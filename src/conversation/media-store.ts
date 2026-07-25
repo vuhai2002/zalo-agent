@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { dataDir, env } from "../config/env.js";
-import { downloadImage } from "../shared/download-image.js";
+import { startDailyTask } from "../shared/daily-task-schedule.js";
+import { downloadImage, type DownloadedImage } from "../shared/download-image.js";
 import { createLogger } from "../shared/logger.js";
 
 const log = createLogger("media-store");
@@ -31,19 +32,24 @@ export type PersistableMessage = {
   images: { url: string; localPath?: string }[];
 };
 
+export type ImageDownloader = (url: string) => Promise<DownloadedImage | null>;
+
 /**
  * Tải ảnh của cả batch về data/media, gắn localPath vào từng ảnh tải thành công.
- * Ảnh lỗi (URL chết, quá 8MB...) chỉ log debug - không được chặn đường trả lời.
- * Không bao giờ reject để caller fire-and-forget được.
+ * Ảnh lỗi (URL chết, quá 8MB, IP nội bộ...) chỉ log debug - không được chặn đường
+ * trả lời. Không bao giờ reject để caller fire-and-forget được.
+ *
+ * `download` tiêm được để test không cần mạng thật.
  */
 export async function persistBatchImages(
   accountId: string,
   messages: PersistableMessage[],
+  download: ImageDownloader = downloadImage,
 ): Promise<void> {
   for (const msg of messages) {
     for (const [index, image] of msg.images.entries()) {
       try {
-        const downloaded = await downloadImage(image.url);
+        const downloaded = await download(image.url);
         if (!downloaded) continue;
         const ext = EXT_BY_MEDIA_TYPE[downloaded.mediaType.split(";")[0]!.trim()] ?? "jpg";
         const relPath = [
@@ -115,12 +121,10 @@ function removeExpiredIn(dir: string, cutoff: number): number {
   return removed;
 }
 
-/** Dọn ngay lúc gọi + lặp lại mỗi 24h (unref để không cản shutdown) */
+/** Dọn ngay lúc gọi + lặp lại mỗi 24h */
 export function startMediaCleanupSchedule(): void {
-  const run = () => {
+  startDailyTask("media-cleanup", () => {
     const removed = cleanupExpiredMedia();
     if (removed > 0) log.info({ removed }, "Đã dọn file media hết hạn");
-  };
-  run();
-  setInterval(run, 24 * 60 * 60 * 1000).unref();
+  });
 }

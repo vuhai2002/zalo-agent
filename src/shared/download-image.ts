@@ -1,17 +1,25 @@
+import { createLogger } from "./logger.js";
+import { downloadFromPublicUrl } from "./safe-remote-download.js";
+
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+const log = createLogger("download-image");
 
 export type DownloadedImage = { data: Buffer; mediaType: string };
 
-/** Tải ảnh về buffer, chặn ảnh quá 8MB (vision không cần lớn hơn). Lỗi gì cũng trả null. */
+/**
+ * Tải ảnh về buffer, cắt theo stream khi vượt 8MB (vision không cần lớn hơn) và
+ * chỉ nhận IP public. Lỗi gì cũng trả null - ảnh hỏng không được chặn đường trả
+ * lời - nhưng vẫn log debug để không mất dấu hoàn toàn.
+ */
 export async function downloadImage(url: string): Promise<DownloadedImage | null> {
   try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const mediaType = res.headers.get("content-type") ?? "image/jpeg";
-    const data = Buffer.from(await res.arrayBuffer());
-    if (data.byteLength === 0 || data.byteLength > MAX_IMAGE_BYTES) return null;
-    return { data, mediaType };
-  } catch {
+    const file = await downloadFromPublicUrl(url, { maxBytes: MAX_IMAGE_BYTES });
+    // Zalo CDN đôi khi không trả content-type ảnh; vision cần media type image/*
+    const mediaType = file.mediaType.startsWith("image/") ? file.mediaType : "image/jpeg";
+    return { data: file.data, mediaType };
+  } catch (err) {
+    log.debug({ err }, "Không tải được ảnh");
     return null;
   }
 }

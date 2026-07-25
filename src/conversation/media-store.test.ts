@@ -9,34 +9,28 @@ let dataDir: string;
 let store: typeof import("./media-store.js");
 type PersistableMessage = import("./media-store.js").PersistableMessage;
 
-const realFetch = globalThis.fetch;
 // 1x1 PNG hợp lệ - đủ cho test lưu/đọc, không cần ảnh thật
 const PNG_BYTES = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
   "base64",
 );
 
-function mockFetchOk(mediaType = "image/png"): void {
-  globalThis.fetch = (async () =>
-    new Response(PNG_BYTES, { headers: { "content-type": mediaType } })) as typeof fetch;
-}
+// Downloader giả: tiêm vào persistBatchImages nên test không chạm mạng thật
+const downloadOk = (mediaType = "image/png") => async () => ({ data: PNG_BYTES, mediaType });
+const downloadFail = async () => null;
 
 before(async () => {
   dataDir = setupTestEnv({ MEDIA_RETENTION_DAYS: "7" });
   store = await import("./media-store.js");
 });
 
-after(() => {
-  globalThis.fetch = realFetch;
-  cleanupTestEnv(dataDir);
-});
+after(() => cleanupTestEnv(dataDir));
 
 describe("media-store", () => {
   it("persist ảnh: lưu file đúng chỗ, gắn localPath, load lại được base64", async () => {
-    mockFetchOk();
     const msg: PersistableMessage = { threadId: "t-1", msgId: "m-100", images: [{ url: "https://z.vn/a.png" }] };
 
-    await store.persistBatchImages("acc-1", [msg]);
+    await store.persistBatchImages("acc-1", [msg], downloadOk());
 
     assert.equal(msg.images[0]!.localPath, "media/acc-1/t-1/m-100-0.png");
     assert.ok(fs.existsSync(path.join(dataDir, "media/acc-1/t-1/m-100-0.png")));
@@ -48,28 +42,26 @@ describe("media-store", () => {
   });
 
   it("tải lỗi thì không gắn localPath và không throw", async () => {
-    globalThis.fetch = (async () => new Response("not found", { status: 404 })) as typeof fetch;
     const msg: PersistableMessage = {
       threadId: "t-1",
       msgId: "m-404",
       images: [{ url: "https://z.vn/die.png" }],
     };
 
-    await store.persistBatchImages("acc-1", [msg]);
+    await store.persistBatchImages("acc-1", [msg], downloadFail);
 
     assert.equal(msg.images[0]!.localPath, undefined);
     assert.deepEqual(store.imagePathsOf(msg.images), []);
   });
 
   it("id chứa ký tự lạ bị sanitize khỏi đường dẫn", async () => {
-    mockFetchOk("image/jpeg");
     const msg: PersistableMessage = {
       threadId: "../thoat",
       msgId: "a/b:c",
       images: [{ url: "https://z.vn/x.jpg" }],
     };
 
-    await store.persistBatchImages("acc-1", [msg]);
+    await store.persistBatchImages("acc-1", [msg], downloadOk("image/jpeg"));
 
     assert.equal(msg.images[0]!.localPath, "media/acc-1/___thoat/a_b_c-0.jpg");
   });
@@ -84,7 +76,6 @@ describe("media-store", () => {
   });
 
   it("cleanup xóa file quá hạn, giữ file mới, gỡ thư mục rỗng", async () => {
-    mockFetchOk();
     const oldMsg: PersistableMessage = {
       threadId: "t-old",
       msgId: "m-old",
@@ -95,7 +86,7 @@ describe("media-store", () => {
       msgId: "m-new",
       images: [{ url: "https://z.vn/n.png" }],
     };
-    await store.persistBatchImages("acc-2", [oldMsg, newMsg]);
+    await store.persistBatchImages("acc-2", [oldMsg, newMsg], downloadOk());
 
     // Giả lập file cũ 8 ngày (quá MEDIA_RETENTION_DAYS=7)
     const oldAbs = path.join(dataDir, oldMsg.images[0]!.localPath!);

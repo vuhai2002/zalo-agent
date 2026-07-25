@@ -4,13 +4,28 @@ import { tool } from "ai";
 import { z } from "zod";
 import { dataDir } from "../../config/env.js";
 import { enqueueSend } from "../../middleware/rate-limiter.js";
+import { downloadFromPublicUrl } from "../../shared/safe-remote-download.js";
+import { withTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
 
 const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
 
 // Chỉ cho gửi file trong data/shared-files (chặn agent đọc file tùy ý trên máy,
-// vd credentials) hoặc tải từ URL http(s) về temp rồi gửi.
+// vd credentials) hoặc tải từ URL http(s) công khai.
+//
+// Nguồn URL do LLM quyết mà LLM đọc tin của người lạ, nên đường tải phải đi qua
+// safe-remote-download: chặn IP nội bộ (SSRF - loopback, 169.254.169.254...) và
+// cắt theo stream khi vượt 25MB. File tạm bị xóa ngay sau khi gửi.
 export function createSendFileTool({ api, account, message }: ToolContext) {
+  const sendAttachment = (filePath: string, caption: string | undefined) =>
+    enqueueSend(`${account.id}:${message.threadId}`, () =>
+      api.sendMessage(
+        { msg: caption ?? "", attachments: [filePath] },
+        message.threadId,
+        message.threadType,
+      ),
+    );
+
   return tool({
     description:
       "Gửi 1 file cho cuộc trò chuyện hiện tại. Nguồn: tên file có sẵn trong kho shared-files (vd 'bao-gia.pdf') hoặc URL http(s) công khai.",
@@ -20,35 +35,21 @@ export function createSendFileTool({ api, account, message }: ToolContext) {
     }),
     execute: async ({ source, caption }) => {
       try {
-        let filePath: string;
-
         if (/^https?:\/\//i.test(source)) {
-          const res = await fetch(source);
-          if (!res.ok) return `Tải URL thất bại: HTTP ${res.status}`;
-          const buf = Buffer.from(await res.arrayBuffer());
-          if (buf.byteLength > MAX_DOWNLOAD_BYTES) return "File quá lớn (>25MB), không gửi";
-
-          const name = path.basename(new URL(source).pathname) || "tep-tai-ve";
-          const tmpDir = path.join(dataDir, "tmp");
-          fs.mkdirSync(tmpDir, { recursive: true });
-          filePath = path.join(tmpDir, `${Date.now()}-${name}`);
-          fs.writeFileSync(filePath, buf);
-        } else {
-          const sharedDir = path.join(dataDir, "shared-files");
-          // basename chặn path traversal kiểu ../../data/accounts/...
-          filePath = path.join(sharedDir, path.basename(source));
-          if (!fs.existsSync(filePath)) {
-            return `Không có file "${source}" trong kho shared-files`;
-          }
+          const file = await downloadFromPublicUrl(source, { maxBytes: MAX_DOWNLOAD_BYTES });
+          await withTempFile(file.fileName, file.data, (filePath) =>
+            sendAttachment(filePath, caption),
+          );
+          return "Đã gửi file thành công";
         }
 
-        await enqueueSend(`${account.id}:${message.threadId}`, () =>
-          api.sendMessage(
-            { msg: caption ?? "", attachments: [filePath] },
-            message.threadId,
-            message.threadType,
-          ),
-        );
+        const sharedDir = path.join(dataDir, "shared-files");
+        // basename chặn path traversal kiểu ../../data/accounts/...
+        const filePath = path.join(sharedDir, path.basename(source));
+        if (!fs.existsSync(filePath)) {
+          return `Không có file "${source}" trong kho shared-files`;
+        }
+        await sendAttachment(filePath, caption);
         return "Đã gửi file thành công";
       } catch (err) {
         return `Gửi file thất bại: ${err instanceof Error ? err.message : String(err)}`;
