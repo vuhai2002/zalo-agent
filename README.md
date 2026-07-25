@@ -3,8 +3,9 @@
 Bot AI thường trú trên Zalo (tài khoản cá nhân, multi-account): nhận tin nhắn -> agent loop (LLM tự gọi tool: thả reaction, gửi file, tag thành viên, xem info nhóm, đọc ảnh) -> trả lời.
 
 - Zalo layer: [zca-js](https://github.com/RFS-ADRENO/zca-js) (unofficial API - CÓ RỦI RO KHÓA NICK, chỉ dùng nick phụ)
-- Agent layer: Vercel AI SDK - provider cắm rời qua env (router proxy OpenAI-compatible hoặc Anthropic trực tiếp)
-- History: SQLite (better-sqlite3), theo account + thread
+- Agent layer: Vercel AI SDK - provider cắm rời qua env (router proxy OpenAI-compatible hoặc Anthropic trực tiếp), đổi được runtime từ dashboard
+- History + memory: SQLite (`node:sqlite` built-in), theo account + thread; rolling summary + fact bền (tool `save_memory`)
+- Dashboard web: Hono + React (tone xanh Zalo) - xem hội thoại, contacts, memory, bật/tắt bot per thread, đổi LLM provider
 
 ## Cài đặt
 
@@ -25,18 +26,24 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ```bash
 pnpm zalo-login acc-chinh   # tạo mã QR, ảnh tự mở - quét bằng app Zalo
-pnpm dev                    # chạy bot (watch mode)
+pnpm dev                    # chạy bot (watch mode) + dashboard API (nếu set DASHBOARD_PASSWORD)
+pnpm dev:web                # dev UI dashboard (Vite, proxy vào API)
+pnpm build:web              # build UI -> web/dist, bot tự serve tại http://127.0.0.1:3900
 ```
+
+Dashboard: set `DASHBOARD_PASSWORD` trong `.env` (không set = tắt), mở `http://127.0.0.1:3900`.
 
 ## Cấu trúc
 
 ```
 src/
-├── config/        env (Zod) + accounts.json (multi-account)
+├── config/        env (Zod) + accounts.json (multi-account) + runtime LLM settings
 ├── zalo/          login, credential mã hóa, listener + reconnect, parse tin nhắn, account manager
-├── agent/         agent loop (AI SDK), provider theo env, persona, tools/
-├── conversation/  SQLite history
-└── middleware/    allowlist + @mention filter, rate limit gửi tin
+├── agent/         agent loop (AI SDK), provider, persona, tools/ (react, file, tag, memory...)
+├── conversation/  SQLite: history, threads, contacts, usage, memory, summarizer
+├── middleware/    allowlist + @mention filter (passive listening), batcher, rate limit
+└── server/        dashboard API (Hono): auth, threads, contacts, memory, provider
+web/               dashboard UI (React + Vite + Tailwind, tone xanh Zalo)
 ```
 
 ## Lưu ý an toàn
