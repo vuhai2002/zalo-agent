@@ -1,5 +1,6 @@
 import { env } from "./config/env.js";
 import { closeHistoryStore } from "./conversation/history-store.js";
+import { startMediaCleanupSchedule } from "./conversation/media-store.js";
 import { startDashboardServer, stopDashboardServer } from "./server/dashboard-server.js";
 import { logger } from "./shared/logger.js";
 import { startAllAccounts, stopAllAccounts } from "./zalo/account-manager.js";
@@ -30,6 +31,9 @@ process.on("uncaughtException", (err) => {
 
 // Heartbeat: xác nhận process còn sống trong log (debug level để prod không noise)
 setInterval(() => logger.debug("heartbeat"), 60_000).unref();
+
+// Dọn ảnh nhận được đã quá MEDIA_RETENTION_DAYS (chạy ngay + mỗi 24h)
+startMediaCleanupSchedule();
 
 startDashboardServer();
 startAllAccounts().catch((err) => {

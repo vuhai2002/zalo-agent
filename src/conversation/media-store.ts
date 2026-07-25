@@ -1,0 +1,126 @@
+import fs from "node:fs";
+import path from "node:path";
+import { dataDir, env } from "../config/env.js";
+import { downloadImage } from "../shared/download-image.js";
+import { createLogger } from "../shared/logger.js";
+
+const log = createLogger("media-store");
+const mediaDir = path.join(dataDir, "media");
+
+const EXT_BY_MEDIA_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+const MEDIA_TYPE_BY_EXT: Record<string, string> = {
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+/** Zalo id là số nhưng không tin tưởng: chỉ giữ ký tự an toàn cho tên file */
+function sanitizeSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_") || "x";
+}
+
+export type PersistableMessage = {
+  threadId: string;
+  msgId: string;
+  images: { url: string; localPath?: string }[];
+};
+
+/**
+ * Tải ảnh của cả batch về data/media, gắn localPath vào từng ảnh tải thành công.
+ * Ảnh lỗi (URL chết, quá 8MB...) chỉ log debug - không được chặn đường trả lời.
+ * Không bao giờ reject để caller fire-and-forget được.
+ */
+export async function persistBatchImages(
+  accountId: string,
+  messages: PersistableMessage[],
+): Promise<void> {
+  for (const msg of messages) {
+    for (const [index, image] of msg.images.entries()) {
+      try {
+        const downloaded = await downloadImage(image.url);
+        if (!downloaded) continue;
+        const ext = EXT_BY_MEDIA_TYPE[downloaded.mediaType.split(";")[0]!.trim()] ?? "jpg";
+        const relPath = [
+          "media",
+          sanitizeSegment(accountId),
+          sanitizeSegment(msg.threadId),
+          `${sanitizeSegment(msg.msgId)}-${index}.${ext}`,
+        ].join("/");
+        const absPath = path.join(dataDir, relPath);
+        fs.mkdirSync(path.dirname(absPath), { recursive: true });
+        fs.writeFileSync(absPath, downloaded.data);
+        image.localPath = relPath;
+      } catch (err) {
+        log.debug({ accountId, msgId: msg.msgId, err }, "Không lưu được ảnh - bỏ qua");
+      }
+    }
+  }
+}
+
+/** Đường dẫn các ảnh đã lưu thành công của 1 tin - để ghi vào cột images */
+export function imagePathsOf(images: { localPath?: string }[]): string[] {
+  return images.map((i) => i.localPath).filter((p): p is string => Boolean(p));
+}
+
+/**
+ * Đọc ảnh đã lưu theo đường dẫn tương đối trong DB. File mất (đã bị dọn theo
+ * MEDIA_RETENTION_DAYS) hoặc đường dẫn thoát khỏi data/media đều trả null.
+ */
+export function loadStoredImage(relPath: string): { base64: string; mediaType: string } | null {
+  try {
+    const absPath = path.resolve(dataDir, relPath);
+    if (!absPath.startsWith(mediaDir + path.sep)) return null;
+    const data = fs.readFileSync(absPath);
+    const ext = path.extname(absPath).slice(1).toLowerCase();
+    return { base64: data.toString("base64"), mediaType: MEDIA_TYPE_BY_EXT[ext] ?? "image/jpeg" };
+  } catch {
+    return null;
+  }
+}
+
+/** Xóa file media cũ hơn MEDIA_RETENTION_DAYS + gỡ thư mục rỗng. Trả về số file đã xóa. */
+export function cleanupExpiredMedia(): number {
+  const cutoff = Date.now() - env.MEDIA_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  return removeExpiredIn(mediaDir, cutoff);
+}
+
+function removeExpiredIn(dir: string, cutoff: number): number {
+  let removed = 0;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return 0; // thư mục chưa tồn tại (chưa nhận ảnh nào)
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    try {
+      if (entry.isDirectory()) {
+        removed += removeExpiredIn(full, cutoff);
+        if (fs.readdirSync(full).length === 0) fs.rmdirSync(full);
+      } else if (fs.statSync(full).mtimeMs < cutoff) {
+        fs.unlinkSync(full);
+        removed++;
+      }
+    } catch (err) {
+      log.debug({ file: full, err }, "Không dọn được file media - bỏ qua");
+    }
+  }
+  return removed;
+}
+
+/** Dọn ngay lúc gọi + lặp lại mỗi 24h (unref để không cản shutdown) */
+export function startMediaCleanupSchedule(): void {
+  const run = () => {
+    const removed = cleanupExpiredMedia();
+    if (removed > 0) log.info({ removed }, "Đã dọn file media hết hạn");
+  };
+  run();
+  setInterval(run, 24 * 60 * 60 * 1000).unref();
+}

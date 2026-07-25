@@ -110,6 +110,9 @@ function runMigrations(): void {
 
   // DB tạo trước khi có cột sender_id: ALTER thêm (nullable - tin cũ không có id)
   addColumnIfMissing("messages", "sender_id", "TEXT");
+  // Ảnh kèm tin nhắn: JSON array đường dẫn file trong data/media (tương đối DATA_DIR)
+  // để lượt sau nạp lại cho model xem; NULL = tin không có ảnh
+  addColumnIfMissing("messages", "images", "TEXT");
   // Memory lớp 2: rolling summary per thread
   addColumnIfMissing("threads", "summary", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing("threads", "summary_covers_to_message_id", "INTEGER NOT NULL DEFAULT 0");

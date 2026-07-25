@@ -1,6 +1,10 @@
 import { ThreadType } from "zca-js";
 
-export type IncomingImage = { url: string };
+export type IncomingImage = {
+  url: string;
+  /** Đường dẫn file đã lưu trong data/media (tương đối với DATA_DIR) - có sau khi persist */
+  localPath?: string;
+};
 
 export type ParsedMessage = {
   accountId: string;
@@ -61,21 +65,4 @@ export function parseIncomingMessage(
     mentionsMe,
     rawData: data,
   };
-}
-
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-
-export async function downloadImageAsBase64(
-  url: string,
-): Promise<{ base64: string; mediaType: string } | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const mediaType = res.headers.get("content-type") ?? "image/jpeg";
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.byteLength === 0 || buf.byteLength > MAX_IMAGE_BYTES) return null;
-    return { base64: buf.toString("base64"), mediaType };
-  } catch {
-    return null;
-  }
 }

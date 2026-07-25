@@ -32,6 +32,7 @@ Zalo servers <--ws/https--> zca-js (npm lib, unofficial)
 | Ghim `zca-js` đúng version (không dùng `^`) | Lib reverse-engineer, minor bump có thể đổi hành vi. Nâng cấp phải là hành động có chủ đích + chạy lại test, không để `pnpm update` nhảy âm thầm |
 | Không bọc facade quanh zca-js | Chỉ dùng 8/150+ hàm, phần lớn import là `type API`. Đổi chữ ký hàm thì TypeScript bắt ngay lúc typecheck - thêm tầng trung gian là over-engineering (chỉ đáng khi thêm kênh khác, mà V3 đã chốt không làm) |
 | `payload-anomaly-watch.ts` cảnh báo payload lạ | Rủi ro thật không phải zca-js đổi API (TS bắt được) mà là **Zalo đổi tên field** - parser moi payload bằng `any` nên bot chỉ âm thầm ngừng thấy ảnh / ngừng nhận @mention. Tin thiếu `threadId` còn bị bỏ qua không dấu vết. Watcher log warn (throttle 10 phút/loại/account) để lỗi hiện ra thay vì im lặng |
+| Ảnh nhận được lưu file `data/media/`, không nhét base64 vào SQLite | URL ảnh Zalo có hạn dùng, còn history chỉ lưu text -> trước đây bot không xem lại được ảnh cũ. Giờ `media-store` lưu file + cột `messages.images` trỏ tới; agent nạp lại tối đa `HISTORY_IMAGE_CONTEXT_LIMIT` ảnh gần nhất (mặc định 3 - mỗi ảnh tốn token mỗi lượt). File quá `MEDIA_RETENTION_DAYS` (7 ngày) bị dọn, history tự rơi về text `[gửi kèm N ảnh]`. Lưu ý: ảnh nằm plaintext trên đĩa (khác cookie có mã hóa) - `data/` đã gitignore |
 
 ## Repo tham khảo
 

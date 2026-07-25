@@ -2,7 +2,8 @@ import type { API } from "zca-js";
 import { runAgentTurn } from "../agent/agent-loop.js";
 import { getAccount, listEnabledAccounts, runAccountsSeedMigration, type AccountConfig } from "../config/account-store.js";
 import { recordContactActivity } from "../conversation/contact-store.js";
-import { appendMessage } from "../conversation/history-store.js";
+import { appendMessage, setMessageImages } from "../conversation/history-store.js";
+import { imagePathsOf, persistBatchImages } from "../conversation/media-store.js";
 import { runStartupBackfill } from "../conversation/startup-backfill.js";
 import {
   hasDisplayName,
@@ -131,12 +132,19 @@ function handleIncomingMessage(accountId: string, api: API, selfId: string, raw:
 
   if (!decision.respond) {
     if (decision.record) {
-      appendMessage(config.id, msg.threadId, {
+      // Ghi tin ngay để giữ đúng thứ tự history; ảnh tải xong (async) mới gắn vào
+      // row qua id - persistBatchImages không bao giờ reject nên fire-and-forget được
+      const rowId = appendMessage(config.id, msg.threadId, {
         role: "user",
         content: describeIncoming(msg),
         senderName: msg.senderName,
         senderId: msg.senderId,
       });
+      if (msg.images.length > 0) {
+        void persistBatchImages(config.id, [msg]).then(() => {
+          setMessageImages(rowId, imagePathsOf(msg.images));
+        });
+      }
     }
     log.debug(
       { accountId: config.id, threadId: msg.threadId, reason: decision.reason },
@@ -207,6 +215,10 @@ async function processBatch(config: AccountConfig, api: API, batch: ParsedMessag
     : () => {};
 
   try {
+    // Lưu ảnh xuống data/media TRƯỚC lượt agent: agent đọc từ đĩa (khỏi tải 2 lần)
+    // và các lượt sau nạp lại được ảnh này từ history
+    await persistBatchImages(config.id, batch);
+
     // Chạy agent TRƯỚC khi ghi history: runAgentTurn tự đọc history cũ và tự
     // ghép batch hiện tại vào input - ghi trước sẽ khiến tin mới lặp 2 lần.
     const result = await runAgentTurn({ api, account: config, batch });
@@ -218,6 +230,7 @@ async function processBatch(config: AccountConfig, api: API, batch: ParsedMessag
         content: describeIncoming(msg),
         senderName: msg.senderName,
         senderId: msg.senderId,
+        images: imagePathsOf(msg.images),
       });
     }
 

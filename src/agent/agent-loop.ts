@@ -4,10 +4,13 @@ import type { AccountConfig } from "../config/account-store.js";
 import { getAgentForAccount } from "../config/agent-store.js";
 import { env } from "../config/env.js";
 import { getRecentMessages } from "../conversation/history-store.js";
+import { loadStoredImage } from "../conversation/media-store.js";
 import { getMemoriesForContext } from "../conversation/memory-store.js";
 import { getThreadSummary } from "../conversation/thread-store.js";
+import { downloadImageAsBase64 } from "../shared/download-image.js";
 import { createLogger } from "../shared/logger.js";
-import { downloadImageAsBase64, type ParsedMessage } from "../zalo/zalo-message-parser.js";
+import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
+import { historyToModelMessages } from "./history-to-model-messages.js";
 import { resolveLanguageModel } from "./llm-provider.js";
 import { buildSystemPrompt } from "./persona-prompt.js";
 import { buildAgentTools } from "./tools/index.js";
@@ -26,14 +29,6 @@ export type AgentTurnResult = {
   usage: { inputTokens: number; outputTokens: number; totalTokens: number; steps: number };
 };
 
-/** "[25/07 14:30]" theo giờ máy chạy bot - đủ cho model cảm nhận khoảng cách thời gian */
-function formatTimestamp(isoUtc: string): string {
-  const d = new Date(isoUtc);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `[${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}]`;
-}
-
 /**
  * Chạy 1 lượt agent: history + cả batch tin nhắn mới (kèm ảnh nếu có) -> LLM tự
  * quyết gọi tool (react, gửi file, tag...) -> trả text cuối cùng để gửi lại Zalo.
@@ -46,16 +41,12 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
   const latest = batch[batch.length - 1]!;
 
   const history = getRecentMessages(account.id, latest.threadId);
-  const messages: ModelMessage[] = history.map((h) => {
-    // Kèm thời gian gửi để model biết khoảng cách giữa các đoạn hội thoại
-    // (người quay lại sau 3 ngày không bị nối chuyện như vừa nhắn xong)
-    const ts = h.createdAt ? formatTimestamp(h.createdAt) : "";
-    if (h.role === "user") {
-      const name = h.senderName ? `${h.senderName}: ` : "";
-      return { role: "user", content: `${ts} ${name}${h.content}`.trim() };
-    }
-    return { role: "assistant", content: h.content };
-  });
+  // Kèm lại tối đa N ảnh gần nhất từ đĩa để model xem lại được ảnh cũ
+  const messages: ModelMessage[] = historyToModelMessages(
+    history,
+    env.HISTORY_IMAGE_CONTEXT_LIMIT,
+    loadStoredImage,
+  );
 
   messages.push({ role: "user", content: await buildCurrentTurnContent(batch) });
 
@@ -111,7 +102,10 @@ async function buildCurrentTurnContent(batch: ParsedMessage[]): Promise<UserCont
 
   for (const msg of batch) {
     for (const image of msg.images) {
-      const downloaded = await downloadImageAsBase64(image.url);
+      // Ảnh đã persist trước đó (account-manager) thì đọc từ đĩa - không tải lại;
+      // persist lỗi thì rơi về tải thẳng từ URL Zalo như cũ
+      const stored = image.localPath ? loadStoredImage(image.localPath) : null;
+      const downloaded = stored ?? (await downloadImageAsBase64(image.url));
       if (downloaded) {
         parts.push({ type: "image", image: downloaded.base64, mediaType: downloaded.mediaType });
       }

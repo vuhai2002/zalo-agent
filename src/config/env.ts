@@ -22,6 +22,12 @@ const envSchema = z.object({
   LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).default(2048),
 
   HISTORY_CONTEXT_LIMIT: z.coerce.number().int().min(1).max(200).default(20),
+  // Ảnh cũ trong history được nạp lại vào context để model "nhớ" ảnh đã nhận.
+  // Mỗi ảnh tốn kha khá token nên giới hạn N ảnh gần nhất; 0 = tắt hẳn.
+  HISTORY_IMAGE_CONTEXT_LIMIT: z.coerce.number().int().min(0).max(20).default(3),
+  // Ảnh nhận được lưu vào data/media để xem lại; file cũ hơn N ngày bị xóa
+  // (dọn lúc khởi động + mỗi 24h) để đĩa không phình vô hạn.
+  MEDIA_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
   // Memory lớp 2: đủ N tin rớt khỏi cửa sổ replay thì gộp vào summary của thread
   SUMMARY_TRIGGER_MESSAGES: z.coerce.number().int().min(5).max(500).default(30),
   // Memory lớp 3: tối đa bao nhiêu fact được lưu cho mỗi người/nhóm

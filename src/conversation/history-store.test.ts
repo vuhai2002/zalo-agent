@@ -97,4 +97,42 @@ describe("history-store", () => {
     assert.deepEqual(acc1.map((r) => r.content), ["của acc-1"]);
     assert.deepEqual(acc2.map((r) => r.content), ["của acc-2"]);
   });
+
+  it("images ghi kèm tin thì đọc lại nguyên vẹn, tin không ảnh trả undefined", () => {
+    store.appendMessage("acc-1", "t-anh", {
+      role: "user",
+      content: "xem ảnh [gửi kèm 2 ảnh]",
+      images: ["media/acc-1/t-anh/m1-0.jpg", "media/acc-1/t-anh/m1-1.png"],
+    });
+    store.appendMessage("acc-1", "t-anh", { role: "assistant", content: "ảnh đẹp" });
+
+    const rows = readAll("acc-1", "t-anh");
+    assert.deepEqual(rows[0]!.images, [
+      "media/acc-1/t-anh/m1-0.jpg",
+      "media/acc-1/t-anh/m1-1.png",
+    ]);
+    assert.equal(rows[1]!.images, undefined);
+  });
+
+  it("setMessageImages gắn ảnh vào tin đã ghi qua id (passive listen tải ảnh xong muộn)", () => {
+    const rowId = store.appendMessage("acc-1", "t-muon", {
+      role: "user",
+      content: "[ảnh]",
+    });
+    store.setMessageImages(rowId, ["media/acc-1/t-muon/m9-0.webp"]);
+
+    const rows = readAll("acc-1", "t-muon");
+    assert.deepEqual(rows[0]!.images, ["media/acc-1/t-muon/m9-0.webp"]);
+  });
+
+  it("images cũng có trong listMessagesPaged (dashboard)", () => {
+    store.appendMessage("acc-1", "t-paged", {
+      role: "user",
+      content: "[ảnh]",
+      images: ["media/acc-1/t-paged/m2-0.jpg"],
+    });
+
+    const rows = store.listMessagesPaged("acc-1", "t-paged");
+    assert.deepEqual(rows[0]!.images, ["media/acc-1/t-paged/m2-0.jpg"]);
+  });
 });
