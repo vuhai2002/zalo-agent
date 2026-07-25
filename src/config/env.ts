@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { isValidTimezone } from "../shared/current-datetime.js";
 
 // Nạp .env bằng API built-in của Node (>= 20.12); thiếu file thì lấy env từ OS
 try {
@@ -30,6 +31,19 @@ const envSchema = z.object({
   LLM_MODEL: z.string().min(1),
   LLM_MAX_STEPS: z.coerce.number().int().min(1).max(30).default(8),
   LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).default(2048),
+
+  // Múi giờ của bot: bơm ngày vào system prompt + tool get_datetime.
+  // Kiểm IANA hợp lệ ngay lúc boot thay vì để lượt agent đầu tiên mới lộ.
+  BOT_TIMEZONE: z
+    .string()
+    .default("Asia/Ho_Chi_Minh")
+    .refine(isValidTimezone, "phải là tên timezone IANA, vd Asia/Ho_Chi_Minh"),
+  // Web search cho agent: DuckDuckGo mặc định không cần key; đặt key Brave
+  // (free tier 2000 query/tháng - https://brave.com/search/api/) để kết quả
+  // tốt hơn, hết quota hay lỗi tự rơi về DuckDuckGo.
+  BRAVE_SEARCH_API_KEY: z.string().default(""),
+  // Số kết quả web search tối đa trả cho agent mỗi lần tìm
+  WEB_SEARCH_MAX_RESULTS: z.coerce.number().int().min(1).max(10).default(5),
 
   HISTORY_CONTEXT_LIMIT: z.coerce.number().int().min(1).max(200).default(20),
   // Ảnh cũ trong history được nạp lại vào context để model "nhớ" ảnh đã nhận.

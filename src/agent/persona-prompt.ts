@@ -1,5 +1,7 @@
 import type { AgentProfile } from "../config/agent-store.js";
+import { env } from "../config/env.js";
 import type { MemoryContext } from "../conversation/memory-store.js";
+import { currentDateLine } from "../shared/current-datetime.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 
 const BASE_PERSONA = `Bạn là trợ lý AI trả lời tin nhắn trên Zalo bằng tiếng Việt tự nhiên, thân thiện và ngắn gọn.
@@ -28,7 +30,9 @@ export function buildSystemPrompt(
   msg: ParsedMessage,
   memory?: PromptMemory,
 ): string {
-  const sections = [BASE_PERSONA];
+  // Chỉ ngày + thứ, không có giờ - giờ đổi mỗi phút sẽ vỡ prompt cache mỗi phút.
+  // Không có dòng này model đoán ngày từ training data và trả lời sai.
+  const sections = [BASE_PERSONA, currentDateLine(env.BOT_TIMEZONE)];
 
   if (agent.persona.trim()) {
     sections.push(`Persona riêng của bạn (tên agent: ${agent.name}):\n${agent.persona.trim()}`);
