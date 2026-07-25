@@ -195,11 +195,12 @@ export function TableShell({
   );
 }
 
-/** Thanh công cụ trên bảng: ô tìm kiếm + phân trang, xuống dòng trên mobile */
+/** Thanh công cụ trên bảng: tìm kiếm + bộ lọc (vd account) + phân trang */
 export function ListToolbar({
   query,
   onQuery,
   placeholder,
+  filter,
   page,
   hasMore,
   onPage,
@@ -207,23 +208,28 @@ export function ListToolbar({
   query: string;
   onQuery: (v: string) => void;
   placeholder: string;
+  /** Slot bộ lọc cạnh ô search - pattern GoClaw: lọc ở đâu, hiệu lực ở đó */
+  filter?: ReactNode;
   page: number;
   hasMore: boolean;
   onPage: (p: number) => void;
 }) {
   return (
     <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="relative w-full sm:w-80">
-        <IconSearch
-          size={15}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft/60"
-        />
-        <input
-          value={query}
-          onChange={(e) => onQuery(e.target.value)}
-          placeholder={placeholder}
-          className="gc-input w-full pl-9"
-        />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative w-full sm:w-72">
+          <IconSearch
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft/60"
+          />
+          <input
+            value={query}
+            onChange={(e) => onQuery(e.target.value)}
+            placeholder={placeholder}
+            className="gc-input w-full pl-9"
+          />
+        </div>
+        {filter && <div className="w-full sm:w-56">{filter}</div>}
       </div>
       <Pager page={page} hasMore={hasMore} onPage={onPage} />
     </div>

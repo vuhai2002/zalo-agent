@@ -8,9 +8,8 @@ import { getThreadUsageTotals } from "../../conversation/usage-store.js";
 export const threadRoutes = new Hono()
 
   .get("/", (c) => {
+    // accountId bỏ trống = xem trộn mọi account (lọc bằng dropdown trong trang)
     const accountId = c.req.query("accountId") ?? "";
-    if (!accountId) return c.json({ error: "Thiếu accountId" }, 400);
-
     const page = Math.max(0, Number(c.req.query("page") ?? 0));
     const pageSize = Math.min(100, Math.max(1, Number(c.req.query("pageSize") ?? 50)));
 
@@ -23,8 +22,8 @@ export const threadRoutes = new Hono()
 
     const items = rows.slice(0, pageSize).map((t) => ({
       ...t,
-      usage: getThreadUsageTotals(accountId, t.threadId),
-      summary: getThreadSummary(accountId, t.threadId).summary,
+      usage: getThreadUsageTotals(t.accountId, t.threadId),
+      summary: getThreadSummary(t.accountId, t.threadId).summary,
     }));
     return c.json({ items, hasMore: rows.length > pageSize });
   })

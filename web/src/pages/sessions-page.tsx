@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ThreadItem } from "../dashboard-api-client";
+import type { AccountInfo, ThreadItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { AccountFilter, accountLabel } from "../shared/account-filter";
 import {
   Badge,
   EmptyRow,
@@ -13,26 +14,28 @@ import {
 } from "../shared/ui-bits";
 import { SessionDetailDrawer } from "./session-detail-drawer";
 
-export function SessionsPage({ selectedAccountId }: { selectedAccountId: string }) {
+export function SessionsPage({ accounts }: { accounts: AccountInfo[] }) {
   const [items, setItems] = useState<ThreadItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [query, setQuery] = useState("");
+  const [accountFilter, setAccountFilter] = useState("");
   const [page, setPage] = useState(0);
   const [openThread, setOpenThread] = useState<ThreadItem | null>(null);
 
+  const showAccountColumn = accounts.length > 1;
+
   const reload = useCallback(() => {
-    if (!selectedAccountId) return;
     api
-      .threads(selectedAccountId, query, page)
+      .threads(accountFilter, query, page)
       .then((data) => {
         setItems(data.items);
         setHasMore(data.hasMore);
       })
       .catch(() => setItems([]));
-  }, [selectedAccountId, query, page]);
+  }, [accountFilter, query, page]);
 
   useEffect(reload, [reload]);
-  useEffect(() => setPage(0), [selectedAccountId, query]);
+  useEffect(() => setPage(0), [accountFilter, query]);
 
   async function toggleBot(t: ThreadItem) {
     await api.setBotEnabled(t.accountId, t.threadId, !t.botEnabled);
@@ -50,18 +53,28 @@ export function SessionsPage({ selectedAccountId }: { selectedAccountId: string 
         query={query}
         onQuery={setQuery}
         placeholder="Tìm theo tên hoặc thread ID..."
+        filter={<AccountFilter accounts={accounts} value={accountFilter} onChange={setAccountFilter} />}
         page={page}
         hasMore={hasMore}
         onPage={setPage}
       />
 
       <TableShell
-        headers={["Tên", "Loại", "Tin nhắn", "Token", "Tin cuối", "Bot", ""]}
-        minWidth={860}
+        headers={
+          showAccountColumn
+            ? ["Tên", "Account", "Loại", "Tin nhắn", "Token", "Tin cuối", "Bot", ""]
+            : ["Tên", "Loại", "Tin nhắn", "Token", "Tin cuối", "Bot", ""]
+        }
+        minWidth={showAccountColumn ? 960 : 860}
       >
-        {items.length === 0 && <EmptyRow colSpan={7} text="Chưa có session nào" />}
+        {items.length === 0 && (
+          <EmptyRow colSpan={showAccountColumn ? 8 : 7} text="Chưa có session nào" />
+        )}
         {items.map((t) => (
-          <tr key={t.threadId} className="border-b border-line/60 last:border-0 hover:bg-tile/40">
+          <tr
+            key={`${t.accountId}:${t.threadId}`}
+            className="border-b border-line/60 last:border-0 hover:bg-tile/40"
+          >
             <td className="px-4 py-3">
               <div className="flex items-center gap-3">
                 <InitialAvatar name={t.displayName || t.threadId} />
@@ -71,6 +84,11 @@ export function SessionsPage({ selectedAccountId }: { selectedAccountId: string 
                 </div>
               </div>
             </td>
+            {showAccountColumn && (
+              <td className="px-4 py-3">
+                <Badge tone="gray" dot={false}>{accountLabel(accounts, t.accountId)}</Badge>
+              </td>
+            )}
             <td className="px-4 py-3">
               <Badge tone={t.threadType === 1 ? "amber" : "blue"} dot={false}>
                 {t.threadType === 1 ? "Group" : "Direct"}

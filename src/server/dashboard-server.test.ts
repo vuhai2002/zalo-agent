@@ -71,6 +71,23 @@ describe("dashboard-server", () => {
     assert.equal(res.status, 200);
   });
 
+  it("GET /api/threads không có accountId trả dữ liệu mọi account", async () => {
+    const threads = await import("../conversation/thread-store.js");
+    threads.recordThreadActivity({
+      accountId: "acc-khac",
+      threadId: "t-acc-khac",
+      threadType: 0,
+      displayName: "Người của acc khác",
+      lastSenderName: "Người của acc khác",
+    });
+
+    const res = await authed("/api/threads");
+    assert.equal(res.status, 200);
+    const data = (await res.json()) as { items: { accountId: string }[] };
+    const accountIds = new Set(data.items.map((t) => t.accountId));
+    assert.ok(accountIds.has("acc-1") && accountIds.has("acc-khac"), "phải gộp cả 2 account");
+  });
+
   it("GET /api/threads trả thread kèm usage", async () => {
     const res = await authed("/api/threads?accountId=acc-1");
     assert.equal(res.status, 200);

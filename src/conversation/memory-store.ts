@@ -91,12 +91,13 @@ export function getMemoriesForContext(params: {
 
 const listStmt = db.prepare(`
   SELECT id, account_id, subject_id, content, learned_in_thread_id, learned_in_group, created_at
-  FROM memories WHERE account_id = ? AND (subject_id LIKE ? OR content LIKE ?)
+  FROM memories WHERE (? = '' OR account_id = ?) AND (subject_id LIKE ? OR content LIKE ?)
   ORDER BY id DESC LIMIT ? OFFSET ?
 `);
 
+/** accountId bỏ trống = mọi account */
 export function listMemories(params: {
-  accountId: string;
+  accountId?: string;
   query?: string;
   limit?: number;
   offset?: number;
@@ -105,9 +106,10 @@ export function listMemories(params: {
     id: number; account_id: string; subject_id: string; content: string;
     learned_in_thread_id: string; learned_in_group: number; created_at: string;
   };
+  const acc = params.accountId ?? "";
   const like = `%${params.query ?? ""}%`;
   const rows = listStmt.all(
-    params.accountId, like, like, params.limit ?? 50, params.offset ?? 0,
+    acc, acc, like, like, params.limit ?? 50, params.offset ?? 0,
   ) as unknown as Row[];
   return rows.map((r) => ({
     id: r.id,

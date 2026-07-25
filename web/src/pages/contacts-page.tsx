@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ContactItem } from "../dashboard-api-client";
+import type { AccountInfo, ContactItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { AccountFilter, accountLabel } from "../shared/account-filter";
 import {
+  Badge,
   EmptyRow,
   formatNumber,
   formatTime,
@@ -11,25 +13,27 @@ import {
   TableShell,
 } from "../shared/ui-bits";
 
-export function ContactsPage({ selectedAccountId }: { selectedAccountId: string }) {
+export function ContactsPage({ accounts }: { accounts: AccountInfo[] }) {
   const [items, setItems] = useState<ContactItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [query, setQuery] = useState("");
+  const [accountFilter, setAccountFilter] = useState("");
   const [page, setPage] = useState(0);
 
+  const showAccountColumn = accounts.length > 1;
+
   const reload = useCallback(() => {
-    if (!selectedAccountId) return;
     api
-      .contacts(selectedAccountId, query, page)
+      .contacts(accountFilter, query, page)
       .then((data) => {
         setItems(data.items);
         setHasMore(data.hasMore);
       })
       .catch(() => setItems([]));
-  }, [selectedAccountId, query, page]);
+  }, [accountFilter, query, page]);
 
   useEffect(reload, [reload]);
-  useEffect(() => setPage(0), [selectedAccountId, query]);
+  useEffect(() => setPage(0), [accountFilter, query]);
 
   return (
     <div>
@@ -42,16 +46,26 @@ export function ContactsPage({ selectedAccountId }: { selectedAccountId: string 
         query={query}
         onQuery={setQuery}
         placeholder="Tìm theo tên hoặc user ID..."
+        filter={<AccountFilter accounts={accounts} value={accountFilter} onChange={setAccountFilter} />}
         page={page}
         hasMore={hasMore}
         onPage={setPage}
       />
 
-      <TableShell headers={["Tên", "User ID", "Số tin", "Lần đầu", "Gần nhất"]} minWidth={760}>
-        {items.length === 0 && <EmptyRow colSpan={5} text="Chưa có contact nào" />}
+      <TableShell
+        headers={
+          showAccountColumn
+            ? ["Tên", "Account", "User ID", "Số tin", "Lần đầu", "Gần nhất"]
+            : ["Tên", "User ID", "Số tin", "Lần đầu", "Gần nhất"]
+        }
+        minWidth={showAccountColumn ? 860 : 760}
+      >
+        {items.length === 0 && (
+          <EmptyRow colSpan={showAccountColumn ? 6 : 5} text="Chưa có contact nào" />
+        )}
         {items.map((contact) => (
           <tr
-            key={contact.userId}
+            key={`${contact.accountId}:${contact.userId}`}
             className="border-b border-line/60 last:border-0 hover:bg-tile/40"
           >
             <td className="px-4 py-3">
@@ -60,6 +74,11 @@ export function ContactsPage({ selectedAccountId }: { selectedAccountId: string 
                 <span className="font-medium text-ink">{contact.displayName || "(không tên)"}</span>
               </div>
             </td>
+            {showAccountColumn && (
+              <td className="px-4 py-3">
+                <Badge tone="gray" dot={false}>{accountLabel(accounts, contact.accountId)}</Badge>
+              </td>
+            )}
             <td className="px-4 py-3 text-ink-soft">{contact.userId}</td>
             <td className="px-4 py-3 text-ink-soft">{formatNumber(contact.messageCount)}</td>
             <td className="px-4 py-3 text-ink-soft">{formatTime(contact.firstSeen)}</td>

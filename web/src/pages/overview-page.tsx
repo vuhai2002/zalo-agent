@@ -23,7 +23,7 @@ import {
   StatCard,
 } from "../shared/ui-bits";
 
-export function OverviewPage({ selectedAccountId }: { selectedAccountId: string }) {
+export function OverviewPage() {
   const [data, setData] = useState<OverviewData | null>(null);
 
   useEffect(() => {
@@ -32,12 +32,33 @@ export function OverviewPage({ selectedAccountId }: { selectedAccountId: string 
 
   if (!data) return <p className="text-ink-soft">Đang tải...</p>;
 
-  const daily = data.usageByAccount.find((u) => u.accountId === selectedAccountId)?.daily ?? [];
-  const stats = data.statsByAccount.find((s) => s.accountId === selectedAccountId)?.stats;
+  // Tổng hợp mọi account: gộp daily theo ngày, cộng dồn stats
+  const dailyByDay = new Map<string, { turns: number; inputTokens: number; outputTokens: number }>();
+  for (const { daily } of data.usageByAccount) {
+    for (const d of daily) {
+      const agg = dailyByDay.get(d.day) ?? { turns: 0, inputTokens: 0, outputTokens: 0 };
+      agg.turns += d.turns;
+      agg.inputTokens += d.inputTokens;
+      agg.outputTokens += d.outputTokens;
+      dailyByDay.set(d.day, agg);
+    }
+  }
+  const stats = data.statsByAccount.reduce(
+    (acc, { stats: s }) => ({
+      threads: acc.threads + s.threads,
+      contacts: acc.contacts + s.contacts,
+      memories: acc.memories + s.memories,
+      messagesTotal: acc.messagesTotal + s.messagesTotal,
+      messagesToday: acc.messagesToday + s.messagesToday,
+    }),
+    { threads: 0, contacts: 0, memories: 0, messagesTotal: 0, messagesToday: 0 },
+  );
   const today = new Date().toISOString().slice(0, 10);
-  const todayUsage = daily.find((d) => d.day === today);
-  // daily trả DESC theo ngày - đảo lại cho sparkline chạy trái -> phải
-  const series = [...daily].reverse();
+  const todayUsage = dailyByDay.get(today);
+  // Sparkline chạy trái -> phải theo thời gian
+  const series = [...dailyByDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, agg]) => ({ day, ...agg }));
 
   return (
     <div>

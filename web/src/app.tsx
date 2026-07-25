@@ -13,11 +13,14 @@ import { ProvidersPage } from "./pages/providers-page";
 import { SessionsPage } from "./pages/sessions-page";
 import { IconMenu } from "./shared/dashboard-icons";
 
-/** Khung chính sau đăng nhập: sidebar + account đang chọn + nội dung trang */
+/**
+ * Khung chính sau đăng nhập. Không có "account đang chọn" toàn cục - các trang
+ * dữ liệu mặc định xem trộn mọi account, lọc bằng dropdown ngay trong trang
+ * (theo pattern GoClaw); sidebar chỉ còn điều hướng.
+ */
 function DashboardShell() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<AccountInfo[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState("");
   const [checked, setChecked] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -26,7 +29,6 @@ function DashboardShell() {
       .overview()
       .then((data) => {
         setAccounts(data.accounts);
-        setSelectedAccountId((prev) => prev || data.accounts[0]?.id || "");
         setChecked(true);
       })
       .catch(() => navigate("/login"));
@@ -39,14 +41,10 @@ function DashboardShell() {
 
   if (!checked) return null;
 
-  const currentAccount = accounts.find((a) => a.id === selectedAccountId);
-
   return (
     <div className="flex min-h-[100dvh] bg-canvas">
       <SidebarNav
-        accounts={accounts}
-        selectedAccountId={selectedAccountId}
-        onSelectAccount={setSelectedAccountId}
+        online={accounts.some((a) => a.online)}
         onLogout={logout}
         mobileOpen={menuOpen}
         onCloseMobile={() => setMenuOpen(false)}
@@ -65,17 +63,15 @@ function DashboardShell() {
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zalo-500 text-[13px] font-bold text-white">
             Z
           </span>
-          <span className="truncate text-[15px] font-semibold text-ink">
-            {currentAccount?.label ?? "zalo-agent"}
-          </span>
+          <span className="truncate text-[15px] font-semibold text-ink">zalo-agent</span>
         </header>
 
         <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:overflow-y-auto lg:px-8 lg:py-7">
           <Routes>
-            <Route path="/" element={<OverviewPage selectedAccountId={selectedAccountId} />} />
-            <Route path="/sessions" element={<SessionsPage selectedAccountId={selectedAccountId} />} />
-            <Route path="/contacts" element={<ContactsPage selectedAccountId={selectedAccountId} />} />
-            <Route path="/memory" element={<MemoryPage selectedAccountId={selectedAccountId} />} />
+            <Route path="/" element={<OverviewPage />} />
+            <Route path="/sessions" element={<SessionsPage accounts={accounts} />} />
+            <Route path="/contacts" element={<ContactsPage accounts={accounts} />} />
+            <Route path="/memory" element={<MemoryPage accounts={accounts} />} />
             <Route path="/accounts" element={<AccountsPage />} />
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/providers" element={<ProvidersPage />} />

@@ -31,24 +31,26 @@ export function recordContactActivity(accountId: string, userId: string, display
 const listStmt = db.prepare(`
   SELECT account_id, user_id, display_name, first_seen, last_seen, message_count
   FROM contacts
-  WHERE account_id = ? AND (display_name LIKE ? OR user_id LIKE ?)
+  WHERE (? = '' OR account_id = ?) AND (display_name LIKE ? OR user_id LIKE ?)
   ORDER BY last_seen DESC
   LIMIT ? OFFSET ?
 `);
 
+/** accountId bỏ trống = mọi account */
 export function listContacts(params: {
-  accountId: string;
+  accountId?: string;
   query?: string;
   limit?: number;
   offset?: number;
 }): ContactRow[] {
+  const acc = params.accountId ?? "";
   const like = `%${params.query ?? ""}%`;
   type Row = {
     account_id: string; user_id: string; display_name: string;
     first_seen: string; last_seen: string; message_count: number;
   };
   const rows = listStmt.all(
-    params.accountId, like, like, params.limit ?? 50, params.offset ?? 0,
+    acc, acc, like, like, params.limit ?? 50, params.offset ?? 0,
   ) as unknown as Row[];
   return rows.map((r) => ({
     accountId: r.account_id,

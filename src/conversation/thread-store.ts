@@ -107,17 +107,19 @@ const listStmt = db.prepare(`
   SELECT account_id, thread_id, thread_type, display_name, bot_enabled,
          message_count, last_message_at, last_sender_name
   FROM threads
-  WHERE account_id = ? AND (display_name LIKE ? OR thread_id LIKE ?)
+  WHERE (? = '' OR account_id = ?) AND (display_name LIKE ? OR thread_id LIKE ?)
   ORDER BY last_message_at DESC
   LIMIT ? OFFSET ?
 `);
 
+/** accountId bỏ trống = mọi account (dashboard mặc định xem trộn chung) */
 export function listThreads(params: {
-  accountId: string;
+  accountId?: string;
   query?: string;
   limit?: number;
   offset?: number;
 }): ThreadRow[] {
+  const acc = params.accountId ?? "";
   const like = `%${params.query ?? ""}%`;
   type Row = {
     account_id: string; thread_id: string; thread_type: number; display_name: string;
@@ -125,7 +127,7 @@ export function listThreads(params: {
     last_sender_name: string | null;
   };
   const rows = listStmt.all(
-    params.accountId, like, like, params.limit ?? 50, params.offset ?? 0,
+    acc, acc, like, like, params.limit ?? 50, params.offset ?? 0,
   ) as unknown as Row[];
   return rows.map((r) => ({
     accountId: r.account_id,

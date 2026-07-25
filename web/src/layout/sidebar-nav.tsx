@@ -1,6 +1,5 @@
 import type { ReactNode, SVGProps } from "react";
 import { NavLink } from "react-router-dom";
-import type { AccountInfo } from "../dashboard-api-client";
 import {
   IconBot,
   IconBrain,
@@ -12,7 +11,6 @@ import {
   IconSliders,
   IconUsers,
 } from "../shared/dashboard-icons";
-import { SelectMenu } from "../shared/select-menu";
 
 /**
  * Sidebar theo mẫu GoClaw. Từ lg trở lên: cột cố định trong layout.
@@ -42,29 +40,17 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
 ];
 
 export function SidebarNav({
-  accounts,
-  selectedAccountId,
-  onSelectAccount,
+  online,
   onLogout,
   mobileOpen,
   onCloseMobile,
 }: {
-  accounts: AccountInfo[];
-  selectedAccountId: string;
-  onSelectAccount: (id: string) => void;
+  /** Có ít nhất 1 account Zalo đang chạy - cho chấm trạng thái ở footer */
+  online: boolean;
   onLogout: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
 }) {
-  const online = accounts.some((a) => a.online);
-
-  const accountOptions = accounts.map((a) => ({
-    value: a.id,
-    label: a.label,
-    hint: a.online ? "online" : "offline",
-    dotClass: a.online ? "bg-emerald-500" : "bg-slate-300",
-  }));
-
   return (
     <>
       {/* Backdrop chỉ tồn tại ở mobile khi drawer mở */}
@@ -95,16 +81,7 @@ export function SidebarNav({
           </button>
         </div>
 
-        <div className="px-4 pb-3">
-          <SelectMenu
-            value={selectedAccountId}
-            options={accountOptions}
-            onChange={onSelectAccount}
-            ariaLabel="Account đang xem"
-          />
-        </div>
-
-        <nav className="flex-1 overflow-y-auto px-3">
+        <nav className="mt-1 flex-1 overflow-y-auto px-3">
           {SECTIONS.map((section) => (
             <div key={section.title} className="mb-5">
               <div className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-soft/70">
