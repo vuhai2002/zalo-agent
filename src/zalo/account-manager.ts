@@ -214,6 +214,22 @@ async function processBatch(config: AccountConfig, api: API, batch: ParsedMessag
       })
     : () => {};
 
+  // Ghi 1 lần duy nhất, gọi được ở cả nhánh thành công và nhánh lỗi
+  let historyWritten = false;
+  const writeBatchToHistory = (): void => {
+    if (historyWritten) return;
+    historyWritten = true;
+    for (const msg of batch) {
+      appendMessage(config.id, msg.threadId, {
+        role: "user",
+        content: describeIncoming(msg),
+        senderName: msg.senderName,
+        senderId: msg.senderId,
+        images: imagePathsOf(msg.images),
+      });
+    }
+  };
+
   try {
     // Lưu ảnh xuống data/media TRƯỚC lượt agent: agent đọc từ đĩa (khỏi tải 2 lần)
     // và các lượt sau nạp lại được ảnh này từ history
@@ -224,15 +240,7 @@ async function processBatch(config: AccountConfig, api: API, batch: ParsedMessag
     const result = await runAgentTurn({ api, account: config, batch });
     recordAgentTurn(config.id, latest.threadId, result.usage);
 
-    for (const msg of batch) {
-      appendMessage(config.id, msg.threadId, {
-        role: "user",
-        content: describeIncoming(msg),
-        senderName: msg.senderName,
-        senderId: msg.senderId,
-        images: imagePathsOf(msg.images),
-      });
-    }
+    writeBatchToHistory();
 
     if (!result.text) {
       log.debug({ threadId: latest.threadId }, "Agent không trả text (có thể chỉ thả reaction)");
@@ -248,6 +256,9 @@ async function processBatch(config: AccountConfig, api: API, batch: ParsedMessag
     // maybeSummarizeThread tự nuốt lỗi nên không cần catch thêm
     void maybeSummarizeThread(config.id, latest.threadId);
   } catch (err) {
+    // Agent lỗi (provider chết, hết quota, timeout) thì tin của người dùng VẪN
+    // phải vào history - bỏ qua là lượt sau bot không biết họ đã nói gì
+    writeBatchToHistory();
     log.error({ accountId: config.id, threadId: latest.threadId, err }, "Lỗi xử lý lượt tin nhắn");
   } finally {
     stopTyping();
