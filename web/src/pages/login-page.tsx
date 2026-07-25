@@ -31,8 +31,8 @@ export function LoginPage() {
             src="/zalo-agent-logo.webp"
             alt="Zalo Agent"
             width={384}
-            height={384}
-            className="h-40 w-40"
+            height={368}
+            className="h-40 w-auto"
           />
           <div className="text-[13px] text-ink-soft">Dashboard quản trị bot</div>
         </div>
