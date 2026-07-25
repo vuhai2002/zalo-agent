@@ -148,6 +148,9 @@ export const api = {
       method: "DELETE",
     }),
 
+  tools: () =>
+    request<{ items: ToolCatalogItem[]; webSearchProvider: string }>("/api/tools"),
+
   provider: () => request<ProviderSettings>("/api/provider"),
   updateProvider: (update: Partial<ProviderSettings> & { apiKey?: string }) =>
     request<ProviderSettings & { ok: true }>("/api/provider", {
@@ -173,8 +176,16 @@ export type ManagedAccount = {
   autoReactEnabled: boolean;
   autoReactIcon: string;
   typingIndicatorEnabled: boolean;
+  disabledTools: string[];
   running: boolean;
   hasCredentials: boolean;
+};
+
+export type ToolCatalogItem = {
+  key: string;
+  label: string;
+  description: string;
+  group: "read" | "action";
 };
 
 export type ReactionIcon = { key: string; emoji: string; label: string };

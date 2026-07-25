@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ManagedAccount, ManagedAgent, ReactionIcon } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { SelectMenu } from "../shared/select-menu";
+import { ToggleKnob } from "../shared/ui-bits";
 
 function Toggle({ value, onChange, label, hint }: {
   value: boolean;
@@ -15,9 +16,7 @@ function Toggle({ value, onChange, label, hint }: {
         <span className="block text-[13.5px] font-medium text-ink">{label}</span>
         {hint && <span className="block text-xs text-ink-soft">{hint}</span>}
       </span>
-      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${value ? "bg-zalo-500" : "bg-slate-300"}`}>
-        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${value ? "left-[18px]" : "left-0.5"}`} />
-      </span>
+      <ToggleKnob on={value} />
     </button>
   );
 }

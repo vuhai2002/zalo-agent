@@ -3,6 +3,19 @@ import { IconSearch } from "./dashboard-icons";
 
 /** Mảnh UI dùng chung theo mẫu GoClaw: badge chấm màu, stat card + sparkline, tile, bảng */
 
+/** Núm gạt bật/tắt - phần hình của mọi toggle (drawer account, trang Tools) */
+export function ToggleKnob({ on }: { on: boolean }) {
+  return (
+    <span
+      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-zalo-500" : "bg-slate-300"}`}
+    >
+      <span
+        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${on ? "left-[18px]" : "left-0.5"}`}
+      />
+    </span>
+  );
+}
+
 export function Badge({
   tone,
   dot = true,

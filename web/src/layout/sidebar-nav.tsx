@@ -1,6 +1,7 @@
 import type { ReactNode, SVGProps } from "react";
 import { NavLink } from "react-router-dom";
 import {
+  IconBolt,
   IconBot,
   IconBrain,
   IconChat,
@@ -34,6 +35,7 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
     items: [
       { to: "/accounts", label: "Accounts", icon: IconSignal },
       { to: "/agents", label: "Agents", icon: IconBot },
+      { to: "/tools", label: "Tools", icon: IconBolt },
       { to: "/providers", label: "Providers", icon: IconSliders },
     ],
   },
