@@ -1,18 +1,142 @@
-import type { ReactNode } from "react";
+import type { ReactNode, SVGProps } from "react";
+import { IconSearch } from "./dashboard-icons";
 
-/** Mảnh UI nhỏ dùng chung: badge, nút phân trang, khung bảng, trạng thái rỗng */
+/** Mảnh UI dùng chung theo mẫu GoClaw: badge chấm màu, stat card + sparkline, tile, bảng */
 
-export function Badge({ tone, children }: { tone: "blue" | "gray" | "green" | "red"; children: ReactNode }) {
+export function Badge({
+  tone,
+  dot = true,
+  children,
+}: {
+  tone: "blue" | "gray" | "green" | "red" | "amber";
+  dot?: boolean;
+  children: ReactNode;
+}) {
   const tones = {
-    blue: "bg-zalo-100 text-zalo-700",
-    gray: "bg-slate-100 text-slate-600",
-    green: "bg-emerald-100 text-emerald-700",
-    red: "bg-red-100 text-red-700",
-  };
+    blue: { chip: "bg-zalo-50 text-zalo-700 border-zalo-100", dot: "bg-zalo-500" },
+    gray: { chip: "bg-tile text-ink-soft border-line", dot: "bg-slate-400" },
+    green: { chip: "bg-emerald-50 text-emerald-700 border-emerald-100", dot: "bg-emerald-500" },
+    red: { chip: "bg-red-50 text-red-700 border-red-100", dot: "bg-red-500" },
+    amber: { chip: "bg-amber-50 text-amber-700 border-amber-100", dot: "bg-amber-500" },
+  }[tone];
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${tones.chip}`}
+    >
+      {dot && <span className={`h-1.5 w-1.5 rounded-full ${tones.dot}`} />}
       {children}
     </span>
+  );
+}
+
+/** Sparkline SVG thuần từ 1 dãy số - đường mảnh + fill nhạt như mẫu */
+export function Sparkline({ values, className }: { values: number[]; className?: string }) {
+  const w = 120;
+  const h = 28;
+  if (values.length < 2 || values.every((v) => v === 0)) {
+    return (
+      <svg viewBox={`0 0 ${w} ${h}`} className={className} preserveAspectRatio="none">
+        <line x1="0" y1={h - 1} x2={w} y2={h - 1} stroke="currentColor" strokeOpacity="0.25" />
+      </svg>
+    );
+  }
+  const max = Math.max(...values);
+  const pts = values.map((v, i) => ({
+    x: (i / (values.length - 1)) * w,
+    y: h - 2 - (v / max) * (h - 6),
+  }));
+  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className={className} preserveAspectRatio="none">
+      <path d={`${line} L${w},${h} L0,${h} Z`} fill="currentColor" fillOpacity="0.1" stroke="none" />
+      <path d={line} fill="none" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+/** Stat card theo mẫu: icon box 32px góc trên, label nhỏ, số to, sparkline đáy */
+export function StatCard({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  series,
+}: {
+  icon: (p: SVGProps<SVGSVGElement> & { size?: number }) => ReactNode;
+  label: string;
+  value: string;
+  sub?: ReactNode;
+  series?: number[];
+}) {
+  return (
+    <div className="gc-card flex flex-col p-5">
+      <div className="flex items-start gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-tile text-ink">
+          <Icon size={17} />
+        </span>
+        <div className="min-w-0">
+          <div className="text-[13px] leading-tight text-ink-soft">{label}</div>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-[26px] font-semibold leading-none text-ink">{value}</span>
+            {sub}
+          </div>
+        </div>
+      </div>
+      {series && <Sparkline values={series} className="mt-4 h-7 w-full text-zalo-500" />}
+    </div>
+  );
+}
+
+/** Panel lớn có header icon + title + slot phải (System Health, Connected Clients...) */
+export function SectionCard({
+  icon: Icon,
+  title,
+  aside,
+  children,
+}: {
+  icon?: (p: SVGProps<SVGSVGElement> & { size?: number }) => ReactNode;
+  title: string;
+  aside?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="gc-card p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          {Icon && (
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-tile text-ink">
+              <Icon size={15} />
+            </span>
+          )}
+          <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+        </div>
+        {aside}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Tile nhỏ trong panel: icon + label + value */
+export function InfoTile({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: (p: SVGProps<SVGSVGElement> & { size?: number }) => ReactNode;
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div className="gc-tile flex items-center gap-3">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white text-ink-soft">
+        <Icon size={16} />
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs text-ink-soft">{label}</div>
+        <div className="truncate text-[15px] font-semibold text-ink">{value}</div>
+      </div>
+    </div>
   );
 }
 
@@ -26,13 +150,13 @@ export function Pager({
   onPage: (p: number) => void;
 }) {
   const btn =
-    "rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm disabled:opacity-40 hover:bg-slate-50";
+    "rounded-lg border border-line bg-white px-3 py-1.5 text-[13px] font-medium text-ink disabled:opacity-40 hover:bg-tile";
   return (
     <div className="flex items-center gap-2">
       <button className={btn} disabled={page === 0} onClick={() => onPage(page - 1)}>
         Trước
       </button>
-      <span className="text-sm text-slate-500">Trang {page + 1}</span>
+      <span className="text-[13px] text-ink-soft">Trang {page + 1}</span>
       <button className={btn} disabled={!hasMore} onClick={() => onPage(page + 1)}>
         Sau
       </button>
@@ -40,14 +164,26 @@ export function Pager({
   );
 }
 
-export function TableShell({ headers, children }: { headers: string[]; children: ReactNode }) {
+/**
+ * Bảng cuộn ngang trên màn hẹp thay vì bóp cột cho vỡ chữ.
+ * minWidth đặt theo số cột để mobile luôn có thanh cuộn thay vì wrap xấu.
+ */
+export function TableShell({
+  headers,
+  minWidth = 720,
+  children,
+}: {
+  headers: string[];
+  minWidth?: number;
+  children: ReactNode;
+}) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-      <table className="w-full text-left text-sm">
+    <div className="gc-card overflow-x-auto">
+      <table className="w-full text-left text-[14px]" style={{ minWidth }}>
         <thead>
-          <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-            {headers.map((h) => (
-              <th key={h} className="px-4 py-3 font-medium">
+          <tr className="border-b border-line text-[11px] uppercase tracking-wider text-ink-soft">
+            {headers.map((h, i) => (
+              <th key={i} className="whitespace-nowrap px-4 py-3 font-semibold">
                 {h}
               </th>
             ))}
@@ -59,13 +195,62 @@ export function TableShell({ headers, children }: { headers: string[]; children:
   );
 }
 
+/** Thanh công cụ trên bảng: ô tìm kiếm + phân trang, xuống dòng trên mobile */
+export function ListToolbar({
+  query,
+  onQuery,
+  placeholder,
+  page,
+  hasMore,
+  onPage,
+}: {
+  query: string;
+  onQuery: (v: string) => void;
+  placeholder: string;
+  page: number;
+  hasMore: boolean;
+  onPage: (p: number) => void;
+}) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative w-full sm:w-80">
+        <IconSearch
+          size={15}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft/60"
+        />
+        <input
+          value={query}
+          onChange={(e) => onQuery(e.target.value)}
+          placeholder={placeholder}
+          className="gc-input w-full pl-9"
+        />
+      </div>
+      <Pager page={page} hasMore={hasMore} onPage={onPage} />
+    </div>
+  );
+}
+
 export function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-10 text-center text-slate-400">
+      <td colSpan={colSpan} className="px-4 py-12 text-center text-[14px] text-ink-soft/70">
         {text}
       </td>
     </tr>
+  );
+}
+
+/** Avatar tròn chữ cái đầu - màu sinh từ tên để ổn định */
+export function InitialAvatar({ name }: { name: string }) {
+  const palette = ["bg-zalo-500", "bg-sky-500", "bg-indigo-500", "bg-teal-500", "bg-rose-500", "bg-amber-500"];
+  const hash = [...name].reduce((a, ch) => a + ch.charCodeAt(0), 0);
+  const initial = (name.trim()[0] ?? "?").toUpperCase();
+  return (
+    <span
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white ${palette[hash % palette.length]}`}
+    >
+      {initial}
+    </span>
   );
 }
 
@@ -76,4 +261,18 @@ export function formatTime(iso: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) return "-";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function formatNumber(n: number): string {
+  return n.toLocaleString("vi-VN");
+}
+
+/** "120d 1h 48m" từ giây */
+export function formatUptime(seconds: number): string {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${seconds % 60}s`;
 }

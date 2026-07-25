@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { loadAccounts } from "../../config/accounts.js";
 import { getDailyUsage } from "../../conversation/usage-store.js";
 import { getRunningAccounts } from "../../zalo/account-manager.js";
+import { getAccountStats, getSystemInfo } from "../overview-stats.js";
 
 /** /api/overview - trang tổng quan: account (config + trạng thái online) + usage 7 ngày */
 export const overviewRoutes = new Hono().get("/", (c) => {
@@ -31,6 +32,10 @@ export const overviewRoutes = new Hono().get("/", (c) => {
     accountId: a.id,
     daily: getDailyUsage(a.id, since),
   }));
+  const statsByAccount = accounts.map((a) => ({
+    accountId: a.id,
+    stats: getAccountStats(a.id),
+  }));
 
-  return c.json({ accounts, usageByAccount });
+  return c.json({ accounts, usageByAccount, statsByAccount, system: getSystemInfo() });
 });

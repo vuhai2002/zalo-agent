@@ -74,9 +74,14 @@ export function buildDashboardApp(): Hono {
   app.route("/api/provider", providerRoutes);
   app.route("/api/memories", memoryRoutes);
 
+  // API không khớp route nào phải trả JSON 404, không được rơi xuống SPA
+  // fallback bên dưới (client fetch JSON mà nhận HTML thì lỗi rất khó đọc)
+  app.all("/api/*", (c) => c.json({ error: "Không tìm thấy endpoint" }, 404));
+
   // Production: serve SPA đã build (pnpm build:web). Dev thì dùng Vite (pnpm dev:web).
-  const webDist = path.resolve("web/dist");
-  if (fs.existsSync(webDist)) {
+  // Fallback index.html cho mọi path còn lại để deep link (/sessions, /login)
+  // load được khi F5 - đây là điều kiện để router dùng URL sạch, không cần hash.
+  if (fs.existsSync(path.resolve("web/dist"))) {
     app.use("/*", serveStatic({ root: "web/dist" }));
     app.get("*", serveStatic({ path: "web/dist/index.html" }));
   }

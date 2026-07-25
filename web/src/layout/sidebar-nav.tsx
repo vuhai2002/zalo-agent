@@ -1,19 +1,35 @@
+import type { ReactNode, SVGProps } from "react";
 import { NavLink } from "react-router-dom";
 import type { AccountInfo } from "../dashboard-api-client";
+import {
+  IconBrain,
+  IconChat,
+  IconClose,
+  IconGrid,
+  IconLogout,
+  IconSliders,
+  IconUsers,
+} from "../shared/dashboard-icons";
+import { SelectMenu } from "../shared/select-menu";
 
-/** Sidebar theo bố cục GoClaw: logo + section + item, tone xanh Zalo */
+/**
+ * Sidebar theo mẫu GoClaw. Từ lg trở lên: cột cố định trong layout.
+ * Dưới lg: drawer trượt từ trái, mở bằng nút hamburger ở topbar mobile.
+ */
 
-const SECTIONS: { title: string; items: { to: string; label: string }[] }[] = [
-  { title: "Tổng quan", items: [{ to: "/", label: "Overview" }] },
+type IconFn = (p: SVGProps<SVGSVGElement> & { size?: number }) => ReactNode;
+
+const SECTIONS: { title: string; items: { to: string; label: string; icon: IconFn }[] }[] = [
+  { title: "Core", items: [{ to: "/", label: "Overview", icon: IconGrid }] },
   {
     title: "Hội thoại",
     items: [
-      { to: "/sessions", label: "Sessions" },
-      { to: "/contacts", label: "Contacts" },
+      { to: "/sessions", label: "Sessions", icon: IconChat },
+      { to: "/contacts", label: "Contacts", icon: IconUsers },
     ],
   },
-  { title: "Dữ liệu", items: [{ to: "/memory", label: "Memory" }] },
-  { title: "Hệ thống", items: [{ to: "/providers", label: "Providers" }] },
+  { title: "Dữ liệu", items: [{ to: "/memory", label: "Memory", icon: IconBrain }] },
+  { title: "Hệ thống", items: [{ to: "/providers", label: "Providers", icon: IconSliders }] },
 ];
 
 export function SidebarNav({
@@ -21,68 +37,106 @@ export function SidebarNav({
   selectedAccountId,
   onSelectAccount,
   onLogout,
+  mobileOpen,
+  onCloseMobile,
 }: {
   accounts: AccountInfo[];
   selectedAccountId: string;
   onSelectAccount: (id: string) => void;
   onLogout: () => void;
+  mobileOpen: boolean;
+  onCloseMobile: () => void;
 }) {
+  const online = accounts.some((a) => a.online);
+
+  const accountOptions = accounts.map((a) => ({
+    value: a.id,
+    label: a.label,
+    hint: a.online ? "online" : "offline",
+    dotClass: a.online ? "bg-emerald-500" : "bg-slate-300",
+  }));
+
   return (
-    <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
-      <div className="flex items-center gap-2 px-5 py-4">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-zalo-500 font-bold text-white">
-          Z
-        </span>
-        <span className="text-lg font-semibold text-slate-900">zalo-agent</span>
-      </div>
+    <>
+      {/* Backdrop chỉ tồn tại ở mobile khi drawer mở */}
+      {mobileOpen && (
+        <button
+          aria-label="Đóng menu"
+          onClick={onCloseMobile}
+          className="fixed inset-0 z-40 bg-ink/30 backdrop-blur-[2px] lg:hidden"
+        />
+      )}
 
-      <div className="px-4 pb-2">
-        <label className="mb-1 block text-xs uppercase tracking-wide text-slate-400">Account</label>
-        <select
-          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm"
-          value={selectedAccountId}
-          onChange={(e) => onSelectAccount(e.target.value)}
-        >
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.label} {a.online ? "(online)" : "(offline)"}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <nav className="flex-1 overflow-y-auto px-3 py-2">
-        {SECTIONS.map((section) => (
-          <div key={section.title} className="mb-4">
-            <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {section.title}
-            </div>
-            {section.items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === "/"}
-                className={({ isActive }) =>
-                  `block rounded-lg px-3 py-2 text-sm ${
-                    isActive
-                      ? "bg-zalo-50 font-medium text-zalo-700"
-                      : "text-slate-600 hover:bg-slate-50"
-                  }`
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </div>
-        ))}
-      </nav>
-
-      <button
-        onClick={onLogout}
-        className="mx-4 mb-4 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:z-auto lg:w-60 lg:translate-x-0 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
-        Đăng xuất
-      </button>
-    </aside>
+        <div className="flex items-center gap-2.5 px-5 pb-4 pt-5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-zalo-500 text-[15px] font-bold text-white">
+            Z
+          </span>
+          <span className="text-[17px] font-bold tracking-tight text-ink">zalo-agent</span>
+          <button
+            onClick={onCloseMobile}
+            aria-label="Đóng menu"
+            className="ml-auto rounded-lg p-1.5 text-ink-soft hover:bg-tile lg:hidden"
+          >
+            <IconClose size={17} />
+          </button>
+        </div>
+
+        <div className="px-4 pb-3">
+          <SelectMenu
+            value={selectedAccountId}
+            options={accountOptions}
+            onChange={onSelectAccount}
+            ariaLabel="Account đang xem"
+          />
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-3">
+          {SECTIONS.map((section) => (
+            <div key={section.title} className="mb-5">
+              <div className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-soft/70">
+                {section.title}
+              </div>
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === "/"}
+                  onClick={onCloseMobile}
+                  className={({ isActive }) =>
+                    `mb-0.5 flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-[14px] transition-colors ${
+                      isActive
+                        ? "bg-zalo-50 font-medium text-zalo-700"
+                        : "text-ink-soft hover:bg-tile hover:text-ink"
+                    }`
+                  }
+                >
+                  <item.icon size={17} />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="flex items-center justify-between border-t border-line px-4 py-3">
+          <span className="flex items-center gap-2 text-[12.5px] text-ink-soft">
+            <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-slate-300"}`} />
+            {online ? "Connected" : "Offline"} · v0.1.0
+          </span>
+          <button
+            onClick={onLogout}
+            title="Đăng xuất"
+            className="rounded-lg p-1.5 text-ink-soft hover:bg-tile hover:text-ink"
+          >
+            <IconLogout size={16} />
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

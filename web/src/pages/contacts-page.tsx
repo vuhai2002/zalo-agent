@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ContactItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
-import { EmptyRow, formatTime, Pager, TableShell } from "../shared/ui-bits";
+import { PageHeader } from "../layout/page-header";
+import {
+  EmptyRow,
+  formatNumber,
+  formatTime,
+  InitialAvatar,
+  ListToolbar,
+  TableShell,
+} from "../shared/ui-bits";
 
 export function ContactsPage({ selectedAccountId }: { selectedAccountId: string }) {
   const [items, setItems] = useState<ContactItem[]>([]);
@@ -25,35 +33,37 @@ export function ContactsPage({ selectedAccountId }: { selectedAccountId: string 
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-semibold text-slate-900">Contacts</h1>
-      <p className="mb-6 text-sm text-slate-500">
-        Tự thu thập từ mọi tin nhắn đến (kể cả người bot không trả lời)
-      </p>
+      <PageHeader
+        title="Contacts"
+        subtitle="Tự thu thập từ mọi tin nhắn đến, kể cả người bot không trả lời"
+      />
 
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Tìm theo tên hoặc user ID..."
-          className="w-80 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-zalo-500 focus:ring-2 focus:ring-zalo-100"
-        />
-        <Pager page={page} hasMore={hasMore} onPage={setPage} />
-      </div>
+      <ListToolbar
+        query={query}
+        onQuery={setQuery}
+        placeholder="Tìm theo tên hoặc user ID..."
+        page={page}
+        hasMore={hasMore}
+        onPage={setPage}
+      />
 
-      <TableShell headers={["Tên", "User ID", "Số tin", "Lần đầu", "Gần nhất"]}>
+      <TableShell headers={["Tên", "User ID", "Số tin", "Lần đầu", "Gần nhất"]} minWidth={760}>
         {items.length === 0 && <EmptyRow colSpan={5} text="Chưa có contact nào" />}
         {items.map((contact) => (
           <tr
             key={contact.userId}
-            className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+            className="border-b border-line/60 last:border-0 hover:bg-tile/40"
           >
-            <td className="px-4 py-3 font-medium text-slate-900">
-              {contact.displayName || "(không tên)"}
+            <td className="px-4 py-3">
+              <div className="flex items-center gap-3">
+                <InitialAvatar name={contact.displayName || contact.userId} />
+                <span className="font-medium text-ink">{contact.displayName || "(không tên)"}</span>
+              </div>
             </td>
-            <td className="px-4 py-3 text-slate-500">{contact.userId}</td>
-            <td className="px-4 py-3 text-slate-600">{contact.messageCount}</td>
-            <td className="px-4 py-3 text-slate-500">{formatTime(contact.firstSeen)}</td>
-            <td className="px-4 py-3 text-slate-500">{formatTime(contact.lastSeen)}</td>
+            <td className="px-4 py-3 text-ink-soft">{contact.userId}</td>
+            <td className="px-4 py-3 text-ink-soft">{formatNumber(contact.messageCount)}</td>
+            <td className="px-4 py-3 text-ink-soft">{formatTime(contact.firstSeen)}</td>
+            <td className="px-4 py-3 text-ink-soft">{formatTime(contact.lastSeen)}</td>
           </tr>
         ))}
       </TableShell>

@@ -1,0 +1,144 @@
+import type { SVGProps } from "react";
+
+/** Icon stroke 1.5px kiểu Phosphor, currentColor - đủ dùng cho sidebar + tiles */
+
+type IconProps = SVGProps<SVGSVGElement> & { size?: number };
+
+function base({ size = 18, ...props }: IconProps) {
+  return {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    ...props,
+  };
+}
+
+export const IconGrid = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="3.5" y="3.5" width="7" height="7" rx="1.6" />
+    <rect x="13.5" y="3.5" width="7" height="7" rx="1.6" />
+    <rect x="3.5" y="13.5" width="7" height="7" rx="1.6" />
+    <rect x="13.5" y="13.5" width="7" height="7" rx="1.6" />
+  </svg>
+);
+
+export const IconChat = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M21 12a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.36-4.1-1L3 21l1.5-5.4A8.5 8.5 0 1 1 21 12Z" />
+  </svg>
+);
+
+export const IconUsers = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="9" cy="8.5" r="3.2" />
+    <path d="M3.5 19.5c.7-3 2.9-4.5 5.5-4.5s4.8 1.5 5.5 4.5" />
+    <path d="M15.5 6a3 3 0 0 1 0 5.4M17.5 15.2c1.7.5 2.7 1.7 3 3.3" />
+  </svg>
+);
+
+export const IconBrain = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9.5 4.5A2.8 2.8 0 0 0 6 7.2c-1.7.4-2.8 1.7-2.8 3.4 0 1 .4 1.9 1.1 2.5-.4.6-.6 1.3-.6 2 0 2 1.6 3.6 3.6 3.6.6 0 1.1-.1 1.6-.4.5.5 1.1.7 1.8.7 1.6 0 2.8-1.3 2.8-2.8V7.3c0-1.6-1.2-2.8-2.8-2.8h-1.2Z" />
+    <path d="M14.5 4.5A2.8 2.8 0 0 1 18 7.2c1.7.4 2.8 1.7 2.8 3.4 0 1-.4 1.9-1.1 2.5.4.6.6 1.3.6 2 0 2-1.6 3.6-3.6 3.6" />
+  </svg>
+);
+
+export const IconSliders = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 8h9M17 8h3M4 16h3M11 16h9" />
+    <circle cx="15" cy="8" r="2" />
+    <circle cx="9" cy="16" r="2" />
+  </svg>
+);
+
+export const IconBolt = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M13 3 5 13.5h5L11 21l8-10.5h-5L13 3Z" />
+  </svg>
+);
+
+export const IconClock = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </svg>
+);
+
+export const IconDatabase = (p: IconProps) => (
+  <svg {...base(p)}>
+    <ellipse cx="12" cy="5.5" rx="7.5" ry="2.8" />
+    <path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13" />
+    <path d="M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8" />
+  </svg>
+);
+
+export const IconCpu = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="6" y="6" width="12" height="12" rx="2" />
+    <rect x="9.5" y="9.5" width="5" height="5" rx="1" />
+    <path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" />
+  </svg>
+);
+
+export const IconSignal = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M6.3 9.5a7 7 0 0 0 0 5M3.5 7a11 11 0 0 0 0 10M17.7 9.5a7 7 0 0 1 0 5M20.5 7a11 11 0 0 1 0 10" />
+    <circle cx="12" cy="12" r="2" />
+  </svg>
+);
+
+export const IconLogout = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M14 4h-7a1.5 1.5 0 0 0-1.5 1.5v13A1.5 1.5 0 0 0 7 20h7" />
+    <path d="M10.5 12h9M16.5 8.5 20 12l-3.5 3.5" />
+  </svg>
+);
+
+export const IconSearch = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m20 20-3.8-3.8" />
+  </svg>
+);
+
+export const IconMessage = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-4 3.5v-14Z" />
+    <path d="M8.5 9.5h7M8.5 12.5h4.5" />
+  </svg>
+);
+
+export const IconChevronDown = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m6 9.5 6 6 6-6" />
+  </svg>
+);
+
+export const IconCheck = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m5 12.5 4.5 4.5L19 7" />
+  </svg>
+);
+
+export const IconMenu = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </svg>
+);
+
+export const IconClose = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M6 6l12 12M18 6 6 18" />
+  </svg>
+);
+
+export const IconHeart = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.2 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10Z" />
+  </svg>
+);

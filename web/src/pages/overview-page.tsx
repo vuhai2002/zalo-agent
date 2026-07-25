@@ -1,7 +1,27 @@
 import { useEffect, useState } from "react";
 import type { OverviewData } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
-import { Badge } from "../shared/ui-bits";
+import { PageHeader } from "../layout/page-header";
+import {
+  IconBolt,
+  IconBrain,
+  IconChat,
+  IconClock,
+  IconCpu,
+  IconDatabase,
+  IconHeart,
+  IconMessage,
+  IconSignal,
+  IconUsers,
+} from "../shared/dashboard-icons";
+import {
+  Badge,
+  formatNumber,
+  formatUptime,
+  InfoTile,
+  SectionCard,
+  StatCard,
+} from "../shared/ui-bits";
 
 export function OverviewPage({ selectedAccountId }: { selectedAccountId: string }) {
   const [data, setData] = useState<OverviewData | null>(null);
@@ -10,73 +30,121 @@ export function OverviewPage({ selectedAccountId }: { selectedAccountId: string 
     api.overview().then(setData).catch(() => setData(null));
   }, []);
 
-  if (!data) return <p className="text-slate-400">Đang tải...</p>;
+  if (!data) return <p className="text-ink-soft">Đang tải...</p>;
 
   const daily = data.usageByAccount.find((u) => u.accountId === selectedAccountId)?.daily ?? [];
-  const totals = daily.reduce(
-    (acc, d) => ({
-      turns: acc.turns + d.turns,
-      input: acc.input + d.inputTokens,
-      output: acc.output + d.outputTokens,
-    }),
-    { turns: 0, input: 0, output: 0 },
-  );
-
-  const cards = [
-    { label: "Lượt agent (7 ngày)", value: totals.turns.toLocaleString("vi-VN") },
-    { label: "Token vào (7 ngày)", value: totals.input.toLocaleString("vi-VN") },
-    { label: "Token ra (7 ngày)", value: totals.output.toLocaleString("vi-VN") },
-  ];
+  const stats = data.statsByAccount.find((s) => s.accountId === selectedAccountId)?.stats;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayUsage = daily.find((d) => d.day === today);
+  // daily trả DESC theo ngày - đảo lại cho sparkline chạy trái -> phải
+  const series = [...daily].reverse();
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-semibold text-slate-900">Overview</h1>
-      <p className="mb-6 text-sm text-slate-500">Trạng thái bot và mức dùng LLM</p>
+      <PageHeader
+        title="Overview"
+        subtitle="Trạng thái bot và mức dùng LLM"
+        aside={
+          <Badge tone={data.system.llm.hasOverride ? "blue" : "gray"} dot={false}>
+            {data.system.llm.provider} · {data.system.llm.model}
+          </Badge>
+        }
+      />
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {cards.map((card) => (
-          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-5">
-            <div className="text-sm text-slate-500">{card.label}</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">{card.value}</div>
-          </div>
-        ))}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          icon={IconMessage}
+          label="Tin nhắn hôm nay"
+          value={formatNumber(stats?.messagesToday ?? 0)}
+          sub={<span className="text-[12px] text-ink-soft">/ {formatNumber(stats?.messagesTotal ?? 0)} tổng</span>}
+          series={series.map((d) => d.turns)}
+        />
+        <StatCard
+          icon={IconBolt}
+          label="Lượt agent hôm nay"
+          value={formatNumber(todayUsage?.turns ?? 0)}
+          series={series.map((d) => d.turns)}
+        />
+        <StatCard
+          icon={IconCpu}
+          label="Token hôm nay"
+          value={formatNumber((todayUsage?.inputTokens ?? 0) + (todayUsage?.outputTokens ?? 0))}
+          sub={
+            <span className="text-[12px] text-ink-soft">
+              {formatNumber(todayUsage?.inputTokens ?? 0)} vào / {formatNumber(todayUsage?.outputTokens ?? 0)} ra
+            </span>
+          }
+          series={series.map((d) => d.inputTokens + d.outputTokens)}
+        />
+        <StatCard
+          icon={IconUsers}
+          label="Contacts"
+          value={formatNumber(stats?.contacts ?? 0)}
+          sub={<span className="text-[12px] text-ink-soft">{formatNumber(stats?.threads ?? 0)} sessions</span>}
+        />
       </div>
 
-      <h2 className="mb-3 text-lg font-medium text-slate-900">Accounts</h2>
-      <div className="space-y-2">
-        {data.accounts.map((a) => (
-          <div
-            key={a.id}
-            className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-3"
-          >
-            <div>
-              <div className="font-medium text-slate-900">{a.label}</div>
-              <div className="text-xs text-slate-400">{a.id}</div>
-            </div>
-            <Badge tone={a.online ? "green" : a.enabled ? "red" : "gray"}>
-              {a.online ? "Online" : a.enabled ? "Offline" : "Đã tắt"}
-            </Badge>
-          </div>
-        ))}
-      </div>
+      <SectionCard
+        icon={IconHeart}
+        title="System Health"
+        aside={<Badge tone="gray" dot={false}>node {data.system.nodeVersion}</Badge>}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <InfoTile icon={IconClock} label="Uptime" value={formatUptime(data.system.uptimeSeconds)} />
+          <InfoTile icon={IconDatabase} label="Database" value="SQLite · Connected" />
+          <InfoTile
+            icon={IconSignal}
+            label="Accounts online"
+            value={`${data.accounts.filter((a) => a.online).length} / ${data.accounts.length}`}
+          />
+          <InfoTile icon={IconChat} label="Sessions" value={formatNumber(stats?.threads ?? 0)} />
+          <InfoTile icon={IconUsers} label="Contacts" value={formatNumber(stats?.contacts ?? 0)} />
+          <InfoTile icon={IconBrain} label="Memory facts" value={formatNumber(stats?.memories ?? 0)} />
+        </div>
 
-      {daily.length > 0 && (
-        <>
-          <h2 className="mb-3 mt-8 text-lg font-medium text-slate-900">Theo ngày</h2>
-          <div className="rounded-xl border border-slate-200 bg-white">
-            {daily.map((d) => (
-              <div
-                key={d.day}
-                className="flex items-center justify-between border-b border-slate-100 px-5 py-2.5 text-sm last:border-0"
-              >
-                <span className="text-slate-600">{d.day}</span>
-                <span className="text-slate-500">
-                  {d.turns} lượt - {(d.inputTokens + d.outputTokens).toLocaleString("vi-VN")} token
-                </span>
-              </div>
+        <div className="mt-5">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+            Channels
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {data.accounts.map((a) => (
+              <Badge key={a.id} tone={a.online ? "green" : a.enabled ? "red" : "gray"}>
+                {a.label}
+              </Badge>
             ))}
           </div>
-        </>
+        </div>
+      </SectionCard>
+
+      {series.length > 0 && (
+        <div className="mt-5">
+          <SectionCard icon={IconBolt} title="Mức dùng 7 ngày">
+            <div>
+              {series.map((d) => {
+                const total = d.inputTokens + d.outputTokens;
+                const max = Math.max(...series.map((x) => x.inputTokens + x.outputTokens), 1);
+                return (
+                  <div
+                    key={d.day}
+                    className="flex items-center gap-3 border-b border-line/60 py-2 text-[13px] last:border-0 sm:gap-4"
+                  >
+                    <span className="w-12 shrink-0 text-ink-soft sm:w-20">{d.day.slice(5)}</span>
+                    <div className="h-1.5 min-w-8 flex-1 overflow-hidden rounded-full bg-tile">
+                      <div
+                        className="h-full rounded-full bg-zalo-500"
+                        style={{ width: `${Math.max(2, (total / max) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="shrink-0 text-right text-ink-soft">
+                      <span className="hidden sm:inline">{d.turns} lượt · </span>
+                      {formatNumber(total)} token
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </SectionCard>
+        </div>
       )}
     </div>
   );

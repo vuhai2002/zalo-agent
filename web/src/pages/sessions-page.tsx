@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ThreadItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
-import { Badge, EmptyRow, formatTime, Pager, TableShell } from "../shared/ui-bits";
+import { PageHeader } from "../layout/page-header";
+import {
+  Badge,
+  EmptyRow,
+  formatNumber,
+  formatTime,
+  InitialAvatar,
+  ListToolbar,
+  TableShell,
+} from "../shared/ui-bits";
 import { SessionDetailDrawer } from "./session-detail-drawer";
 
 export function SessionsPage({ selectedAccountId }: { selectedAccountId: string }) {
@@ -32,40 +41,47 @@ export function SessionsPage({ selectedAccountId }: { selectedAccountId: string 
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-semibold text-slate-900">Sessions</h1>
-      <p className="mb-6 text-sm text-slate-500">
-        Mỗi thread (chat riêng / nhóm) là một session, ngữ cảnh giữ vĩnh viễn trong SQLite
-      </p>
+      <PageHeader
+        title="Sessions"
+        subtitle="Mỗi thread (chat riêng / nhóm) là một session, ngữ cảnh giữ trong SQLite"
+      />
 
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Tìm theo tên hoặc thread ID..."
-          className="w-80 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-zalo-500 focus:ring-2 focus:ring-zalo-100"
-        />
-        <Pager page={page} hasMore={hasMore} onPage={setPage} />
-      </div>
+      <ListToolbar
+        query={query}
+        onQuery={setQuery}
+        placeholder="Tìm theo tên hoặc thread ID..."
+        page={page}
+        hasMore={hasMore}
+        onPage={setPage}
+      />
 
-      <TableShell headers={["Tên", "Loại", "Tin nhắn", "Token", "Tin cuối", "Bot", ""]}>
+      <TableShell
+        headers={["Tên", "Loại", "Tin nhắn", "Token", "Tin cuối", "Bot", ""]}
+        minWidth={860}
+      >
         {items.length === 0 && <EmptyRow colSpan={7} text="Chưa có session nào" />}
         {items.map((t) => (
-          <tr key={t.threadId} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+          <tr key={t.threadId} className="border-b border-line/60 last:border-0 hover:bg-tile/40">
             <td className="px-4 py-3">
-              <div className="font-medium text-slate-900">{t.displayName || t.threadId}</div>
-              <div className="text-xs text-slate-400">{t.threadId}</div>
+              <div className="flex items-center gap-3">
+                <InitialAvatar name={t.displayName || t.threadId} />
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-ink">{t.displayName || t.threadId}</div>
+                  <div className="truncate text-xs text-ink-soft/70">{t.threadId}</div>
+                </div>
+              </div>
             </td>
             <td className="px-4 py-3">
-              <Badge tone={t.threadType === 1 ? "gray" : "blue"}>
+              <Badge tone={t.threadType === 1 ? "amber" : "blue"} dot={false}>
                 {t.threadType === 1 ? "Group" : "Direct"}
               </Badge>
             </td>
-            <td className="px-4 py-3 text-slate-600">{t.messageCount}</td>
-            <td className="px-4 py-3 text-slate-600">
-              {t.usage.totalTokens.toLocaleString("vi-VN")}
-              <span className="text-xs text-slate-400"> / {t.usage.turns} lượt</span>
+            <td className="px-4 py-3 text-ink-soft">{formatNumber(t.messageCount)}</td>
+            <td className="px-4 py-3 text-ink-soft">
+              {formatNumber(t.usage.totalTokens)}
+              <span className="text-xs text-ink-soft/60"> / {t.usage.turns} lượt</span>
             </td>
-            <td className="px-4 py-3 text-slate-500">{formatTime(t.lastMessageAt)}</td>
+            <td className="px-4 py-3 text-ink-soft">{formatTime(t.lastMessageAt)}</td>
             <td className="px-4 py-3">
               <button
                 onClick={() => toggleBot(t)}
@@ -75,8 +91,8 @@ export function SessionsPage({ selectedAccountId }: { selectedAccountId: string 
                 title={t.botEnabled ? "Bot đang bật - bấm để tắt" : "Bot đang tắt - bấm để bật"}
               >
                 <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
-                    t.botEnabled ? "left-4.5" : "left-0.5"
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${
+                    t.botEnabled ? "left-[18px]" : "left-0.5"
                   }`}
                 />
               </button>
@@ -84,7 +100,7 @@ export function SessionsPage({ selectedAccountId }: { selectedAccountId: string 
             <td className="px-4 py-3">
               <button
                 onClick={() => setOpenThread(t)}
-                className="text-sm font-medium text-zalo-600 hover:underline"
+                className="text-[13px] font-medium text-zalo-600 hover:underline"
               >
                 Xem
               </button>
@@ -93,9 +109,7 @@ export function SessionsPage({ selectedAccountId }: { selectedAccountId: string 
         ))}
       </TableShell>
 
-      {openThread && (
-        <SessionDetailDrawer thread={openThread} onClose={() => setOpenThread(null)} />
-      )}
+      {openThread && <SessionDetailDrawer thread={openThread} onClose={() => setOpenThread(null)} />}
     </div>
   );
 }

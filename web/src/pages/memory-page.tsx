@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MemoryFactItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
-import { Badge, EmptyRow, formatTime, Pager, TableShell } from "../shared/ui-bits";
+import { PageHeader } from "../layout/page-header";
+import { Badge, EmptyRow, formatTime, ListToolbar, TableShell } from "../shared/ui-bits";
 
 export function MemoryPage({ selectedAccountId }: { selectedAccountId: string }) {
   const [items, setItems] = useState<MemoryFactItem[]>([]);
@@ -30,38 +31,34 @@ export function MemoryPage({ selectedAccountId }: { selectedAccountId: string })
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-semibold text-slate-900">Memory</h1>
-      <p className="mb-6 text-sm text-slate-500">
-        Fact bot tự ghi nhớ qua tool save_memory. Fact học ở chat riêng không bao giờ được dùng trong nhóm.
-      </p>
+      <PageHeader
+        title="Memory"
+        subtitle="Fact bot tự ghi nhớ qua tool save_memory - fact học ở chat riêng không bao giờ dùng trong nhóm"
+      />
 
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Tìm trong nội dung hoặc subject ID..."
-          className="w-80 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-zalo-500 focus:ring-2 focus:ring-zalo-100"
-        />
-        <Pager page={page} hasMore={hasMore} onPage={setPage} />
-      </div>
+      <ListToolbar
+        query={query}
+        onQuery={setQuery}
+        placeholder="Tìm trong nội dung hoặc subject ID..."
+        page={page}
+        hasMore={hasMore}
+        onPage={setPage}
+      />
 
-      <TableShell headers={["Fact", "Về", "Học từ", "Lúc", ""]}>
+      <TableShell headers={["Fact", "Về", "Học từ", "Lúc", ""]} minWidth={780}>
         {items.length === 0 && <EmptyRow colSpan={5} text="Bot chưa ghi nhớ gì" />}
         {items.map((m) => (
-          <tr key={m.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-            <td className="max-w-md px-4 py-3 text-slate-800">{m.content}</td>
-            <td className="px-4 py-3 text-slate-500">{m.subjectId}</td>
+          <tr key={m.id} className="border-b border-line/60 last:border-0 hover:bg-tile/40">
+            <td className="max-w-md px-4 py-3 text-ink">{m.content}</td>
+            <td className="px-4 py-3 text-ink-soft">{m.subjectId}</td>
             <td className="px-4 py-3">
-              <Badge tone={m.learnedInGroup ? "gray" : "blue"}>
+              <Badge tone={m.learnedInGroup ? "amber" : "blue"} dot={false}>
                 {m.learnedInGroup ? "Nhóm" : "Chat riêng"}
               </Badge>
             </td>
-            <td className="px-4 py-3 text-slate-500">{formatTime(m.createdAt)}</td>
+            <td className="px-4 py-3 text-ink-soft">{formatTime(m.createdAt)}</td>
             <td className="px-4 py-3">
-              <button
-                onClick={() => remove(m.id)}
-                className="text-sm text-red-600 hover:underline"
-              >
+              <button onClick={() => remove(m.id)} className="text-[13px] text-red-600 hover:underline">
                 Xóa
               </button>
             </td>

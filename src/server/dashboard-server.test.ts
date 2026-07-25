@@ -147,4 +147,10 @@ describe("dashboard-server", () => {
     const data = (await (await authed("/api/provider")).json()) as { hasOverride: boolean };
     assert.equal(data.hasOverride, false);
   });
+
+  it("API path lạ trả JSON 404, không rơi xuống SPA fallback", async () => {
+    const res = await authed("/api/khong-ton-tai");
+    assert.equal(res.status, 404);
+    assert.match(res.headers.get("content-type") ?? "", /application\/json/);
+  });
 });

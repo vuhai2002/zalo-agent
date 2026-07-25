@@ -15,7 +15,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: { "content-type": "application/json", ...init.headers },
   });
   if (res.status === 401 && !path.startsWith("/api/auth/")) {
-    window.location.hash = "#/login";
+    // Ngoài React tree nên không dùng được navigate() - đổi URL trực tiếp
+    if (window.location.pathname !== "/login") window.location.assign("/login");
     throw new ApiError(401, "Chưa đăng nhập");
   }
   const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -27,9 +28,22 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export type AccountInfo = { id: string; label: string; enabled: boolean; online: boolean };
 export type DailyUsage = { day: string; turns: number; inputTokens: number; outputTokens: number };
+export type AccountStats = {
+  threads: number;
+  contacts: number;
+  memories: number;
+  messagesTotal: number;
+  messagesToday: number;
+};
 export type OverviewData = {
   accounts: AccountInfo[];
   usageByAccount: { accountId: string; daily: DailyUsage[] }[];
+  statsByAccount: { accountId: string; stats: AccountStats }[];
+  system: {
+    uptimeSeconds: number;
+    nodeVersion: string;
+    llm: { provider: string; model: string; hasOverride: boolean };
+  };
 };
 
 export type ThreadItem = {

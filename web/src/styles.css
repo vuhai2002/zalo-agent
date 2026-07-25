@@ -1,14 +1,57 @@
 @import "tailwindcss";
 
-/* Tone xanh Zalo thay cho cam GoClaw - dùng qua class zalo-* hoặc CSS var */
+/*
+ * Design tokens - trích từ GoClaw dashboard thật (card trắng border 0.67px
+ * radius 12, nền off-white, không shadow) nhưng đổi hệ màu: neutral warm ->
+ * cool, primary cam -> xanh Zalo #0068FF. Font Be Vietnam Pro (thiết kế cho
+ * tiếng Việt, hợp brand Zalo).
+ */
 @theme {
-  --color-zalo-50: #eef5ff;
-  --color-zalo-100: #d9e8ff;
+  --font-sans: "Be Vietnam Pro", system-ui, sans-serif;
+
+  --color-zalo-50: #eaf2ff;
+  --color-zalo-100: #d6e6ff;
+  --color-zalo-200: #adcdff;
   --color-zalo-500: #0068ff;
   --color-zalo-600: #0054d6;
   --color-zalo-700: #0043ab;
+
+  --color-canvas: #f6f8fb;      /* nền trang */
+  --color-ink: #1c2433;         /* chữ chính */
+  --color-ink-soft: #67748b;    /* chữ phụ */
+  --color-line: #e4e8ef;        /* border card */
+  --color-tile: #eef1f6;        /* nền tile/hover */
 }
 
 body {
-  @apply bg-slate-50 text-slate-800 antialiased;
+  @apply bg-canvas font-sans text-ink antialiased;
+  font-size: 15px;
+}
+
+/*
+ * Tailwind v4 đổi preflight: button nhận cursor:default (v3 là pointer).
+ * Trả lại pointer cho mọi thứ bấm được thay vì rắc cursor-pointer khắp JSX.
+ */
+button:not(:disabled),
+select:not(:disabled),
+summary,
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+/* Trong @layer components để utility (pl-9...) vẫn override được khi cần */
+@layer components {
+  /* Card chuẩn mẫu: trắng, border mảnh, radius 12, KHÔNG shadow */
+  .gc-card {
+    @apply rounded-xl border border-line bg-white;
+  }
+
+  /* Tile nhỏ trong panel (System Health): nền muted mờ */
+  .gc-tile {
+    @apply rounded-xl border border-line bg-tile/40 p-3;
+  }
+
+  .gc-input {
+    @apply rounded-lg border border-line bg-white px-3 py-2 text-[15px] text-ink outline-none placeholder:text-ink-soft/60 focus:border-zalo-500 focus:ring-2 focus:ring-zalo-100;
+  }
 }
