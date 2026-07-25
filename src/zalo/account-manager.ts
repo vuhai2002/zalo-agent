@@ -1,7 +1,17 @@
 import type { API } from "zca-js";
 import { runAgentTurn } from "../agent/agent-loop.js";
 import { loadAccounts, type AccountConfig } from "../config/accounts.js";
+import { recordContactActivity } from "../conversation/contact-store.js";
 import { appendMessage } from "../conversation/history-store.js";
+import { runStartupBackfill } from "../conversation/startup-backfill.js";
+import {
+  hasDisplayName,
+  isBotEnabled,
+  recordThreadActivity,
+  setThreadDisplayName,
+} from "../conversation/thread-store.js";
+import { maybeSummarizeThread } from "../conversation/thread-summarizer.js";
+import { recordAgentTurn } from "../conversation/usage-store.js";
 import { shouldRespond } from "../middleware/allowlist-filter.js";
 import { clearPendingBatches, enqueueMessage } from "../middleware/message-batcher.js";
 import { enqueueSend } from "../middleware/rate-limiter.js";
@@ -20,7 +30,14 @@ type RunningAccount = {
 const running: RunningAccount[] = [];
 const log = createLogger("account-manager");
 
+/** Trạng thái account đang chạy - cho dashboard overview */
+export function getRunningAccounts(): { id: string; label: string; selfId: string }[] {
+  return running.map((a) => ({ id: a.config.id, label: a.config.label, selfId: a.selfId }));
+}
+
 export async function startAllAccounts(): Promise<void> {
+  runStartupBackfill();
+
   const accounts = loadAccounts().filter((a) => a.enabled);
 
   for (const config of accounts) {
@@ -44,8 +61,9 @@ export async function startAllAccounts(): Promise<void> {
 }
 
 /**
- * Lọc tin rồi đẩy vào batcher. Batcher gom các tin gần nhau trong cùng thread
- * (Zalo gửi ảnh và caption thành 2 tin) và chạy tuần tự từng thread.
+ * Mọi tin đến (kể cả tin sẽ bị lọc): ghi contact + thread ("auto-collected").
+ * Sau đó lọc; tin passive (group không mention, thread tắt bot) chỉ ghi history;
+ * tin cần trả lời mới vào batcher -> agent.
  */
 function handleIncomingMessage(
   config: AccountConfig,
@@ -54,17 +72,54 @@ function handleIncomingMessage(
   raw: unknown,
 ): void {
   const msg = parseIncomingMessage(config.id, selfId, raw);
-  const decision = shouldRespond(config, msg);
+
+  if (!msg.isSelf && msg.threadId) {
+    recordContactActivity(config.id, msg.senderId, msg.senderName);
+    recordThreadActivity({
+      accountId: config.id,
+      threadId: msg.threadId,
+      threadType: msg.threadType,
+      // Chat riêng: tên thread = tên người chat. Group: tên lấy async bên dưới.
+      displayName: msg.isGroup ? "" : msg.senderName,
+      lastSenderName: msg.senderName,
+    });
+    if (msg.isGroup && !hasDisplayName(config.id, msg.threadId)) {
+      void resolveGroupName(config.id, api, msg.threadId);
+    }
+  }
+
+  const decision = shouldRespond(config, msg, isBotEnabled(config.id, msg.threadId));
+
   if (!decision.respond) {
+    if (decision.record) {
+      appendMessage(config.id, msg.threadId, {
+        role: "user",
+        content: describeIncoming(msg),
+        senderName: msg.senderName,
+        senderId: msg.senderId,
+      });
+    }
     log.debug(
       { accountId: config.id, threadId: msg.threadId, reason: decision.reason },
-      "Bỏ qua tin",
+      decision.record ? "Ghi passive, không trả lời" : "Bỏ qua tin",
     );
     return;
   }
 
   const threadKey = `${config.id}:${msg.threadId}`;
   enqueueMessage(threadKey, msg, (batch) => processBatch(config, api, batch));
+}
+
+/** Lấy tên group 1 lần khi gặp lần đầu, cache vào bảng threads */
+async function resolveGroupName(accountId: string, api: API, threadId: string): Promise<void> {
+  try {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const info: any = await api.getGroupInfo(threadId);
+    const name = info?.gridInfoMap?.[threadId]?.name ?? info?.name;
+    if (name) setThreadDisplayName(accountId, threadId, String(name));
+  } catch (err) {
+    log.debug({ accountId, threadId, err }, "Không lấy được tên nhóm - để trống");
+  }
 }
 
 async function processBatch(
@@ -89,25 +144,31 @@ async function processBatch(
   try {
     // Chạy agent TRƯỚC khi ghi history: runAgentTurn tự đọc history cũ và tự
     // ghép batch hiện tại vào input - ghi trước sẽ khiến tin mới lặp 2 lần.
-    const replyText = await runAgentTurn({ api, account: config, batch });
+    const result = await runAgentTurn({ api, account: config, batch });
+    recordAgentTurn(config.id, latest.threadId, result.usage);
 
     for (const msg of batch) {
       appendMessage(config.id, msg.threadId, {
         role: "user",
         content: describeIncoming(msg),
         senderName: msg.senderName,
+        senderId: msg.senderId,
       });
     }
 
-    if (!replyText) {
+    if (!result.text) {
       log.debug({ threadId: latest.threadId }, "Agent không trả text (có thể chỉ thả reaction)");
       return;
     }
 
     await enqueueSend(threadKey, () =>
-      api.sendMessage({ msg: replyText }, latest.threadId, latest.threadType),
+      api.sendMessage({ msg: result.text }, latest.threadId, latest.threadType),
     );
-    appendMessage(config.id, latest.threadId, { role: "assistant", content: replyText });
+    appendMessage(config.id, latest.threadId, { role: "assistant", content: result.text });
+
+    // Memory lớp 2: gộp tin cũ vào summary - fire-and-forget sau khi đã trả lời,
+    // maybeSummarizeThread tự nuốt lỗi nên không cần catch thêm
+    void maybeSummarizeThread(config.id, latest.threadId);
   } catch (err) {
     log.error({ accountId: config.id, threadId: latest.threadId, err }, "Lỗi xử lý lượt tin nhắn");
   }

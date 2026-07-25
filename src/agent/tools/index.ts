@@ -3,6 +3,7 @@ import type { AccountConfig } from "../../config/accounts.js";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 import { createAddReactionTool } from "./add-reaction-tool.js";
 import { createGetGroupInfoTool } from "./get-group-info-tool.js";
+import { createSaveMemoryTool } from "./save-memory-tool.js";
 import { createSendFileTool } from "./send-file-tool.js";
 import { createTagMemberTool } from "./tag-member-tool.js";
 
@@ -19,5 +20,6 @@ export function buildAgentTools(ctx: ToolContext) {
     send_file: createSendFileTool(ctx),
     tag_member: createTagMemberTool(ctx),
     get_group_info: createGetGroupInfoTool(ctx),
+    save_memory: createSaveMemoryTool(ctx),
   };
 }
