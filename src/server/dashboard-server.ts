@@ -4,13 +4,16 @@ import { serve, type ServerType } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type MiddlewareHandler } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
+import type { CookieOptions } from "hono/utils/cookie";
 import { env } from "../config/env.js";
 import { createLogger } from "../shared/logger.js";
+import { resolveClientIp } from "./client-ip.js";
 import {
   allowLoginAttempt,
   checkPassword,
   clearLoginAttempts,
   createSessionToken,
+  revokeSessionToken,
   verifySessionToken,
 } from "./dashboard-auth.js";
 import { accountRoutes } from "./routes/account-routes.js";
@@ -23,6 +26,17 @@ import { threadRoutes } from "./routes/thread-routes.js";
 
 const log = createLogger("dashboard-server");
 const SESSION_COOKIE = "dashboard_session";
+
+/**
+ * `secure` chỉ bật khi đứng sau proxy HTTPS: bật lúc chạy http://127.0.0.1 thì
+ * trình duyệt không gửi cookie và không ai đăng nhập được.
+ */
+const SESSION_COOKIE_OPTIONS: CookieOptions = {
+  httpOnly: true,
+  sameSite: "Lax",
+  path: "/",
+  secure: env.DASHBOARD_BEHIND_PROXY,
+};
 
 /**
  * Cache cho file tĩnh. Vite đặt hash vào tên file trong /assets/ nên cache
@@ -54,8 +68,7 @@ export function buildDashboardApp(): Hono {
   });
 
   app.post("/api/auth/login", async (c) => {
-    // Sau reverse proxy chỉ tin x-forwarded-for do Caddy tự set; local thì fallback
-    const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+    const ip = resolveClientIp(c);
     if (!allowLoginAttempt(ip)) {
       return c.json({ error: "Thử quá nhiều lần, đợi 1 phút" }, 429);
     }
@@ -67,16 +80,16 @@ export function buildDashboardApp(): Hono {
 
     clearLoginAttempts(ip);
     setCookie(c, SESSION_COOKIE, createSessionToken(), {
-      httpOnly: true,
-      sameSite: "Lax",
-      path: "/",
+      ...SESSION_COOKIE_OPTIONS,
       maxAge: 7 * 24 * 60 * 60,
     });
     return c.json({ ok: true });
   });
 
   app.post("/api/auth/logout", (c) => {
-    setCookie(c, SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+    // Xóa phiên trong DB, không chỉ xóa cookie ở client
+    revokeSessionToken(getCookie(c, SESSION_COOKIE));
+    setCookie(c, SESSION_COOKIE, "", { ...SESSION_COOKIE_OPTIONS, maxAge: 0 });
     return c.json({ ok: true });
   });
 

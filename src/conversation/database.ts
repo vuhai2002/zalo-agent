@@ -94,6 +94,17 @@ function runMigrations(): void {
     CREATE INDEX IF NOT EXISTS idx_memories_account_subject
       ON memories (account_id, subject_id, id);
 
+    -- Phiên đăng nhập dashboard. Có bản ghi thật thì logout mới thu hồi được
+    -- (token HMAC stateless không xóa được), và password_fingerprint cho phép
+    -- đổi DASHBOARD_PASSWORD là mọi phiên cũ hết hiệu lực ngay.
+    CREATE TABLE IF NOT EXISTS dashboard_sessions (
+      id TEXT PRIMARY KEY,
+      secret_hash TEXT NOT NULL,
+      password_fingerprint TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS agent_turns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       account_id TEXT NOT NULL,
