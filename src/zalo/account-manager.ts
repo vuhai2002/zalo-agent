@@ -16,6 +16,7 @@ import { shouldRespond } from "../middleware/allowlist-filter.js";
 import { clearPendingBatches, enqueueMessage } from "../middleware/message-batcher.js";
 import { enqueueSend } from "../middleware/rate-limiter.js";
 import { createLogger } from "../shared/logger.js";
+import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
 import { toZaloReaction } from "./reaction-icons.js";
 import { startTypingIndicator } from "./typing-indicator.js";
 import { loginWithStoredCredentials } from "./zalo-client.js";
@@ -107,6 +108,10 @@ function handleIncomingMessage(accountId: string, api: API, selfId: string, raw:
   if (!config) return;
 
   const msg = parseIncomingMessage(config.id, selfId, raw);
+
+  // Chạy TRƯỚC mọi nhánh return bên dưới: tin thiếu threadId bị bỏ qua lặng lẽ
+  // ở ngay dòng dưới, không cảnh báo ở đây thì không còn chỗ nào biết
+  reportPayloadAnomalies(config.id, msg);
 
   if (!msg.isSelf && msg.threadId) {
     recordContactActivity(config.id, msg.senderId, msg.senderName);

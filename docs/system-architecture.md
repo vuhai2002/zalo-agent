@@ -29,6 +29,9 @@ Zalo servers <--ws/https--> zca-js (npm lib, unofficial)
 | Cookie mã hóa AES-256-GCM, key từ env | Cookie = full quyền tài khoản Zalo; file layout `[iv][authTag][ciphertext]`, mode 0600 |
 | Filter trước agent | Tin bị lọc (không @mention, ngoài allowlist, tin của bot) không bao giờ chạm LLM -> không tốn token |
 | Tool send_file giới hạn `data/shared-files/` | Chặn agent đọc file tùy ý trên máy (vd credentials) qua prompt injection |
+| Ghim `zca-js` đúng version (không dùng `^`) | Lib reverse-engineer, minor bump có thể đổi hành vi. Nâng cấp phải là hành động có chủ đích + chạy lại test, không để `pnpm update` nhảy âm thầm |
+| Không bọc facade quanh zca-js | Chỉ dùng 8/150+ hàm, phần lớn import là `type API`. Đổi chữ ký hàm thì TypeScript bắt ngay lúc typecheck - thêm tầng trung gian là over-engineering (chỉ đáng khi thêm kênh khác, mà V3 đã chốt không làm) |
+| `payload-anomaly-watch.ts` cảnh báo payload lạ | Rủi ro thật không phải zca-js đổi API (TS bắt được) mà là **Zalo đổi tên field** - parser moi payload bằng `any` nên bot chỉ âm thầm ngừng thấy ảnh / ngừng nhận @mention. Tin thiếu `threadId` còn bị bỏ qua không dấu vết. Watcher log warn (throttle 10 phút/loại/account) để lỗi hiện ra thay vì im lặng |
 
 ## Repo tham khảo
 
