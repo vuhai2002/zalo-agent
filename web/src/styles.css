@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* Tone xanh Zalo thay cho cam GoClaw - dùng qua class zalo-* hoặc CSS var */
+@theme {
+  --color-zalo-50: #eef5ff;
+  --color-zalo-100: #d9e8ff;
+  --color-zalo-500: #0068ff;
+  --color-zalo-600: #0054d6;
+  --color-zalo-700: #0043ab;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
