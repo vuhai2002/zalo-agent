@@ -53,10 +53,20 @@ function flush(threadKey: string, handler: BatchHandler): void {
 
   const previous = threadChains.get(threadKey) ?? Promise.resolve();
   const run = previous.then(() => handler(batch.messages));
-  threadChains.set(
-    threadKey,
-    run.catch(() => undefined),
-  );
+
+  // Xóa entry khi thread chạy xong: Map này sống suốt đời process, giữ lại một
+  // promise đã settled cho mỗi thread từng nhắn là rò rỉ bộ nhớ chậm.
+  let tail: Promise<unknown>;
+  const release = (): void => {
+    if (threadChains.get(threadKey) === tail) threadChains.delete(threadKey);
+  };
+  tail = run.then(release, release);
+  threadChains.set(threadKey, tail);
+}
+
+/** Số thread đang chờ/đang chạy lượt agent - dùng cho test rò rỉ bộ nhớ */
+export function activeThreadCount(): number {
+  return pending.size + threadChains.size;
 }
 
 /** Hủy toàn bộ tin đang chờ - dùng khi shutdown để không treo process */

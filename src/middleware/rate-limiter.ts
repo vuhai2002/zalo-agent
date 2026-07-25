@@ -18,10 +18,21 @@ export function enqueueSend<T>(threadKey: string, task: () => Promise<T>): Promi
     await sleep(randomSendDelay());
     return task();
   });
-  // Giữ queue sống kể cả khi task lỗi (lỗi vẫn ném về caller của run)
-  queues.set(
-    threadKey,
-    run.catch(() => undefined),
-  );
+
+  // Giữ queue sống kể cả khi task lỗi (lỗi vẫn ném về caller của run). Xóa entry
+  // khi thread gửi xong hết: bot thường trú gặp hàng nghìn thread, giữ lại mỗi
+  // thread 1 promise đã settled là rò rỉ bộ nhớ chậm.
+  let tail: Promise<unknown>;
+  const release = (): void => {
+    if (queues.get(threadKey) === tail) queues.delete(threadKey);
+  };
+  tail = run.then(release, release);
+  queues.set(threadKey, tail);
+
   return run;
+}
+
+/** Số thread đang có việc gửi - dùng cho test rò rỉ bộ nhớ */
+export function pendingSendThreadCount(): number {
+  return queues.size;
 }

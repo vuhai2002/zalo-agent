@@ -115,6 +115,17 @@ describe("message-batcher", () => {
     assert.deepEqual(events, ["start:A", "end:A", "start:B", "end:B"]);
   });
 
+  it("thread chạy xong thì bỏ khỏi Map - không rò rỉ theo số thread từng nhắn", async () => {
+    const handler = async () => {};
+    for (let i = 0; i < 20; i++) {
+      batcher.enqueueMessage(`k-ro-ri-${i}`, makeMessage(`t${i}`), handler, 10);
+    }
+    assert.ok(batcher.activeThreadCount() >= 20, "đang chờ thì phải có mặt trong Map");
+
+    await sleep(80);
+    assert.equal(batcher.activeThreadCount(), 0, "chạy xong phải dọn sạch");
+  });
+
   it("clearPendingBatches hủy tin đang chờ, handler không chạy", async () => {
     let called = false;
     batcher.enqueueMessage(
