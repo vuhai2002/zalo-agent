@@ -2,12 +2,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 
-const accountSchema = z.object({
+/**
+ * Đọc config/accounts.json làm SEED cho lần chạy đầu - DB (bảng accounts/agents)
+ * mới là source of truth, quản lý qua dashboard. File này chỉ còn dùng khi
+ * bảng accounts trống (nâng cấp từ bản cũ hoặc cài mới muốn khai báo sẵn).
+ */
+
+const accountSeedSchema = z.object({
   // id dùng làm tên thư mục data + key SQLite - giữ kebab-case
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "id phải là kebab-case (a-z, 0-9, dấu gạch ngang)"),
   label: z.string().min(1),
   enabled: z.boolean().default(true),
-  // Persona riêng cho account này; rỗng thì dùng persona mặc định
+  // Bản cũ để persona trong account - migration sẽ tách thành agent riêng
   persona: z.string().default(""),
   allowlist: z
     .object({
@@ -17,25 +23,20 @@ const accountSchema = z.object({
     .default({ mode: "all", userIds: [] }),
   groupRequireMention: z.boolean().default(true),
   respondToGroups: z.boolean().default(true),
-  // Tin group không @mention vẫn ghi vào history (không gọi LLM, không trả lời)
-  // để lần được mention sau agent nắm được ngữ cảnh hội thoại xung quanh
   groupPassiveListen: z.boolean().default(true),
 });
 
 const accountsFileSchema = z.object({
-  accounts: z.array(accountSchema).min(1),
+  accounts: z.array(accountSeedSchema).min(1),
 });
 
-export type AccountConfig = z.infer<typeof accountSchema>;
+export type AccountSeed = z.infer<typeof accountSeedSchema>;
 
-export function loadAccounts(
+/** null = không có file seed (cài mới hoàn toàn) - không phải lỗi */
+export function readAccountsSeedFile(
   configPath = path.resolve("config/accounts.json"),
-): AccountConfig[] {
-  if (!fs.existsSync(configPath)) {
-    throw new Error(
-      `Không tìm thấy ${configPath} - copy từ config/accounts.example.json rồi chỉnh lại`,
-    );
-  }
+): AccountSeed[] | null {
+  if (!fs.existsSync(configPath)) return null;
 
   const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
   const parsed = accountsFileSchema.parse(raw);
@@ -44,6 +45,5 @@ export function loadAccounts(
   if (new Set(ids).size !== ids.length) {
     throw new Error("config/accounts.json: có account id bị trùng");
   }
-
   return parsed.accounts;
 }

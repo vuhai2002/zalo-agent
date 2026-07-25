@@ -1,4 +1,4 @@
-import type { AccountConfig } from "../config/accounts.js";
+import type { AccountConfig } from "../config/account-store.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 
 export type FilterDecision = {

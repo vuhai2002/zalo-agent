@@ -52,6 +52,34 @@ function runMigrations(): void {
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
 
+    -- Não của bot: persona + model override, gắn vào account qua accounts.agent_id.
+    -- DB là source of truth (config/accounts.json chỉ seed 1 lần đầu).
+    CREATE TABLE IF NOT EXISTS agents (
+      id TEXT PRIMARY KEY,
+      icon TEXT NOT NULL DEFAULT '🤖',
+      name TEXT NOT NULL,
+      persona TEXT NOT NULL DEFAULT '',
+      model_provider TEXT,
+      model_name TEXT,
+      max_steps INTEGER,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+
+    -- Tài khoản Zalo (kênh): policies + gắn não. N account dùng chung 1 agent được.
+    CREATE TABLE IF NOT EXISTS accounts (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      agent_id TEXT NOT NULL,
+      allowlist_mode TEXT NOT NULL DEFAULT 'all' CHECK (allowlist_mode IN ('all', 'list')),
+      allowlist_user_ids TEXT NOT NULL DEFAULT '[]',
+      group_require_mention INTEGER NOT NULL DEFAULT 1,
+      respond_to_groups INTEGER NOT NULL DEFAULT 1,
+      group_passive_listen INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+
     -- Memory lớp 3: fact bền do agent tự lưu qua tool save_memory.
     -- learned_in_group quyết định quy tắc inject bất đối xứng (private không ra public)
     CREATE TABLE IF NOT EXISTS memories (

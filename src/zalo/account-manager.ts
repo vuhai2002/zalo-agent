@@ -1,6 +1,6 @@
 import type { API } from "zca-js";
 import { runAgentTurn } from "../agent/agent-loop.js";
-import { loadAccounts, type AccountConfig } from "../config/accounts.js";
+import { getAccount, listEnabledAccounts, runAccountsSeedMigration, type AccountConfig } from "../config/account-store.js";
 import { recordContactActivity } from "../conversation/contact-store.js";
 import { appendMessage } from "../conversation/history-store.js";
 import { runStartupBackfill } from "../conversation/startup-backfill.js";
@@ -27,50 +27,83 @@ type RunningAccount = {
   stopListener: () => void;
 };
 
-const running: RunningAccount[] = [];
+const running = new Map<string, RunningAccount>();
 const log = createLogger("account-manager");
 
-/** Trạng thái account đang chạy - cho dashboard overview */
+/** Trạng thái account đang chạy - cho dashboard */
 export function getRunningAccounts(): { id: string; label: string; selfId: string }[] {
-  return running.map((a) => ({ id: a.config.id, label: a.config.label, selfId: a.selfId }));
+  return [...running.values()].map((a) => ({
+    id: a.config.id,
+    label: a.config.label,
+    selfId: a.selfId,
+  }));
+}
+
+export function isAccountRunning(accountId: string): boolean {
+  return running.has(accountId);
+}
+
+/**
+ * Gắn 1 account đã có API instance vào hệ thống (login QR web xong gọi thẳng
+ * vào đây để không phải login lần 2). Account đang chạy thì thay thế.
+ */
+export function attachAccount(config: AccountConfig, api: API): void {
+  stopAccount(config.id);
+  const selfId = String(api.getOwnId());
+  const stopListener = startListener(config.id, api, (raw) =>
+    handleIncomingMessage(config.id, api, selfId, raw),
+  );
+  running.set(config.id, { config, api, selfId, stopListener });
+  log.info({ accountId: config.id, label: config.label }, "Account sẵn sàng");
+}
+
+/** Start bằng credentials đã lưu - dùng lúc boot và khi bật lại từ dashboard */
+export async function startAccount(accountId: string): Promise<void> {
+  const config = getAccount(accountId);
+  if (!config) throw new Error(`Account "${accountId}" không tồn tại`);
+  if (!config.enabled) throw new Error(`Account "${accountId}" đang tắt`);
+
+  const api = await loginWithStoredCredentials(accountId);
+  attachAccount(config, api);
+}
+
+export function stopAccount(accountId: string): void {
+  const account = running.get(accountId);
+  if (!account) return;
+  account.stopListener();
+  running.delete(accountId);
+  log.info({ accountId }, "Đã dừng listener");
 }
 
 export async function startAllAccounts(): Promise<void> {
   runStartupBackfill();
+  runAccountsSeedMigration();
 
-  const accounts = loadAccounts().filter((a) => a.enabled);
-
+  const accounts = listEnabledAccounts();
   for (const config of accounts) {
     try {
-      const api = await loginWithStoredCredentials(config.id);
-      const selfId = String(api.getOwnId());
-      const stopListener = startListener(config.id, api, (raw) =>
-        handleIncomingMessage(config, api, selfId, raw),
-      );
-      running.push({ config, api, selfId, stopListener });
-      log.info({ accountId: config.id, label: config.label }, "Account sẵn sàng");
+      await startAccount(config.id);
     } catch (err) {
       log.error({ accountId: config.id, err }, "Không khởi động được account - bỏ qua");
     }
   }
 
-  if (running.length === 0) {
-    throw new Error("Không account nào khởi động được - kiểm tra credentials (pnpm zalo-login <id>)");
-  }
-  log.info({ total: running.length }, "Tất cả account đã khởi động");
+  // Không account nào chạy vẫn KHÔNG chết: dashboard cần sống để user thêm
+  // account + quét QR ngay trên web (khác bản cũ vốn throw ở đây)
+  log.info(
+    { total: running.size, configured: accounts.length },
+    running.size > 0 ? "Account đã khởi động" : "Chưa account nào chạy - thêm/login qua dashboard",
+  );
 }
 
 /**
  * Mọi tin đến (kể cả tin sẽ bị lọc): ghi contact + thread ("auto-collected").
- * Sau đó lọc; tin passive (group không mention, thread tắt bot) chỉ ghi history;
- * tin cần trả lời mới vào batcher -> agent.
+ * Đọc config mới nhất từ DB mỗi tin để sửa policies từ dashboard ăn ngay.
  */
-function handleIncomingMessage(
-  config: AccountConfig,
-  api: API,
-  selfId: string,
-  raw: unknown,
-): void {
+function handleIncomingMessage(accountId: string, api: API, selfId: string, raw: unknown): void {
+  const config = getAccount(accountId);
+  if (!config) return;
+
   const msg = parseIncomingMessage(config.id, selfId, raw);
 
   if (!msg.isSelf && msg.threadId) {
@@ -79,7 +112,6 @@ function handleIncomingMessage(
       accountId: config.id,
       threadId: msg.threadId,
       threadType: msg.threadType,
-      // Chat riêng: tên thread = tên người chat. Group: tên lấy async bên dưới.
       displayName: msg.isGroup ? "" : msg.senderName,
       lastSenderName: msg.senderName,
     });
@@ -122,11 +154,7 @@ async function resolveGroupName(accountId: string, api: API, threadId: string): 
   }
 }
 
-async function processBatch(
-  config: AccountConfig,
-  api: API,
-  batch: ParsedMessage[],
-): Promise<void> {
+async function processBatch(config: AccountConfig, api: API, batch: ParsedMessage[]): Promise<void> {
   const latest = batch[batch.length - 1]!;
   const threadKey = `${config.id}:${latest.threadId}`;
 
@@ -181,8 +209,8 @@ function describeIncoming(msg: ParsedMessage): string {
 
 export function stopAllAccounts(): void {
   clearPendingBatches();
-  for (const account of running) {
-    account.stopListener();
+  for (const id of [...running.keys()]) {
+    stopAccount(id);
   }
   log.info("Đã dừng toàn bộ listener");
 }

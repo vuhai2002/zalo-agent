@@ -13,16 +13,25 @@ const sanitizingFetch = createSanitizingFetch({
     log.warn("Router trả JSON dính đuôi SSE 'data: [DONE]' - đã cắt bỏ (bug 9Router, nên fix tận gốc)"),
 });
 
+export type ModelOverride = {
+  modelProvider?: "openai-compatible" | "anthropic" | null;
+  modelName?: string | null;
+};
+
 /**
- * Chọn model theo cấu hình hiệu lực (runtime_settings từ dashboard đè lên env).
- * Gọi mỗi lượt agent nên đổi settings từ UI có hiệu lực ngay lượt kế tiếp.
+ * Chọn model theo thứ tự ưu tiên: override của agent (não) -> runtime_settings
+ * (dashboard) -> env. Gọi mỗi lượt agent nên đổi từ UI có hiệu lực ngay.
  * - openai-compatible: router proxy (9Router, LiteLLM, OpenRouter...) qua base URL
  * - anthropic: gọi thẳng API Anthropic
- * Cần thêm provider trực tiếp khác (openai, google): pnpm add @ai-sdk/openai
- * rồi thêm 1 case tương tự.
+ * API key/base URL luôn lấy từ cấu hình chung (per-agent key là chuyện sau).
  */
-export function resolveLanguageModel(): LanguageModel {
-  const settings = getEffectiveLlmSettings();
+export function resolveLanguageModel(override?: ModelOverride): LanguageModel {
+  const base = getEffectiveLlmSettings();
+  const settings = {
+    ...base,
+    provider: override?.modelProvider ?? base.provider,
+    model: override?.modelName ?? base.model,
+  };
   switch (settings.provider) {
     case "openai-compatible": {
       if (!settings.baseUrl) {

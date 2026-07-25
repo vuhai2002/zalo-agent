@@ -1,5 +1,5 @@
 import type { API } from "zca-js";
-import type { AccountConfig } from "../../config/accounts.js";
+import type { AccountConfig } from "../../config/account-store.js";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 import { createAddReactionTool } from "./add-reaction-tool.js";
 import { createGetGroupInfoTool } from "./get-group-info-tool.js";

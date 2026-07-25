@@ -1,6 +1,7 @@
 import { generateText, stepCountIs, type ModelMessage, type UserContent } from "ai";
 import type { API } from "zca-js";
-import type { AccountConfig } from "../config/accounts.js";
+import type { AccountConfig } from "../config/account-store.js";
+import { getAgentForAccount } from "../config/agent-store.js";
 import { env } from "../config/env.js";
 import { getRecentMessages } from "../conversation/history-store.js";
 import { getMemoriesForContext } from "../conversation/memory-store.js";
@@ -69,12 +70,15 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
     threadSummary: getThreadSummary(account.id, latest.threadId).summary,
   };
 
+  // Não của account: persona + model/maxSteps override (fallback cấu hình chung)
+  const agent = getAgentForAccount(account.agentId);
+
   const result = await generateText({
-    model: resolveLanguageModel(),
-    system: buildSystemPrompt(account, latest, memory),
+    model: resolveLanguageModel(agent),
+    system: buildSystemPrompt(agent, latest, memory),
     messages,
     tools: buildAgentTools({ api, account, message: latest }),
-    stopWhen: stepCountIs(env.LLM_MAX_STEPS),
+    stopWhen: stepCountIs(agent.maxSteps ?? env.LLM_MAX_STEPS),
     maxOutputTokens: env.LLM_MAX_OUTPUT_TOKENS,
     maxRetries: 2,
   });

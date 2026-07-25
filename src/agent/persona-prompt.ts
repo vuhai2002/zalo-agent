@@ -1,4 +1,4 @@
-import type { AccountConfig } from "../config/accounts.js";
+import type { AgentProfile } from "../config/agent-store.js";
 import type { MemoryContext } from "../conversation/memory-store.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 
@@ -24,14 +24,14 @@ export type PromptMemory = {
 };
 
 export function buildSystemPrompt(
-  account: AccountConfig,
+  agent: AgentProfile,
   msg: ParsedMessage,
   memory?: PromptMemory,
 ): string {
   const sections = [BASE_PERSONA];
 
-  if (account.persona.trim()) {
-    sections.push(`Persona riêng của account này:\n${account.persona.trim()}`);
+  if (agent.persona.trim()) {
+    sections.push(`Persona riêng của bạn (tên agent: ${agent.name}):\n${agent.persona.trim()}`);
   }
 
   if (memory?.threadSummary) {

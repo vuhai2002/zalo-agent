@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ThreadType } from "zca-js";
-import type { AccountConfig } from "../config/accounts.js";
+import type { AccountConfig } from "../config/account-store.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 import { shouldRespond } from "./allowlist-filter.js";
 
@@ -12,7 +12,7 @@ function makeAccount(overrides: Partial<AccountConfig> = {}): AccountConfig {
     id: "acc-test",
     label: "Test",
     enabled: true,
-    persona: "",
+    agentId: "agent-test",
     allowlist: { mode: "all", userIds: [] },
     groupRequireMention: true,
     respondToGroups: true,

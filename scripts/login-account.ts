@@ -46,7 +46,8 @@ try {
   const displayName = (info as any)?.profile?.displayName ?? "(không rõ tên)";
   console.log(`\nĐăng nhập thành công: ${displayName}`);
   console.log(`Credentials đã lưu (mã hóa) tại data/accounts/${accountId}/credentials.enc`);
-  console.log(`Khai báo account "${accountId}" trong config/accounts.json rồi chạy: pnpm dev`);
+  console.log(`Thêm account "${accountId}" trên dashboard (trang Accounts) rồi bật lên là chạy.`);
+  console.log("(Hoặc đơn giản hơn: làm mọi thứ ngay trên dashboard, có nút login QR.)");
 
   fs.rmSync(qrPath, { force: true }); // QR đã dùng xong, xóa cho sạch
   process.exit(0);
