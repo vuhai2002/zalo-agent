@@ -54,3 +54,7 @@ web/               dashboard UI (React + Vite + Tailwind, tone xanh Zalo)
 - Không nối tool chuyển tiền/thanh toán vào agent (rủi ro prompt injection).
 - Mở Zalo Web trên trình duyệt sẽ đá listener của bot (bot tự reconnect lại).
 - File cho phép bot gửi đặt trong `data/shared-files/`.
+- Bot chỉ tải được URL trỏ tới IP public: chặn loopback/mạng nội bộ/metadata cloud
+  (phòng prompt injection lừa bot đọc dịch vụ nội bộ rồi gửi ra chat).
+- Deploy sau Caddy/Nginx thì phải đặt `DASHBOARD_BEHIND_PROXY=true` (rate-limit
+  login đúng IP + cookie `Secure`).
