@@ -1,5 +1,6 @@
 import { env } from "./config/env.js";
 import { closeHistoryStore } from "./conversation/history-store.js";
+import { startDashboardServer, stopDashboardServer } from "./server/dashboard-server.js";
 import { logger } from "./shared/logger.js";
 import { startAllAccounts, stopAllAccounts } from "./zalo/account-manager.js";
 
@@ -13,6 +14,7 @@ function shutdown(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, "Đang tắt zalo-agent...");
+  stopDashboardServer();
   stopAllAccounts();
   closeHistoryStore();
   process.exit(0);
@@ -29,6 +31,7 @@ process.on("uncaughtException", (err) => {
 // Heartbeat: xác nhận process còn sống trong log (debug level để prod không noise)
 setInterval(() => logger.debug("heartbeat"), 60_000).unref();
 
+startDashboardServer();
 startAllAccounts().catch((err) => {
   logger.fatal({ err }, "Khởi động thất bại");
   process.exit(1);
