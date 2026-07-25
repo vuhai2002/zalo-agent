@@ -44,6 +44,12 @@ const envSchema = z.object({
   BRAVE_SEARCH_API_KEY: z.string().default(""),
   // Số kết quả web search tối đa trả cho agent mỗi lần tìm
   WEB_SEARCH_MAX_RESULTS: z.coerce.number().int().min(1).max(10).default(5),
+  // Số ký tự tối đa web_fetch trả cho model. Từng để 8000 và dính lỗi thật:
+  // trang xổ số phần đầu toàn menu, bảng kết quả nằm sau ký tự 8300 -> bị cắt
+  // mất, bot tưởng trang không có dữ liệu. GoClaw để 60000; mình để 15000 vì
+  // mỗi ký tự là token trả tiền, kèm lọc menu trong html-to-text để nội dung
+  // thật không bị rác đẩy ra khỏi cap.
+  WEB_FETCH_MAX_CHARS: z.coerce.number().int().min(2000).max(100_000).default(15_000),
 
   HISTORY_CONTEXT_LIMIT: z.coerce.number().int().min(1).max(200).default(20),
   // Ảnh cũ trong history được nạp lại vào context để model "nhớ" ảnh đã nhận.

@@ -3,19 +3,73 @@ import { stripHtmlTags } from "./web-search-providers.js";
 /**
  * Rút text đọc được từ HTML cho tool web_fetch - không thêm dependency
  * (readability/cheerio) vì nhu cầu chỉ là "agent đọc lướt nội dung trang".
+ *
+ * Bài học từ vụ dò vé số: trang tin Việt Nam (minhngoc, xoso...) mở đầu bằng
+ * cả nghìn ký tự menu, đẩy nội dung thật ra sau cap của tool -> model chỉ thấy
+ * menu và tưởng trang không có dữ liệu. GoClaw giải bằng Defuddle (bóc nội dung
+ * chính kiểu Readability); mình dùng phiên bản tối giản của đúng tín hiệu đó:
+ * list nào text nằm gần hết trong <a> là menu điều hướng, vứt.
+ *
  * Trang render bằng JS sẽ ra ít text - chấp nhận, đó là giới hạn đã biết.
  */
 
-/** Bỏ hẳn các block không phải nội dung trước khi bóc thẻ */
-const NON_CONTENT_BLOCKS = /<(script|style|noscript|svg|head|nav|footer|iframe|template)[\s\S]*?<\/\1>/gi;
+/**
+ * Block không bao giờ là nội dung. Thứ tự "header|head" quan trọng: alternation
+ * chọn nhánh đầu khớp trước, để "head" đứng trước thì "<header>" bị khớp dở
+ * thành "<head" + phần thừa và regex không đóng được đúng thẻ.
+ */
+const NON_CONTENT_BLOCKS =
+  /<(script|style|noscript|svg|header|head|nav|footer|aside|form|select|iframe|template)\b[\s\S]*?<\/\1\s*>/gi;
+
+/** Tỉ lệ text-trong-link tối thiểu để coi 1 list là menu điều hướng */
+const MENU_LINK_DENSITY = 0.7;
+const MENU_MIN_LINKS = 3;
+
+/**
+ * Xóa <ul>/<ol> là menu: >= 3 link và >= 70% chữ nằm trong <a> (list nội dung
+ * thật thì chữ chủ yếu nằm ngoài link).
+ *
+ * Regex chỉ match list TRONG CÙNG (content không chứa thẻ mở list khác) rồi
+ * chạy lặp: gỡ menu con xong thì menu cha thành trong cùng và được xét ở lượt
+ * sau. Match lazy thường sẽ ăn từ thẻ mở ngoài tới thẻ đóng trong - nuốt mất
+ * opener của cha, phần còn lại không bao giờ được xét (bug đã dính khi viết).
+ * List con được GIỮ (nội dung thật) thì cha không bao giờ thành trong cùng -
+ * thiên về giữ nhầm hơn xóa nhầm, đúng hướng an toàn.
+ */
+function removeLinkDenseLists(html: string): string {
+  const listBlock = /<(ul|ol|menu)\b[^>]*>(?:(?!<(?:ul|ol|menu)\b)[\s\S])*?<\/\1\s*>/gi;
+  let current = html;
+  for (let pass = 0; pass < 5; pass++) {
+    let removedAny = false;
+    current = current.replace(listBlock, (block) => {
+      const totalText = stripHtmlTags(block);
+      if (!totalText) {
+        removedAny = true;
+        return " ";
+      }
+      const anchors = [...block.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)];
+      const anchorText = anchors.map((m) => stripHtmlTags(m[1]!)).join(" ");
+      const isMenu =
+        anchors.length >= MENU_MIN_LINKS &&
+        anchorText.length / totalText.length >= MENU_LINK_DENSITY;
+      if (isMenu) removedAny = true;
+      return isMenu ? " " : block;
+    });
+    if (!removedAny) break;
+  }
+  return current;
+}
 
 export function htmlToReadableText(html: string): string {
-  const withoutBlocks = html.replace(NON_CONTENT_BLOCKS, " ");
+  const withoutBlocks = removeLinkDenseLists(html.replace(NON_CONTENT_BLOCKS, " "));
 
   // Giữ cấu trúc đoạn: thẻ block phổ biến thành xuống dòng trước khi bóc thẻ
   const withBreaks = withoutBlocks
     .replace(/<(br|\/p|\/div|\/h[1-6]|\/li|\/tr|\/section|\/article)[^>]*>/gi, "\n")
-    .replace(/<li[^>]*>/gi, "\n- ");
+    .replace(/<li[^>]*>/gi, "\n- ")
+    // Ranh giới ô trong bảng: bảng kết quả (xổ số, giá) mà dính chữ liền nhau
+    // là model đọc sai cột
+    .replace(/<\/t[dh]>/gi, " | ");
 
   // stripHtmlTags nuốt cả \n (collapse \s+) nên tách dòng trước, bóc thẻ từng dòng
   return withBreaks

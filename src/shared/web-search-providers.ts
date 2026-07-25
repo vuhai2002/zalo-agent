@@ -1,3 +1,4 @@
+import { decodeHtmlEntities } from "./html-entities.js";
 import { createLogger } from "./logger.js";
 
 /**
@@ -26,20 +27,9 @@ export type SearchOptions = {
   fetchFn?: typeof fetch;
 };
 
-/** Bóc thẻ HTML + giải mã entity hay gặp trong kết quả DDG */
+/** Bóc thẻ HTML + giải mã entity (số lẫn tên - xem html-entities.ts) */
 export function stripHtmlTags(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x?\d+;|&#\d+;/g, (m) => {
-      const code = m.startsWith("&#x") ? Number.parseInt(m.slice(3, -1), 16) : Number(m.slice(2, -1));
-      return Number.isFinite(code) ? String.fromCodePoint(code) : m;
-    })
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&nbsp;/g, " ")
+  return decodeHtmlEntities(html.replace(/<[^>]+>/g, ""))
     .replace(/\s+/g, " ")
     .trim();
 }
