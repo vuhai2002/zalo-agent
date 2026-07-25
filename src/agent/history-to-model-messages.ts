@@ -51,7 +51,8 @@ export function historyToModelMessages(
     const parts: Exclude<UserContent, string> = [];
     for (const relPath of (message.images ?? []).slice(0, take)) {
       const image = loadImage(relPath);
-      if (image) parts.push({ type: "image", image: image.base64, mediaType: image.mediaType });
+      // Part "file" thay cho "image" - kiểu cũ bị AI SDK v7 deprecated
+      if (image) parts.push({ type: "file", data: image.base64, mediaType: image.mediaType });
     }
     parts.push({ type: "text", text });
     // Toàn bộ file ảnh đã bị dọn -> trả text thuần cho gọn payload

@@ -74,12 +74,15 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
     maxRetries: 2,
   });
 
-  log.debug(
+  // info + kèm tên tool: khi bot trả lời kém ("chưa lấy được kết quả...") phải
+  // nhìn được ngay nó ĐÃ gọi gì - trước đây chỉ có số steps, debug toàn phải đoán
+  log.info(
     {
       accountId: account.id,
       threadId: latest.threadId,
       batchSize: batch.length,
       steps: result.steps.length,
+      toolCalls: result.steps.flatMap((step) => step.toolCalls.map((call) => call.toolName)),
       usage: result.totalUsage,
     },
     "Hoàn thành lượt agent",
@@ -107,7 +110,9 @@ async function buildCurrentTurnContent(batch: ParsedMessage[]): Promise<UserCont
       const stored = image.localPath ? loadStoredImage(image.localPath) : null;
       const downloaded = stored ?? (await downloadImageAsBase64(image.url));
       if (downloaded) {
-        parts.push({ type: "image", image: downloaded.base64, mediaType: downloaded.mediaType });
+        // Part "file" thay cho "image": kiểu image bị AI SDK v7 đánh dấu
+        // deprecated (in cảnh báo mỗi ảnh) và sẽ xóa ở bản sau
+        parts.push({ type: "file", data: downloaded.base64, mediaType: downloaded.mediaType });
       }
     }
   }

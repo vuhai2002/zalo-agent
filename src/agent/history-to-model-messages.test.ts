@@ -15,8 +15,8 @@ function userMsg(content: string, images?: string[]): StoredMessage {
 function imagePartsOf(message: { content: unknown }): string[] {
   if (!Array.isArray(message.content)) return [];
   return message.content
-    .filter((p: { type: string }) => p.type === "image")
-    .map((p: { image: string }) => p.image);
+    .filter((p: { type: string }) => p.type === "file")
+    .map((p: { data: string }) => p.data);
 }
 
 describe("history-to-model-messages", () => {
