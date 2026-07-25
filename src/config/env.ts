@@ -22,6 +22,9 @@ const envSchema = z.object({
   LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).default(2048),
 
   HISTORY_CONTEXT_LIMIT: z.coerce.number().int().min(1).max(200).default(20),
+  // Số tin tối đa giữ lại mỗi thread; tin cũ hơn bị xóa sau mỗi lần ghi để DB
+  // không phình vô hạn khi bot chạy dài ngày.
+  HISTORY_MAX_MESSAGES_PER_THREAD: z.coerce.number().int().min(20).max(100_000).default(500),
   SEND_DELAY_MIN_MS: z.coerce.number().int().min(0).default(800),
   SEND_DELAY_MAX_MS: z.coerce.number().int().min(0).default(2500),
   // Thời gian chờ gộp tin nhắn cùng thread thành 1 lượt agent (ảnh + caption,
@@ -55,6 +58,12 @@ if (env.LLM_PROVIDER === "openai-compatible" && !env.LLM_BASE_URL) {
 
 if (env.SEND_DELAY_MAX_MS < env.SEND_DELAY_MIN_MS) {
   console.error("SEND_DELAY_MAX_MS phải >= SEND_DELAY_MIN_MS");
+  process.exit(1);
+}
+
+// Giữ ít hơn số tin agent đọc mỗi lượt = vừa ghi xong đã bị xóa mất context
+if (env.HISTORY_MAX_MESSAGES_PER_THREAD < env.HISTORY_CONTEXT_LIMIT) {
+  console.error("HISTORY_MAX_MESSAGES_PER_THREAD phải >= HISTORY_CONTEXT_LIMIT");
   process.exit(1);
 }
 

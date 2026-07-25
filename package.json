@@ -5,12 +5,13 @@
   "description": "Multi-account Zalo AI agent - zca-js + Vercel AI SDK (provider-agnostic via env)",
   "type": "module",
   "engines": {
-    "node": ">=20.6"
+    "node": ">=22.13"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "zalo-login": "tsx scripts/login-account.ts",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "build": "tsc"
   },

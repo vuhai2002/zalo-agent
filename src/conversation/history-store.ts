@@ -38,12 +38,25 @@ const recentStmt = db.prepare(
    ORDER BY id DESC LIMIT ?`,
 );
 
+// Giữ N tin mới nhất của thread, xóa phần cũ hơn. Subquery lấy id của tin thứ
+// N+1 tính từ mới nhất; thread có ít hơn N+1 tin thì trả NULL và không xóa gì.
+// Cả DELETE lẫn subquery đều chạy trên index (account_id, thread_id, id).
+const pruneStmt = db.prepare(
+  `DELETE FROM messages
+   WHERE account_id = ? AND thread_id = ?
+     AND id <= (SELECT id FROM messages
+                WHERE account_id = ? AND thread_id = ?
+                ORDER BY id DESC LIMIT 1 OFFSET ?)`,
+);
+
 export function appendMessage(
   accountId: string,
   threadId: string,
   message: StoredMessage,
 ): void {
   insertStmt.run(accountId, threadId, message.role, message.senderName ?? null, message.content);
+  // Dọn ngay thread vừa ghi: không cần cron, và thread im lặng thì không tốn gì
+  pruneStmt.run(accountId, threadId, accountId, threadId, env.HISTORY_MAX_MESSAGES_PER_THREAD);
 }
 
 export function getRecentMessages(
