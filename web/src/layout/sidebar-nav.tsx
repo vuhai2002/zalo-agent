@@ -68,10 +68,21 @@ export function SidebarNav({
         }`}
       >
         <div className="flex items-center gap-2.5 px-5 pb-4 pt-5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-zalo-500 text-[15px] font-bold text-white">
-            Z
-          </span>
-          <span className="text-[17px] font-bold tracking-tight text-ink">zalo-agent</span>
+          <NavLink
+            to="/"
+            onClick={onCloseMobile}
+            className="flex items-center gap-2.5"
+            title="Về trang chính"
+          >
+            <img
+              src="/zalo-agent-icon.webp"
+              alt="Zalo Agent"
+              width={128}
+              height={128}
+              className="h-9 w-9"
+            />
+            <span className="text-[17px] font-bold tracking-tight text-ink">Zalo Agent</span>
+          </NavLink>
           <button
             onClick={onCloseMobile}
             aria-label="Đóng menu"

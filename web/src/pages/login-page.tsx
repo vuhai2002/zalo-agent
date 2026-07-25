@@ -25,14 +25,16 @@ export function LoginPage() {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-canvas px-4">
       <form onSubmit={submit} className="gc-card w-full max-w-sm p-8">
-        <div className="mb-7 flex flex-col items-center gap-3">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zalo-500 text-xl font-bold text-white">
-            Z
-          </span>
-          <div className="text-center">
-            <div className="text-lg font-bold text-ink">zalo-agent</div>
-            <div className="text-[13px] text-ink-soft">Dashboard quản trị bot</div>
-          </div>
+        <div className="mb-6 flex flex-col items-center gap-1">
+          {/* Logo bản đầy đủ đã có chữ "Zalo Agent" bên trong */}
+          <img
+            src="/zalo-agent-logo.webp"
+            alt="Zalo Agent"
+            width={384}
+            height={384}
+            className="h-40 w-40"
+          />
+          <div className="text-[13px] text-ink-soft">Dashboard quản trị bot</div>
         </div>
 
         <label className="mb-1.5 block text-[13px] font-medium text-ink">Mật khẩu dashboard</label>

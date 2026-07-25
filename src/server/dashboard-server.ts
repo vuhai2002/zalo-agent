@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { serve, type ServerType } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { env } from "../config/env.js";
 import { createLogger } from "../shared/logger.js";
@@ -23,6 +23,25 @@ import { threadRoutes } from "./routes/thread-routes.js";
 
 const log = createLogger("dashboard-server");
 const SESSION_COOKIE = "dashboard_session";
+
+/**
+ * Cache cho file tĩnh. Vite đặt hash vào tên file trong /assets/ nên cache
+ * vĩnh viễn được; ảnh trong public/ giữ nguyên tên nên chỉ cache 1 ngày để
+ * đổi logo không phải bảo user xóa cache. index.html không bao giờ cache -
+ * nó là thứ trỏ tới bundle mới sau mỗi lần deploy.
+ */
+const setStaticCacheHeaders: MiddlewareHandler = async (c, next) => {
+  await next();
+  if (!c.res.ok) return;
+  const p = c.req.path;
+  if (p.startsWith("/assets/")) {
+    c.header("Cache-Control", "public, max-age=31536000, immutable");
+  } else if (/\.(webp|png|jpg|jpeg|svg|ico|woff2?)$/i.test(p)) {
+    c.header("Cache-Control", "public, max-age=86400");
+  } else {
+    c.header("Cache-Control", "no-cache");
+  }
+};
 
 /** Tách buildApp khỏi serve() để test gọi app.request() không cần mở port */
 export function buildDashboardApp(): Hono {
@@ -86,7 +105,7 @@ export function buildDashboardApp(): Hono {
   // Fallback index.html cho mọi path còn lại để deep link (/sessions, /login)
   // load được khi F5 - đây là điều kiện để router dùng URL sạch, không cần hash.
   if (fs.existsSync(path.resolve("web/dist"))) {
-    app.use("/*", serveStatic({ root: "web/dist" }));
+    app.use("/*", setStaticCacheHeaders, serveStatic({ root: "web/dist" }));
     app.get("*", serveStatic({ path: "web/dist/index.html" }));
   }
 

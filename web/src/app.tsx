@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import type { AccountInfo } from "./dashboard-api-client";
 import { api } from "./dashboard-api-client";
 import { SidebarNav } from "./layout/sidebar-nav";
@@ -60,10 +60,16 @@ function DashboardShell() {
           >
             <IconMenu size={20} />
           </button>
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zalo-500 text-[13px] font-bold text-white">
-            Z
-          </span>
-          <span className="truncate text-[15px] font-semibold text-ink">zalo-agent</span>
+          <Link to="/" className="flex items-center gap-2" title="Về trang chính">
+            <img
+              src="/zalo-agent-icon.webp"
+              alt="Zalo Agent"
+              width={128}
+              height={128}
+              className="h-7 w-7"
+            />
+            <span className="truncate text-[15px] font-semibold text-ink">Zalo Agent</span>
+          </Link>
         </header>
 
         <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:overflow-y-auto lg:px-8 lg:py-7">
