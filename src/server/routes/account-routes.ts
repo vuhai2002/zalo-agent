@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Hono } from "hono";
 import { z } from "zod";
+import { TOOL_KEYS } from "../../agent/tools/index.js";
 import {
   createAccount,
   deleteAccount,
@@ -41,6 +42,8 @@ const patchSchema = z.object({
   // Chặn icon lạ ngay ở API thay vì để rơi về mặc định lúc chạy
   autoReactIcon: z.enum(REACTION_ICON_KEYS as [string, ...string[]]).optional(),
   typingIndicatorEnabled: z.boolean().optional(),
+  // Chặn key tool lạ ngay ở API - key sai âm thầm nằm trong DB sẽ không tắt gì cả
+  disabledTools: z.array(z.enum(TOOL_KEYS as [string, ...string[]])).optional(),
 });
 
 const withStatus = (a: ReturnType<typeof listAccounts>[number]) => ({

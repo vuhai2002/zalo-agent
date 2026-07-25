@@ -1,25 +1,13 @@
-import type { API } from "zca-js";
-import type { AccountConfig } from "../../config/account-store.js";
-import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
-import { createAddReactionTool } from "./add-reaction-tool.js";
-import { createGetGroupInfoTool } from "./get-group-info-tool.js";
-import { createSaveMemoryTool } from "./save-memory-tool.js";
-import { createSendFileTool } from "./send-file-tool.js";
-import { createTagMemberTool } from "./tag-member-tool.js";
-
-/** Bối cảnh 1 lượt xử lý - tools dùng để gọi zca-js đúng account + thread */
-export type ToolContext = {
-  api: API;
-  account: AccountConfig;
-  message: ParsedMessage;
-};
-
-export function buildAgentTools(ctx: ToolContext) {
-  return {
-    add_reaction: createAddReactionTool(ctx),
-    send_file: createSendFileTool(ctx),
-    tag_member: createTagMemberTool(ctx),
-    get_group_info: createGetGroupInfoTool(ctx),
-    save_memory: createSaveMemoryTool(ctx),
-  };
-}
+/**
+ * Điểm vào của hệ tool. Catalog + logic bật/tắt nằm ở tool-registry.ts;
+ * file này chỉ re-export để các tool file import `ToolContext` từ "./index.js"
+ * như cũ (import type - không tạo vòng import lúc chạy).
+ */
+export {
+  buildAgentTools,
+  TOOL_DEFINITIONS,
+  TOOL_KEYS,
+  type ToolContext,
+  type ToolDefinition,
+  type ToolGroup,
+} from "./tool-registry.js";

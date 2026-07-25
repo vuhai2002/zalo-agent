@@ -233,6 +233,45 @@ describe("dashboard-server", () => {
     assert.ok(data.items.some((i) => i.key === "heart" && i.emoji === "❤️"));
   });
 
+  it("GET /api/tools trả catalog cho trang Tools", async () => {
+    const res = await authed("/api/tools");
+    assert.equal(res.status, 200);
+    const data = (await res.json()) as {
+      items: { key: string; label: string; group: string }[];
+      webSearchProvider: string;
+    };
+    assert.ok(data.items.length >= 8);
+    assert.ok(data.items.some((t) => t.key === "web_search" && t.group === "read"));
+    assert.ok(data.items.some((t) => t.key === "send_file" && t.group === "action"));
+    // Test env không set key Brave -> phải báo đang dùng DuckDuckGo miễn phí
+    assert.match(data.webSearchProvider, /DuckDuckGo/);
+  });
+
+  it("PATCH disabledTools lưu và trả lại đúng; key tool lạ bị chặn 400", async () => {
+    const patch = await authed("/api/accounts/acc-tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ disabledTools: ["web_search", "send_file"] }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(patch.status, 200);
+    const data = (await patch.json()) as { account: { disabledTools: string[] } };
+    assert.deepEqual(data.account.disabledTools.sort(), ["send_file", "web_search"]);
+
+    const bad = await authed("/api/accounts/acc-tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ disabledTools: ["tool-khong-ton-tai"] }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(bad.status, 400);
+
+    // Bật lại hết để các test sau không bị ảnh hưởng
+    await authed("/api/accounts/acc-tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ disabledTools: [] }),
+      headers: { "content-type": "application/json" },
+    });
+  });
+
   it("không xóa được agent đang có account dùng -> 409", async () => {
     const res = await authed("/api/agents/tu-van", { method: "DELETE" });
     assert.equal(res.status, 409);

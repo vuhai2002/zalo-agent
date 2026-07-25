@@ -20,6 +20,7 @@ function makeAccount(overrides: Partial<AccountConfig> = {}): AccountConfig {
     autoReactEnabled: true,
     autoReactIcon: "heart",
     typingIndicatorEnabled: true,
+    disabledTools: [],
     ...overrides,
   };
 }

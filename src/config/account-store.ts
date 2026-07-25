@@ -21,6 +21,12 @@ export type AccountConfig = {
   autoReactIcon: string;
   /** Báo "đang nhập" trong lúc agent xử lý */
   typingIndicatorEnabled: boolean;
+  /**
+   * Key các tool bị tắt trên trang Tools (danh sách trắng ngược: mặc định
+   * mọi tool bật, tắt cái nào ghi cái đó - tool MỚI thêm vào registry tự bật
+   * cho account cũ, không cần migration).
+   */
+  disabledTools: string[];
 };
 
 type Row = {
@@ -36,7 +42,18 @@ type Row = {
   auto_react_enabled: number;
   auto_react_icon: string;
   typing_indicator_enabled: number;
+  disabled_tools: string;
 };
+
+/** Cột JSON có thể hỏng nếu ai sửa DB tay - hỏng thì coi như không tắt gì */
+function parseDisabledTools(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 const toConfig = (r: Row): AccountConfig => ({
   id: r.id,
@@ -50,11 +67,13 @@ const toConfig = (r: Row): AccountConfig => ({
   autoReactEnabled: r.auto_react_enabled === 1,
   autoReactIcon: r.auto_react_icon,
   typingIndicatorEnabled: r.typing_indicator_enabled === 1,
+  disabledTools: parseDisabledTools(r.disabled_tools),
 });
 
 const SELECT = `SELECT id, label, enabled, agent_id, allowlist_mode, allowlist_user_ids,
                        group_require_mention, respond_to_groups, group_passive_listen,
-                       auto_react_enabled, auto_react_icon, typing_indicator_enabled
+                       auto_react_enabled, auto_react_icon, typing_indicator_enabled,
+                       disabled_tools
                 FROM accounts`;
 
 export function listAccounts(): AccountConfig[] {
@@ -91,7 +110,7 @@ export function updateAccount(
     `UPDATE accounts SET label = ?, enabled = ?, agent_id = ?, allowlist_mode = ?,
        allowlist_user_ids = ?, group_require_mention = ?, respond_to_groups = ?,
        group_passive_listen = ?, auto_react_enabled = ?, auto_react_icon = ?,
-       typing_indicator_enabled = ?
+       typing_indicator_enabled = ?, disabled_tools = ?
      WHERE id = ?`,
   ).run(
     next.label,
@@ -105,6 +124,7 @@ export function updateAccount(
     next.autoReactEnabled ? 1 : 0,
     next.autoReactIcon,
     next.typingIndicatorEnabled ? 1 : 0,
+    JSON.stringify(next.disabledTools),
     id,
   );
   return getAccount(id);

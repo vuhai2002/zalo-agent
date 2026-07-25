@@ -132,6 +132,9 @@ function runMigrations(): void {
   addColumnIfMissing("accounts", "auto_react_enabled", "INTEGER NOT NULL DEFAULT 1");
   addColumnIfMissing("accounts", "auto_react_icon", "TEXT NOT NULL DEFAULT 'heart'");
   addColumnIfMissing("accounts", "typing_indicator_enabled", "INTEGER NOT NULL DEFAULT 1");
+  // Trang Tools: JSON array key tool bị tắt per account (rỗng = bật hết).
+  // Lưu danh sách TẮT thay vì BẬT để tool mới thêm vào code tự bật cho account cũ.
+  addColumnIfMissing("accounts", "disabled_tools", "TEXT NOT NULL DEFAULT '[]'");
 }
 
 function addColumnIfMissing(table: string, column: string, definition: string): void {
