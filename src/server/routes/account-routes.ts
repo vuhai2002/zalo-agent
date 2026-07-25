@@ -14,6 +14,7 @@ import { dataDir } from "../../config/env.js";
 import { createLogger } from "../../shared/logger.js";
 import { isAccountRunning, startAccount, stopAccount } from "../../zalo/account-manager.js";
 import { getQrLoginStatus, startQrLogin } from "../../zalo/qr-login-manager.js";
+import { REACTION_ICON_KEYS, REACTION_ICONS } from "../../zalo/reaction-icons.js";
 import { hasCredentials } from "../../zalo/zalo-credential-store.js";
 
 const log = createLogger("account-routes");
@@ -36,6 +37,10 @@ const patchSchema = z.object({
   groupRequireMention: z.boolean().optional(),
   respondToGroups: z.boolean().optional(),
   groupPassiveListen: z.boolean().optional(),
+  autoReactEnabled: z.boolean().optional(),
+  // Chặn icon lạ ngay ở API thay vì để rơi về mặc định lúc chạy
+  autoReactIcon: z.enum(REACTION_ICON_KEYS as [string, ...string[]]).optional(),
+  typingIndicatorEnabled: z.boolean().optional(),
 });
 
 const withStatus = (a: ReturnType<typeof listAccounts>[number]) => ({
@@ -48,6 +53,18 @@ const withStatus = (a: ReturnType<typeof listAccounts>[number]) => ({
 export const accountRoutes = new Hono()
 
   .get("/", (c) => c.json({ items: listAccounts().map(withStatus) }))
+
+  // Danh sách reaction cho UI chọn - giữ 1 nguồn duy nhất ở server, tránh
+  // frontend chép lại rồi lệch. Đặt trước route /:id để không bị nuốt.
+  .get("/reaction-icons", (c) =>
+    c.json({
+      items: REACTION_ICON_KEYS.map((key) => ({
+        key,
+        emoji: REACTION_ICONS[key].emoji,
+        label: REACTION_ICONS[key].label,
+      })),
+    }),
+  )
 
   .post("/", async (c) => {
     const parsed = createSchema.safeParse(await c.req.json().catch(() => null));

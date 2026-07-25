@@ -15,6 +15,12 @@ export type AccountConfig = {
   groupRequireMention: boolean;
   respondToGroups: boolean;
   groupPassiveListen: boolean;
+  /** Thả reaction ngay khi nhận tin để người nhắn biết bot đã thấy */
+  autoReactEnabled: boolean;
+  /** Key trong REACTION_ICONS (zalo/reaction-icons.ts) */
+  autoReactIcon: string;
+  /** Báo "đang nhập" trong lúc agent xử lý */
+  typingIndicatorEnabled: boolean;
 };
 
 type Row = {
@@ -27,6 +33,9 @@ type Row = {
   group_require_mention: number;
   respond_to_groups: number;
   group_passive_listen: number;
+  auto_react_enabled: number;
+  auto_react_icon: string;
+  typing_indicator_enabled: number;
 };
 
 const toConfig = (r: Row): AccountConfig => ({
@@ -38,10 +47,14 @@ const toConfig = (r: Row): AccountConfig => ({
   groupRequireMention: r.group_require_mention === 1,
   respondToGroups: r.respond_to_groups === 1,
   groupPassiveListen: r.group_passive_listen === 1,
+  autoReactEnabled: r.auto_react_enabled === 1,
+  autoReactIcon: r.auto_react_icon,
+  typingIndicatorEnabled: r.typing_indicator_enabled === 1,
 });
 
 const SELECT = `SELECT id, label, enabled, agent_id, allowlist_mode, allowlist_user_ids,
-                       group_require_mention, respond_to_groups, group_passive_listen
+                       group_require_mention, respond_to_groups, group_passive_listen,
+                       auto_react_enabled, auto_react_icon, typing_indicator_enabled
                 FROM accounts`;
 
 export function listAccounts(): AccountConfig[] {
@@ -77,7 +90,8 @@ export function updateAccount(
   db.prepare(
     `UPDATE accounts SET label = ?, enabled = ?, agent_id = ?, allowlist_mode = ?,
        allowlist_user_ids = ?, group_require_mention = ?, respond_to_groups = ?,
-       group_passive_listen = ?
+       group_passive_listen = ?, auto_react_enabled = ?, auto_react_icon = ?,
+       typing_indicator_enabled = ?
      WHERE id = ?`,
   ).run(
     next.label,
@@ -88,6 +102,9 @@ export function updateAccount(
     next.groupRequireMention ? 1 : 0,
     next.respondToGroups ? 1 : 0,
     next.groupPassiveListen ? 1 : 0,
+    next.autoReactEnabled ? 1 : 0,
+    next.autoReactIcon,
+    next.typingIndicatorEnabled ? 1 : 0,
     id,
   );
   return getAccount(id);

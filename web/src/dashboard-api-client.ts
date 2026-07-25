@@ -108,6 +108,7 @@ export const api = {
 
   accountsAdmin: {
     list: () => request<{ items: ManagedAccount[] }>("/api/accounts"),
+    reactionIcons: () => request<{ items: ReactionIcon[] }>("/api/accounts/reaction-icons"),
     create: (input: { id: string; label: string; agentId?: string }) =>
       request<{ account: ManagedAccount }>("/api/accounts", {
         method: "POST",
@@ -169,9 +170,14 @@ export type ManagedAccount = {
   groupRequireMention: boolean;
   respondToGroups: boolean;
   groupPassiveListen: boolean;
+  autoReactEnabled: boolean;
+  autoReactIcon: string;
+  typingIndicatorEnabled: boolean;
   running: boolean;
   hasCredentials: boolean;
 };
+
+export type ReactionIcon = { key: string; emoji: string; label: string };
 
 export type ManagedAgent = {
   id: string;

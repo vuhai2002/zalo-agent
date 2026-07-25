@@ -34,6 +34,9 @@ const envSchema = z.object({
   // Thời gian chờ gộp tin nhắn cùng thread thành 1 lượt agent (ảnh + caption,
   // hoặc user nhắn liền nhiều tin ngắn). Cao hơn = gộp tốt hơn nhưng trả lời chậm hơn.
   MESSAGE_BATCH_DEBOUNCE_MS: z.coerce.number().int().min(0).max(15000).default(2500),
+  // Zalo không có API tắt "đang nhập", chỉ báo tự hết sau vài giây -> phải bắn
+  // lặp lại theo chu kỳ này cho tới khi gửi xong câu trả lời
+  TYPING_REFRESH_MS: z.coerce.number().int().min(1000).max(10000).default(3000),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

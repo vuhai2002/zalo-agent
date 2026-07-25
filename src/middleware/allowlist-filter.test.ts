@@ -17,6 +17,9 @@ function makeAccount(overrides: Partial<AccountConfig> = {}): AccountConfig {
     groupRequireMention: true,
     respondToGroups: true,
     groupPassiveListen: true,
+    autoReactEnabled: true,
+    autoReactIcon: "heart",
+    typingIndicatorEnabled: true,
     ...overrides,
   };
 }

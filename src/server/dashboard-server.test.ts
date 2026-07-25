@@ -196,6 +196,43 @@ describe("dashboard-server", () => {
     assert.equal(renamed.account.agentId, "tu-van");
   });
 
+  it("account mới mặc định bật auto-react tim và typing", async () => {
+    const res = await authed("/api/accounts");
+    const data = (await res.json()) as { items: { id: string; autoReactEnabled: boolean; autoReactIcon: string; typingIndicatorEnabled: boolean }[] };
+    const acc = data.items.find((a) => a.id === "acc-tu-van")!;
+    assert.equal(acc.autoReactEnabled, true);
+    assert.equal(acc.autoReactIcon, "heart");
+    assert.equal(acc.typingIndicatorEnabled, true);
+  });
+
+  it("đổi icon reaction + tắt typing qua API", async () => {
+    const res = await authed("/api/accounts/acc-tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ autoReactIcon: "like", typingIndicatorEnabled: false }),
+      headers: { "content-type": "application/json" },
+    });
+    const data = (await res.json()) as { account: { autoReactIcon: string; typingIndicatorEnabled: boolean } };
+    assert.equal(data.account.autoReactIcon, "like");
+    assert.equal(data.account.typingIndicatorEnabled, false);
+  });
+
+  it("icon reaction lạ bị chặn ở API -> 400", async () => {
+    const res = await authed("/api/accounts/acc-tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ autoReactIcon: "khong-ton-tai" }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(res.status, 400);
+  });
+
+  it("GET reaction-icons trả danh sách cho UI, không bị route /:id nuốt", async () => {
+    const res = await authed("/api/accounts/reaction-icons");
+    assert.equal(res.status, 200);
+    const data = (await res.json()) as { items: { key: string; emoji: string; label: string }[] };
+    assert.ok(data.items.length >= 5);
+    assert.ok(data.items.some((i) => i.key === "heart" && i.emoji === "❤️"));
+  });
+
   it("không xóa được agent đang có account dùng -> 409", async () => {
     const res = await authed("/api/agents/tu-van", { method: "DELETE" });
     assert.equal(res.status, 409);

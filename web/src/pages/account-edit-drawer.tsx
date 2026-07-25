@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { ManagedAccount, ManagedAgent } from "../dashboard-api-client";
+import { useEffect, useState } from "react";
+import type { ManagedAccount, ManagedAgent, ReactionIcon } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { SelectMenu } from "../shared/select-menu";
 
@@ -41,11 +41,22 @@ export function AccountEditDrawer({
     groupRequireMention: account?.groupRequireMention ?? true,
     respondToGroups: account?.respondToGroups ?? true,
     groupPassiveListen: account?.groupPassiveListen ?? true,
+    autoReactEnabled: account?.autoReactEnabled ?? true,
+    autoReactIcon: account?.autoReactIcon ?? "heart",
+    typingIndicatorEnabled: account?.typingIndicatorEnabled ?? true,
     allowlistMode: account?.allowlist.mode ?? "all",
     allowlistIds: (account?.allowlist.userIds ?? []).join("\n"),
   });
+  const [reactionIcons, setReactionIcons] = useState<ReactionIcon[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.accountsAdmin
+      .reactionIcons()
+      .then((d) => setReactionIcons(d.items))
+      .catch(() => setReactionIcons([]));
+  }, []);
 
   const agentOptions = agents.map((a) => ({
     value: a.id,
@@ -62,6 +73,9 @@ export function AccountEditDrawer({
       groupRequireMention: form.groupRequireMention,
       respondToGroups: form.respondToGroups,
       groupPassiveListen: form.groupPassiveListen,
+      autoReactEnabled: form.autoReactEnabled,
+      autoReactIcon: form.autoReactIcon,
+      typingIndicatorEnabled: form.typingIndicatorEnabled,
       allowlist: {
         mode: form.allowlistMode as "all" | "list",
         userIds: form.allowlistIds.split("\n").map((s) => s.trim()).filter(Boolean),
@@ -144,6 +158,43 @@ export function AccountEditDrawer({
               label="Nghe passive trong nhóm"
               hint="Tin không @mention vẫn ghi vào ngữ cảnh, không tốn LLM"
             />
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-line p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+              Phản hồi tức thì
+            </div>
+            <Toggle
+              value={form.typingIndicatorEnabled}
+              onChange={(v) => setForm({ ...form, typingIndicatorEnabled: v })}
+              label='Hiện "đang nhập" khi bot xử lý'
+              hint="Giống người thật đang gõ, tự tắt khi gửi xong"
+            />
+            <Toggle
+              value={form.autoReactEnabled}
+              onChange={(v) => setForm({ ...form, autoReactEnabled: v })}
+              label="Thả cảm xúc khi nhận tin"
+              hint="Báo cho người nhắn biết bot đã thấy tin"
+            />
+            {form.autoReactEnabled && reactionIcons.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {reactionIcons.map((icon) => (
+                  <button
+                    key={icon.key}
+                    type="button"
+                    title={icon.label}
+                    onClick={() => setForm({ ...form, autoReactIcon: icon.key })}
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition-colors ${
+                      form.autoReactIcon === icon.key
+                        ? "border-zalo-500 bg-zalo-50 ring-2 ring-zalo-100"
+                        : "border-line hover:bg-tile"
+                    }`}
+                  >
+                    {icon.emoji}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2 rounded-xl border border-line p-4">

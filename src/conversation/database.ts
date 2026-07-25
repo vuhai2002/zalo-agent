@@ -113,6 +113,11 @@ function runMigrations(): void {
   // Memory lớp 2: rolling summary per thread
   addColumnIfMissing("threads", "summary", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing("threads", "summary_covers_to_message_id", "INTEGER NOT NULL DEFAULT 0");
+
+  // Phản hồi tức thì: thả reaction + báo "đang nhập" khi bot bắt đầu xử lý
+  addColumnIfMissing("accounts", "auto_react_enabled", "INTEGER NOT NULL DEFAULT 1");
+  addColumnIfMissing("accounts", "auto_react_icon", "TEXT NOT NULL DEFAULT 'heart'");
+  addColumnIfMissing("accounts", "typing_indicator_enabled", "INTEGER NOT NULL DEFAULT 1");
 }
 
 function addColumnIfMissing(table: string, column: string, definition: string): void {

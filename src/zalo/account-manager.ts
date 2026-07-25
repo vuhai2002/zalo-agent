@@ -16,6 +16,8 @@ import { shouldRespond } from "../middleware/allowlist-filter.js";
 import { clearPendingBatches, enqueueMessage } from "../middleware/message-batcher.js";
 import { enqueueSend } from "../middleware/rate-limiter.js";
 import { createLogger } from "../shared/logger.js";
+import { toZaloReaction } from "./reaction-icons.js";
+import { startTypingIndicator } from "./typing-indicator.js";
 import { loginWithStoredCredentials } from "./zalo-client.js";
 import { startListener } from "./zalo-listener.js";
 import { parseIncomingMessage, type ParsedMessage } from "./zalo-message-parser.js";
@@ -154,6 +156,24 @@ async function resolveGroupName(accountId: string, api: API, threadId: string): 
   }
 }
 
+/**
+ * Báo cho người nhắn biết bot đã nhận: thả reaction vào tin vừa gửi.
+ * Không await ở luồng chính và tự nuốt lỗi - reaction hỏng không được làm
+ * chậm hay chết đường trả lời.
+ */
+function sendAutoReaction(config: AccountConfig, api: API, msg: ParsedMessage): void {
+  if (!config.autoReactEnabled || !msg.msgId) return;
+  void api
+    .addReaction(toZaloReaction(config.autoReactIcon), {
+      data: { msgId: msg.msgId, cliMsgId: msg.cliMsgId },
+      threadId: msg.threadId,
+      type: msg.threadType,
+    })
+    .catch((err) =>
+      log.debug({ accountId: config.id, threadId: msg.threadId, err }, "Auto-react thất bại"),
+    );
+}
+
 async function processBatch(config: AccountConfig, api: API, batch: ParsedMessage[]): Promise<void> {
   const latest = batch[batch.length - 1]!;
   const threadKey = `${config.id}:${latest.threadId}`;
@@ -168,6 +188,18 @@ async function processBatch(config: AccountConfig, api: API, batch: ParsedMessag
     },
     "Xử lý lượt tin nhắn",
   );
+
+  sendAutoReaction(config, api, latest);
+
+  // Giữ "đang nhập" xuyên suốt: qua cả lượt LLM lẫn delay của rate-limiter,
+  // dừng trong finally kể cả khi agent ném lỗi
+  const stopTyping = config.typingIndicatorEnabled
+    ? startTypingIndicator({
+        send: (threadId, threadType) => api.sendTypingEvent(threadId, threadType),
+        threadId: latest.threadId,
+        threadType: latest.threadType,
+      })
+    : () => {};
 
   try {
     // Chạy agent TRƯỚC khi ghi history: runAgentTurn tự đọc history cũ và tự
@@ -199,6 +231,8 @@ async function processBatch(config: AccountConfig, api: API, batch: ParsedMessag
     void maybeSummarizeThread(config.id, latest.threadId);
   } catch (err) {
     log.error({ accountId: config.id, threadId: latest.threadId, err }, "Lỗi xử lý lượt tin nhắn");
+  } finally {
+    stopTyping();
   }
 }
 
