@@ -7,7 +7,8 @@
       "persona": "",
       "allowlist": { "mode": "all", "userIds": [] },
       "groupRequireMention": true,
-      "respondToGroups": true
+      "respondToGroups": true,
+      "groupPassiveListen": true
     }
   ]
 }

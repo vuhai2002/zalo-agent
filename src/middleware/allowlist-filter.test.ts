@@ -16,6 +16,7 @@ function makeAccount(overrides: Partial<AccountConfig> = {}): AccountConfig {
     allowlist: { mode: "all", userIds: [] },
     groupRequireMention: true,
     respondToGroups: true,
+    groupPassiveListen: true,
     ...overrides,
   };
 }
@@ -61,9 +62,42 @@ describe("shouldRespond", () => {
     assert.equal(shouldRespond(account, msg).respond, false);
   });
 
-  it("bỏ qua group khi bắt buộc @mention mà tin không mention bot", () => {
+  it("group không @mention + passive listen: không trả lời nhưng ghi history", () => {
     const msg = makeMessage({ isGroup: true, threadType: ThreadType.Group, mentionsMe: false });
-    assert.equal(shouldRespond(makeAccount(), msg).respond, false);
+    const decision = shouldRespond(makeAccount(), msg);
+    assert.equal(decision.respond, false);
+    assert.equal(decision.record, true);
+  });
+
+  it("group không @mention + tắt passive listen: bỏ qua hẳn", () => {
+    const account = makeAccount({ groupPassiveListen: false });
+    const msg = makeMessage({ isGroup: true, threadType: ThreadType.Group, mentionsMe: false });
+    const decision = shouldRespond(account, msg);
+    assert.equal(decision.respond, false);
+    assert.equal(decision.record, false);
+  });
+
+  it("thread tắt bot: không trả lời nhưng vẫn ghi history", () => {
+    const decision = shouldRespond(makeAccount(), makeMessage(), false);
+    assert.equal(decision.respond, false);
+    assert.equal(decision.record, true);
+  });
+
+  it("ngoài allowlist thì không ghi gì kể cả khi thread tắt bot", () => {
+    const account = makeAccount({ allowlist: { mode: "list", userIds: ["user-9"] } });
+    const decision = shouldRespond(account, makeMessage({ senderId: "user-1" }), false);
+    assert.equal(decision.record, false);
+  });
+
+  it("tin của chính bot không bao giờ được ghi passive", () => {
+    const decision = shouldRespond(makeAccount(), makeMessage({ isSelf: true }));
+    assert.equal(decision.record, false);
+  });
+
+  it("tin được trả lời thì cũng được ghi history", () => {
+    const decision = shouldRespond(makeAccount(), makeMessage());
+    assert.equal(decision.respond, true);
+    assert.equal(decision.record, true);
   });
 
   it("trả lời trong group khi có @mention bot", () => {

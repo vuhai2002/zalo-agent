@@ -17,6 +17,9 @@ const accountSchema = z.object({
     .default({ mode: "all", userIds: [] }),
   groupRequireMention: z.boolean().default(true),
   respondToGroups: z.boolean().default(true),
+  // Tin group không @mention vẫn ghi vào history (không gọi LLM, không trả lời)
+  // để lần được mention sau agent nắm được ngữ cảnh hội thoại xung quanh
+  groupPassiveListen: z.boolean().default(true),
 });
 
 const accountsFileSchema = z.object({

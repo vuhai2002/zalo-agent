@@ -1,39 +1,22 @@
-import path from "node:path";
-// Dùng SQLite built-in của Node (>= 22.13) - không cần native build (better-sqlite3
-// yêu cầu Visual Studio Build Tools trên Windows). API đủ cho nhu cầu key-value history.
-import { DatabaseSync } from "node:sqlite";
-import { dataDir, env } from "../config/env.js";
+import { env } from "../config/env.js";
+import { closeDatabase, db } from "./database.js";
 
 export type StoredMessage = {
   role: "user" | "assistant";
   content: string;
   senderName?: string;
+  senderId?: string;
+  /** ISO UTC - có sẵn khi đọc; khi ghi do DB tự sinh */
+  createdAt?: string;
 };
 
-const db = new DatabaseSync(path.join(dataDir, "zalo-agent.db"));
-db.exec("PRAGMA journal_mode = WAL;");
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_id TEXT NOT NULL,
-    thread_id TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-    sender_name TEXT,
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-  );
-  CREATE INDEX IF NOT EXISTS idx_messages_account_thread
-    ON messages (account_id, thread_id, id);
-`);
-
 const insertStmt = db.prepare(
-  `INSERT INTO messages (account_id, thread_id, role, sender_name, content)
-   VALUES (?, ?, ?, ?, ?)`,
+  `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content)
+   VALUES (?, ?, ?, ?, ?, ?)`,
 );
 
 const recentStmt = db.prepare(
-  `SELECT role, sender_name, content FROM messages
+  `SELECT role, sender_name, sender_id, content, created_at FROM messages
    WHERE account_id = ? AND thread_id = ?
    ORDER BY id DESC LIMIT ?`,
 );
@@ -54,7 +37,14 @@ export function appendMessage(
   threadId: string,
   message: StoredMessage,
 ): void {
-  insertStmt.run(accountId, threadId, message.role, message.senderName ?? null, message.content);
+  insertStmt.run(
+    accountId,
+    threadId,
+    message.role,
+    message.senderName ?? null,
+    message.senderId ?? null,
+    message.content,
+  );
   // Dọn ngay thread vừa ghi: không cần cron, và thread im lặng thì không tốn gì
   pruneStmt.run(accountId, threadId, accountId, threadId, env.HISTORY_MAX_MESSAGES_PER_THREAD);
 }
@@ -64,16 +54,63 @@ export function getRecentMessages(
   threadId: string,
   limit = env.HISTORY_CONTEXT_LIMIT,
 ): StoredMessage[] {
-  type Row = { role: "user" | "assistant"; sender_name: string | null; content: string };
+  type Row = {
+    role: "user" | "assistant";
+    sender_name: string | null;
+    sender_id: string | null;
+    content: string;
+    created_at: string;
+  };
   const rows = recentStmt.all(accountId, threadId, limit) as unknown as Row[];
   // DESC để lấy N tin mới nhất, đảo lại thành thứ tự thời gian cho LLM
   return rows.reverse().map((r) => ({
     role: r.role,
     content: r.content,
     senderName: r.sender_name ?? undefined,
+    senderId: r.sender_id ?? undefined,
+    createdAt: r.created_at,
+  }));
+}
+
+const pagedStmt = db.prepare(
+  `SELECT id, role, sender_name, content, created_at FROM messages
+   WHERE account_id = ? AND thread_id = ? AND id < ?
+   ORDER BY id DESC LIMIT ?`,
+);
+
+export type PagedMessage = StoredMessage & { id: number };
+
+/**
+ * Đọc tin nhắn phân trang cho dashboard - keyset theo id (ổn định khi có tin
+ * mới chen vào, không lệch trang như OFFSET). beforeId bỏ trống = từ tin mới nhất.
+ */
+export function listMessagesPaged(
+  accountId: string,
+  threadId: string,
+  options: { limit?: number; beforeId?: number } = {},
+): PagedMessage[] {
+  type Row = {
+    id: number;
+    role: "user" | "assistant";
+    sender_name: string | null;
+    content: string;
+    created_at: string;
+  };
+  const rows = pagedStmt.all(
+    accountId,
+    threadId,
+    options.beforeId ?? Number.MAX_SAFE_INTEGER,
+    options.limit ?? 50,
+  ) as unknown as Row[];
+  return rows.reverse().map((r) => ({
+    id: r.id,
+    role: r.role,
+    content: r.content,
+    senderName: r.sender_name ?? undefined,
+    createdAt: r.created_at,
   }));
 }
 
 export function closeHistoryStore(): void {
-  db.close();
+  closeDatabase();
 }

@@ -22,6 +22,10 @@ const envSchema = z.object({
   LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).default(2048),
 
   HISTORY_CONTEXT_LIMIT: z.coerce.number().int().min(1).max(200).default(20),
+  // Memory lớp 2: đủ N tin rớt khỏi cửa sổ replay thì gộp vào summary của thread
+  SUMMARY_TRIGGER_MESSAGES: z.coerce.number().int().min(5).max(500).default(30),
+  // Memory lớp 3: tối đa bao nhiêu fact được lưu cho mỗi người/nhóm
+  MEMORY_MAX_FACTS_PER_SUBJECT: z.coerce.number().int().min(1).max(1000).default(50),
   // Số tin tối đa giữ lại mỗi thread; tin cũ hơn bị xóa sau mỗi lần ghi để DB
   // không phình vô hạn khi bot chạy dài ngày.
   HISTORY_MAX_MESSAGES_PER_THREAD: z.coerce.number().int().min(20).max(100_000).default(500),
@@ -30,6 +34,10 @@ const envSchema = z.object({
   // Thời gian chờ gộp tin nhắn cùng thread thành 1 lượt agent (ảnh + caption,
   // hoặc user nhắn liền nhiều tin ngắn). Cao hơn = gộp tốt hơn nhưng trả lời chậm hơn.
   MESSAGE_BATCH_DEBOUNCE_MS: z.coerce.number().int().min(0).max(15000).default(2500),
+
+  // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
+  DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),
+  DASHBOARD_PASSWORD: z.string().min(8, "tối thiểu 8 ký tự").optional(),
 
   // Khóa AES-256 mã hóa cookie Zalo trên đĩa
   CREDENTIALS_ENCRYPTION_KEY: z
