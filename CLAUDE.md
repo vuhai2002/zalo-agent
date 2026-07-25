@@ -16,6 +16,8 @@ Nằm ngoài project tại `D:\source-code\zalo-agent-references\`:
 | `zalo-agent-cli` | Pattern QR login, lưu credential mã hóa |
 | `zalo-personal` | Cách gọi zca-js cho từng tính năng (react, file, tag, group) |
 | `deplao-builder` | Pattern quản lý nhiều instance zca-js cùng lúc |
+| `goclaw` | Pattern tool hệ thống (datetime, web search chain, UI Built-in Tools). **CC BY-NC 4.0: chỉ soi pattern, KHÔNG copy code** |
+| `hermes-agent` | Toolset theo kênh, webhook-safe toolset, cascade web search (MIT - dùng thoải mái) |
 
 **Trước khi viết code đụng zca-js, hãy grep trong `zalo-agent-references\zca-js\src\apis\` để xác nhận chữ ký hàm thật thay vì đoán.** Đã có tiền lệ đoán sai: `loginQR` KHÔNG tự ghi file QR khi mình truyền callback - phải tự gọi `event.actions.saveToFile()`.
 

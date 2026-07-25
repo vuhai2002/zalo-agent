@@ -38,6 +38,10 @@ Zalo servers <--ws/https--> zca-js (npm lib, unofficial)
 | File tạm của `send_file` xóa ngay trong `finally`, sweep định kỳ chỉ để bắt file mồ côi | `data/tmp` là nơi trung chuyển, không phải nơi lưu trữ. Sweep 24h một lần chỉ dọn phần sót lại khi process bị kill giữa lượt gửi |
 | `LLM_API_KEY` để trống được | Key nhập được ở dashboard (lưu DB, mã hóa) nên bắt buộc lúc boot là vô lý - không cấu hình được từ UI thuần. Thiếu key thì log warn lúc khởi động và lượt agent ném lỗi có hướng dẫn, thay vì `process.exit(1)` |
 | Tin của người dùng vào history cả khi lượt agent lỗi | Trước đây `appendMessage` nằm sau `runAgentTurn`: provider chết là tin nhắn biến mất khỏi history, lượt sau bot không biết người ta đã nói gì. Vẫn phải ghi SAU khi agent chạy (agent tự ghép batch vào input, ghi trước thì tin lặp 2 lần) nên dùng cờ ghi-một-lần gọi ở cả 2 nhánh |
+| System prompt chỉ bơm NGÀY (không giờ), giờ chính xác qua tool `get_datetime` | Giờ đổi mỗi phút là prompt cache của provider vỡ mỗi phút; chỉ ngày thì cache sống nguyên ngày (pattern GoClaw). Thứ trong tuần do server tính - LLM tự suy thứ từ ngày rất hay sai. Không có dòng ngày model đoán từ training data và trả lời sai ngày hôm nay |
+| Web search: chuỗi Brave (khi có key) -> DuckDuckGo (luôn cuối, không key) | Pattern chung của cả GoClaw lẫn Hermes: DDG scraping `html.duckduckgo.com` miễn phí làm fallback bắt buộc nên web search không bao giờ "chưa cấu hình"; Brave free tier 2000 query/tháng cho kết quả tốt hơn, lỗi/hết quota tự rơi về DDG. Provider lỗi trả mảng rỗng cho tool diễn giải, không throw ra agent loop |
+| Tool bật/tắt per account, lưu danh sách TẮT (`accounts.disabled_tools`) | Lưu danh sách tắt thay vì bật để tool mới thêm vào registry tự bật cho account cũ, không cần migration. Tool tắt không đưa vào schema gửi LLM: không tốn token mô tả, model không biết nó tồn tại, prompt injection không dụ gọi được. Catalog một nguồn ở `tool-registry.ts`, UI đọc qua `/api/tools` (không chép sang frontend - cùng lý do reaction-icons) |
+| Tool nhóm theo mức rủi ro read/action | Học từ webhook-safe toolset của Hermes (nguồn không tin cậy chỉ được cấp tool đọc): `read` = tra cứu không tác động, `action` = gửi/sửa trên Zalo. Hiện chỉ để nhóm UI; là nền cho allowlist tool theo thread sau này |
 | Ảnh nhận được lưu file `data/media/`, không nhét base64 vào SQLite | URL ảnh Zalo có hạn dùng, còn history chỉ lưu text -> trước đây bot không xem lại được ảnh cũ. Giờ `media-store` lưu file + cột `messages.images` trỏ tới; agent nạp lại tối đa `HISTORY_IMAGE_CONTEXT_LIMIT` ảnh gần nhất (mặc định 3 - mỗi ảnh tốn token mỗi lượt). File quá `MEDIA_RETENTION_DAYS` (7 ngày) bị dọn, history tự rơi về text `[gửi kèm N ảnh]`. Lưu ý: ảnh nằm plaintext trên đĩa (khác cookie có mã hóa) - `data/` đã gitignore |
 
 ## Repo tham khảo
@@ -50,6 +54,8 @@ Clone shallow (chỉ đọc, không build, không sửa) tại `D:\source-code\z
 | [zalo-agent-cli](https://github.com/PhucMPham/zalo-agent-cli) | Pattern QR login, lưu credential mã hóa. **Không harvest phần bank transfer/VietQR** |
 | [zalo-personal](https://github.com/caochitam/zalo-personal) | Catalog 141 action - cách gọi zca-js cho từng tính năng |
 | [deplao-builder](https://github.com/babyvibe/deplao-builder) | Pattern quản lý nhiều instance zca-js cùng lúc |
+| [goclaw](https://github.com/nextlevelbuilder/goclaw) | Pattern tool hệ thống: datetime tool (weekday server tính), chuỗi web search Brave -> DDG, UI Built-in Tools. **License CC BY-NC 4.0 - chỉ soi pattern, KHÔNG copy code** |
+| [hermes-agent](https://github.com/NousResearch/hermes-agent) | Agent hot nhất 2026 (Nous Research, MIT): toolset theo kênh, webhook-safe toolset (chống prompt injection), cascade provider web search trả phí -> free |
 
 Bản `zca-js` trong `references/` chỉ là sách tra cứu - runtime dùng bản cài trong `node_modules` qua pnpm.
 

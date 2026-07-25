@@ -81,6 +81,40 @@ Rà soát toàn bộ codebase, 7 lỗi tìm được đều đã vá. Không ph�
 Ghi chú: các phiên dashboard đang đăng nhập sẽ bị đăng xuất 1 lần sau khi cập nhật
 (token định dạng cũ không còn hợp lệ) - đăng nhập lại là xong.
 
+## V2.5 - Tool tra cứu + trang Tools (2026-07-25)
+
+Sửa 2 thiếu sót user gặp thật (bot trả lời sai ngày hôm nay, không tra web được)
++ trang bật/tắt tool kiểu GoClaw. Nghiên cứu trước khi làm: soi GoClaw v2.23.7
+(UI + `internal/tools/`) và Hermes Agent của Nous Research (2 repo đã clone về
+`zalo-agent-references/`).
+
+- [x] `get_datetime` tool + bơm dòng ngày vào system prompt: CHỈ ngày + thứ, không
+  giờ (giữ prompt cache nguyên ngày - pattern GoClaw); thứ do server tính, dặn model
+  dùng nguyên văn. `BOT_TIMEZONE` kiểm IANA hợp lệ lúc boot bằng Zod refine
+- [x] `web_search` tool: chuỗi Brave (khi có `BRAVE_SEARCH_API_KEY`, free tier
+  2000 query/tháng) -> DuckDuckGo scraping (luôn cuối, không key, miễn phí) -
+  đúng pattern chain của GoClaw/Hermes. Mọi provider chết trả thông báo cho model,
+  không throw
+- [x] `web_fetch` tool: đi qua `safe-remote-download` (thừa hưởng guard SSRF + cap
+  stream), bóc text bằng `html-to-text.ts` tự viết (không thêm dependency), cap
+  8000 ký tự để không phình context, đánh dấu nội dung web là dữ liệu tham khảo
+- [x] Tool registry (`tool-registry.ts`): catalog 8 tool một nguồn duy nhất, nhóm
+  read/action theo mức rủi ro (học webhook-safe toolset của Hermes), UI đọc qua
+  `GET /api/tools`
+- [x] Bật/tắt tool per account: cột `accounts.disabled_tools` (lưu danh sách TẮT -
+  tool mới tự bật cho account cũ), tool tắt không vào schema LLM, key lạ bị chặn
+  400 ở API
+- [x] Trang Tools trên dashboard kiểu GoClaw Built-in Tools: nhóm + toggle mỗi
+  dòng, chọn account, badge hiện provider search đang hiệu lực
+- [x] Test: 215 pass (thêm current-datetime, web-search-providers với fetch tiêm,
+  html-to-text, tool-registry, API tools/disabledTools)
+- [ ] Chưa test Zalo thật: hỏi "hôm nay ngày mấy" (kỳ vọng đúng ngày), nhờ tra
+  thông tin mới (kỳ vọng bot search rồi trả lời kèm nguồn), tắt tool trên UI rồi
+  kiểm tra bot không dùng nữa
+
+Ghi chú license: GoClaw là CC BY-NC 4.0 - chỉ học pattern, không copy code.
+Hermes MIT - dùng thoải mái.
+
 ## V2 còn lại - Khi cần
 
 - [ ] `src/scheduler/` - nhắn chủ động theo lịch (nhắc hẹn, báo cáo)

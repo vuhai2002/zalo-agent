@@ -1,11 +1,12 @@
 # zalo-agent
 
-Bot AI thường trú trên Zalo (tài khoản cá nhân, multi-account): nhận tin nhắn -> agent loop (LLM tự gọi tool: thả reaction, gửi file, tag thành viên, xem info nhóm, đọc ảnh) -> trả lời.
+Bot AI thường trú trên Zalo (tài khoản cá nhân, multi-account): nhận tin nhắn -> agent loop (LLM tự gọi tool: tra ngày giờ, tìm kiếm web, đọc trang web, thả reaction, gửi file, tag thành viên, xem info nhóm, đọc ảnh) -> trả lời. Tool bật/tắt được per account ngay trên dashboard (trang Tools).
 
 - Zalo layer: [zca-js](https://github.com/RFS-ADRENO/zca-js) (unofficial API - CÓ RỦI RO KHÓA NICK, chỉ dùng nick phụ)
 - Agent layer: Vercel AI SDK - provider cắm rời qua env (router proxy OpenAI-compatible hoặc Anthropic trực tiếp), đổi được runtime từ dashboard
 - History + memory: SQLite (`node:sqlite` built-in), theo account + thread; rolling summary + fact bền (tool `save_memory`)
-- Dashboard web: Hono + React (tone xanh Zalo) - xem hội thoại, contacts, memory, bật/tắt bot per thread, đổi LLM provider
+- Dashboard web: Hono + React (tone xanh Zalo) - xem hội thoại, contacts, memory, bật/tắt bot per thread, bật/tắt tool per account, đổi LLM provider
+- Web search miễn phí qua DuckDuckGo (không cần key); điền `BRAVE_SEARCH_API_KEY` (free tier) nếu muốn kết quả tốt hơn
 
 ## Cài đặt
 
