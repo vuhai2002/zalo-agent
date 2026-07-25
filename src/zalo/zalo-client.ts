@@ -70,7 +70,12 @@ export async function loginWithQR(
     }
   });
 
-  // Lưu lại cookie/imei/userAgent để các lần boot sau không cần quét QR
+  persistCredentialsFromApi(accountId, api);
+  return api;
+}
+
+/** Lưu cookie/imei/userAgent (mã hóa) để các lần boot sau không cần quét QR */
+function persistCredentialsFromApi(accountId: string, api: API): void {
   const ctx = api.getContext();
   saveCredentials(accountId, {
     cookie: ctx.cookie.toJSON()?.cookies ?? [],
@@ -78,5 +83,44 @@ export async function loginWithQR(
     userAgent: ctx.userAgent,
   });
   log.info({ accountId }, "Đã lưu credentials (mã hóa) cho các lần đăng nhập sau");
+}
+
+export type QrLoginEvent = {
+  type: "qr" | "scanned" | "expired" | "declined" | "info";
+  /** Base64 PNG (không có prefix data:) - chỉ có ở type "qr" */
+  qrBase64?: string;
+};
+
+/**
+ * Login QR cho web dashboard: KHÔNG ghi file, lấy thẳng base64 từ
+ * event.data.image (đã xác nhận trong zca-js/src/apis/loginQR.ts:433 -
+ * lib strip sẵn prefix data:image/png;base64). QR hết hạn zca-js tự tạo
+ * mã mới và bắn lại QRCodeGenerated.
+ */
+export async function loginWithQRForWeb(
+  accountId: string,
+  onEvent: (event: QrLoginEvent) => void,
+): Promise<API> {
+  const api = await createZaloInstance().loginQR({}, async (event) => {
+    switch (event.type) {
+      case LoginQRCallbackEventType.QRCodeGenerated:
+        onEvent({ type: "qr", qrBase64: (event.data as { image?: string } | null)?.image });
+        break;
+      case LoginQRCallbackEventType.QRCodeScanned:
+        onEvent({ type: "scanned" });
+        break;
+      case LoginQRCallbackEventType.QRCodeExpired:
+        onEvent({ type: "expired" });
+        break;
+      case LoginQRCallbackEventType.QRCodeDeclined:
+        onEvent({ type: "declined" });
+        break;
+      case LoginQRCallbackEventType.GotLoginInfo:
+        onEvent({ type: "info" });
+        break;
+    }
+  });
+
+  persistCredentialsFromApi(accountId, api);
   return api;
 }
