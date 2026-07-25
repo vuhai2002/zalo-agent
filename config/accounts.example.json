@@ -1,0 +1,13 @@
+{
+  "accounts": [
+    {
+      "id": "acc-chinh",
+      "label": "Nick phụ chính",
+      "enabled": true,
+      "persona": "",
+      "allowlist": { "mode": "all", "userIds": [] },
+      "groupRequireMention": true,
+      "respondToGroups": true
+    }
+  ]
+}

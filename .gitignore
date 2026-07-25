@@ -1,0 +1,18 @@
+node_modules/
+dist/
+logs/
+
+# Runtime data: SQLite db, cookie Zalo (credential!), file tải về
+data/
+
+# Env thật không bao giờ commit
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Cấu hình account thật (chứa user id, persona riêng)
+config/accounts.json
+
+# QR login tạm
+qr*.png
