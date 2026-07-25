@@ -115,6 +115,39 @@ Sửa 2 thiếu sót user gặp thật (bot trả lời sai ngày hôm nay, khô
 Ghi chú license: GoClaw là CC BY-NC 4.0 - chỉ học pattern, không copy code.
 Hermes MIT - dùng thoải mái.
 
+## V2.5.1 - Vá vụ dò vé số: web_fetch mù vì menu rác (2026-07-25)
+
+Test thật đầu tiên thất bại đúng kiểu quý giá: gửi ảnh 2 vé số Đà Lạt nhờ dò, bot
+đọc số vé chuẩn (vision OK), agent_turns ghi steps=3 (CÓ gọi tool) nhưng trả lời
+"chưa lấy được kết quả". Tái hiện được nguyên nhân: search ra đúng 5 trang, còn
+web_fetch trả về 8000 ký tự ĐẦU của minhngoc.net.vn - toàn menu, bảng kết quả nằm
+từ ký tự 8314 nên bị cắt đúng trước phần có số.
+
+- [x] `html-to-text` học tín hiệu Readability/Defuddle (GoClaw): vứt list có >= 3
+  link và >= 70% chữ nằm trong link (menu điều hướng), match list trong cùng trước
+  để gỡ menu lồng; bỏ thêm form/select/header/aside; decode entity tên
+  (&Ecirc; -> Ê) qua `html-entities.ts`; ô bảng ngăn " | " để số không dính cột
+- [x] Cap fetch 8000 -> `WEB_FETCH_MAX_CHARS` (mặc định 15000). Kiểm chứng lại
+  trang minhngoc: text 9438 -> 5591 ký tự, TOÀN BỘ số trong bảng kết quả sống sót
+  và nằm gọn trong cap
+- [x] Persona thêm khối "quy tắc tra cứu" chưng cất từ `<tool_persistence>` +
+  `<missing_context>` của Hermes: thông tin thời sự phải search trước khi từ chối,
+  trang đầu hỏng thì thử trang khác, chỉ hỏi ngược user khi tool bó tay, cấm bịa
+  số liệu, chuyện tiền phải nêu nguồn + ngày
+- [x] Log "Hoàn thành lượt agent" nâng lên info kèm TÊN tool đã gọi - trước chỉ có
+  số steps, debug phải đoán bot đã làm gì
+- [x] Ảnh gửi model đổi content part `image` -> `file` (kiểu cũ AI SDK v7
+  deprecated, in cảnh báo mỗi ảnh trong terminal)
+- [x] Test: 225 pass (thêm html-entities, menu link-density, menu lồng, bảng)
+- [ ] Chưa test Zalo thật: gửi lại ảnh vé số -> kỳ vọng bot search, fetch, đối
+  chiếu và trả lời trúng/trượt kèm nguồn + ngày quay
+
+## V2.5.2 - Không làm vội (ghi lại để khỏi quên)
+
+- Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic
+  link-density bắt đầu hụt với các trang khác
+- Per-thread tool allowlist dựa trên nhóm read/action đã có sẵn trong registry
+
 ## V2 còn lại - Khi cần
 
 - [ ] `src/scheduler/` - nhắn chủ động theo lịch (nhắc hẹn, báo cáo)
