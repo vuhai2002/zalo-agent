@@ -32,6 +32,16 @@
 - [x] Memory 3 lớp (mô hình ChatGPT/OpenClaw): rolling summary per thread (async sau reply), tool save_memory với quy tắc privacy bất đối xứng (fact học ở DM không bao giờ inject trong group), timestamps
 - [x] Fetch sanitizer chống response lỗi từ 9Router (JSON dính đuôi SSE)
 
+## V2.1 - Accounts + Agents + QR web (2026-07-25, plan: plans/260725-1910-accounts-agents-qr-web/)
+
+- [x] Tách "kênh" khỏi "não" theo mô hình GoClaw: bảng `agents` (icon, persona, model override, max_steps) + `accounts` (label, policies, agent_id) - N account dùng chung 1 agent
+- [x] DB là source of truth; config/accounts.json chỉ seed 1 lần (persona cũ tự tách thành agent riêng)
+- [x] Trang Accounts: thêm/đổi tên/bật tắt account, sửa policies + allowlist, gắn não, xóa (kèm credentials)
+- [x] Trang Agents: tạo/sửa não, model override per agent, không xóa được agent mặc định/đang dùng
+- [x] QR login ngay trên web: lấy base64 từ event loginQR (không ghi file), polling status, QR hết hạn tự thay, phiên 3 phút, login xong tự start listener
+- [x] account-manager lifecycle per account (start/stop runtime, đọc policies mới nhất từ DB mỗi tin) - bot không account nào vẫn sống để login qua web
+- [ ] Chưa test Zalo thật: quét QR end-to-end, persona agent ăn vào trả lời
+
 ## V2 còn lại - Khi cần
 
 - [ ] `src/scheduler/` - nhắn chủ động theo lịch (nhắc hẹn, báo cáo)

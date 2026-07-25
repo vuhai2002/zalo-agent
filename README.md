@@ -25,13 +25,15 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ## Chạy
 
 ```bash
-pnpm zalo-login acc-chinh   # tạo mã QR, ảnh tự mở - quét bằng app Zalo
-pnpm dev                    # chạy bot (watch mode) + dashboard API (nếu set DASHBOARD_PASSWORD)
-pnpm dev:web                # dev UI dashboard (Vite, proxy vào API)
+pnpm dev                    # chạy bot (watch mode) + dashboard (nếu set DASHBOARD_PASSWORD)
 pnpm build:web              # build UI -> web/dist, bot tự serve tại http://127.0.0.1:3900
+pnpm dev:web                # dev UI dashboard (Vite, proxy vào API)
+pnpm zalo-login acc-chinh   # login QR bằng CLI (cách cũ - giờ làm trên web tiện hơn)
 ```
 
 Dashboard: set `DASHBOARD_PASSWORD` trong `.env` (không set = tắt), mở `http://127.0.0.1:3900`.
+Thêm tài khoản Zalo + quét QR login + tạo agent (não riêng cho từng account) đều làm
+trên dashboard (trang Accounts / Agents) - account/agent lưu trong DB, không cần sửa file.
 
 ## Cấu trúc
 
