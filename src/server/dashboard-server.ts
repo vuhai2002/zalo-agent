@@ -13,6 +13,8 @@ import {
   createSessionToken,
   verifySessionToken,
 } from "./dashboard-auth.js";
+import { accountRoutes } from "./routes/account-routes.js";
+import { agentRoutes } from "./routes/agent-routes.js";
 import { contactRoutes } from "./routes/contact-routes.js";
 import { memoryRoutes } from "./routes/memory-routes.js";
 import { overviewRoutes } from "./routes/overview-routes.js";
@@ -73,6 +75,8 @@ export function buildDashboardApp(): Hono {
   app.route("/api/contacts", contactRoutes);
   app.route("/api/provider", providerRoutes);
   app.route("/api/memories", memoryRoutes);
+  app.route("/api/accounts", accountRoutes);
+  app.route("/api/agents", agentRoutes);
 
   // API không khớp route nào phải trả JSON 404, không được rơi xuống SPA
   // fallback bên dưới (client fetch JSON mà nhận HTML thì lỗi rất khó đọc)

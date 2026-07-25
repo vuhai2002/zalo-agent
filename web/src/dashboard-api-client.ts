@@ -106,6 +106,38 @@ export const api = {
       `/api/contacts?accountId=${encodeURIComponent(accountId)}&q=${encodeURIComponent(q)}&page=${page}`,
     ),
 
+  accountsAdmin: {
+    list: () => request<{ items: ManagedAccount[] }>("/api/accounts"),
+    create: (input: { id: string; label: string; agentId?: string }) =>
+      request<{ account: ManagedAccount }>("/api/accounts", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    update: (id: string, patch: Partial<Omit<ManagedAccount, "id" | "running" | "hasCredentials">>) =>
+      request<{ account: ManagedAccount; warning?: string }>(
+        `/api/accounts/${encodeURIComponent(id)}`,
+        { method: "PATCH", body: JSON.stringify(patch) },
+      ),
+    remove: (id: string) =>
+      request<{ ok: true }>(`/api/accounts/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+
+  agentsAdmin: {
+    list: () => request<{ items: ManagedAgent[] }>("/api/agents"),
+    create: (input: { id: string; name: string; icon?: string; persona?: string }) =>
+      request<{ agent: ManagedAgent }>("/api/agents", { method: "POST", body: JSON.stringify(input) }),
+    update: (
+      id: string,
+      patch: Partial<Pick<ManagedAgent, "name" | "icon" | "persona" | "modelProvider" | "modelName" | "maxSteps">>,
+    ) =>
+      request<{ agent: ManagedAgent }>(`/api/agents/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    remove: (id: string) =>
+      request<{ ok: true }>(`/api/agents/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+
   memories: (accountId: string, q: string, page: number) =>
     request<{ items: MemoryFactItem[]; hasMore: boolean }>(
       `/api/memories?accountId=${encodeURIComponent(accountId)}&q=${encodeURIComponent(q)}&page=${page}`,
@@ -126,6 +158,31 @@ export const api = {
     request<{ ok: boolean; reply?: string; error?: string }>("/api/provider/test", {
       method: "POST",
     }),
+};
+
+export type ManagedAccount = {
+  id: string;
+  label: string;
+  enabled: boolean;
+  agentId: string;
+  allowlist: { mode: "all" | "list"; userIds: string[] };
+  groupRequireMention: boolean;
+  respondToGroups: boolean;
+  groupPassiveListen: boolean;
+  running: boolean;
+  hasCredentials: boolean;
+};
+
+export type ManagedAgent = {
+  id: string;
+  icon: string;
+  name: string;
+  persona: string;
+  modelProvider: "openai-compatible" | "anthropic" | null;
+  modelName: string | null;
+  maxSteps: number | null;
+  isDefault: boolean;
+  accountCount: number;
 };
 
 export type MemoryFactItem = {

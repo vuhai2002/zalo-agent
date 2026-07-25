@@ -153,4 +153,71 @@ describe("dashboard-server", () => {
     assert.equal(res.status, 404);
     assert.match(res.headers.get("content-type") ?? "", /application\/json/);
   });
+
+  it("tạo agent + tạo account gắn agent + đổi tên qua API", async () => {
+    const createAgent = await authed("/api/agents", {
+      method: "POST",
+      body: JSON.stringify({ id: "tu-van", name: "Tư Vấn", icon: "💼", persona: "Bạn là tư vấn viên" }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(createAgent.status, 201);
+
+    const createAcc = await authed("/api/accounts", {
+      method: "POST",
+      body: JSON.stringify({ id: "acc-tu-van", label: "Nick tư vấn", agentId: "tu-van" }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(createAcc.status, 201);
+
+    const rename = await authed("/api/accounts/acc-tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ label: "Nick tư vấn CES" }),
+      headers: { "content-type": "application/json" },
+    });
+    const renamed = (await rename.json()) as { account: { label: string; agentId: string } };
+    assert.equal(renamed.account.label, "Nick tư vấn CES");
+    assert.equal(renamed.account.agentId, "tu-van");
+  });
+
+  it("không xóa được agent đang có account dùng -> 409", async () => {
+    const res = await authed("/api/agents/tu-van", { method: "DELETE" });
+    assert.equal(res.status, 409);
+  });
+
+  it("bật account chưa có credentials: trả warning, không 500", async () => {
+    const res = await authed("/api/accounts/acc-tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ enabled: true }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(res.status, 200);
+    const data = (await res.json()) as { warning?: string };
+    assert.ok(data.warning, "phải có warning vì chưa login QR");
+  });
+
+  it("account id trùng -> 409; id sai định dạng -> 400", async () => {
+    const dup = await authed("/api/accounts", {
+      method: "POST",
+      body: JSON.stringify({ id: "acc-tu-van", label: "Trùng" }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(dup.status, 409);
+
+    const bad = await authed("/api/accounts", {
+      method: "POST",
+      body: JSON.stringify({ id: "Sai Format", label: "X" }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(bad.status, 400);
+  });
+
+  it("xóa account xong thì list không còn", async () => {
+    const del = await authed("/api/accounts/acc-tu-van", { method: "DELETE" });
+    assert.equal(del.status, 200);
+    const list = (await (await authed("/api/accounts")).json()) as { items: { id: string }[] };
+    assert.ok(!list.items.some((a) => a.id === "acc-tu-van"));
+    // Giờ agent hết account dùng -> xóa được
+    const delAgent = await authed("/api/agents/tu-van", { method: "DELETE" });
+    assert.equal(delAgent.status, 200);
+  });
 });

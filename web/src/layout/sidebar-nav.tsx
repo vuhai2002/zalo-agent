@@ -2,11 +2,13 @@ import type { ReactNode, SVGProps } from "react";
 import { NavLink } from "react-router-dom";
 import type { AccountInfo } from "../dashboard-api-client";
 import {
+  IconBot,
   IconBrain,
   IconChat,
   IconClose,
   IconGrid,
   IconLogout,
+  IconSignal,
   IconSliders,
   IconUsers,
 } from "../shared/dashboard-icons";
@@ -29,7 +31,14 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
     ],
   },
   { title: "Dữ liệu", items: [{ to: "/memory", label: "Memory", icon: IconBrain }] },
-  { title: "Hệ thống", items: [{ to: "/providers", label: "Providers", icon: IconSliders }] },
+  {
+    title: "Hệ thống",
+    items: [
+      { to: "/accounts", label: "Accounts", icon: IconSignal },
+      { to: "/agents", label: "Agents", icon: IconBot },
+      { to: "/providers", label: "Providers", icon: IconSliders },
+    ],
+  },
 ];
 
 export function SidebarNav({

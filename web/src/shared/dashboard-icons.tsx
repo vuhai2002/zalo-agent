@@ -113,6 +113,16 @@ export const IconMessage = (p: IconProps) => (
   </svg>
 );
 
+export const IconBot = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="4.5" y="8" width="15" height="11" rx="2.5" />
+    <path d="M12 8V4.5M9 4.5h6" />
+    <circle cx="9" cy="13" r="1" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="13" r="1" fill="currentColor" stroke="none" />
+    <path d="M9.5 16.5h5" />
+  </svg>
+);
+
 export const IconChevronDown = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="m6 9.5 6 6 6-6" />

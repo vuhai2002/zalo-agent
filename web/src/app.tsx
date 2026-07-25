@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-route
 import type { AccountInfo } from "./dashboard-api-client";
 import { api } from "./dashboard-api-client";
 import { SidebarNav } from "./layout/sidebar-nav";
+import { AccountsPage } from "./pages/accounts-page";
+import { AgentsPage } from "./pages/agents-page";
 import { ContactsPage } from "./pages/contacts-page";
 import { LoginPage } from "./pages/login-page";
 import { MemoryPage } from "./pages/memory-page";
@@ -74,6 +76,8 @@ function DashboardShell() {
             <Route path="/sessions" element={<SessionsPage selectedAccountId={selectedAccountId} />} />
             <Route path="/contacts" element={<ContactsPage selectedAccountId={selectedAccountId} />} />
             <Route path="/memory" element={<MemoryPage selectedAccountId={selectedAccountId} />} />
+            <Route path="/accounts" element={<AccountsPage />} />
+            <Route path="/agents" element={<AgentsPage />} />
             <Route path="/providers" element={<ProvidersPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
