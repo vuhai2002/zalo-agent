@@ -30,6 +30,19 @@ Zalo servers <--ws/https--> zca-js (npm lib, unofficial)
 | Filter trước agent | Tin bị lọc (không @mention, ngoài allowlist, tin của bot) không bao giờ chạm LLM -> không tốn token |
 | Tool send_file giới hạn `data/shared-files/` | Chặn agent đọc file tùy ý trên máy (vd credentials) qua prompt injection |
 
+## Repo tham khảo
+
+Clone shallow (chỉ đọc, không build, không sửa) tại `D:\source-code\zalo-agent-references\` - đặt ngoài project để không dính vào git/pnpm/tsc:
+
+| Repo | Dùng để tra |
+|---|---|
+| [zca-js](https://github.com/RFS-ADRENO/zca-js) | Source lib chính: `src/apis/` (chữ ký hàm thật), `examples/login.ts`, `examples/echobot.ts` |
+| [zalo-agent-cli](https://github.com/PhucMPham/zalo-agent-cli) | Pattern QR login, lưu credential mã hóa. **Không harvest phần bank transfer/VietQR** |
+| [zalo-personal](https://github.com/caochitam/zalo-personal) | Catalog 141 action - cách gọi zca-js cho từng tính năng |
+| [deplao-builder](https://github.com/babyvibe/deplao-builder) | Pattern quản lý nhiều instance zca-js cùng lúc |
+
+Bản `zca-js` trong `references/` chỉ là sách tra cứu - runtime dùng bản cài trong `node_modules` qua pnpm.
+
 ## Ràng buộc từ Zalo (qua zca-js)
 
 - 1 listener/account: mở Zalo Web trên trình duyệt sẽ đá listener bot (bot tự reconnect với backoff).
