@@ -9,14 +9,24 @@ try {
   /* không có .env - dùng biến môi trường hệ thống */
 }
 
+/**
+ * "KEY=" trong .env cho ra chuỗi rỗng, không phải undefined - mà `.env.example`
+ * ship đúng dạng đó cho các biến tùy chọn. Không quy về undefined thì copy
+ * example nguyên bản là crash lúc boot ("DASHBOARD_PASSWORD: tối thiểu 8 ký tự")
+ * dù ý nghĩa mong muốn là "không set = tắt dashboard".
+ */
+const emptyToUndefined = (value: unknown): unknown => (value === "" ? undefined : value);
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error"]).default("info"),
   DATA_DIR: z.string().default("./data"),
 
   LLM_PROVIDER: z.enum(["openai-compatible", "anthropic"]).default("openai-compatible"),
-  LLM_BASE_URL: z.string().startsWith("http").optional(),
-  LLM_API_KEY: z.string().min(1),
+  LLM_BASE_URL: z.preprocess(emptyToUndefined, z.string().startsWith("http").optional()),
+  // Để trống được: key có thể nhập ở trang Providers trên dashboard (lưu DB, mã
+  // hóa). Thiếu cả 2 nơi thì lượt agent lỗi với thông báo rõ, không chết lúc boot.
+  LLM_API_KEY: z.string().default(""),
   LLM_MODEL: z.string().min(1),
   LLM_MAX_STEPS: z.coerce.number().int().min(1).max(30).default(8),
   LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).default(2048),
@@ -46,7 +56,15 @@ const envSchema = z.object({
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),
-  DASHBOARD_PASSWORD: z.string().min(8, "tối thiểu 8 ký tự").optional(),
+  DASHBOARD_PASSWORD: z.preprocess(
+    emptyToUndefined,
+    z.string().min(8, "tối thiểu 8 ký tự").optional(),
+  ),
+  // Dashboard chạy sau reverse proxy HTTPS (Caddy/Nginx). Bật thì tin
+  // X-Forwarded-For do proxy ghi (để rate-limit login đúng IP client) và gắn cờ
+  // Secure vào cookie session. PHẢI để false khi truy cập trực tiếp qua http,
+  // nếu không cookie không bao giờ được gửi và không đăng nhập được.
+  DASHBOARD_BEHIND_PROXY: z.preprocess(emptyToUndefined, z.stringbool().default(false)),
 
   // Khóa AES-256 mã hóa cookie Zalo trên đĩa
   CREDENTIALS_ENCRYPTION_KEY: z

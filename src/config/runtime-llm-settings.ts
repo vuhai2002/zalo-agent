@@ -89,6 +89,7 @@ export function clearLlmSettings(): void {
 
 /** "sk-abc...xyz" - đủ nhận diện key nào, không đủ dùng lại */
 export function maskApiKey(key: string): string {
+  if (!key) return "chưa cấu hình";
   if (key.length <= 8) return "***";
   return `${key.slice(0, 5)}...${key.slice(-4)}`;
 }

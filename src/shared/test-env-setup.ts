@@ -35,6 +35,9 @@ export function setupTestEnv(overrides: Record<string, string> = {}): string {
     SEND_DELAY_MAX_MS: "0",
     MESSAGE_BATCH_DEBOUNCE_MS: "20",
 
+    // Test chạy như chạy local: không tin X-Forwarded-For, cookie không cần Secure
+    DASHBOARD_BEHIND_PROXY: "false",
+
     CREDENTIALS_ENCRYPTION_KEY: "0".repeat(64),
 
     ...overrides,

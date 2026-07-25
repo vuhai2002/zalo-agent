@@ -32,6 +32,12 @@ export function resolveLanguageModel(override?: ModelOverride): LanguageModel {
     provider: override?.modelProvider ?? base.provider,
     model: override?.modelName ?? base.model,
   };
+  if (!settings.apiKey) {
+    throw new Error(
+      "Chưa cấu hình LLM API key - đặt LLM_API_KEY trong .env hoặc nhập ở trang Providers trên dashboard",
+    );
+  }
+
   switch (settings.provider) {
     case "openai-compatible": {
       if (!settings.baseUrl) {
