@@ -287,6 +287,88 @@ Bot không tra được giá vàng. Tái hiện ra HAI lỗi riêng biệt, khô
 - `POST /v1/web/fetch` của 9Router: cũng cần key cho firecrawl/tavily/exa. Gọi
   thẳng r.jina.ai ngắn hơn và không phụ thuộc cấu hình router
 
+## V2.7 - Tin dài, trạng thái đã xem, hết im lặng khi lỗi (2026-07-26)
+
+Test thật: hỏi "tìm hiểu các drama về kim cương mấy ngày gần đây". Bot chạy đúng
+20 tool call, tổng hợp xong, rồi `ZaloApiError: Nội dung quá dài` (code 118) -
+người nhắn không nhận được gì, câu trả lời cũng không vào history. Lượt đó tốn
+175.351 token ra số 0.
+
+- [x] **Nguyên nhân**: Zalo chặn tin dài ở phía server, zca-js không kiểm gì
+  (`sendMessage.ts` chỉ đếm attachment), code mình gửi thẳng `result.text`.
+  `LLM_MAX_OUTPUT_TOKENS=2048` là trần MỖI STEP nên câu trả lời hợp lệ vẫn ra
+  4000-6000 ký tự. Các câu trả lời trước trong DB dài 258-1309 ký tự nên chưa
+  từng chạm ngưỡng
+- [x] `split-long-message.ts`: cắt ở dòng trống -> xuống dòng -> hết câu ->
+  khoảng trắng, không bao giờ giữa từ; điểm cắt phải lấp >= 50% cửa sổ để không
+  sinh đoạn vụn. `ZALO_MAX_MESSAGE_CHARS` (2000) + `ZALO_MAX_MESSAGE_PARTS` (5),
+  vượt trần thì đoạn cuối kèm ghi chú "phần sau còn dài"
+- [x] `send-reply-in-parts.ts`: gửi tuần tự qua rate-limiter sẵn có (delay ngẫu
+  nhiên mỗi tin nên chuỗi tin trông như người gõ nhiều dòng). History chỉ ghi
+  phần ĐÃ gửi được
+- [x] **Hết im lặng khi lỗi**: nhánh `catch` giờ gửi thông báo trục trặc kỹ thuật
+  thay vì chỉ log. Dùng chung câu với nhánh router trả completion rỗng. Không ghi
+  câu này vào history (thông báo hệ thống, để lại là model neo vào tiền lệ hỏng)
+- [x] **Trạng thái "đã nhận" / "đã xem"**: `message-receipts.ts` gọi
+  `sendDeliveredEvent` cho mọi tin về listener và `sendSeenEvent` khi bot bắt đầu
+  xử lý lượt. Chữ ký hàm đối chiếu source thật của zca-js (cần đủ 9 field từ
+  payload gốc, mọi tin trong một lần gọi phải cùng thread). Tin passive-listen
+  không báo đã xem - báo xem rồi im lặng khiến người nhắn tưởng bot đang soạn
+- [x] **Lỗi thứ 2 tìm ra từ cùng log - web_fetch nuốt gzip**: znews.vn trả
+  `content-encoding: gzip` dù mình không khai `Accept-Encoding` (kiểm chứng trực
+  tiếp), mà `safe-remote-download` đọc buffer rồi `.toString("utf-8")` thẳng ->
+  46.066 ký tự rác nhị phân vào context (tienphong 19.680). Giờ giải nén theo
+  header (gzip/deflate/deflate thô/br), chặn zip bomb bằng `maxOutputLength`,
+  khai `Accept-Encoding` như trình duyệt. Đo lại sau khi vá: znews 10.853 ký tự
+  bài báo thật, tienphong 5.741, không còn ký tự nhị phân
+- [x] **Lỗi thứ 3 - thẻ HTML tràn 2 dòng lọt vào context**: bước cuối của
+  `html-to-text` tách dòng TRƯỚC rồi mới bóc thẻ từng dòng, nên thẻ xuống dòng
+  giữa chừng (tuoitre.vn viết `<input onfocus=... \n placeholder=... />`) không
+  khớp `<...>` trên dòng nào và đi thẳng vào text gửi model. Gộp thẻ về 1 dòng
+  trước khi xử lý; ràng buộc ký tự đầu là chữ/`/`/`!` để dấu nhỏ hơn trong văn
+  xuôi ("giá < 100 triệu") không bị nhận nhầm là thẻ. Đo lại tuoitre: 10.809 ->
+  8.343 ký tự, bớt 2.466 ký tự markup rác mỗi lần fetch
+- [x] Test: 305 pass (thêm split-long-message 10 case, message-receipts 7 case,
+  decompressBody 8 case gồm cả zip bomb, html-to-text 3 case thẻ tràn dòng)
+- [ ] Chưa test Zalo thật: hỏi lại câu drama kim cương -> kỳ vọng nhận đủ nhiều
+  tin liền mạch, không cụt chữ; người nhắn thấy "Đã nhận" rồi "Đã xem"; rút mạng
+  giữa lượt -> kỳ vọng có tin báo lỗi thay vì im
+
+### Chốt lại 3 con số khả nghi trong log (đo bằng request thật + đọc source router)
+
+Bắt fetch của SDK để soi đúng body đi ra router, kèm đọc source 9Router:
+
+- **`reasoning_effort` CÓ được gửi**: body ra router là
+  `{model, max_tokens, reasoning_effort: "medium", messages}`. Cảnh báo
+  deprecated key `llm-router` KHÔNG làm mất tham số - `resolveProviderOptionsKey`
+  của `@ai-sdk/openai-compatible` rơi về đúng key kebab-case khi không có bản
+  camelCase, chỉ đẩy một warning
+- **`reasoningTokens: 0` là LỖI BÁO CÁO, không phải thinking bị tắt**. Sửa lại
+  phỏng đoán ghi ở V2.5.3 ("router nuốt tham số"): `executors/codex.js:441` đọc
+  `reasoning_effort` rồi đổi thành `reasoning: {effort, summary:"auto"}` cho
+  backend Codex - thinking CÓ chạy. Nhưng
+  `translator/response/openai-responses.js:474` gọi `buildUsage({promptTokens,
+  completionTokens, totalTokens, cachedTokens})` - KHÔNG truyền `reasoningTokens`,
+  mà `buildUsage` chỉ thêm `completion_tokens_details` khi giá trị > 0. Field
+  `output_tokens_details.reasoning_tokens` của upstream không ai đọc. Tức là
+  không thể dùng reasoningTokens để kiểm chứng thinking trên đường
+  gpt-5.6-sol nữa
+- **`cachedTokens: 0` là miss thật**: cùng translator đó CÓ truyền `cachedTokens`
+  lấy từ `input_tokens_details.cached_tokens`, nên số 0 phản ánh đúng upstream.
+  Header `x-session-id` đã gửi đúng và ổn định (kiểm chứng: 2 request liên tiếp
+  cùng `zalo-agent-c749a3dd...`, prompt 1287 token > ngưỡng cache 1024) mà vẫn
+  miss. Nguyên nhân nằm ngoài repo này - nghi 9Router xoay vòng nhiều tài khoản
+  upstream nên prefix cache không dùng lại được. Cần soi log phía router
+
+- [x] Dọn cảnh báo deprecated in ra mỗi request: `ROUTER_PROVIDER_OPTIONS_KEY`
+  đổi `llm-router` -> `llmRouter`. Kiểm chứng bằng request thật: cảnh báo hết,
+  `reasoning_effort: "medium"` vẫn nằm trong body đi ra router. Thêm test chặn
+  hồi quy (key không được chứa dấu gạch ngang)
+
+Còn nợ:
+- `account-manager.ts` đã 309 dòng - nên tách phần đường đi của tin nhắn
+  (handleIncomingMessage + processBatch) ra khỏi phần lifecycle account
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic
