@@ -11,6 +11,18 @@ export type StoredImageLoader = (relPath: string) => { base64: string; mediaType
  */
 export type ImageDescriptionLookup = (relPath: string) => string | null;
 
+/**
+ * Cách render ảnh history khi có sidecar:
+ * - keepPixels=false (describe): chỉ text mô tả - model chính không đọc được ảnh.
+ * - keepPixels=true (hybrid, cho combo): CẢ pixel LẪN mô tả - thành viên vision
+ *   của combo thấy pixel, thành viên mù bị router lột pixel nhưng mô tả text
+ *   sống sót nên vẫn biết ảnh chứa gì.
+ */
+export type HistoryImageRendering = {
+  describe: ImageDescriptionLookup;
+  keepPixels: boolean;
+};
+
 /** "[25/07 14:30]" theo giờ máy chạy bot - đủ cho model cảm nhận khoảng cách thời gian */
 export function formatTimestamp(isoUtc: string): string {
   const d = new Date(isoUtc);
@@ -60,7 +72,7 @@ export function historyToModelMessages(
   history: StoredMessage[],
   imageLimit: number,
   loadImage: StoredImageLoader,
-  describeImage?: ImageDescriptionLookup,
+  rendering?: HistoryImageRendering,
 ): ModelMessage[] {
   const imageBudgetByIndex = planImageBudget(history, imageLimit);
 
@@ -80,13 +92,14 @@ export function historyToModelMessages(
 
     const parts: Exclude<UserContent, string> = [];
     for (const relPath of (message.images ?? []).slice(0, take)) {
-      if (describeImage) {
-        // Model chính không đọc được ảnh: thay pixel bằng mô tả text từ sidecar
-        const description = describeImage(relPath);
+      // describe/hybrid: kèm mô tả text từ cache sidecar (nếu đã có)
+      if (rendering) {
+        const description = rendering.describe(relPath);
         if (description) {
           parts.push({ type: "text", text: `[Mô tả ảnh đính kèm: ${description}]` });
         }
-        continue;
+        // describe (keepPixels=false): model chính mù, pixel là rác tốn token
+        if (!rendering.keepPixels) continue;
       }
       const image = loadImage(relPath);
       // Part "file" thay cho "image" - kiểu cũ bị AI SDK v7 deprecated

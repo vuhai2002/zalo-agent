@@ -85,7 +85,7 @@ describe("history-to-model-messages", () => {
     assert.match(textPart!.text!, /Hải: xem ảnh này \[gửi kèm 1 ảnh\]$/);
   });
 
-  it("chế độ describe: thay pixel bằng text mô tả, KHÔNG gọi loader ảnh", () => {
+  it("chế độ describe (keepPixels=false): thay pixel bằng text mô tả, KHÔNG gọi loader ảnh", () => {
     let loaderCalls = 0;
     const out = historyToModelMessages(
       [userMsg("vé số [gửi kèm 1 ảnh]", ["media/a/t/ve-0.jpg"])],
@@ -94,7 +94,7 @@ describe("history-to-model-messages", () => {
         loaderCalls++;
         return fakeLoader("x");
       },
-      (relPath) => `vé số Đà Lạt, số 123456 (${relPath})`,
+      { describe: (relPath) => `vé số Đà Lạt, số 123456 (${relPath})`, keepPixels: false },
     );
 
     const content = out[0]!.content as { type: string; text?: string }[];
@@ -108,10 +108,36 @@ describe("history-to-model-messages", () => {
       [userMsg("cũ [gửi kèm 1 ảnh]", ["media/a/t/cu-0.jpg"])],
       3,
       fakeLoader,
-      () => null,
+      { describe: () => null, keepPixels: false },
     );
     assert.equal(typeof out[0]!.content, "string");
     assert.match(String(out[0]!.content), /gửi kèm 1 ảnh/);
+  });
+
+  it("chế độ hybrid (keepPixels=true): CẢ pixel LẪN mô tả cùng vào content", () => {
+    const out = historyToModelMessages(
+      [userMsg("vé [gửi kèm 1 ảnh]", ["media/a/t/hy-0.jpg"])],
+      3,
+      fakeLoader,
+      { describe: () => "vé số Đà Lạt 654321", keepPixels: true },
+    );
+
+    const content = out[0]!.content as { type: string; text?: string; data?: string }[];
+    assert.deepEqual(imagePartsOf(out[0]!), ["b64:media/a/t/hy-0.jpg"], "pixel phải còn");
+    assert.ok(
+      content.some((p) => p.type === "text" && /Mô tả ảnh đính kèm: vé số Đà Lạt 654321/.test(p.text!)),
+      "mô tả phải kèm theo",
+    );
+  });
+
+  it("chế độ hybrid: chưa có mô tả thì vẫn còn pixel (thành viên vision không bị thiệt)", () => {
+    const out = historyToModelMessages(
+      [userMsg("vé [gửi kèm 1 ảnh]", ["media/a/t/hy-1.jpg"])],
+      3,
+      fakeLoader,
+      { describe: () => null, keepPixels: true },
+    );
+    assert.deepEqual(imagePartsOf(out[0]!), ["b64:media/a/t/hy-1.jpg"]);
   });
 
   it("collectImagesWithinBudget trả đúng các ảnh sẽ vào context theo ngân sách", () => {

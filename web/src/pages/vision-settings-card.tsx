@@ -12,6 +12,7 @@ import { Badge } from "../shared/ui-bits";
 const IMAGE_MODE_BADGE = {
   native: { tone: "green" as const, text: "Model tự đọc ảnh" },
   describe: { tone: "blue" as const, text: "Sidecar mô tả ảnh cho model" },
+  hybrid: { tone: "blue" as const, text: "Combo: gửi ảnh + kèm mô tả từ sidecar" },
   blind: { tone: "amber" as const, text: "Bot KHÔNG đọc được ảnh" },
 };
 

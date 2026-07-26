@@ -262,6 +262,9 @@ export type VisionSettings = {
   /** Model chính có đọc được ảnh không: auto = tự hỏi router */
   mode: "auto" | "on" | "off";
   sidecar: { baseUrl: string; model: string; apiKeyMasked: string; configured: boolean };
-  /** Chế độ ảnh đang hiệu lực: native = model tự đọc, describe = sidecar mô tả, blind = bỏ ảnh */
-  imageMode: "native" | "describe" | "blind";
+  /**
+   * Chế độ ảnh đang hiệu lực: native = model tự đọc, describe = sidecar mô tả,
+   * hybrid = combo nhận cả pixel + mô tả, blind = bỏ ảnh
+   */
+  imageMode: "native" | "describe" | "hybrid" | "blind";
 };

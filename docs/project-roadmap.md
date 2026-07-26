@@ -421,6 +421,38 @@ chết cả lượt. Research trước khi làm: Hermes `image_input_mode` auto|
   (vd ds/deepseek-v4-pro) -> gửi ảnh, kỳ vọng bot vẫn mô tả được nội dung;
   bấm Test sidecar trên UI
 
+## V2.9.1 - Combo hybrid + reactive fallback khi model từ chối ảnh (2026-07-27)
+
+Trả lời 2 câu hỏi của user sau V2.9: "combo check vision được không?" và "gọi
+model kèm ảnh mà lỗi thì agent tự dùng model đọc ảnh được không?". Test sống
+trước khi làm: `/v1/models` instance thật trả capabilities đủ 20/20 model
+(deepseek vision=false, gpt-5.6 vision=true), combo chỉ có `owned_by: "combo"`;
+`/api/combos` 401 kể cả kèm key -> không tra được thành viên combo. Đọc source
+`combo.js`: auto-switch luôn bật đẩy thành viên vision lên đầu khi lượt hiện
+tại có ảnh, nhưng ảnh HISTORY chủ đích không pin combo -> rơi vào thành viên
+mù là ảnh bị lột êm, không lỗi, không dấu vết.
+
+- [x] Phân loại 4 trạng thái `vision|no-vision|combo|unknown` thay boolean
+  (`classifyModelVision`); combo nhận diện qua `owned_by: "combo"`
+- [x] Chế độ ảnh thứ 4 `hybrid` cho combo + có sidecar: đính CẢ pixel LẪN mô
+  tả - thành viên vision thấy pixel, lượt rơi vào thành viên mù (fallback hoặc
+  ảnh history) bị lột pixel nhưng mô tả text sống sót. Không sidecar thì combo
+  giữ native (router auto-switch vẫn đỡ lượt có ảnh mới)
+- [x] Reactive fallback (`agent-loop`): lượt native/hybrid có part ảnh mà
+  provider ném APICallError 4xx (loại 401/403/429/5xx) -> `markModelNoVision`
+  ghi cache âm 10 phút + dựng lại input ở describe/blind (`forceMode`) thử lại
+  1 lần. Đóng nốt lỗ "endpoint ngoài 9Router + model mù + mode auto" - trước
+  đây chết lượt với câu trục trặc kỹ thuật
+- [x] Cache âm THẮNG kết quả /models lạc quan; anthropic không bao giờ bị đánh
+  dấu; `clearVisionDetectionCache` (đổi cấu hình từ dashboard) xóa cả cache âm
+- [x] Test: 346 pass (16 test mới: phân loại combo/unknown, cache âm,
+  isImageRejectionError từng mã HTTP, hasImageParts, describe/hybrid của cả
+  history lẫn lượt hiện tại với file thật trên đĩa + cache mô tả, forceMode).
+  Test sống trên 9Router thật: 5 case phân loại + cache âm + imageMode đều đúng
+- [ ] Chưa test Zalo thật: cấu hình sidecar Gemini rồi gửi ảnh vào combo ->
+  kỳ vọng log `imageMode: "hybrid"`; lượt sau hỏi lại về ảnh (không gửi ảnh
+  mới) khi combo rơi vào deepseek -> kỳ vọng bot vẫn biết nội dung ảnh
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic

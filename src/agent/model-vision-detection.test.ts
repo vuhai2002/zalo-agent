@@ -30,30 +30,31 @@ beforeEach(() => {
   visionStore.updateVisionSettings({ mode: "auto" });
 });
 
-/** Response /models kiểu 9Router: entry kèm capabilities.vision */
+/** Response /models đúng dạng đo được trên 9Router thật (2026-07-26) */
 const routerPayload = {
   data: [
-    { id: "cx/gpt-5.6-sol", capabilities: { vision: true } },
-    { id: "ds/deepseek-v4-pro", capabilities: { vision: false } },
-    { id: "my-combo" }, // combo không có capabilities
+    { id: "cx/gpt-5.6-sol", owned_by: "cx", capabilities: { vision: true } },
+    { id: "ds/deepseek-v4-pro", owned_by: "ds", capabilities: { vision: false } },
+    { id: "my-combo", object: "model", owned_by: "combo" },
   ],
 };
 
 describe("parseModelsCapabilities", () => {
-  it("bóc đúng map vision, bỏ qua entry thiếu capabilities", () => {
-    const map = detection.parseModelsCapabilities(routerPayload);
-    assert.equal(map.get("cx/gpt-5.6-sol"), true);
-    assert.equal(map.get("ds/deepseek-v4-pro"), false);
-    assert.equal(map.has("my-combo"), false);
+  it("bóc map vision + nhận diện combo qua owned_by", () => {
+    const { visionByModel, comboIds } = detection.parseModelsCapabilities(routerPayload);
+    assert.equal(visionByModel.get("cx/gpt-5.6-sol"), true);
+    assert.equal(visionByModel.get("ds/deepseek-v4-pro"), false);
+    assert.equal(visionByModel.has("my-combo"), false);
+    assert.deepEqual([...comboIds], ["my-combo"]);
   });
 
-  it("payload rác không throw, trả map rỗng", () => {
-    assert.equal(detection.parseModelsCapabilities(null).size, 0);
-    assert.equal(detection.parseModelsCapabilities({ data: "x" }).size, 0);
+  it("payload rác không throw, trả kết quả rỗng", () => {
+    assert.equal(detection.parseModelsCapabilities(null).visionByModel.size, 0);
+    assert.equal(detection.parseModelsCapabilities({ data: "x" }).comboIds.size, 0);
   });
 });
 
-describe("modelReadsImages", () => {
+describe("classifyModelVision", () => {
   it("mode on/off ép tay, không gọi /models", async () => {
     let calls = 0;
     const fetcher = async () => {
@@ -61,57 +62,110 @@ describe("modelReadsImages", () => {
       return routerPayload;
     };
     visionStore.updateVisionSettings({ mode: "on" });
-    assert.equal(await detection.modelReadsImages(undefined, fetcher), true);
+    assert.equal(await detection.classifyModelVision(undefined, fetcher), "vision");
     visionStore.updateVisionSettings({ mode: "off" });
-    assert.equal(await detection.modelReadsImages(undefined, fetcher), false);
+    assert.equal(await detection.classifyModelVision(undefined, fetcher), "no-vision");
     assert.equal(calls, 0);
   });
 
-  it("auto: router báo vision=false thì tắt ảnh; model không có trong list thì coi như có", async () => {
+  it("auto: vision=true/false theo router, combo nhận diện riêng, model lạ = unknown", async () => {
     const fetcher = async () => routerPayload;
-    // Model mặc định cx/gpt-5.6-sol có vision
-    assert.equal(await detection.modelReadsImages(undefined, fetcher), true);
-    // Override sang model router báo không vision
+    assert.equal(await detection.classifyModelVision(undefined, fetcher), "vision");
     assert.equal(
-      await detection.modelReadsImages({ modelName: "ds/deepseek-v4-pro" }, fetcher),
-      false,
+      await detection.classifyModelVision({ modelName: "ds/deepseek-v4-pro" }, fetcher),
+      "no-vision",
     );
-    // Combo không có capabilities -> không biết -> giữ hành vi cũ (true)
-    assert.equal(await detection.modelReadsImages({ modelName: "my-combo" }, fetcher), true);
+    assert.equal(await detection.classifyModelVision({ modelName: "my-combo" }, fetcher), "combo");
+    assert.equal(
+      await detection.classifyModelVision({ modelName: "model-la-hoac-moi" }, fetcher),
+      "unknown",
+    );
   });
 
-  it("auto: /models lỗi thì coi như có vision và có cache (không đập router)", async () => {
+  it("auto: /models lỗi thì unknown và có cache (không đập router)", async () => {
     let calls = 0;
     const fetcher = async () => {
       calls++;
       throw new Error("router down");
     };
-    assert.equal(await detection.modelReadsImages(undefined, fetcher), true);
-    assert.equal(await detection.modelReadsImages(undefined, fetcher), true);
+    assert.equal(await detection.classifyModelVision(undefined, fetcher), "unknown");
+    assert.equal(await detection.classifyModelVision(undefined, fetcher), "unknown");
     assert.equal(calls, 1, "kết quả lỗi cũng phải được cache");
   });
 
-  it("cache dùng chung theo baseUrl: 2 model khác nhau chỉ gọi /models 1 lần", async () => {
+  it("cache dùng chung theo baseUrl: nhiều model chỉ gọi /models 1 lần", async () => {
     let calls = 0;
     const fetcher = async () => {
       calls++;
       return routerPayload;
     };
-    await detection.modelReadsImages(undefined, fetcher);
-    await detection.modelReadsImages({ modelName: "ds/deepseek-v4-pro" }, fetcher);
+    await detection.classifyModelVision(undefined, fetcher);
+    await detection.classifyModelVision({ modelName: "ds/deepseek-v4-pro" }, fetcher);
+    await detection.classifyModelVision({ modelName: "my-combo" }, fetcher);
     assert.equal(calls, 1);
   });
 
-  it("provider anthropic luôn true, không gọi /models", async () => {
+  it("provider anthropic luôn vision, không gọi /models", async () => {
     let calls = 0;
     const fetcher = async () => {
       calls++;
       return routerPayload;
     };
     assert.equal(
-      await detection.modelReadsImages({ modelProvider: "anthropic", modelName: "claude-opus-5" }, fetcher),
-      true,
+      await detection.classifyModelVision(
+        { modelProvider: "anthropic", modelName: "claude-opus-5" },
+        fetcher,
+      ),
+      "vision",
     );
     assert.equal(calls, 0);
+  });
+
+  it("modelReadsImages: chỉ no-vision mới là false", async () => {
+    const fetcher = async () => routerPayload;
+    assert.equal(await detection.modelReadsImages({ modelName: "my-combo" }, fetcher), true);
+    assert.equal(
+      await detection.modelReadsImages({ modelName: "ds/deepseek-v4-pro" }, fetcher),
+      false,
+    );
+  });
+});
+
+describe("markModelNoVision - cache âm của reactive fallback", () => {
+  it("model bị đánh dấu thì classify ra no-vision, THẮNG cả kết quả /models lạc quan", async () => {
+    const fetcher = async () => routerPayload;
+    // Router bảo unknown (model lạ) -> bình thường là unknown
+    assert.equal(
+      await detection.classifyModelVision({ modelName: "model-cau-am" }, fetcher),
+      "unknown",
+    );
+    // Provider từ chối ảnh thật -> đánh dấu
+    detection.markModelNoVision({ modelName: "model-cau-am" });
+    assert.equal(
+      await detection.classifyModelVision({ modelName: "model-cau-am" }, fetcher),
+      "no-vision",
+    );
+    // Model khác không bị vạ lây
+    assert.equal(await detection.classifyModelVision(undefined, fetcher), "vision");
+  });
+
+  it("đường anthropic không bao giờ bị đánh dấu (mọi model Claude đều có vision)", async () => {
+    detection.markModelNoVision({ modelProvider: "anthropic", modelName: "claude-opus-5" });
+    assert.equal(
+      await detection.classifyModelVision(
+        { modelProvider: "anthropic", modelName: "claude-opus-5" },
+        async () => routerPayload,
+      ),
+      "vision",
+    );
+  });
+
+  it("clearVisionDetectionCache xóa cả cache âm", async () => {
+    detection.markModelNoVision({ modelName: "model-tam-mu" });
+    detection.clearVisionDetectionCache();
+    assert.equal(
+      await detection.classifyModelVision({ modelName: "model-tam-mu" }, async () => routerPayload),
+      "unknown",
+    );
   });
 });

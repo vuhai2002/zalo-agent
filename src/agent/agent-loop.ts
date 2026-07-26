@@ -3,16 +3,19 @@ import type { API } from "zca-js";
 import type { AccountConfig } from "../config/account-store.js";
 import { getAgentForAccount } from "../config/agent-store.js";
 import { env } from "../config/env.js";
+import { isSidecarConfigured } from "../config/runtime-vision-settings.js";
 import { getRecentMessages } from "../conversation/history-store.js";
 import { getMemoriesForContext } from "../conversation/memory-store.js";
 import { getThreadSummary } from "../conversation/thread-store.js";
 import { createLogger } from "../shared/logger.js";
 import { TECHNICAL_ERROR_REPLY } from "../zalo/send-reply-in-parts.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
-import { buildTurnMessages } from "./agent-turn-content.js";
+import { buildTurnMessages, type ImageContextMode } from "./agent-turn-content.js";
 import { resolveLanguageModel, resolveReasoningOptions } from "./llm-provider.js";
+import { markModelNoVision } from "./model-vision-detection.js";
 import { buildSystemPrompt } from "./persona-prompt.js";
 import { buildAgentTools } from "./tools/index.js";
+import { hasImageParts, isImageRejectionError } from "./vision-rejection-fallback.js";
 
 const log = createLogger("agent-loop");
 
@@ -71,8 +74,10 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
 
   const history = getRecentMessages(account.id, latest.threadId);
   // Ảnh xử lý theo chế độ: native (model tự đọc) / describe (sidecar mô tả) /
-  // blind (bỏ ảnh, dặn bot nói thật) - quyết định theo model đang hiệu lực
-  const { messages, imageMode } = await buildTurnMessages({ history, batch, override: agent });
+  // hybrid (combo: cả hai) / blind (bỏ ảnh, dặn bot nói thật)
+  const built = await buildTurnMessages({ history, batch, override: agent });
+  let messages = built.messages;
+  let imageMode = built.imageMode;
 
   // Memory: fact bền (lọc theo quy tắc privacy) + summary phần hội thoại cũ
   const memory = {
@@ -126,7 +131,29 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
       totalTokens: r.totalUsage.totalTokens ?? 0,
     });
 
-  let result = await runOnce();
+  let result: Awaited<ReturnType<typeof runOnce>>;
+  try {
+    result = await runOnce();
+  } catch (err) {
+    // Reactive fallback: lượt đang đính pixel mà provider từ chối bằng 4xx
+    // (endpoint ngoài 9Router không khai capability, detect đoán lạc quan) ->
+    // ghi nhớ model mù + dựng lại input không pixel rồi thử lại 1 lần.
+    // Combo qua 9Router không rơi vào đây - router lột ảnh êm, không lỗi.
+    const pixelModes: ImageContextMode[] = ["native", "hybrid"];
+    if (!pixelModes.includes(imageMode) || !hasImageParts(messages) || !isImageRejectionError(err)) {
+      throw err;
+    }
+    markModelNoVision(agent);
+    const fallbackMode: ImageContextMode = isSidecarConfigured() ? "describe" : "blind";
+    log.warn(
+      { accountId: account.id, threadId: latest.threadId, imageMode, fallbackMode, err: forLog(err, 200) },
+      "Provider từ chối lượt có ảnh (4xx) - thử lại không kèm pixel",
+    );
+    const rebuilt = await buildTurnMessages({ history, batch, override: agent, forceMode: fallbackMode });
+    messages = rebuilt.messages;
+    imageMode = rebuilt.imageMode;
+    result = await runOnce();
+  }
 
   // 9Router thỉnh thoảng trả 200 + completion rỗng (0 token). maxRetries của
   // SDK không retry vì response "thành công" - phải tự thử lại 1 lần.
@@ -145,7 +172,9 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
       accountId: account.id,
       threadId: latest.threadId,
       batchSize: batch.length,
-      // native = model tự đọc ảnh; describe = sidecar mô tả; blind = bỏ ảnh
+      // native = model tự đọc ảnh; describe = sidecar mô tả; hybrid = combo
+      // nhận cả pixel + mô tả; blind = bỏ ảnh. Lượt bị reactive fallback thì
+      // đây là chế độ THẬT đã chạy (describe/blind), không phải chế độ ban đầu.
       imageMode,
       steps: result.steps.length,
       finishReason: result.finishReason,
