@@ -85,6 +85,16 @@ const envSchema = z.object({
   HISTORY_MAX_MESSAGES_PER_THREAD: z.coerce.number().int().min(20).max(100_000).default(500),
   SEND_DELAY_MIN_MS: z.coerce.number().int().min(0).default(800),
   SEND_DELAY_MAX_MS: z.coerce.number().int().min(0).default(2500),
+  // Zalo chặn tin quá dài ở phía server (error_code 118 "Nội dung quá dài") -
+  // zca-js không kiểm gì nên vượt ngưỡng là mất trắng cả câu trả lời. Đo được:
+  // chính Zalo tự cắt tin dán vào thành đoạn 2613 ký tự, tức trần thật >= 2613;
+  // repo tham khảo zalo-personal chốt 4000 làm trần cứng và 2000 mỗi đoạn gửi.
+  // Để 2000 cho có biên (phòng khi Zalo tính theo BYTE - tiếng Việt 1 ký tự
+  // ~1.4 byte). Nâng lên thì ít tin hơn nhưng gần ngưỡng vỡ hơn.
+  ZALO_MAX_MESSAGE_CHARS: z.coerce.number().int().min(500).max(4000).default(2000),
+  // Trần số tin cho 1 lượt trả lời. Bắn quá nhiều tin liên tiếp là hành vi dễ
+  // bị Zalo đánh dấu spam; vượt trần thì đoạn cuối kèm ghi chú "phần sau còn dài".
+  ZALO_MAX_MESSAGE_PARTS: z.coerce.number().int().min(1).max(20).default(5),
   // Thời gian chờ gộp tin nhắn cùng thread thành 1 lượt agent (ảnh + caption,
   // hoặc user nhắn liền nhiều tin ngắn). Cao hơn = gộp tốt hơn nhưng trả lời chậm hơn.
   MESSAGE_BATCH_DEBOUNCE_MS: z.coerce.number().int().min(0).max(15000).default(2500),
