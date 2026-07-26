@@ -555,6 +555,23 @@ User dùng thật rồi chốt 2 việc: cấu hình đọc ảnh đưa hết v�
   xóa key Brave -> badge dòng tool đổi sang "DuckDuckGo (miễn phí)" tức thì,
   trang Providers không còn card vision
 
+## V2.9.6 - Hộp thoại xác nhận theo design system (2026-07-27)
+
+User chỉ ra hộp thoại `window.confirm` mặc định của trình duyệt xấu: hiện cả
+"localhost:3900 says", nút kiểu OS, không style được, lạc hẳn khỏi dashboard.
+
+- [x] `shared/confirm-dialog.tsx`: hook `useConfirmDialog()` trả `confirm()`
+  (Promise<boolean>) + element render - call site chỉ đổi 1 dòng
+  `if (!window.confirm(...))` thành `if (!(await confirm({...})))`
+- [x] Thay ở CẢ 4 chỗ: xóa account, xóa agent, xóa key Brave, xóa cấu hình
+  sidecar. Grep xác nhận không còn `window.confirm/alert/prompt` nào
+- [x] Chi tiết: icon cảnh báo đỏ, nút xác nhận đỏ (tone danger), autofocus nút
+  xác nhận, Esc + bấm nền để hủy, `z-[60]` để nằm trên modal thường (z-50) vì
+  thường mở TỪ trong một modal
+- [x] Kiểm bằng trình duyệt thật: Esc hủy (key còn nguyên, modal cha vẫn mở),
+  bấm nền hủy (account còn nguyên), bấm Xóa thì xóa thật + cả 2 modal đóng,
+  autofocus đúng nút xác nhận
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic

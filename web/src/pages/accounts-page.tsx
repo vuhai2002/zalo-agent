@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ManagedAccount, ManagedAgent } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { useConfirmDialog } from "../shared/confirm-dialog";
 import { Badge, InitialAvatar } from "../shared/ui-bits";
 import { AccountEditDrawer } from "./account-edit-drawer";
 import { QrLoginModal } from "./qr-login-modal";
@@ -14,6 +15,7 @@ export function AccountsPage() {
   const [creating, setCreating] = useState(false);
   const [qrAccount, setQrAccount] = useState<ManagedAccount | null>(null);
   const [notice, setNotice] = useState<{ tone: "red" | "amber"; text: string } | null>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const reload = useCallback(async () => {
     const [accs, ags] = await Promise.all([api.accountsAdmin.list(), api.agentsAdmin.list()]);
@@ -33,7 +35,11 @@ export function AccountsPage() {
   }
 
   async function remove(acc: ManagedAccount) {
-    if (!window.confirm(`Xóa account "${acc.label}"? Credentials sẽ bị xóa, history giữ lại.`)) return;
+    const ok = await confirm({
+      title: `Xóa account "${acc.label}"?`,
+      message: "Credentials đăng nhập Zalo sẽ bị xóa, lịch sử hội thoại vẫn giữ lại.",
+    });
+    if (!ok) return;
     setNotice(null);
     try {
       await api.accountsAdmin.remove(acc.id);
@@ -156,6 +162,8 @@ export function AccountsPage() {
           }}
         />
       )}
+
+      {confirmDialog}
     </div>
   );
 }

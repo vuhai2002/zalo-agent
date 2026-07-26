@@ -3,6 +3,7 @@ import type { ManagedAgent } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { AgentEditDrawer } from "./agent-edit-drawer";
+import { useConfirmDialog } from "../shared/confirm-dialog";
 import { Badge } from "../shared/ui-bits";
 
 /** Trang Agents theo mẫu GoClaw: card não (icon, tên, persona preview), tạo/sửa/xóa */
@@ -11,6 +12,7 @@ export function AgentsPage() {
   const [editing, setEditing] = useState<ManagedAgent | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const reload = () => api.agentsAdmin.list().then((d) => setAgents(d.items)).catch(() => setAgents([]));
   useEffect(() => {
@@ -18,7 +20,11 @@ export function AgentsPage() {
   }, []);
 
   async function remove(agent: ManagedAgent) {
-    if (!window.confirm(`Xóa agent "${agent.name}"?`)) return;
+    const ok = await confirm({
+      title: `Xóa agent "${agent.name}"?`,
+      message: "Persona và cấu hình model riêng của agent này sẽ mất.",
+    });
+    if (!ok) return;
     setError("");
     try {
       await api.agentsAdmin.remove(agent.id);
@@ -107,6 +113,8 @@ export function AgentsPage() {
           }}
         />
       )}
+
+      {confirmDialog}
     </div>
   );
 }

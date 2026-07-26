@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FetchSettings, SearchSettings, ToolCatalogItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
+import { useConfirmDialog } from "../shared/confirm-dialog";
 import { SecretInput } from "../shared/secret-input";
 import { ChainStep, modalButton, ToolModalShell } from "./tool-settings-modal-shell";
 
@@ -31,6 +32,7 @@ export function ToolChainSettingsModal({
   const [jinaOn, setJinaOn] = useState(fetchSettings.fallbackEnabled);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const keyAvailable = search.hasBraveApiKey || apiKey.trim().length > 0;
   const blocked = isSearch && braveOn && !keyAvailable;
@@ -64,7 +66,11 @@ export function ToolChainSettingsModal({
    * cách nào gửi chuỗi rỗng qua nút Lưu.
    */
   async function clearBraveKey() {
-    if (!window.confirm("Xóa API key Brave? Web search sẽ chỉ còn DuckDuckGo.")) return;
+    const ok = await confirm({
+      title: "Xóa API key Brave?",
+      message: "Web search sẽ chỉ còn DuckDuckGo (miễn phí) cho tới khi bạn nhập key mới.",
+    });
+    if (!ok) return;
     setSaving(true);
     setError("");
     try {
@@ -82,6 +88,7 @@ export function ToolChainSettingsModal({
   }
 
   return (
+    <>
     <ToolModalShell
       title={`${tool.label} - chuỗi nguồn`}
       subtitle="Thử lần lượt từ trên xuống, dừng ở bậc đầu tiên cho kết quả dùng được."
@@ -187,5 +194,7 @@ export function ToolChainSettingsModal({
         </div>
       )}
     </ToolModalShell>
+    {confirmDialog}
+    </>
   );
 }

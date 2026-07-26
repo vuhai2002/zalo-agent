@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { VisionSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
+import { useConfirmDialog } from "../shared/confirm-dialog";
 import { SecretInput } from "../shared/secret-input";
 import { ChainStep, modalButton, ToolModalShell } from "./tool-settings-modal-shell";
 
@@ -35,6 +36,7 @@ export function VisionSettingsModal({
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ tone: "green" | "red"; text: string } | null>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const hasSomethingToClear = vision.sidecar.hasApiKey || vision.sidecar.baseUrl || vision.sidecar.model;
 
@@ -77,8 +79,11 @@ export function VisionSettingsModal({
   async function clearSidecar() {
     // Mất key thật (phải xin lại từ nhà cung cấp) nên hỏi trước - cùng nếp với
     // xóa account/agent
-    if (!window.confirm("Xóa cấu hình sidecar (gồm cả API key)? Bot sẽ không đọc được ảnh nữa."))
-      return;
+    const ok = await confirm({
+      title: "Xóa cấu hình sidecar?",
+      message: "Cả API key cũng bị xóa. Bot sẽ không đọc được ảnh cho tới khi bạn cấu hình lại.",
+    });
+    if (!ok) return;
     setBusy(true);
     setStatus(null);
     try {
@@ -93,6 +98,7 @@ export function VisionSettingsModal({
   }
 
   return (
+    <>
     <ToolModalShell
       title="Đọc ảnh - chuỗi nguồn"
       subtitle="Model chính đọc pixel trước; không đọc được thì model sidecar mô tả ảnh thành chữ."
@@ -202,5 +208,7 @@ export function VisionSettingsModal({
         </div>
       )}
     </ToolModalShell>
+    {confirmDialog}
+    </>
   );
 }
