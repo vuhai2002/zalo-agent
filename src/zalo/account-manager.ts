@@ -16,10 +16,11 @@ import { maybeSummarizeThread } from "../conversation/thread-summarizer.js";
 import { recordAgentTurn } from "../conversation/usage-store.js";
 import { shouldRespond } from "../middleware/allowlist-filter.js";
 import { clearPendingBatches, enqueueMessage } from "../middleware/message-batcher.js";
-import { enqueueSend } from "../middleware/rate-limiter.js";
 import { createLogger } from "../shared/logger.js";
+import { sendDeliveredReceipt, sendSeenReceipt } from "./message-receipts.js";
 import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
 import { toZaloReaction } from "./reaction-icons.js";
+import { notifyTechnicalError, sendReplyInParts, type ReplyTarget } from "./send-reply-in-parts.js";
 import { startTypingIndicator } from "./typing-indicator.js";
 import { loginWithStoredCredentials } from "./zalo-client.js";
 import { startListener } from "./zalo-listener.js";
@@ -116,6 +117,9 @@ function handleIncomingMessage(accountId: string, api: API, selfId: string, raw:
   reportPayloadAnomalies(config.id, msg);
 
   if (!msg.isSelf && msg.threadId) {
+    // "Đã nhận" cho MỌI tin về tới listener, kể cả tin sắp bị lọc - client Zalo
+    // thật cũng báo nhận tự động, không phụ thuộc người dùng có đọc hay không
+    sendDeliveredReceipt(api, msg);
     recordContactActivity(config.id, msg.senderId, msg.senderName);
     recordThreadActivity({
       accountId: config.id,
@@ -191,6 +195,12 @@ function sendAutoReaction(config: AccountConfig, api: API, msg: ParsedMessage): 
 async function processBatch(config: AccountConfig, api: API, batch: ParsedMessage[]): Promise<void> {
   const latest = batch[batch.length - 1]!;
   const threadKey = `${config.id}:${latest.threadId}`;
+  const replyTarget: ReplyTarget = {
+    api,
+    threadKey,
+    threadId: latest.threadId,
+    threadType: latest.threadType,
+  };
 
   log.info(
     {
@@ -203,6 +213,10 @@ async function processBatch(config: AccountConfig, api: API, batch: ParsedMessag
     "Xử lý lượt tin nhắn",
   );
 
+  // "Đã xem" cho cả lượt: bot bắt đầu xử lý = giống người mở hội thoại ra đọc.
+  // Tin bị lọc (passive listen) không có bước này - báo đã xem rồi im lặng sẽ
+  // khiến người nhắn tưởng bot đang soạn trả lời.
+  sendSeenReceipt(api, batch);
   sendAutoReaction(config, api, latest);
 
   // Giữ "đang nhập" xuyên suốt: qua cả lượt LLM lẫn delay của rate-limiter,
@@ -248,10 +262,22 @@ async function processBatch(config: AccountConfig, api: API, batch: ParsedMessag
       return;
     }
 
-    await enqueueSend(threadKey, () =>
-      api.sendMessage({ msg: result.text }, latest.threadId, latest.threadType),
-    );
-    appendMessage(config.id, latest.threadId, { role: "assistant", content: result.text });
+    // Tin dài bị Zalo chặn (error_code 118) nên phải cắt thành nhiều đoạn
+    const reply = await sendReplyInParts(replyTarget, result.text);
+
+    // Chỉ ghi phần ĐÃ gửi được: history phải khớp với cái người dùng nhìn thấy
+    if (reply.deliveredText) {
+      appendMessage(config.id, latest.threadId, {
+        role: "assistant",
+        content: reply.deliveredText,
+      });
+    }
+
+    // Gửi dở giữa chừng cũng phải nói, đừng để người ta ngồi đợi nốt phần sau
+    if (reply.error) {
+      await notifyTechnicalError(replyTarget);
+      return;
+    }
 
     // Memory lớp 2: gộp tin cũ vào summary - fire-and-forget sau khi đã trả lời,
     // maybeSummarizeThread tự nuốt lỗi nên không cần catch thêm
@@ -261,6 +287,9 @@ async function processBatch(config: AccountConfig, api: API, batch: ParsedMessag
     // phải vào history - bỏ qua là lượt sau bot không biết họ đã nói gì
     writeBatchToHistory();
     log.error({ accountId: config.id, threadId: latest.threadId, err }, "Lỗi xử lý lượt tin nhắn");
+    // Báo cho người nhắn thay vì im lặng bỏ treo. KHÔNG ghi câu này vào history:
+    // nó là thông báo hệ thống, để lại chỉ khiến lượt sau model neo vào tiền lệ hỏng.
+    await notifyTechnicalError(replyTarget);
   } finally {
     stopTyping();
   }

@@ -9,6 +9,7 @@ import { getMemoriesForContext } from "../conversation/memory-store.js";
 import { getThreadSummary } from "../conversation/thread-store.js";
 import { downloadImageAsBase64 } from "../shared/download-image.js";
 import { createLogger } from "../shared/logger.js";
+import { TECHNICAL_ERROR_REPLY } from "../zalo/send-reply-in-parts.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 import { historyToModelMessages } from "./history-to-model-messages.js";
 import { resolveLanguageModel, resolveReasoningOptions } from "./llm-provider.js";
@@ -37,9 +38,12 @@ export function isEmptyRouterCompletion(input: {
   return !input.text.trim() && input.toolCallCount === 0 && input.totalTokens === 0;
 }
 
-/** Tin nhắn khi router hỏng cả 2 lần - im lặng bỏ treo người nhắn là tệ nhất */
-const ROUTER_DOWN_REPLY =
-  "Mình đang gặp trục trặc kỹ thuật, bạn nhắn lại giúp mình sau ít phút nhé.";
+/**
+ * Tin nhắn khi router hỏng cả 2 lần - im lặng bỏ treo người nhắn là tệ nhất.
+ * Dùng chung một câu với nhánh lỗi ở account-manager để người nhắn không phải
+ * đoán xem hai thông báo khác nhau nghĩa là hai chuyện khác nhau.
+ */
+const ROUTER_DOWN_REPLY = TECHNICAL_ERROR_REPLY;
 
 export type AgentTurnParams = {
   api: API;
