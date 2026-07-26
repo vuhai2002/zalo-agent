@@ -30,6 +30,10 @@ describe("reasoningProviderOptions", () => {
   });
 
   it("key router phải khớp name trong createOpenAICompatible - lệch là options bị lờ đi im lặng", () => {
-    assert.equal(ROUTER_PROVIDER_OPTIONS_KEY, "llm-router");
+    assert.equal(ROUTER_PROVIDER_OPTIONS_KEY, "llmRouter");
+  });
+
+  it("key phải là camelCase - kebab-case làm SDK in cảnh báo deprecated mỗi request", () => {
+    assert.ok(!ROUTER_PROVIDER_OPTIONS_KEY.includes("-"), "không được có dấu gạch ngang");
   });
 });

@@ -24,8 +24,16 @@ export type ReasoningOptions = Record<string, Record<string, JsonValue>>;
 
 export type ProviderKind = "openai-compatible" | "anthropic";
 
-/** Trùng với `name` truyền vào createOpenAICompatible trong llm-provider.ts */
-export const ROUTER_PROVIDER_OPTIONS_KEY = "llm-router";
+/**
+ * Trùng với `name` truyền vào createOpenAICompatible trong llm-provider.ts.
+ *
+ * PHẢI viết camelCase: `@ai-sdk/openai-compatible` chuyển tên provider sang
+ * camelCase rồi so lại, thấy client dùng bản kebab-case (`llm-router`) là in
+ * cảnh báo deprecated MỖI REQUEST. Tham số vẫn tới nơi (SDK rơi về key thô khi
+ * không có bản camelCase) nhưng terminal ngập cảnh báo. Hằng số này chỉ dùng
+ * nội bộ nên đổi tên không ảnh hưởng gì bên ngoài.
+ */
+export const ROUTER_PROVIDER_OPTIONS_KEY = "llmRouter";
 
 /**
  * providerOptions cho generateText theo provider + mức effort.
