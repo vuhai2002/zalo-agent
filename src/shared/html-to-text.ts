@@ -60,8 +60,28 @@ function removeLinkDenseLists(html: string): string {
   return current;
 }
 
+/**
+ * Gộp thẻ viết tràn nhiều dòng về 1 dòng.
+ *
+ * Bước cuối của hàm dưới tách dòng TRƯỚC rồi mới bóc thẻ từng dòng, nên thẻ bị
+ * xuống dòng giữa chừng không còn khớp `<...>` trên dòng nào cả và lọt nguyên
+ * vào text gửi model. Lỗi thật ở tuoitre.vn:
+ *
+ *     <input onfocus="this.removeAttribute('readonly');" class="input-search"
+ *     placeholder="Nhập nội dung cần tìm" />
+ *
+ * Chỉ đụng phần bên trong `<...>`, nội dung văn bản giữ nguyên. Ràng buộc ký tự
+ * đầu là chữ / `/` / `!` để dấu nhỏ hơn trong văn xuôi ("a < b") không bị nhận
+ * nhầm là thẻ mở.
+ */
+function collapseMultilineTags(html: string): string {
+  return html.replace(/<[a-zA-Z/!][^>]*>/g, (tag) => tag.replace(/\s+/g, " "));
+}
+
 export function htmlToReadableText(html: string): string {
-  const withoutBlocks = removeLinkDenseLists(html.replace(NON_CONTENT_BLOCKS, " "));
+  const withoutBlocks = removeLinkDenseLists(
+    collapseMultilineTags(html).replace(NON_CONTENT_BLOCKS, " "),
+  );
 
   // Giữ cấu trúc đoạn: thẻ block phổ biến thành xuống dòng trước khi bóc thẻ
   const withBreaks = withoutBlocks

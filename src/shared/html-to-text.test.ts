@@ -112,6 +112,27 @@ describe("htmlToReadableText", () => {
   it("span đơn giữa từ không bị chẻ đôi", () => {
     assert.equal(htmlToReadableText("<p>Gi<span>á</span> vàng</p>"), "Giá vàng");
   });
+
+  it("thẻ viết tràn nhiều dòng vẫn bị bóc (markup thật của tuoitre.vn)", () => {
+    // Bóc thẻ chạy trên TỪNG DÒNG nên thẻ xuống dòng giữa chừng từng lọt nguyên
+    // markup vào text gửi cho model
+    const html = `<div><input onfocus="this.removeAttribute('readonly');" class="input-search"
+placeholder="Nhập nội dung cần tìm" />
+<p>Giá vàng hôm nay tăng</p></div>`;
+    const text = htmlToReadableText(html);
+    assert.ok(!text.includes("<input"), `còn markup trong text: ${text}`);
+    assert.ok(!text.includes("placeholder"), `còn thuộc tính trong text: ${text}`);
+    assert.ok(text.includes("Giá vàng hôm nay tăng"));
+  });
+
+  it("thẻ block xuống dòng giữa chừng vẫn tách được đoạn", () => {
+    const html = `<p\nclass="intro">Đoạn một</p>\n<p>Đoạn hai</p>`;
+    assert.equal(htmlToReadableText(html), "Đoạn một\nĐoạn hai");
+  });
+
+  it("dấu nhỏ hơn trong văn xuôi không bị nhận nhầm là thẻ", () => {
+    assert.equal(htmlToReadableText("<p>Giá vàng < 100 triệu là mua được</p>"), "Giá vàng < 100 triệu là mua được");
+  });
 });
 
 describe("extractHtmlTitle", () => {
