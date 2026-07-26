@@ -2,6 +2,7 @@ import dns from "node:dns";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import net, { type LookupFunction } from "node:net";
+import zlib from "node:zlib";
 import { hostnameToAddress, isPublicAddress } from "./private-address-guard.js";
 
 /**
@@ -25,6 +26,12 @@ const BROWSER_HEADERS: Record<string, string> = {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
   "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+  // node:http KHÔNG tự thêm Accept-Encoding và cũng không tự giải nén (khác
+  // fetch/undici). Nhưng nhiều site nén gzip kể cả khi không được hỏi - đo
+  // được: znews.vn trả "content-encoding: gzip" với request không hề khai. Vì
+  // đằng nào cũng phải giải nén, khai đủ như trình duyệt luôn: tiết kiệm băng
+  // thông và bớt một tín hiệu "không phải trình duyệt".
+  "Accept-Encoding": "gzip, deflate, br",
   "Cache-Control": "no-cache",
 };
 
@@ -80,6 +87,50 @@ export async function readCappedStream(
     chunks.push(buffer);
   }
   return Buffer.concat(chunks);
+}
+
+/**
+ * Giải nén body theo header `content-encoding`.
+ *
+ * Lỗi thật đã gặp: znews.vn và tienphong.vn trả gzip, code cũ `.toString("utf-8")`
+ * thẳng vào buffer nén nên tool web_fetch đẩy 46.000 ký tự rác nhị phân vào
+ * context của model - vừa đốt token vừa mất luôn nguồn đó. Rác thì dài nên
+ * ngưỡng "quá ít chữ" cũng không kích hoạt được lưới đỡ Jina.
+ *
+ * `maxOutputLength` chặn zip bomb: file nén 1MB có thể bung thành hàng GB, cap
+ * ở tầng stream (dữ liệu nén) không cứu được.
+ */
+export function decompressBody(
+  data: Buffer,
+  contentEncoding: string | undefined,
+  maxBytes: number,
+): Buffer {
+  const codec = (contentEncoding ?? "").trim().toLowerCase();
+  if (!codec || codec === "identity") return data;
+
+  const options = { maxOutputLength: maxBytes };
+  try {
+    switch (codec) {
+      case "gzip":
+      case "x-gzip":
+        return zlib.gunzipSync(data, options);
+      case "br":
+        return zlib.brotliDecompressSync(data, options);
+      case "deflate":
+        // Một số server gửi deflate thô (không có zlib header) - thử cả 2 kiểu
+        try {
+          return zlib.inflateSync(data, options);
+        } catch {
+          return zlib.inflateRawSync(data, options);
+        }
+      default:
+        // Trả nguyên buffer là tái diễn đúng bug cũ (rác nhị phân vào context),
+        // báo lỗi để caller rơi xuống nguồn khác
+        throw new Error(`Không giải nén được kiểu "${codec}"`);
+    }
+  } catch (err) {
+    throw new Error(`Giải nén nội dung thất bại: ${err instanceof Error ? err.message : err}`);
+  }
 }
 
 function openGuardedRequest(url: URL, timeoutMs: number): Promise<IncomingMessage> {
@@ -159,8 +210,11 @@ export async function downloadFromPublicUrl(
       throw new Error(`Nội dung vượt giới hạn ${formatMb(options.maxBytes)}`);
     }
 
-    const data = await readCappedStream(res, options.maxBytes);
-    if (data.byteLength === 0) throw new Error("Nội dung rỗng");
+    const raw = await readCappedStream(res, options.maxBytes);
+    if (raw.byteLength === 0) throw new Error("Nội dung rỗng");
+
+    // Giải nén TRƯỚC khi trả về: caller nào cũng đang coi đây là dữ liệu thô
+    const data = decompressBody(raw, res.headers["content-encoding"], options.maxBytes);
 
     return {
       data,
