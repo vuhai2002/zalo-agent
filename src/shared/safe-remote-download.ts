@@ -15,6 +15,19 @@ import { hostnameToAddress, isPublicAddress } from "./private-address-guard.js";
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_REDIRECTS = 3;
 
+/**
+ * Request trần (không header) bị nhiều site trả 403/406 - đo thực tế:
+ * vnexpress 406, sjc.com.vn 403. Gửi bộ header trình duyệt tối thiểu là qua
+ * được phần lớn. Site sau Cloudflare vẫn chặn - đó là việc của fallback.
+ */
+const BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+  "Cache-Control": "no-cache",
+};
+
 export type RemoteFile = { data: Buffer; mediaType: string; fileName: string };
 export type DownloadOptions = { maxBytes: number; timeoutMs?: number };
 
@@ -83,7 +96,11 @@ function openGuardedRequest(url: URL, timeoutMs: number): Promise<IncomingMessag
 
   return new Promise((resolve, reject) => {
     const send = url.protocol === "https:" ? httpsRequest : httpRequest;
-    const req = send(url, { lookup: guardedLookup, timeout: timeoutMs }, resolve);
+    const req = send(
+      url,
+      { lookup: guardedLookup, timeout: timeoutMs, headers: BROWSER_HEADERS },
+      resolve,
+    );
     req.on("timeout", () => req.destroy(new Error(`Hết thời gian chờ ${timeoutMs}ms`)));
     req.on("error", reject);
     req.end();
