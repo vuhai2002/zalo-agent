@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { env } from "../../config/env.js";
+import { getSearchSettings } from "../../config/runtime-tool-settings.js";
 import { searchWeb } from "../../shared/web-search-providers.js";
 
 /**
@@ -19,9 +20,12 @@ export function createWebSearchTool() {
       query: z.string().min(1).max(400).describe("Từ khóa tìm kiếm, giữ ngắn gọn"),
     }),
     execute: async ({ query }) => {
+      // Cấu hình đọc lại mỗi lượt - đổi provider trên dashboard có hiệu lực ngay.
+      // Provider duckduckgo thì không truyền key Brave để chain bỏ qua nó luôn.
+      const settings = getSearchSettings();
       const results = await searchWeb(query, {
         maxResults: env.WEB_SEARCH_MAX_RESULTS,
-        braveApiKey: env.BRAVE_SEARCH_API_KEY || undefined,
+        braveApiKey: settings.provider === "brave" ? settings.braveApiKey : undefined,
       });
 
       if (results.length === 0) {

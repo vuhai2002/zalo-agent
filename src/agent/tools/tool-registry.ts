@@ -32,6 +32,12 @@ export type ToolDefinition = {
   label: string;
   description: string;
   group: ToolGroup;
+  /**
+   * Có nút Settings trên dòng tool ở dashboard không. Tool nào đi theo CHUỖI
+   * nhiều nguồn thì có, để người dùng xem thứ tự thử và bật/tắt từng bậc
+   * (mô hình Extractor Chain của GoClaw).
+   */
+  hasSettings?: boolean;
   build: (ctx: ToolContext) => Tool;
 };
 
@@ -50,8 +56,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     key: "web_search",
     label: "Tìm kiếm web",
-    description: "Tìm thông tin mới trên web (DuckDuckGo miễn phí; có key Brave thì dùng Brave trước)",
+    description: "Tìm thông tin mới trên web theo chuỗi nguồn, DuckDuckGo luôn đứng cuối",
     group: "read",
+    hasSettings: true,
     build: () => createWebSearchTool(),
   },
   {
@@ -59,6 +66,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     label: "Đọc trang web",
     description: "Đọc nội dung 1 URL công khai (đã chặn IP nội bộ chống SSRF)",
     group: "read",
+    hasSettings: true,
     build: () => createWebFetchTool(),
   },
   {

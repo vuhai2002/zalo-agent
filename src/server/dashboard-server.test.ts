@@ -233,18 +233,86 @@ describe("dashboard-server", () => {
     assert.ok(data.items.some((i) => i.key === "heart" && i.emoji === "❤️"));
   });
 
-  it("GET /api/tools trả catalog cho trang Tools", async () => {
+  it("GET /api/tools trả catalog + cấu hình search cho trang Tools", async () => {
     const res = await authed("/api/tools");
     assert.equal(res.status, 200);
     const data = (await res.json()) as {
-      items: { key: string; label: string; group: string }[];
-      webSearchProvider: string;
+      items: { key: string; label: string; group: string; hasSettings: boolean }[];
+      search: { provider: string; braveApiKeyMasked: string; hasBraveApiKey: boolean };
     };
     assert.ok(data.items.length >= 8);
     assert.ok(data.items.some((t) => t.key === "web_search" && t.group === "read"));
     assert.ok(data.items.some((t) => t.key === "send_file" && t.group === "action"));
-    // Test env không set key Brave -> phải báo đang dùng DuckDuckGo miễn phí
-    assert.match(data.webSearchProvider, /DuckDuckGo/);
+    // Chỉ tool đi theo chuỗi nguồn mới có nút Settings trên dòng
+    assert.equal(data.items.find((t) => t.key === "web_search")?.hasSettings, true);
+    assert.equal(data.items.find((t) => t.key === "web_fetch")?.hasSettings, true);
+    assert.equal(data.items.find((t) => t.key === "add_reaction")?.hasSettings, false);
+    // Test env không có key Brave -> mặc định DuckDuckGo, không lộ key
+    assert.equal(data.search.provider, "duckduckgo");
+    assert.equal(data.search.hasBraveApiKey, false);
+  });
+
+  it("PATCH /api/tools/fetch bật/tắt bậc Jina Reader", async () => {
+    const off = await authed("/api/tools/fetch", {
+      method: "PATCH",
+      body: JSON.stringify({ fallbackEnabled: false }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(off.status, 200);
+    assert.equal(((await off.json()) as { fetch: { fallbackEnabled: boolean } }).fetch.fallbackEnabled, false);
+
+    const on = await authed("/api/tools/fetch", {
+      method: "PATCH",
+      body: JSON.stringify({ fallbackEnabled: true }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(((await on.json()) as { fetch: { fallbackEnabled: boolean } }).fetch.fallbackEnabled, true);
+  });
+
+  it("PATCH /api/tools/search: chọn brave khi chưa có key -> 400", async () => {
+    const res = await authed("/api/tools/search", {
+      method: "PATCH",
+      body: JSON.stringify({ provider: "brave" }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(res.status, 400);
+    assert.match(((await res.json()) as { error: string }).error, /API key Brave/);
+  });
+
+  it("PATCH /api/tools/search: có key thì bật được brave, key trả về luôn masked", async () => {
+    const res = await authed("/api/tools/search", {
+      method: "PATCH",
+      body: JSON.stringify({ provider: "brave", braveApiKey: "BSA-key-that-is-secret-1234" }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(res.status, 200);
+
+    const body = await res.text();
+    assert.ok(!body.includes("BSA-key-that-is-secret-1234"), "response không được chứa key đầy đủ");
+    const data = JSON.parse(body) as { search: { provider: string; hasBraveApiKey: boolean } };
+    assert.equal(data.search.provider, "brave");
+    assert.equal(data.search.hasBraveApiKey, true);
+  });
+
+  it("PATCH /api/tools/search: xóa key thì tự hạ về duckduckgo, không kẹt ở brave", async () => {
+    const res = await authed("/api/tools/search", {
+      method: "PATCH",
+      body: JSON.stringify({ braveApiKey: "" }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(res.status, 200);
+    const data = (await res.json()) as { search: { provider: string; hasBraveApiKey: boolean } };
+    assert.equal(data.search.hasBraveApiKey, false);
+    assert.equal(data.search.provider, "duckduckgo", "mất key thì không được kẹt ở brave");
+  });
+
+  it("PATCH /api/tools/search: provider lạ bị chặn 400", async () => {
+    const res = await authed("/api/tools/search", {
+      method: "PATCH",
+      body: JSON.stringify({ provider: "google" }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(res.status, 400);
   });
 
   it("PATCH disabledTools lưu và trả lại đúng; key tool lạ bị chặn 400", async () => {
