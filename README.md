@@ -41,7 +41,8 @@ trên dashboard (trang Accounts / Agents) - account/agent lưu trong DB, không 
 ```
 src/
 ├── config/        env (Zod) + accounts.json (multi-account) + runtime LLM settings
-├── zalo/          login, credential mã hóa, listener + reconnect, parse tin nhắn, account manager
+├── zalo/          login, credential mã hóa, listener + reconnect, parse tin nhắn,
+│                  lifecycle account, router tin đến, xử lý 1 lượt trả lời
 ├── agent/         agent loop (AI SDK), provider, persona, tools/ (react, file, tag, memory...)
 ├── conversation/  SQLite: history, threads, contacts, usage, memory, summarizer
 ├── middleware/    allowlist + @mention filter (passive listening), batcher, rate limit

@@ -365,9 +365,21 @@ Bắt fetch của SDK để soi đúng body đi ra router, kèm đọc source 9R
   `reasoning_effort: "medium"` vẫn nằm trong body đi ra router. Thêm test chặn
   hồi quy (key không được chứa dấu gạch ngang)
 
-Còn nợ:
-- `account-manager.ts` đã 309 dòng - nên tách phần đường đi của tin nhắn
-  (handleIncomingMessage + processBatch) ra khỏi phần lifecycle account
+## V2.8 - Tách account-manager (2026-07-26)
+
+Trả món nợ ghi ở cuối V2.7: 1 file 309 dòng gánh 3 việc không liên quan nhau.
+
+- [x] `incoming-message-router.ts` (98 dòng): tin đến -> ghi contact/thread, báo
+  "đã nhận", chạy filter, ghi passive hoặc đẩy vào batcher. Đây là chỗ duy nhất
+  quyết định một tin có được trả lời hay không
+- [x] `message-turn-processor.ts` (144 dòng): lượt agent -> trả lời -> ghi
+  history, kèm "đã xem", auto-react, chỉ báo đang nhập và cả 2 nhánh lỗi
+- [x] `account-manager.ts` còn 103 dòng: thuần lifecycle (map account đang chạy,
+  attach/start/stop, boot, shutdown) - phần dashboard gọi vào
+- [x] `describeForHistory` về `zalo-message-parser.ts`: cả 2 nhánh ghi history
+  (passive và batch) đều cần, để ở một trong hai file kia là sinh import vòng
+- [x] Giữ nguyên hành vi - không sửa logic, không đổi public API. 306 test pass,
+  typecheck sạch
 
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 

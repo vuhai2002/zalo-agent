@@ -1,30 +1,22 @@
 import type { API } from "zca-js";
-import { runAgentTurn } from "../agent/agent-loop.js";
-import { getAccount, listEnabledAccounts, runAccountsSeedMigration, type AccountConfig } from "../config/account-store.js";
-import { env } from "../config/env.js";
-import { recordContactActivity } from "../conversation/contact-store.js";
-import { appendMessage, setMessageImages } from "../conversation/history-store.js";
-import { imagePathsOf, persistBatchImages } from "../conversation/media-store.js";
-import { runStartupBackfill } from "../conversation/startup-backfill.js";
 import {
-  hasDisplayName,
-  isBotEnabled,
-  recordThreadActivity,
-  setThreadDisplayName,
-} from "../conversation/thread-store.js";
-import { maybeSummarizeThread } from "../conversation/thread-summarizer.js";
-import { recordAgentTurn } from "../conversation/usage-store.js";
-import { shouldRespond } from "../middleware/allowlist-filter.js";
-import { clearPendingBatches, enqueueMessage } from "../middleware/message-batcher.js";
+  getAccount,
+  listEnabledAccounts,
+  runAccountsSeedMigration,
+  type AccountConfig,
+} from "../config/account-store.js";
+import { runStartupBackfill } from "../conversation/startup-backfill.js";
+import { clearPendingBatches } from "../middleware/message-batcher.js";
 import { createLogger } from "../shared/logger.js";
-import { sendDeliveredReceipt, sendSeenReceipt } from "./message-receipts.js";
-import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
-import { toZaloReaction } from "./reaction-icons.js";
-import { notifyTechnicalError, sendReplyInParts, type ReplyTarget } from "./send-reply-in-parts.js";
-import { startTypingIndicator } from "./typing-indicator.js";
+import { routeIncomingMessage } from "./incoming-message-router.js";
 import { loginWithStoredCredentials } from "./zalo-client.js";
 import { startListener } from "./zalo-listener.js";
-import { parseIncomingMessage, type ParsedMessage } from "./zalo-message-parser.js";
+
+/**
+ * Vòng đời của các account đang chạy. Đường đi của tin nhắn nằm ở
+ * `incoming-message-router.ts` (lọc + ghi) và `message-turn-processor.ts`
+ * (lượt agent + trả lời).
+ */
 
 type RunningAccount = {
   config: AccountConfig;
@@ -57,7 +49,7 @@ export function attachAccount(config: AccountConfig, api: API): void {
   stopAccount(config.id);
   const selfId = String(api.getOwnId());
   const stopListener = startListener(config.id, api, (raw) =>
-    handleIncomingMessage(config.id, api, selfId, raw),
+    routeIncomingMessage(config.id, api, selfId, raw),
   );
   running.set(config.id, { config, api, selfId, stopListener });
   log.info({ accountId: config.id, label: config.label }, "Account sẵn sàng");
@@ -100,204 +92,6 @@ export async function startAllAccounts(): Promise<void> {
     { total: running.size, configured: accounts.length },
     running.size > 0 ? "Account đã khởi động" : "Chưa account nào chạy - thêm/login qua dashboard",
   );
-}
-
-/**
- * Mọi tin đến (kể cả tin sẽ bị lọc): ghi contact + thread ("auto-collected").
- * Đọc config mới nhất từ DB mỗi tin để sửa policies từ dashboard ăn ngay.
- */
-function handleIncomingMessage(accountId: string, api: API, selfId: string, raw: unknown): void {
-  const config = getAccount(accountId);
-  if (!config) return;
-
-  const msg = parseIncomingMessage(config.id, selfId, raw, env.ZALO_IMAGE_QUALITY);
-
-  // Chạy TRƯỚC mọi nhánh return bên dưới: tin thiếu threadId bị bỏ qua lặng lẽ
-  // ở ngay dòng dưới, không cảnh báo ở đây thì không còn chỗ nào biết
-  reportPayloadAnomalies(config.id, msg);
-
-  if (!msg.isSelf && msg.threadId) {
-    // "Đã nhận" cho MỌI tin về tới listener, kể cả tin sắp bị lọc - client Zalo
-    // thật cũng báo nhận tự động, không phụ thuộc người dùng có đọc hay không
-    sendDeliveredReceipt(api, msg);
-    recordContactActivity(config.id, msg.senderId, msg.senderName);
-    recordThreadActivity({
-      accountId: config.id,
-      threadId: msg.threadId,
-      threadType: msg.threadType,
-      displayName: msg.isGroup ? "" : msg.senderName,
-      lastSenderName: msg.senderName,
-    });
-    if (msg.isGroup && !hasDisplayName(config.id, msg.threadId)) {
-      void resolveGroupName(config.id, api, msg.threadId);
-    }
-  }
-
-  const decision = shouldRespond(config, msg, isBotEnabled(config.id, msg.threadId));
-
-  if (!decision.respond) {
-    if (decision.record) {
-      // Ghi tin ngay để giữ đúng thứ tự history; ảnh tải xong (async) mới gắn vào
-      // row qua id - persistBatchImages không bao giờ reject nên fire-and-forget được
-      const rowId = appendMessage(config.id, msg.threadId, {
-        role: "user",
-        content: describeIncoming(msg),
-        senderName: msg.senderName,
-        senderId: msg.senderId,
-      });
-      if (msg.images.length > 0) {
-        void persistBatchImages(config.id, [msg]).then(() => {
-          setMessageImages(rowId, imagePathsOf(msg.images));
-        });
-      }
-    }
-    log.debug(
-      { accountId: config.id, threadId: msg.threadId, reason: decision.reason },
-      decision.record ? "Ghi passive, không trả lời" : "Bỏ qua tin",
-    );
-    return;
-  }
-
-  const threadKey = `${config.id}:${msg.threadId}`;
-  enqueueMessage(threadKey, msg, (batch) => processBatch(config, api, batch));
-}
-
-/** Lấy tên group 1 lần khi gặp lần đầu, cache vào bảng threads */
-async function resolveGroupName(accountId: string, api: API, threadId: string): Promise<void> {
-  try {
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    const info: any = await api.getGroupInfo(threadId);
-    const name = info?.gridInfoMap?.[threadId]?.name ?? info?.name;
-    if (name) setThreadDisplayName(accountId, threadId, String(name));
-  } catch (err) {
-    log.debug({ accountId, threadId, err }, "Không lấy được tên nhóm - để trống");
-  }
-}
-
-/**
- * Báo cho người nhắn biết bot đã nhận: thả reaction vào tin vừa gửi.
- * Không await ở luồng chính và tự nuốt lỗi - reaction hỏng không được làm
- * chậm hay chết đường trả lời.
- */
-function sendAutoReaction(config: AccountConfig, api: API, msg: ParsedMessage): void {
-  if (!config.autoReactEnabled || !msg.msgId) return;
-  void api
-    .addReaction(toZaloReaction(config.autoReactIcon), {
-      data: { msgId: msg.msgId, cliMsgId: msg.cliMsgId },
-      threadId: msg.threadId,
-      type: msg.threadType,
-    })
-    .catch((err) =>
-      log.debug({ accountId: config.id, threadId: msg.threadId, err }, "Auto-react thất bại"),
-    );
-}
-
-async function processBatch(config: AccountConfig, api: API, batch: ParsedMessage[]): Promise<void> {
-  const latest = batch[batch.length - 1]!;
-  const threadKey = `${config.id}:${latest.threadId}`;
-  const replyTarget: ReplyTarget = {
-    api,
-    threadKey,
-    threadId: latest.threadId,
-    threadType: latest.threadType,
-  };
-
-  log.info(
-    {
-      accountId: config.id,
-      threadId: latest.threadId,
-      from: latest.senderName,
-      batchSize: batch.length,
-      images: batch.reduce((sum, m) => sum + m.images.length, 0),
-    },
-    "Xử lý lượt tin nhắn",
-  );
-
-  // "Đã xem" cho cả lượt: bot bắt đầu xử lý = giống người mở hội thoại ra đọc.
-  // Tin bị lọc (passive listen) không có bước này - báo đã xem rồi im lặng sẽ
-  // khiến người nhắn tưởng bot đang soạn trả lời.
-  sendSeenReceipt(api, batch);
-  sendAutoReaction(config, api, latest);
-
-  // Giữ "đang nhập" xuyên suốt: qua cả lượt LLM lẫn delay của rate-limiter,
-  // dừng trong finally kể cả khi agent ném lỗi
-  const stopTyping = config.typingIndicatorEnabled
-    ? startTypingIndicator({
-        send: (threadId, threadType) => api.sendTypingEvent(threadId, threadType),
-        threadId: latest.threadId,
-        threadType: latest.threadType,
-      })
-    : () => {};
-
-  // Ghi 1 lần duy nhất, gọi được ở cả nhánh thành công và nhánh lỗi
-  let historyWritten = false;
-  const writeBatchToHistory = (): void => {
-    if (historyWritten) return;
-    historyWritten = true;
-    for (const msg of batch) {
-      appendMessage(config.id, msg.threadId, {
-        role: "user",
-        content: describeIncoming(msg),
-        senderName: msg.senderName,
-        senderId: msg.senderId,
-        images: imagePathsOf(msg.images),
-      });
-    }
-  };
-
-  try {
-    // Lưu ảnh xuống data/media TRƯỚC lượt agent: agent đọc từ đĩa (khỏi tải 2 lần)
-    // và các lượt sau nạp lại được ảnh này từ history
-    await persistBatchImages(config.id, batch);
-
-    // Chạy agent TRƯỚC khi ghi history: runAgentTurn tự đọc history cũ và tự
-    // ghép batch hiện tại vào input - ghi trước sẽ khiến tin mới lặp 2 lần.
-    const result = await runAgentTurn({ api, account: config, batch });
-    recordAgentTurn(config.id, latest.threadId, result.usage);
-
-    writeBatchToHistory();
-
-    if (!result.text) {
-      log.debug({ threadId: latest.threadId }, "Agent không trả text (có thể chỉ thả reaction)");
-      return;
-    }
-
-    // Tin dài bị Zalo chặn (error_code 118) nên phải cắt thành nhiều đoạn
-    const reply = await sendReplyInParts(replyTarget, result.text);
-
-    // Chỉ ghi phần ĐÃ gửi được: history phải khớp với cái người dùng nhìn thấy
-    if (reply.deliveredText) {
-      appendMessage(config.id, latest.threadId, {
-        role: "assistant",
-        content: reply.deliveredText,
-      });
-    }
-
-    // Gửi dở giữa chừng cũng phải nói, đừng để người ta ngồi đợi nốt phần sau
-    if (reply.error) {
-      await notifyTechnicalError(replyTarget);
-      return;
-    }
-
-    // Memory lớp 2: gộp tin cũ vào summary - fire-and-forget sau khi đã trả lời,
-    // maybeSummarizeThread tự nuốt lỗi nên không cần catch thêm
-    void maybeSummarizeThread(config.id, latest.threadId);
-  } catch (err) {
-    // Agent lỗi (provider chết, hết quota, timeout) thì tin của người dùng VẪN
-    // phải vào history - bỏ qua là lượt sau bot không biết họ đã nói gì
-    writeBatchToHistory();
-    log.error({ accountId: config.id, threadId: latest.threadId, err }, "Lỗi xử lý lượt tin nhắn");
-    // Báo cho người nhắn thay vì im lặng bỏ treo. KHÔNG ghi câu này vào history:
-    // nó là thông báo hệ thống, để lại chỉ khiến lượt sau model neo vào tiền lệ hỏng.
-    await notifyTechnicalError(replyTarget);
-  } finally {
-    stopTyping();
-  }
-}
-
-function describeIncoming(msg: ParsedMessage): string {
-  const imageNote = msg.images.length > 0 ? ` [gửi kèm ${msg.images.length} ảnh]` : "";
-  return `${msg.text}${imageNote}`.trim() || "[ảnh]";
 }
 
 export function stopAllAccounts(): void {

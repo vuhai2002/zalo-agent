@@ -24,6 +24,16 @@ export type ParsedMessage = {
   rawData: Record<string, unknown>;
 };
 
+/**
+ * Nội dung ghi vào history cho 1 tin đến. Ảnh không vào được cột text nên để
+ * lại dấu vết đếm được; tin chỉ có ảnh vẫn phải có chữ, nếu không lượt sau
+ * model đọc history thấy một dòng trống không hiểu chuyện gì đã xảy ra.
+ */
+export function describeForHistory(msg: ParsedMessage): string {
+  const imageNote = msg.images.length > 0 ? ` [gửi kèm ${msg.images.length} ảnh]` : "";
+  return `${msg.text}${imageNote}`.trim() || "[ảnh]";
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * @param imageQuality cỡ ảnh lấy từ payload Zalo - caller truyền

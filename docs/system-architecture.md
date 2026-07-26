@@ -7,7 +7,11 @@ Zalo servers <--ws/https--> zca-js (npm lib, unofficial)
                                 |
                     src/zalo/account-manager.ts   (N account, mỗi account 1 api + 1 listener)
                                 |
+              src/zalo/incoming-message-router.ts (ghi contact/thread, báo "đã nhận")
+                                |
               middleware: allowlist-filter -> (lọc xong mới tốn token)
+                                |
+              src/zalo/message-turn-processor.ts  (1 lượt: agent -> trả lời -> history)
                                 |
                     src/agent/agent-loop.ts       (Vercel AI SDK generateText + tools)
                                 |                  provider theo env: 9Router / Anthropic
