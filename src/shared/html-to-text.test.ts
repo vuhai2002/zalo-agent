@@ -90,6 +90,28 @@ describe("htmlToReadableText", () => {
   it("entity tên trong nội dung được giải mã (CHUY&Ecirc;N -> CHUYÊN)", () => {
     assert.equal(htmlToReadableText("<p>CHUY&Ecirc;N TRANG KẾT QUẢ</p>"), "CHUYÊN TRANG KẾT QUẢ");
   });
+
+  it("số trong các span liền kề không dính chùm (markup kiểu xoso.com.vn)", () => {
+    // Site bọc mỗi con số kết quả trong 1 span - bóc thẻ trần ra "36910..." vô dụng
+    const html = "<div><span>36</span><span>910</span><span>4644</span> <span>6422</span></div>";
+    assert.equal(htmlToReadableText(html), "36 910 4644 6422");
+  });
+
+  it("bảng HTML5 bỏ thẻ đóng </td></tr> vẫn tách được hàng và cột", () => {
+    // Đúng markup thật của xoso.com.vn: <tr><td>8<td><span>36</span><tr>...
+    const html =
+      "<table><tr><td class=name-prize>8<td><span data-loto=36>36</span>" +
+      "<tr><td class=name-prize>7<td><span data-loto=910>910</span>" +
+      "<tr><td class=name-prize>ĐB<td><span data-loto=087842>087842</span></table>";
+    const text = htmlToReadableText(html);
+    assert.ok(!text.includes("836"), `hàng phải tách, không dính "8"+"36": ${text}`);
+    assert.ok(/8\s*\|\s*36/.test(text), `thiếu ranh giới cột hàng G8: ${text}`);
+    assert.ok(/ĐB\s*\|\s*087842/.test(text), `thiếu ranh giới cột hàng ĐB: ${text}`);
+  });
+
+  it("span đơn giữa từ không bị chẻ đôi", () => {
+    assert.equal(htmlToReadableText("<p>Gi<span>á</span> vàng</p>"), "Giá vàng");
+  });
 });
 
 describe("extractHtmlTitle", () => {

@@ -65,11 +65,20 @@ export function htmlToReadableText(html: string): string {
 
   // Giữ cấu trúc đoạn: thẻ block phổ biến thành xuống dòng trước khi bóc thẻ
   const withBreaks = withoutBlocks
-    .replace(/<(br|\/p|\/div|\/h[1-6]|\/li|\/tr|\/section|\/article)[^>]*>/gi, "\n")
+    // Span liền kề phải có khoảng trắng ở ranh giới: xoso.com.vn bọc MỖI CON SỐ
+    // kết quả trong 1 span, bóc thẻ trần sẽ ra "836791064644..." dính chùm -
+    // model không cách nào tách lại được. Chỉ xử ranh giới </span><span> nên
+    // span đơn lẻ giữa từ (kiểu tô màu 1 chữ) không bị chẻ đôi.
+    .replace(/<\/span>\s*<span/gi, "</span> <span")
+    // Hàng/ô bảng bám theo thẻ MỞ chứ không phải thẻ đóng: HTML5 cho phép bỏ
+    // </td></tr> và xoso.com.vn viết đúng kiểu đó - bám thẻ đóng là cả bảng
+    // kết quả dính thành 1 dòng "836791064644...". Thẻ đóng </tr> vẫn giữ cho
+    // site viết đủ; dòng rỗng sinh thêm bị filter(Boolean) nuốt.
+    .replace(/<(br|\/p|\/div|\/h[1-6]|\/li|\/tr|tr\b|\/section|\/article)[^>]*>/gi, "\n")
     .replace(/<li[^>]*>/gi, "\n- ")
     // Ranh giới ô trong bảng: bảng kết quả (xổ số, giá) mà dính chữ liền nhau
     // là model đọc sai cột
-    .replace(/<\/t[dh]>/gi, " | ");
+    .replace(/<t[dh]\b[^>]*>/gi, " | ");
 
   // stripHtmlTags nuốt cả \n (collapse \s+) nên tách dòng trước, bóc thẻ từng dòng
   return withBreaks
