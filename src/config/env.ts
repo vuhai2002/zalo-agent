@@ -47,9 +47,9 @@ const envSchema = z.object({
     .string()
     .default("Asia/Ho_Chi_Minh")
     .refine(isValidTimezone, "phải là tên timezone IANA, vd Asia/Ho_Chi_Minh"),
-  // Web search cho agent: DuckDuckGo mặc định không cần key; đặt key Brave
-  // (free tier 2000 query/tháng - https://brave.com/search/api/) để kết quả
-  // tốt hơn, hết quota hay lỗi tự rơi về DuckDuckGo.
+  // Key Brave dự phòng cho web search. Nên nhập ở trang Tools trên dashboard
+  // (lưu DB, mã hóa) - env chỉ dùng khi DB chưa có. DuckDuckGo luôn là lưới
+  // đỡ cuối nên thiếu key vẫn tìm được.
   BRAVE_SEARCH_API_KEY: z.string().default(""),
   // Số kết quả web search tối đa trả cho agent mỗi lần tìm
   WEB_SEARCH_MAX_RESULTS: z.coerce.number().int().min(1).max(10).default(5),
@@ -59,6 +59,10 @@ const envSchema = z.object({
   // mỗi ký tự là token trả tiền, kèm lọc menu trong html-to-text để nội dung
   // thật không bị rác đẩy ra khỏi cap.
   WEB_FETCH_MAX_CHARS: z.coerce.number().int().min(2000).max(100_000).default(15_000),
+  // Fetch tự làm hỏng hoặc ra quá ít chữ (trang render bằng JavaScript, chặn
+  // bot) thì đẩy URL qua Jina Reader - đo thực tế cứu được giavang.doji.vn và
+  // vnexpress. Đánh đổi: chậm hơn nhiều và URL đi qua bên thứ ba, tắt được ở đây.
+  WEB_FETCH_FALLBACK_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
 
   HISTORY_CONTEXT_LIMIT: z.coerce.number().int().min(1).max(200).default(20),
   // Ảnh cũ trong history được nạp lại vào context để model "nhớ" ảnh đã nhận.

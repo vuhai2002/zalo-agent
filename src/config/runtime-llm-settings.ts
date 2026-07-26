@@ -1,6 +1,6 @@
-import crypto from "node:crypto";
 import { db } from "../conversation/database.js";
 import { env } from "./env.js";
+import { decryptSecret, encryptSecret, maskSecret } from "./secret-cipher.js";
 
 /**
  * Override cấu hình LLM lúc runtime (đổi từ dashboard, áp dụng ngay không cần
@@ -28,22 +28,6 @@ const setStmt = db.prepare(`
 `);
 const delStmt = db.prepare("DELETE FROM runtime_settings WHERE key = ?");
 
-const encryptionKey = () => Buffer.from(env.CREDENTIALS_ENCRYPTION_KEY, "hex");
-
-function encrypt(plaintext: string): string {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", encryptionKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf-8"), cipher.final()]);
-  return Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
-}
-
-function decrypt(payload: string): string {
-  const buf = Buffer.from(payload, "base64");
-  const decipher = crypto.createDecipheriv("aes-256-gcm", encryptionKey(), buf.subarray(0, 12));
-  decipher.setAuthTag(buf.subarray(12, 28));
-  return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]).toString("utf-8");
-}
-
 function read(key: (typeof KEYS)[number]): string | undefined {
   const row = getStmt.get(key) as { value: string } | undefined;
   return row?.value;
@@ -60,7 +44,7 @@ export function getEffectiveLlmSettings(): LlmSettings {
     provider: (provider as LlmSettings["provider"]) ?? env.LLM_PROVIDER,
     baseUrl: baseUrl ?? env.LLM_BASE_URL,
     model: model ?? env.LLM_MODEL,
-    apiKey: encryptedApiKey ? decrypt(encryptedApiKey) : env.LLM_API_KEY,
+    apiKey: encryptedApiKey ? decryptSecret(encryptedApiKey) : env.LLM_API_KEY,
     hasOverride: Boolean(provider || baseUrl || model || encryptedApiKey),
   };
 }
@@ -78,7 +62,7 @@ export function updateLlmSettings(update: LlmSettingsUpdate): void {
   if (update.baseUrl !== undefined) setStmt.run("llm_base_url", update.baseUrl);
   if (update.model !== undefined) setStmt.run("llm_model", update.model);
   if (update.apiKey !== undefined && update.apiKey !== "") {
-    setStmt.run("llm_api_key", encrypt(update.apiKey));
+    setStmt.run("llm_api_key", encryptSecret(update.apiKey));
   }
 }
 
@@ -88,8 +72,4 @@ export function clearLlmSettings(): void {
 }
 
 /** "sk-abc...xyz" - đủ nhận diện key nào, không đủ dùng lại */
-export function maskApiKey(key: string): string {
-  if (!key) return "chưa cấu hình";
-  if (key.length <= 8) return "***";
-  return `${key.slice(0, 5)}...${key.slice(-4)}`;
-}
+export const maskApiKey = maskSecret;
