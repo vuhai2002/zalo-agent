@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+  clearSidecarSettings,
   getVisionSettingsForApi,
   updateVisionSettings,
 } from "../../config/runtime-vision-settings.js";
@@ -47,6 +48,16 @@ export const visionRoutes = new Hono()
       { changedFields: Object.keys(parsed.data).filter((k) => parsed.data[k as never] !== undefined) },
       "Đổi cấu hình vision từ dashboard",
     );
+    return c.json({ ok: true, ...getVisionSettingsForApi(), ...(await detectionState()) });
+  })
+
+  // Xóa sạch cấu hình sidecar KỂ CẢ key: đường PATCH quy ước "key trống = giữ
+  // key cũ" nên không gỡ được key qua PATCH, phải có hành động riêng
+  .delete("/sidecar", async (c) => {
+    clearSidecarSettings();
+    const { clearVisionDetectionCache } = await import("../../agent/model-vision-detection.js");
+    clearVisionDetectionCache();
+    log.info("Xóa cấu hình vision sidecar từ dashboard");
     return c.json({ ok: true, ...getVisionSettingsForApi(), ...(await detectionState()) });
   })
 

@@ -52,6 +52,12 @@ export type ToolDefinition = {
    * schema thì chỉ tốn token mô tả và dụ model gọi để nhận lỗi.
    */
   available?: () => boolean;
+  /**
+   * Hiện trên trang Tools khi `available()` false - phải nói RÕ thiếu gì và
+   * sửa ở đâu. Không có dòng này thì UI hiện tool bật sẵn trong khi model
+   * không hề nhận được nó (người dùng tưởng bot có khả năng đó mà không có).
+   */
+  unavailableHint?: string;
   build: (ctx: ToolContext) => Tool;
 };
 
@@ -90,6 +96,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "Hỏi model đọc ảnh (sidecar) một câu cụ thể về ảnh đã nhận - đếm, đọc chữ nhỏ, soi chi tiết. Cần cấu hình sidecar ở trang Providers",
     group: "read",
     available: () => isSidecarConfigured(),
+    unavailableHint: "Cần cấu hình model sidecar đọc ảnh ở trang Providers",
     build: (ctx) => createReadImageTool(ctx),
   },
   {

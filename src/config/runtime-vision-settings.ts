@@ -104,6 +104,18 @@ export function updateVisionSettings(update: VisionSettingsUpdate): VisionSettin
   return getVisionSettings();
 }
 
+/**
+ * Xóa sạch cấu hình sidecar (gồm cả API key) - quay về giá trị env, thường là
+ * trống nghĩa là tắt hẳn sidecar. Cần hành động riêng vì đường PATCH quy ước
+ * "key bỏ trống = giữ key cũ", nên không có cách nào gỡ key qua PATCH từ UI.
+ */
+export function clearSidecarSettings(): VisionSettings {
+  for (const key of [SIDECAR_BASE_URL_KEY, SIDECAR_MODEL_KEY, SIDECAR_API_KEY_KEY]) {
+    delStmt.run(key);
+  }
+  return getVisionSettings();
+}
+
 /** Dạng an toàn trả về dashboard - không bao giờ lộ key đầy đủ */
 export function getVisionSettingsForApi() {
   const settings = getVisionSettings();
@@ -113,6 +125,9 @@ export function getVisionSettingsForApi() {
       baseUrl: settings.sidecar.baseUrl,
       model: settings.sidecar.model,
       apiKeyMasked: maskSecret(settings.sidecar.apiKey),
+      // Cờ riêng vì apiKeyMasked KHÔNG BAO GIỜ rỗng (trống thì ra "chưa cấu
+      // hình") - UI không thể suy ra "có key hay không" từ chuỗi mask
+      hasApiKey: Boolean(settings.sidecar.apiKey),
       configured: isSidecarConfigured(settings),
     },
   };

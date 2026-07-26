@@ -31,13 +31,21 @@ export const toolRoutes = new Hono()
 
   .get("/", (c) =>
     c.json({
-      items: TOOL_DEFINITIONS.map((t) => ({
-        key: t.key,
-        label: t.label,
-        description: t.description,
-        group: t.group,
-        hasSettings: Boolean(t.hasSettings),
-      })),
+      items: TOOL_DEFINITIONS.map((t) => {
+        // available = hạ tầng đã sẵn sàng chưa (khác với bật/tắt per account).
+        // Thiếu cờ này thì UI hiện tool bật sẵn trong khi model không hề nhận
+        // được nó - người dùng tưởng bot có khả năng đó mà không có.
+        const available = t.available ? t.available() : true;
+        return {
+          key: t.key,
+          label: t.label,
+          description: t.description,
+          group: t.group,
+          hasSettings: Boolean(t.hasSettings),
+          available,
+          unavailableHint: available ? undefined : t.unavailableHint,
+        };
+      }),
       search: getSearchSettingsForApi(),
       fetch: getFetchSettings(),
     }),

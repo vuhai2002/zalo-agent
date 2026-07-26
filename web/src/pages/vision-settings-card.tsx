@@ -53,6 +53,24 @@ export function VisionSettingsCard() {
     }
   }
 
+  async function clearSidecar() {
+    // Mất key thật (phải xin lại từ nhà cung cấp) nên hỏi trước - cùng nếp với
+    // xóa account/agent
+    if (!window.confirm("Xóa cấu hình sidecar (gồm cả API key)? Bot sẽ không đọc được ảnh nữa."))
+      return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      await api.clearVisionSidecar();
+      await load();
+      setStatus({ tone: "green", text: "Đã xóa cấu hình sidecar" });
+    } catch (err) {
+      setStatus({ tone: "red", text: err instanceof ApiError ? err.message : "Xóa thất bại" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function testSidecar() {
     setBusy(true);
     setStatus(null);
@@ -158,6 +176,17 @@ export function VisionSettingsCard() {
         >
           Test sidecar
         </button>
+        {/* Chỉ hiện khi thật sự có gì để xóa. KHÔNG dùng apiKeyMasked làm điều
+            kiện: chuỗi đó luôn khác rỗng (trống thì ra "chưa cấu hình") */}
+        {(settings.sidecar.hasApiKey || settings.sidecar.baseUrl || settings.sidecar.model) && (
+          <button
+            onClick={clearSidecar}
+            disabled={busy}
+            className="ml-auto rounded-lg px-4 py-2 text-[14px] text-red-600 hover:bg-red-50 disabled:opacity-50"
+          >
+            Xóa cấu hình sidecar
+          </button>
+        )}
       </div>
     </div>
   );

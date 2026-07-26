@@ -52,6 +52,23 @@ describe("runtime-vision-settings", () => {
     assert.ok(!JSON.stringify(view).includes("AIza-secret"));
   });
 
+  it("clearSidecarSettings xóa sạch cả key - đường duy nhất gỡ key vì PATCH quy ước giữ key cũ", () => {
+    store.updateVisionSettings({
+      sidecarBaseUrl: "https://gemini.test/v1beta/openai",
+      sidecarModel: "gemini-3.5-flash-lite",
+      sidecarApiKey: "AIza-can-xoa",
+    });
+    assert.equal(store.isSidecarConfigured(), true);
+
+    const after = store.clearSidecarSettings();
+    assert.equal(store.isSidecarConfigured(after), false);
+    assert.equal(after.sidecar.baseUrl, "");
+    assert.equal(after.sidecar.model, "");
+    assert.equal(after.sidecar.apiKey, "", "key phải bị gỡ khỏi DB");
+    // Không đụng tới mode - xóa sidecar khác với đổi cách phát hiện vision
+    assert.equal(after.mode, store.getVisionSettings().mode);
+  });
+
   it("chuỗi rỗng tường minh xóa field, quay về env (rỗng) -> sidecar tắt", () => {
     store.updateVisionSettings({ sidecarApiKey: "" });
     assert.equal(store.isSidecarConfigured(), false);

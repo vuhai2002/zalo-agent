@@ -134,8 +134,14 @@ export function ToolsPage() {
                               : "DuckDuckGo (miễn phí)"}
                           </Badge>
                         )}
+                        {/* Bật mà thiếu hạ tầng thì model KHÔNG nhận được tool -
+                            phải nói thẳng, không để người dùng tưởng bot có khả năng đó */}
+                        {!tool.available && <Badge tone="amber">Chưa dùng được</Badge>}
                       </div>
                       <p className="mt-0.5 text-[12.5px] text-ink-soft">{tool.description}</p>
+                      {!tool.available && tool.unavailableHint && (
+                        <p className="mt-1 text-[12.5px] text-amber-700">{tool.unavailableHint}</p>
+                      )}
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2.5">
@@ -149,12 +155,15 @@ export function ToolsPage() {
                           Settings
                         </button>
                       )}
+                      {/* Vẫn bấm được khi chưa dùng được (đặt sẵn cho account là
+                          hợp lệ) nhưng làm mờ để báo "cài đặt này chưa có hiệu lực" */}
                       <button
                         type="button"
                         disabled={saving !== null}
                         onClick={() => toggleTool(tool.key)}
                         aria-label={`Bật tắt ${tool.label}`}
-                        className="disabled:cursor-wait"
+                        title={tool.available ? undefined : tool.unavailableHint}
+                        className={`disabled:cursor-wait ${tool.available ? "" : "opacity-50"}`}
                       >
                         <ToggleKnob on={enabled} />
                       </button>

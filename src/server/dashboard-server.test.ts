@@ -237,7 +237,14 @@ describe("dashboard-server", () => {
     const res = await authed("/api/tools");
     assert.equal(res.status, 200);
     const data = (await res.json()) as {
-      items: { key: string; label: string; group: string; hasSettings: boolean }[];
+      items: {
+        key: string;
+        label: string;
+        group: string;
+        hasSettings: boolean;
+        available: boolean;
+        unavailableHint?: string;
+      }[];
       search: { provider: string; braveApiKeyMasked: string; hasBraveApiKey: boolean };
     };
     assert.ok(data.items.length >= 8);
@@ -250,6 +257,14 @@ describe("dashboard-server", () => {
     // Test env không có key Brave -> mặc định DuckDuckGo, không lộ key
     assert.equal(data.search.provider, "duckduckgo");
     assert.equal(data.search.hasBraveApiKey, false);
+
+    // Tool không phụ thuộc hạ tầng ngoài luôn available
+    assert.equal(data.items.find((t) => t.key === "web_search")?.available, true);
+    assert.equal(data.items.find((t) => t.key === "web_search")?.unavailableHint, undefined);
+    // read_image chưa có sidecar -> UI phải biết để không hiện "bật" giả
+    const readImage = data.items.find((t) => t.key === "read_image");
+    assert.equal(readImage?.available, false);
+    assert.match(readImage?.unavailableHint ?? "", /Providers/);
   });
 
   it("PATCH /api/tools/fetch bật/tắt bậc Jina Reader", async () => {

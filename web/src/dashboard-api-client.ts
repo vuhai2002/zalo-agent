@@ -178,6 +178,8 @@ export const api = {
     request<{ ok: boolean; reply?: string; error?: string }>("/api/vision/test", {
       method: "POST",
     }),
+  clearVisionSidecar: () =>
+    request<VisionSettings & { ok: true }>("/api/vision/sidecar", { method: "DELETE" }),
 
   provider: () => request<ProviderSettings>("/api/provider"),
   updateProvider: (update: Partial<ProviderSettings> & { apiKey?: string }) =>
@@ -216,6 +218,10 @@ export type ToolCatalogItem = {
   group: "read" | "action";
   /** Có nút Settings mở modal chuỗi nguồn không */
   hasSettings: boolean;
+  /** Hạ tầng đã sẵn sàng chưa (khác bật/tắt per account) - false = model không nhận được tool */
+  available: boolean;
+  /** Thiếu gì và sửa ở đâu - chỉ có khi available = false */
+  unavailableHint?: string;
 };
 
 export type SearchSettings = {
@@ -261,7 +267,14 @@ export type ProviderSettings = {
 export type VisionSettings = {
   /** Model chính có đọc được ảnh không: auto = tự hỏi router */
   mode: "auto" | "on" | "off";
-  sidecar: { baseUrl: string; model: string; apiKeyMasked: string; configured: boolean };
+  sidecar: {
+    baseUrl: string;
+    model: string;
+    apiKeyMasked: string;
+    /** apiKeyMasked trống vẫn ra chuỗi "chưa cấu hình" nên phải có cờ riêng */
+    hasApiKey: boolean;
+    configured: boolean;
+  };
   /**
    * Chế độ ảnh đang hiệu lực: native = model tự đọc, describe = sidecar mô tả,
    * hybrid = combo nhận cả pixel + mô tả, blind = bỏ ảnh

@@ -500,6 +500,37 @@ trang Rate Limit của AI Studio nhờ soi lại. Test sống bằng chính key 
 - [ ] User đổi model trên dashboard thành `gemini-3.5-flash-lite` + bấm Test
   sidecar (key giữ nguyên)
 
+## V2.9.4 - Xóa được sidecar + trang Tools hết nói dối (2026-07-27)
+
+User hỏi 2 câu khi dùng thật: "không có chỗ xóa provider đọc ảnh à?" và "cấu
+hình này nên để tab Tools hay Providers?". Rà lại thì cả hai đều lộ vấn đề:
+
+- **Không gỡ được API key sidecar**: UI gửi `sidecarApiKey: form.apiKey ||
+  undefined` - ô trống nghĩa là "giữ key cũ", nên key nằm lại DB vĩnh viễn dù
+  xóa base URL + model. Backend có sẵn đường xóa nhưng UI không gọi được
+- **Trang Tools hiện `read_image` bật sẵn kể cả khi chưa có sidecar**:
+  `/api/tools` trả cả catalog không lọc theo `available()`, trong khi
+  `buildAgentTools` thì lọc - người dùng tưởng bot có khả năng đó mà không có
+
+- [x] `clearSidecarSettings()` + `DELETE /api/vision/sidecar` (xóa cả key,
+  dọn cache detect); nút "Xóa cấu hình sidecar" trên card Đọc ảnh, có confirm
+  vì mất key thật - cùng nếp với xóa account/agent
+- [x] Cờ `hasApiKey` trong API view: `apiKeyMasked` KHÔNG BAO GIỜ rỗng (trống
+  thì ra chuỗi "chưa cấu hình") nên UI không thể suy ra có key hay không -
+  bug này do chính test API bắt được trước khi kịp lộ ra ngoài
+- [x] `/api/tools` trả `available` + `unavailableHint`; trang Tools hiện badge
+  amber "Chưa dùng được" + dòng chỉ đường sang Providers, toggle làm mờ nhưng
+  vẫn bấm được (đặt sẵn cho account là hợp lệ)
+- [x] Chốt vị trí: sidecar Ở LẠI trang Providers. Nó phục vụ đường ống chính
+  (chế độ describe/hybrid mọi lượt có ảnh), không chỉ tool `read_image` - tắt
+  tool thì sidecar vẫn chạy. Khác key Brave (chỉ phục vụ web_search nên nằm ở
+  Tools). Trang Tools chỉ trỏ đường, không ôm cấu hình
+- [x] Test: 370 pass (thêm `vision-routes.test.ts` cho cả nhóm /api/vision:
+  mask key, giữ key khi PATCH trống, DELETE xóa sạch, imageMode đổi theo, 401
+  khi chưa login). Kiểm bằng trình duyệt thật trên instance dashboard riêng
+  (port 3901, DB tạm): badge + toggle mờ + nút xóa xuất hiện/biến mất đúng
+  trạng thái, xóa xong `hasApiKey` về false và `read_image` về chưa dùng được
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic
