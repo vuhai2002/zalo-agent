@@ -521,15 +521,39 @@ hình này nên để tab Tools hay Providers?". Rà lại thì cả hai đều 
 - [x] `/api/tools` trả `available` + `unavailableHint`; trang Tools hiện badge
   amber "Chưa dùng được" + dòng chỉ đường sang Providers, toggle làm mờ nhưng
   vẫn bấm được (đặt sẵn cho account là hợp lệ)
-- [x] Chốt vị trí: sidecar Ở LẠI trang Providers. Nó phục vụ đường ống chính
-  (chế độ describe/hybrid mọi lượt có ảnh), không chỉ tool `read_image` - tắt
-  tool thì sidecar vẫn chạy. Khác key Brave (chỉ phục vụ web_search nên nằm ở
-  Tools). Trang Tools chỉ trỏ đường, không ôm cấu hình
+- [x] Vị trí cấu hình sidecar: bản này để ở Providers, V2.9.5 chuyển sang Tools
+  theo quyết định của user (xem mục dưới)
 - [x] Test: 370 pass (thêm `vision-routes.test.ts` cho cả nhóm /api/vision:
   mask key, giữ key khi PATCH trống, DELETE xóa sạch, imageMode đổi theo, 401
   khi chưa login). Kiểm bằng trình duyệt thật trên instance dashboard riêng
   (port 3901, DB tạm): badge + toggle mờ + nút xóa xuất hiện/biến mất đúng
   trạng thái, xóa xong `hasApiKey` về false và `read_image` về chưa dùng được
+
+## V2.9.5 - Gom cấu hình đọc ảnh về trang Tools + xóa được key Brave (2026-07-27)
+
+User dùng thật rồi chốt 2 việc: cấu hình đọc ảnh đưa hết về tab Tools cho gọn
+("tránh 2 nơi"), và phát hiện modal search cũng không xóa được key Brave -
+đúng loại bug vừa vá cho sidecar, nằm ở chỗ khác.
+
+- [x] **Xóa key Brave**: nút riêng trong modal chuỗi search (có confirm), gọi
+  `braveApiKey: ""` - backend vốn đã hỗ trợ, chỉ thiếu đường gọi từ UI vì nút
+  Lưu quy ước "ô trống = giữ key cũ". Xóa xong provider tự hạ về DuckDuckGo
+- [x] **Đọc ảnh về trang Tools**: card ở Providers bỏ hẳn, thay bằng modal
+  Settings trên dòng `read_image` (`hasSettings: true`). Trình bày lại thành
+  chuỗi 2 bậc đúng mẫu Extractor Chain như search/fetch: #1 model chính tự đọc
+  pixel (dropdown auto/on/off), #2 sidecar mô tả ảnh. Nút Test + Xóa nằm luôn
+  trong modal
+- [x] Badge chế độ ảnh hiệu lực (native/describe/hybrid/blind) hiện trên dòng
+  tool; lưu/xóa xong tự nạp lại catalog nên trạng thái "Chưa dùng được" đổi
+  ngay không cần F5
+- [x] Tách `tool-settings-modal-shell.tsx` (ChainStep + khung modal + class
+  nút dùng chung) để 2 modal không chép lại bố cục; trang Providers quay về
+  đúng một việc là cấu hình LLM chính
+- [x] Test: 370 pass. Kiểm bằng trình duyệt thật trên dashboard riêng (port
+  3901, DB tạm): mở modal từ dòng tool, lưu -> badge "Chưa dùng được" biến mất
+  ngay, xóa sidecar -> quay lại trạng thái chưa dùng được + key gỡ khỏi DB,
+  xóa key Brave -> badge dòng tool đổi sang "DuckDuckGo (miễn phí)" tức thì,
+  trang Providers không còn card vision
 
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 

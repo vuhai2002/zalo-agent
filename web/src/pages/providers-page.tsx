@@ -4,7 +4,6 @@ import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { SecretInput } from "../shared/secret-input";
 import { Badge } from "../shared/ui-bits";
-import { VisionSettingsCard } from "./vision-settings-card";
 
 export function ProvidersPage() {
   const [settings, setSettings] = useState<ProviderSettings | null>(null);
@@ -155,8 +154,6 @@ export function ProvidersPage() {
           )}
         </div>
       </div>
-
-      <VisionSettingsCard />
     </div>
   );
 }

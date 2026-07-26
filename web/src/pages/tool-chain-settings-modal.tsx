@@ -2,64 +2,15 @@ import { useState } from "react";
 import type { FetchSettings, SearchSettings, ToolCatalogItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { SecretInput } from "../shared/secret-input";
-import { ToggleKnob } from "../shared/ui-bits";
+import { ChainStep, modalButton, ToolModalShell } from "./tool-settings-modal-shell";
 
 /**
- * Modal cấu hình chuỗi nguồn của 1 tool, theo mẫu "Extractor Chain" của GoClaw:
- * liệt kê các bậc theo thứ tự thử, mỗi bậc có toggle + cấu hình riêng.
+ * Modal chuỗi nguồn của web_search / web_fetch.
  *
  * Bậc CUỐI của mỗi chuỗi khoá cứng (không có toggle) - đó là thứ bảo đảm tool
  * không bao giờ rơi vào trạng thái "chưa cấu hình": web_search luôn còn
  * DuckDuckGo, web_fetch luôn còn tầng tự tải.
  */
-
-function ChainStep({
-  index,
-  title,
-  description,
-  enabled,
-  locked,
-  onToggle,
-  children,
-}: {
-  index: number;
-  title: string;
-  description: string;
-  enabled: boolean;
-  /** Bậc bắt buộc - hiện nhãn thay cho toggle */
-  locked?: boolean;
-  onToggle?: () => void;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-line p-3.5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded bg-tile px-1.5 py-0.5 text-[11px] font-medium text-ink-soft">
-              #{index}
-            </span>
-            <span className="text-[14px] font-medium text-ink">{title}</span>
-          </div>
-          <p className="mt-1 text-[12.5px] text-ink-soft">{description}</p>
-        </div>
-        {locked ? (
-          <span className="shrink-0 whitespace-nowrap rounded-full bg-tile px-2.5 py-1 text-[11px] font-medium text-ink-soft">
-            Luôn bật
-          </span>
-        ) : (
-          // shrink-0 bắt buộc: thiếu nó flex bóp nút về width 0 và toggle biến
-          // mất hẳn dù ToggleKnob bên trong vẫn giữ 36px
-          <button type="button" onClick={onToggle} aria-label={`Bật tắt ${title}`} className="shrink-0">
-            <ToggleKnob on={enabled} />
-          </button>
-        )}
-      </div>
-      {children && <div className="mt-3">{children}</div>}
-    </div>
-  );
-}
-
 export function ToolChainSettingsModal({
   tool,
   search,
@@ -107,116 +58,134 @@ export function ToolChainSettingsModal({
     }
   }
 
+  /**
+   * Gỡ hẳn key khỏi DB. Cần hành động riêng vì đường lưu quy ước "ô trống =
+   * giữ key cũ" (để đổi cấu hình khác không phải nhập lại key), nên không có
+   * cách nào gửi chuỗi rỗng qua nút Lưu.
+   */
+  async function clearBraveKey() {
+    if (!window.confirm("Xóa API key Brave? Web search sẽ chỉ còn DuckDuckGo.")) return;
+    setSaving(true);
+    setError("");
+    try {
+      // Xóa key thì provider tự hạ về duckduckgo ở tầng store
+      const res = await api.updateSearchSettings({ braveApiKey: "" });
+      setApiKey("");
+      setBraveOn(false);
+      onSaved({ search: res.search });
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/25 p-4 backdrop-blur-[2px]"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-[17px] font-semibold text-ink">
-          {tool.label} - chuỗi nguồn
-        </h2>
-        <p className="mt-1 text-[13px] text-ink-soft">
-          Thử lần lượt từ trên xuống, dừng ở bậc đầu tiên cho kết quả dùng được.
-        </p>
-
-        <div className="mt-4 space-y-3">
-          {isSearch ? (
-            <>
-              <ChainStep
-                index={1}
-                title="Brave Search"
-                description="Kết quả tốt hơn, cần API key. Hết quota hoặc lỗi thì tự rơi xuống bậc dưới."
-                enabled={braveOn}
-                onToggle={() => setBraveOn((v) => !v)}
-              >
-                <label className="block text-[13px] font-medium text-ink" htmlFor="brave-key">
-                  API key
-                  <span className="ml-2 font-normal text-ink-soft">
-                    (hiện tại: {search.braveApiKeyMasked})
-                  </span>
-                </label>
-                <SecretInput
-                  id="brave-key"
-                  value={apiKey}
-                  onChange={setApiKey}
-                  placeholder={search.hasBraveApiKey ? "Để trống nếu giữ key cũ" : "Dán key vào đây"}
-                  className="mt-1.5"
-                />
-                <p className="mt-1.5 text-xs text-ink-soft">
-                  Lấy key miễn phí tại{" "}
-                  <a
-                    href="https://brave.com/search/api/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-zalo-600 hover:underline"
-                  >
-                    brave.com/search/api
-                  </a>
-                  . Key được mã hóa trước khi lưu, không bao giờ hiện lại đầy đủ.
-                </p>
-              </ChainStep>
-
-              <ChainStep
-                index={2}
-                title="DuckDuckGo"
-                description="Miễn phí, không cần key. Là bậc cuối nên web search không bao giờ thiếu nguồn."
-                enabled
-                locked
-              />
-            </>
-          ) : (
-            <>
-              <ChainStep
-                index={1}
-                title="Tự tải trực tiếp"
-                description="Nhanh, riêng tư, đã chặn IP nội bộ chống SSRF. Không đọc được trang render bằng JavaScript."
-                enabled
-                locked
-              />
-              <ChainStep
-                index={2}
-                title="Jina Reader (r.jina.ai)"
-                description="Dùng khi bậc 1 hỏng hoặc ra quá ít chữ: render được trang JavaScript, qua được một phần chặn bot. Chậm hơn nhiều và URL đi qua dịch vụ bên thứ ba."
-                enabled={jinaOn}
-                onToggle={() => setJinaOn((v) => !v)}
-              />
-            </>
+    <ToolModalShell
+      title={`${tool.label} - chuỗi nguồn`}
+      subtitle="Thử lần lượt từ trên xuống, dừng ở bậc đầu tiên cho kết quả dùng được."
+      onClose={onClose}
+      footer={
+        <>
+          {isSearch && search.hasBraveApiKey && (
+            <button
+              type="button"
+              onClick={clearBraveKey}
+              disabled={saving}
+              className={`mr-auto ${modalButton.danger}`}
+            >
+              Xóa key Brave
+            </button>
           )}
-        </div>
-
-        {blocked && (
-          <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-800">
-            Nhập API key Brave trước rồi mới bật được bậc này.
-          </div>
-        )}
-        {error && (
-          <div className="mt-3 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-[13px] text-red-700">
-            {error}
-          </div>
-        )}
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-line px-4 py-2 text-[14px] font-medium text-ink-soft hover:bg-tile"
-          >
+          <button type="button" onClick={onClose} className={modalButton.cancel}>
             Hủy
           </button>
           <button
             type="button"
             onClick={save}
             disabled={blocked || saving}
-            className="rounded-lg bg-zalo-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-zalo-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className={modalButton.primary}
           >
             {saving ? "Đang lưu..." : "Lưu"}
           </button>
+        </>
+      }
+    >
+      {isSearch ? (
+        <>
+          <ChainStep
+            index={1}
+            title="Brave Search"
+            description="Kết quả tốt hơn, cần API key. Hết quota hoặc lỗi thì tự rơi xuống bậc dưới."
+            enabled={braveOn}
+            onToggle={() => setBraveOn((v) => !v)}
+          >
+            <label className="block text-[13px] font-medium text-ink" htmlFor="brave-key">
+              API key
+              <span className="ml-2 font-normal text-ink-soft">
+                (hiện tại: {search.braveApiKeyMasked})
+              </span>
+            </label>
+            <SecretInput
+              id="brave-key"
+              value={apiKey}
+              onChange={setApiKey}
+              placeholder={search.hasBraveApiKey ? "Để trống nếu giữ key cũ" : "Dán key vào đây"}
+              className="mt-1.5"
+            />
+            <p className="mt-1.5 text-xs text-ink-soft">
+              Lấy key miễn phí tại{" "}
+              <a
+                href="https://brave.com/search/api/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-zalo-600 hover:underline"
+              >
+                brave.com/search/api
+              </a>
+              . Key được mã hóa trước khi lưu, không bao giờ hiện lại đầy đủ.
+            </p>
+          </ChainStep>
+
+          <ChainStep
+            index={2}
+            title="DuckDuckGo"
+            description="Miễn phí, không cần key. Là bậc cuối nên web search không bao giờ thiếu nguồn."
+            enabled
+            locked
+          />
+
+          {blocked && (
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-800">
+              Nhập API key Brave trước rồi mới bật được bậc này.
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <ChainStep
+            index={1}
+            title="Tự tải trực tiếp"
+            description="Nhanh, riêng tư, đã chặn IP nội bộ chống SSRF. Không đọc được trang render bằng JavaScript."
+            enabled
+            locked
+          />
+          <ChainStep
+            index={2}
+            title="Jina Reader (r.jina.ai)"
+            description="Dùng khi bậc 1 hỏng hoặc ra quá ít chữ: render được trang JavaScript, qua được một phần chặn bot. Chậm hơn nhiều và URL đi qua dịch vụ bên thứ ba."
+            enabled={jinaOn}
+            onToggle={() => setJinaOn((v) => !v)}
+          />
+        </>
+      )}
+
+      {error && (
+        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-[13px] text-red-700">
+          {error}
         </div>
-      </div>
-    </div>
+      )}
+    </ToolModalShell>
   );
 }

@@ -93,10 +93,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     key: "read_image",
     label: "Nhìn kỹ ảnh",
     description:
-      "Hỏi model đọc ảnh (sidecar) một câu cụ thể về ảnh đã nhận - đếm, đọc chữ nhỏ, soi chi tiết. Cần cấu hình sidecar ở trang Providers",
+      "Hỏi model đọc ảnh (sidecar) một câu cụ thể về ảnh đã nhận - đếm, đọc chữ nhỏ, soi chi tiết",
     group: "read",
+    // Cấu hình đọc ảnh (chế độ vision + sidecar) nằm trong modal Settings của
+    // chính dòng này - gom về một chỗ thay vì tách sang trang Providers
+    hasSettings: true,
     available: () => isSidecarConfigured(),
-    unavailableHint: "Cần cấu hình model sidecar đọc ảnh ở trang Providers",
+    unavailableHint: "Bấm Settings để cấu hình model sidecar đọc ảnh",
     build: (ctx) => createReadImageTool(ctx),
   },
   {

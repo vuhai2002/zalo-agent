@@ -8,9 +8,9 @@ Bot AI thường trú trên Zalo (tài khoản cá nhân, multi-account): nhận
 - Dashboard web: Hono + React (tone xanh Zalo) - xem hội thoại, contacts, memory, bật/tắt bot per thread, bật/tắt tool per account, đổi LLM provider
 - Web search miễn phí qua DuckDuckGo (không cần key); điền `BRAVE_SEARCH_API_KEY` (free tier) nếu muốn kết quả tốt hơn
 - Model chính không đọc được ảnh? Bot tự phát hiện (hỏi router) và có thể thuê model vision phụ
-  (Gemini free tier) mô tả ảnh thành chữ - cấu hình ở card "Đọc ảnh" trang Providers.
-  Có sidecar thì agent còn được thêm tool `read_image` để "nhìn kỹ lại" ảnh với câu hỏi
-  cụ thể (đếm số lượng, đọc chữ nhỏ) khi mô tả sẵn có không đủ
+  (Gemini free tier) mô tả ảnh thành chữ - cấu hình ở nút Settings trên dòng "Nhìn kỹ ảnh"
+  của trang Tools. Có sidecar thì agent còn dùng được tool `read_image` để "nhìn kỹ lại"
+  ảnh với câu hỏi cụ thể (đếm số lượng, đọc chữ nhỏ) khi mô tả sẵn có không đủ
 
 ## Cài đặt
 

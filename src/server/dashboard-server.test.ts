@@ -264,7 +264,9 @@ describe("dashboard-server", () => {
     // read_image chưa có sidecar -> UI phải biết để không hiện "bật" giả
     const readImage = data.items.find((t) => t.key === "read_image");
     assert.equal(readImage?.available, false);
-    assert.match(readImage?.unavailableHint ?? "", /Providers/);
+    assert.match(readImage?.unavailableHint ?? "", /Settings/);
+    // Cấu hình đọc ảnh mở từ chính dòng này (không còn nằm ở trang Providers)
+    assert.equal(readImage?.hasSettings, true);
   });
 
   it("PATCH /api/tools/fetch bật/tắt bậc Jina Reader", async () => {

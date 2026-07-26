@@ -4,6 +4,7 @@ import type {
   ManagedAccount,
   SearchSettings,
   ToolCatalogItem,
+  VisionSettings,
 } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
@@ -11,6 +12,7 @@ import { IconSliders } from "../shared/dashboard-icons";
 import { SelectMenu } from "../shared/select-menu";
 import { Badge, ToggleKnob } from "../shared/ui-bits";
 import { ToolChainSettingsModal } from "./tool-chain-settings-modal";
+import { VisionSettingsModal } from "./vision-settings-modal";
 
 /**
  * Trang Tools theo mẫu Built-in Tools của GoClaw: tool nhóm theo mức rủi ro,
@@ -23,22 +25,38 @@ const GROUP_META: Record<ToolCatalogItem["group"], { title: string; hint: string
   action: { title: "Hành động", hint: "Gửi/sửa thứ gì đó trên Zalo - cân nhắc theo account" },
 };
 
+/** Chế độ ảnh đang hiệu lực - hiện ngay trên dòng read_image cho khỏi phải đoán */
+const IMAGE_MODE_BADGE: Record<
+  VisionSettings["imageMode"],
+  { tone: "green" | "blue" | "amber"; text: string }
+> = {
+  native: { tone: "green", text: "Model tự đọc ảnh" },
+  describe: { tone: "blue", text: "Sidecar mô tả ảnh" },
+  hybrid: { tone: "blue", text: "Ảnh + mô tả từ sidecar" },
+  blind: { tone: "amber", text: "Bot không đọc được ảnh" },
+};
+
 export function ToolsPage() {
   const [tools, setTools] = useState<ToolCatalogItem[]>([]);
   const [search, setSearch] = useState<SearchSettings | null>(null);
   const [fetchSettings, setFetchSettings] = useState<FetchSettings | null>(null);
+  const [vision, setVision] = useState<VisionSettings | null>(null);
   const [settingsFor, setSettingsFor] = useState<ToolCatalogItem | null>(null);
   const [accounts, setAccounts] = useState<ManagedAccount[]>([]);
   const [accountId, setAccountId] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState("");
 
+  /** Nạp lại catalog: cấu hình sidecar đổi thì read_image available đổi theo */
+  const reloadTools = () => api.tools().then((res) => setTools(res.items));
+
   useEffect(() => {
-    Promise.all([api.tools(), api.accountsAdmin.list()])
-      .then(([toolsRes, accountsRes]) => {
+    Promise.all([api.tools(), api.accountsAdmin.list(), api.vision()])
+      .then(([toolsRes, accountsRes, visionRes]) => {
         setTools(toolsRes.items);
         setSearch(toolsRes.search);
         setFetchSettings(toolsRes.fetch);
+        setVision(visionRes);
         setAccounts(accountsRes.items);
         if (accountsRes.items[0]) setAccountId(accountsRes.items[0].id);
       })
@@ -134,6 +152,11 @@ export function ToolsPage() {
                               : "DuckDuckGo (miễn phí)"}
                           </Badge>
                         )}
+                        {tool.key === "read_image" && vision && (
+                          <Badge tone={IMAGE_MODE_BADGE[vision.imageMode].tone}>
+                            {IMAGE_MODE_BADGE[vision.imageMode].text}
+                          </Badge>
+                        )}
                         {/* Bật mà thiếu hạ tầng thì model KHÔNG nhận được tool -
                             phải nói thẳng, không để người dùng tưởng bot có khả năng đó */}
                         {!tool.available && <Badge tone="amber">Chưa dùng được</Badge>}
@@ -176,7 +199,19 @@ export function ToolsPage() {
         ))
       )}
 
-      {settingsFor && search && fetchSettings && (
+      {settingsFor?.key === "read_image" && vision && (
+        <VisionSettingsModal
+          vision={vision}
+          onClose={() => setSettingsFor(null)}
+          onSaved={(next) => {
+            setVision(next);
+            // Cấu hình sidecar đổi -> read_image available đổi theo
+            void reloadTools();
+          }}
+        />
+      )}
+
+      {settingsFor && settingsFor.key !== "read_image" && search && fetchSettings && (
         <ToolChainSettingsModal
           tool={settingsFor}
           search={search}
