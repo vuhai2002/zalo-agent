@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { VisionSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
+import { SecretInput } from "../shared/secret-input";
 import { Badge } from "../shared/ui-bits";
 
 /**
@@ -123,11 +124,9 @@ export function VisionSettingsCard() {
             onChange={(e) => setForm({ ...form, model: e.target.value })}
             placeholder="gemini-2.5-flash-lite"
           />
-          <input
-            type="password"
-            className="gc-input w-full"
+          <SecretInput
             value={form.apiKey}
-            onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+            onChange={(apiKey) => setForm({ ...form, apiKey })}
             placeholder={
               settings.sidecar.apiKeyMasked
                 ? `API key (hiện tại: ${settings.sidecar.apiKeyMasked} - bỏ trống để giữ)`

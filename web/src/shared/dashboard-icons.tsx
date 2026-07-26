@@ -152,3 +152,20 @@ export const IconHeart = (p: IconProps) => (
     <path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.2 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10Z" />
   </svg>
 );
+
+export const IconEye = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+export const IconEyeOff = (p: IconProps) => (
+  // Cùng geometry với IconEye + nét gạch chéo - vẽ lại mắt bằng arc tay dễ
+  // lệch cong thành cục rối ở cỡ 16px (đã dính 1 lần)
+  <svg {...base(p)}>
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+    <circle cx="12" cy="12" r="3" />
+    <path d="M5.5 3.5l13 17" />
+  </svg>
+);

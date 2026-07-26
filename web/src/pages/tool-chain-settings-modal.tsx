@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FetchSettings, SearchSettings, ToolCatalogItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
+import { SecretInput } from "../shared/secret-input";
 import { ToggleKnob } from "../shared/ui-bits";
 
 /**
@@ -138,14 +139,12 @@ export function ToolChainSettingsModal({
                     (hiện tại: {search.braveApiKeyMasked})
                   </span>
                 </label>
-                <input
+                <SecretInput
                   id="brave-key"
-                  type="password"
                   value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
+                  onChange={setApiKey}
                   placeholder={search.hasBraveApiKey ? "Để trống nếu giữ key cũ" : "Dán key vào đây"}
-                  autoComplete="off"
-                  className="gc-input mt-1.5 w-full"
+                  className="mt-1.5"
                 />
                 <p className="mt-1.5 text-xs text-ink-soft">
                   Lấy key miễn phí tại{" "}

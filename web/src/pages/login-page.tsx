@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../dashboard-api-client";
+import { SecretInput } from "../shared/secret-input";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -38,13 +39,7 @@ export function LoginPage() {
         </div>
 
         <label className="mb-1.5 block text-[13px] font-medium text-ink">Mật khẩu dashboard</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoFocus
-          className="gc-input mb-3 w-full"
-        />
+        <SecretInput value={password} onChange={setPassword} autoFocus className="mb-3" />
         {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
 
         <button

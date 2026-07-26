@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ProviderSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { SecretInput } from "../shared/secret-input";
 import { Badge } from "../shared/ui-bits";
 import { VisionSettingsCard } from "./vision-settings-card";
 
@@ -112,11 +113,9 @@ export function ProvidersPage() {
           <label className="mb-1.5 block text-[13px] font-medium text-ink">
             API key <span className="font-normal text-ink-soft">(hiện tại: {settings.apiKeyMasked})</span>
           </label>
-          <input
-            type="password"
-            className="gc-input w-full"
+          <SecretInput
             value={form.apiKey}
-            onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+            onChange={(apiKey) => setForm({ ...form, apiKey })}
             placeholder="Bỏ trống để giữ key hiện tại"
           />
           <p className="mt-1.5 text-xs text-ink-soft/80">
