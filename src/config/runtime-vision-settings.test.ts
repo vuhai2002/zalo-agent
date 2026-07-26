@@ -39,7 +39,7 @@ describe("runtime-vision-settings", () => {
     store.updateVisionSettings({ sidecarBaseUrl: "https://gemini.test/v1beta/openai" });
     assert.equal(store.isSidecarConfigured(), false, "mới có base URL - chưa đủ");
 
-    store.updateVisionSettings({ sidecarModel: "gemini-2.5-flash-lite", sidecarApiKey: "AIza-secret" });
+    store.updateVisionSettings({ sidecarModel: "gemini-3.5-flash-lite", sidecarApiKey: "AIza-secret" });
     const s = store.getVisionSettings();
     assert.equal(store.isSidecarConfigured(s), true);
     assert.equal(s.sidecar.apiKey, "AIza-secret", "key giải mã lại đúng nguyên văn");

@@ -476,6 +476,30 @@ với GoClaw (`read_image`) và Hermes (`vision_analyze` + hint "closer look").
   cá hỏi "có mấy con cá màu vàng" -> kỳ vọng agent gọi read_image rồi trả
   lời có số đếm từ Gemini, log tool `read_image` hiện input câu hỏi
 
+## V2.9.3 - Đính chính model sidecar: 2.5-flash-lite đã chết (2026-07-27)
+
+User cấu hình sidecar theo hướng dẫn (`gemini-2.5-flash-lite`) rồi gửi 3 ảnh
+trang Rate Limit của AI Studio nhờ soi lại. Test sống bằng chính key đã lưu
+(đọc từ DB, giải mã, không in) phát hiện:
+
+- **`gemini-2.5-flash-lite` trả 404 "Not Found"** khi gọi thật, dù vẫn nằm
+  trong `/models` - Google đang rút serving thế hệ 2.5; quota trên trang Rate
+  Limit cũng bị bóp còn 20 lượt/ngày. Con số "1000 lượt/ngày" ghi ở V2.9 là
+  dữ liệu web thời 2.5 còn là bản chính - hết đúng
+- Test 4 ứng viên thay với ảnh thật: `gemini-3.5-flash-lite` OK (15 RPM /
+  500 RPD trên account user), `gemini-3.1-flash-lite` OK (500 RPD),
+  `gemini-flash-lite-latest` OK (alias - tránh vì Google đổi đích âm thầm),
+  `gemma-4-26b-a4b-it` OK nhưng RÒ `<thought>` thô vào output + TPM 16K thấp
+  (quota 14.4K/ngày rất to nhưng không dùng làm mắt được)
+
+- [x] Đổi khuyến nghị mặc định sang `gemini-3.5-flash-lite` ở cả 4 chỗ:
+  `.env.example`, `.env.production.example`, placeholder card Đọc ảnh, fixture
+  test; system-architecture ghi lại vụ 404 + lý do loại Gemma
+- [x] Bài học ghi docs: quota free Gemini phải đọc từ trang Rate Limit của
+  CHÍNH account (thay đổi theo thế hệ model + tier), không tin số liệu web
+- [ ] User đổi model trên dashboard thành `gemini-3.5-flash-lite` + bấm Test
+  sidecar (key giữ nguyên)
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic

@@ -153,7 +153,7 @@ describe("resolveImageContextMode + buildTurnMessages", () => {
 
     visionStore.updateVisionSettings({
       sidecarBaseUrl: "https://gemini.test/v1beta/openai",
-      sidecarModel: "gemini-2.5-flash-lite",
+      sidecarModel: "gemini-3.5-flash-lite",
       sidecarApiKey: "AIza-x",
     });
     assert.equal(await content.resolveImageContextMode(), "describe");

@@ -50,7 +50,7 @@ function unconfigureSidecar(): void {
 function configureSidecar(): void {
   visionStore.updateVisionSettings({
     sidecarBaseUrl: "https://gemini.test/v1beta/openai",
-    sidecarModel: "gemini-2.5-flash-lite",
+    sidecarModel: "gemini-3.5-flash-lite",
     sidecarApiKey: "AIza-x",
   });
 }

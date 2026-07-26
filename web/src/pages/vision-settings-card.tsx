@@ -108,7 +108,7 @@ export function VisionSettingsCard() {
         <p className="mb-3 text-[13px] font-medium text-ink">
           Model sidecar đọc ảnh thuê
           <span className="ml-2 font-normal text-ink-soft">
-            (Gemini free là lựa chọn tiêu chuẩn - 1000 lượt/ngày với flash-lite)
+            (Gemini free là lựa chọn tiêu chuẩn - ~500 lượt/ngày với flash-lite đời mới)
           </span>
         </p>
         <div className="space-y-3">
@@ -122,7 +122,7 @@ export function VisionSettingsCard() {
             className="gc-input w-full"
             value={form.model}
             onChange={(e) => setForm({ ...form, model: e.target.value })}
-            placeholder="gemini-2.5-flash-lite"
+            placeholder="gemini-3.5-flash-lite"
           />
           <SecretInput
             value={form.apiKey}
