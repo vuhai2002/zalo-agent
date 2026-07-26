@@ -245,6 +245,48 @@ caching mà client tự làm - không phải chỉnh gì ở router.
 - [ ] Chưa test Zalo thật: gửi vài tin trong cùng cuộc chat, kỳ vọng `cachedTokens > 0`
   từ lượt thứ 2 và `CACHED TOKENS` trên dashboard 9Router tăng
 
+## V2.6 - web_fetch 2 tầng + cấu hình search trên dashboard (2026-07-26)
+
+Bot không tra được giá vàng. Tái hiện ra HAI lỗi riêng biệt, không phải một:
+
+- `web_search` trả 0 kết quả: DuckDuckGo chặn IP (HTTP 202 + trang challenge trên
+  cả `html.` lẫn `lite.`). Thử SearXNG công khai (searx.be) cũng "Verifying your
+  browser". Scraping miễn phí là đường cụt, không phải bug code
+- `web_fetch` bị 403/406: `safe-remote-download` KHÔNG gửi header nào - không
+  User-Agent, không Accept. Đây là bug thật của mình
+
+Đã làm:
+- [x] Thêm header trình duyệt vào fetch tự làm. Kết quả đo: vnexpress từ 406 thành
+  chạy được ở tầng 1 trong 503ms
+- [x] `jina-reader-fallback.ts`: tầng 2 khi tầng 1 hỏng hoặc ra dưới 200 ký tự.
+  Cứu được `giavang.doji.vn` (tầng 1 ra 11 ký tự vì trang render JS -> Jina ra 938).
+  Không cần key, tắt bằng `WEB_FETCH_FALLBACK_ENABLED`. Phải soi dòng
+  `Warning: Target URL returned error` vì Jina trả 200 cả khi trang đích chặn nó
+- [x] `runtime-search-settings.ts`: provider + key Brave lưu DB (mã hóa), sửa ở
+  trang Tools. Chọn Brave phải có key (chặn ở store, không chỉ ở UI); mất key thì
+  tự hạ về DDG. DDG luôn là lưới đỡ cuối, không tắt được
+- [x] Tách `secret-cipher.ts` dùng chung - trước đó encrypt/decrypt AES-GCM chỉ
+  nằm trong runtime-llm-settings, thêm chỗ thứ hai là bắt đầu có nguy cơ lệch
+- [x] Test: 277 pass (thêm jina-reader-fallback, runtime-search-settings, 4 case
+  API cấu hình search)
+- [x] UI theo đúng mẫu Extractor Chain của GoClaw: nút Settings trên DÒNG TOOL mở
+  modal liệt kê các bậc (#1, #2) kèm toggle từng bậc; bậc cuối khoá cứng hiện
+  nhãn "Luôn bật". Bản đầu để cấu hình thành khối rời cuối trang - bị phản hồi
+  "2 nơi khó hiểu", đã bỏ. `WEB_FETCH_FALLBACK_ENABLED` cũng chuyển vào DB để
+  bật/tắt bậc Jina ngay trên UI
+- [x] Lỗi UI tự tìm ra khi kiểm bằng browser: `ToggleKnob` dùng `<span>` mặc định
+  `display: inline` mà width/height KHÔNG áp dụng cho inline element - núm gạt chỉ
+  có kích thước khi cha tình cờ là flex container, đặt trong nút thường thì co về
+  0x0 và biến mất hẳn. Sửa ở chính primitive (`inline-block`) thay vì vá từng chỗ gọi
+- [ ] Chưa test Zalo thật: hỏi giá vàng sau khi anh nhập key Brave vào trang Tools
+
+Đã khảo sát và KHÔNG chọn (ghi lại để khỏi khảo sát lại):
+- `POST /v1/search` của 9Router: mọi provider (Tavily, Exa, Brave, Serper...) đều
+  cần API key; chỉ SearXNG `authType: "none"` nhưng phải tự dựng instance. Cùng
+  bài toán key mà thêm một tầng
+- `POST /v1/web/fetch` của 9Router: cũng cần key cho firecrawl/tavily/exa. Gọi
+  thẳng r.jina.ai ngắn hơn và không phụ thuộc cấu hình router
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic
