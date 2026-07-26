@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 // Module thuần (chỉ import type) - không chạm env/DB nên import tĩnh được
-import { historyToModelMessages } from "./history-to-model-messages.js";
+import { collectImagesWithinBudget, historyToModelMessages } from "./history-to-model-messages.js";
 import type { StoredMessage } from "../conversation/history-store.js";
 
 /** Loader giả: trả base64 đánh dấu theo path để assert đúng ảnh nào được nạp */
@@ -83,5 +83,46 @@ describe("history-to-model-messages", () => {
     const content = out[0]!.content as { type: string; text?: string }[];
     const textPart = content.find((p) => p.type === "text");
     assert.match(textPart!.text!, /Hải: xem ảnh này \[gửi kèm 1 ảnh\]$/);
+  });
+
+  it("chế độ describe: thay pixel bằng text mô tả, KHÔNG gọi loader ảnh", () => {
+    let loaderCalls = 0;
+    const out = historyToModelMessages(
+      [userMsg("vé số [gửi kèm 1 ảnh]", ["media/a/t/ve-0.jpg"])],
+      3,
+      () => {
+        loaderCalls++;
+        return fakeLoader("x");
+      },
+      (relPath) => `vé số Đà Lạt, số 123456 (${relPath})`,
+    );
+
+    const content = out[0]!.content as { type: string; text?: string }[];
+    assert.equal(loaderCalls, 0, "describe mode không được nạp pixel");
+    assert.equal(content.filter((p) => p.type === "file").length, 0);
+    assert.match(content[0]!.text!, /^\[Mô tả ảnh đính kèm: vé số Đà Lạt, số 123456/);
+  });
+
+  it("chế độ describe: ảnh chưa có mô tả rơi về text thuần sẵn có", () => {
+    const out = historyToModelMessages(
+      [userMsg("cũ [gửi kèm 1 ảnh]", ["media/a/t/cu-0.jpg"])],
+      3,
+      fakeLoader,
+      () => null,
+    );
+    assert.equal(typeof out[0]!.content, "string");
+    assert.match(String(out[0]!.content), /gửi kèm 1 ảnh/);
+  });
+
+  it("collectImagesWithinBudget trả đúng các ảnh sẽ vào context theo ngân sách", () => {
+    const history = [
+      userMsg("1", ["media/a/t/1-0.jpg"]),
+      userMsg("2", ["media/a/t/2-0.jpg", "media/a/t/2-1.jpg"]),
+      userMsg("3", ["media/a/t/3-0.jpg"]),
+    ];
+    const paths = collectImagesWithinBudget(history, 2);
+    // Ưu tiên tin mới: ảnh của tin 3 + 1 ảnh đầu của tin 2
+    assert.deepEqual(paths.sort(), ["media/a/t/2-0.jpg", "media/a/t/3-0.jpg"]);
+    assert.deepEqual(collectImagesWithinBudget(history, 0), []);
   });
 });

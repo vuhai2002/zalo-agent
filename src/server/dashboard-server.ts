@@ -24,6 +24,7 @@ import { overviewRoutes } from "./routes/overview-routes.js";
 import { providerRoutes } from "./routes/provider-routes.js";
 import { threadRoutes } from "./routes/thread-routes.js";
 import { toolRoutes } from "./routes/tool-routes.js";
+import { visionRoutes } from "./routes/vision-routes.js";
 
 const log = createLogger("dashboard-server");
 const SESSION_COOKIE = "dashboard_session";
@@ -111,6 +112,7 @@ export function buildDashboardApp(): Hono {
   app.route("/api/accounts", accountRoutes);
   app.route("/api/agents", agentRoutes);
   app.route("/api/tools", toolRoutes);
+  app.route("/api/vision", visionRoutes);
 
   // API không khớp route nào phải trả JSON 404, không được rơi xuống SPA
   // fallback bên dưới (client fetch JSON mà nhận HTML thì lỗi rất khó đọc)

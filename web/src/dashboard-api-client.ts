@@ -163,6 +163,22 @@ export const api = {
       body: JSON.stringify(update),
     }),
 
+  vision: () => request<VisionSettings>("/api/vision"),
+  updateVision: (update: {
+    mode?: "auto" | "on" | "off";
+    sidecarBaseUrl?: string;
+    sidecarModel?: string;
+    sidecarApiKey?: string;
+  }) =>
+    request<VisionSettings & { ok: true }>("/api/vision", {
+      method: "PATCH",
+      body: JSON.stringify(update),
+    }),
+  testVisionSidecar: () =>
+    request<{ ok: boolean; reply?: string; error?: string }>("/api/vision/test", {
+      method: "POST",
+    }),
+
   provider: () => request<ProviderSettings>("/api/provider"),
   updateProvider: (update: Partial<ProviderSettings> & { apiKey?: string }) =>
     request<ProviderSettings & { ok: true }>("/api/provider", {
@@ -240,4 +256,12 @@ export type ProviderSettings = {
   model: string;
   apiKeyMasked: string;
   hasOverride: boolean;
+};
+
+export type VisionSettings = {
+  /** Model chính có đọc được ảnh không: auto = tự hỏi router */
+  mode: "auto" | "on" | "off";
+  sidecar: { baseUrl: string; model: string; apiKeyMasked: string; configured: boolean };
+  /** Chế độ ảnh đang hiệu lực: native = model tự đọc, describe = sidecar mô tả, blind = bỏ ảnh */
+  imageMode: "native" | "describe" | "blind";
 };

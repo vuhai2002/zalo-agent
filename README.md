@@ -7,6 +7,8 @@ Bot AI thường trú trên Zalo (tài khoản cá nhân, multi-account): nhận
 - History + memory: SQLite (`node:sqlite` built-in), theo account + thread; rolling summary + fact bền (tool `save_memory`)
 - Dashboard web: Hono + React (tone xanh Zalo) - xem hội thoại, contacts, memory, bật/tắt bot per thread, bật/tắt tool per account, đổi LLM provider
 - Web search miễn phí qua DuckDuckGo (không cần key); điền `BRAVE_SEARCH_API_KEY` (free tier) nếu muốn kết quả tốt hơn
+- Model chính không đọc được ảnh? Bot tự phát hiện (hỏi router) và có thể thuê model vision phụ
+  (Gemini free tier) mô tả ảnh thành chữ - cấu hình ở card "Đọc ảnh" trang Providers
 
 ## Cài đặt
 

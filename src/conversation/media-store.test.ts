@@ -7,6 +7,7 @@ import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 // media-store đọc dataDir từ env lúc import nên phải setupTestEnv trước, import động sau
 let dataDir: string;
 let store: typeof import("./media-store.js");
+let database: typeof import("./database.js");
 type PersistableMessage = import("./media-store.js").PersistableMessage;
 
 // 1x1 PNG hợp lệ - đủ cho test lưu/đọc, không cần ảnh thật
@@ -22,9 +23,15 @@ const downloadFail = async () => null;
 before(async () => {
   dataDir = setupTestEnv({ MEDIA_RETENTION_DAYS: "7" });
   store = await import("./media-store.js");
+  // media-store giờ kéo theo image-description-store (DB) - phải đóng DB trước
+  // khi xóa thư mục tạm, Windows khóa file đang mở nên rmSync sẽ EPERM
+  database = await import("./database.js");
 });
 
-after(() => cleanupTestEnv(dataDir));
+after(() => {
+  database.closeDatabase();
+  cleanupTestEnv(dataDir);
+});
 
 describe("media-store", () => {
   it("persist ảnh: lưu file đúng chỗ, gắn localPath, load lại được base64", async () => {

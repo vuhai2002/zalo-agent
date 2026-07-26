@@ -64,6 +64,19 @@ const envSchema = z.object({
   // vnexpress. Đánh đổi: chậm hơn nhiều và URL đi qua bên thứ ba, tắt được ở đây.
   WEB_FETCH_FALLBACK_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
 
+  // Model chính có đọc được ảnh không. auto = tự hỏi router qua GET {baseUrl}/models
+  // (9Router trả capabilities.vision cho từng model; endpoint khác không có field
+  // này thì coi như đọc được - giữ hành vi cũ). on/off = ép tay, dùng khi endpoint
+  // không phải 9Router mà model thật sự không có vision.
+  LLM_VISION_MODE: z.enum(["auto", "on", "off"]).default("auto"),
+  // Model phụ "đọc ảnh thuê" khi model chính không có vision: mô tả ảnh thành text
+  // 1 lần (cache trong DB), model chính đọc text. Gemini free tier qua endpoint
+  // OpenAI-compatible là lựa chọn tiêu chuẩn (GoClaw cũng dùng gemini làm mắt).
+  // Cấu hình được từ dashboard (trang Providers) - env chỉ là giá trị khởi điểm.
+  VISION_SIDECAR_BASE_URL: z.preprocess(emptyToUndefined, z.string().startsWith("http").optional()),
+  VISION_SIDECAR_MODEL: z.string().default(""),
+  VISION_SIDECAR_API_KEY: z.string().default(""),
+
   HISTORY_CONTEXT_LIMIT: z.coerce.number().int().min(1).max(200).default(20),
   // Ảnh cũ trong history được nạp lại vào context để model "nhớ" ảnh đã nhận.
   // MỖI ảnh tốn ~1500-2500 token và bị gửi lại ở MỌI step của lượt agent, nên

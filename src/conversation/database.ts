@@ -105,6 +105,15 @@ function runMigrations(): void {
       expires_at INTEGER NOT NULL
     );
 
+    -- Cache mô tả ảnh do vision sidecar sinh ra (khi model chính không đọc được
+    -- ảnh). Key theo đường dẫn file trong data/media - mỗi ảnh chỉ mô tả 1 lần.
+    CREATE TABLE IF NOT EXISTS image_descriptions (
+      rel_path TEXT PRIMARY KEY,
+      description TEXT NOT NULL,
+      model TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+
     CREATE TABLE IF NOT EXISTS agent_turns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       account_id TEXT NOT NULL,

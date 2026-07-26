@@ -5,6 +5,7 @@ import { startDailyTask } from "../shared/daily-task-schedule.js";
 import { downloadImage, type DownloadedImage } from "../shared/download-image.js";
 import { createLogger } from "../shared/logger.js";
 import { estimateImageTokens, readImageSize } from "../zalo/zalo-image-variant.js";
+import { pruneExpiredImageDescriptions } from "./image-description-store.js";
 
 const log = createLogger("media-store");
 const mediaDir = path.join(dataDir, "media");
@@ -141,6 +142,10 @@ function removeExpiredIn(dir: string, cutoff: number): number {
 export function startMediaCleanupSchedule(): void {
   startDailyTask("media-cleanup", () => {
     const removed = cleanupExpiredMedia();
-    if (removed > 0) log.info({ removed }, "Đã dọn file media hết hạn");
+    // Mô tả ảnh của sidecar dọn cùng nhịp: quá hạn thì cả pixel lẫn mô tả cùng đi
+    const prunedDescriptions = pruneExpiredImageDescriptions(env.MEDIA_RETENTION_DAYS);
+    if (removed > 0 || prunedDescriptions > 0) {
+      log.info({ removed, prunedDescriptions }, "Đã dọn file media + mô tả ảnh hết hạn");
+    }
   });
 }

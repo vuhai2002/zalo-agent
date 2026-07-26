@@ -381,6 +381,46 @@ Trả món nợ ghi ở cuối V2.7: 1 file 309 dòng gánh 3 việc không liê
 - [x] Giữ nguyên hành vi - không sửa logic, không đổi public API. 306 test pass,
   typecheck sạch
 
+## V2.9 - Model không vision vẫn dùng được, sidecar đọc ảnh thuê (2026-07-26)
+
+Trả lời câu hỏi của user: "dùng model không hỗ trợ đọc ảnh thì sao?". Trước đây
+bot luôn đính base64 vào request: qua 9Router thì router tự lột ảnh (bot bỗng
+"mù" không báo trước, base64 vẫn tốn băng thông), endpoint khác thì HTTP 400
+chết cả lượt. Research trước khi làm: Hermes `image_input_mode` auto|native|text
+(`agent/image_routing.py`), GoClaw `read_image` tool + vision provider chain,
+9Router `translator/concerns/modality.js` + `/v1/models` trả capabilities.
+
+- [x] Phát hiện vision `auto|on|off` (mặc định auto): tra `GET {baseUrl}/models`,
+  đọc `capabilities.vision` (đúng nguồn icon con mắt trên UI 9Router), cache 10
+  phút theo baseUrl. Model lạ/combo/endpoint thường không có field -> coi như có
+  vision (giữ hành vi cũ). Anthropic trực tiếp luôn true. on/off ép tay cho
+  endpoint ngoài 9Router
+- [x] 3 chế độ ảnh mỗi lượt agent (`agent-turn-content.ts`, log `imageMode`):
+  native = đính pixel như cũ; describe = sidecar mô tả ảnh thành text; blind =
+  bỏ ảnh + ghi chú dặn bot nói thật "không xem được ảnh", history hạ ngân sách
+  ảnh về 0 (tự rơi về text "[gửi kèm N ảnh]" sẵn có)
+- [x] Vision sidecar "đọc ảnh thuê" (mô hình auxiliary.vision của Hermes): model
+  vision phụ qua endpoint OpenAI-compatible - đã kiểm chứng Gemini
+  `https://generativelanguage.googleapis.com/v1beta/openai/` còn sống 7/2026,
+  nhận ảnh base64 qua image_url, beta nhưng không có dấu hiệu deprecated.
+  Free tier flash-lite 1000 lượt/ngày - chỉ tốn khi có ảnh MỚI vì mô tả cache
+  vĩnh viễn trong DB (bảng `image_descriptions`, key theo rel_path media,
+  prompt ép chép nguyên văn chữ + số cho use case vé số/hóa đơn)
+- [x] Mô tả cả ảnh history sắp vào context (gồm ảnh passive-listen chưa qua
+  lượt agent nào - nhóm gửi vé số rồi mới @mention bot vẫn đọc được); dọn mô tả
+  cùng nhịp media cleanup theo MEDIA_RETENTION_DAYS
+- [x] Cấu hình: env `LLM_VISION_MODE` + `VISION_SIDECAR_*` (đủ 3 nơi theo quy
+  ước) + runtime settings đè từ dashboard (key sidecar mã hóa AES-256-GCM);
+  card "Đọc ảnh (Vision)" trên trang Providers: badge chế độ đang hiệu lực,
+  chọn mode, nhập sidecar, nút Test gọi thật với ảnh 1x1
+- [x] Test: 330 pass (runtime-vision-settings, model-vision-detection với
+  fetcher tiêm, vision-sidecar với caller tiêm, describe-mode của
+  history-to-model-messages, blind-mode của agent-turn-content; sửa
+  media-store.test đóng DB trước khi dọn thư mục tạm - EPERM trên Windows)
+- [ ] Chưa test thật: điền key Gemini + đổi model chính sang model không vision
+  (vd ds/deepseek-v4-pro) -> gửi ảnh, kỳ vọng bot vẫn mô tả được nội dung;
+  bấm Test sidecar trên UI
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic

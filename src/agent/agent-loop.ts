@@ -1,17 +1,15 @@
-import { generateText, stepCountIs, type ModelMessage, type UserContent } from "ai";
+import { generateText, stepCountIs } from "ai";
 import type { API } from "zca-js";
 import type { AccountConfig } from "../config/account-store.js";
 import { getAgentForAccount } from "../config/agent-store.js";
 import { env } from "../config/env.js";
 import { getRecentMessages } from "../conversation/history-store.js";
-import { loadStoredImage } from "../conversation/media-store.js";
 import { getMemoriesForContext } from "../conversation/memory-store.js";
 import { getThreadSummary } from "../conversation/thread-store.js";
-import { downloadImageAsBase64 } from "../shared/download-image.js";
 import { createLogger } from "../shared/logger.js";
 import { TECHNICAL_ERROR_REPLY } from "../zalo/send-reply-in-parts.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
-import { historyToModelMessages } from "./history-to-model-messages.js";
+import { buildTurnMessages } from "./agent-turn-content.js";
 import { resolveLanguageModel, resolveReasoningOptions } from "./llm-provider.js";
 import { buildSystemPrompt } from "./persona-prompt.js";
 import { buildAgentTools } from "./tools/index.js";
@@ -68,15 +66,13 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
   // Tin cuối đại diện cho lượt: tools (thả reaction, quote) tác động lên tin này
   const latest = batch[batch.length - 1]!;
 
-  const history = getRecentMessages(account.id, latest.threadId);
-  // Kèm lại tối đa N ảnh gần nhất từ đĩa để model xem lại được ảnh cũ
-  const messages: ModelMessage[] = historyToModelMessages(
-    history,
-    env.HISTORY_IMAGE_CONTEXT_LIMIT,
-    loadStoredImage,
-  );
+  // Não của account: persona + model/maxSteps override (fallback cấu hình chung)
+  const agent = getAgentForAccount(account.agentId);
 
-  messages.push({ role: "user", content: await buildCurrentTurnContent(batch) });
+  const history = getRecentMessages(account.id, latest.threadId);
+  // Ảnh xử lý theo chế độ: native (model tự đọc) / describe (sidecar mô tả) /
+  // blind (bỏ ảnh, dặn bot nói thật) - quyết định theo model đang hiệu lực
+  const { messages, imageMode } = await buildTurnMessages({ history, batch, override: agent });
 
   // Memory: fact bền (lọc theo quy tắc privacy) + summary phần hội thoại cũ
   const memory = {
@@ -88,9 +84,6 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
     }),
     threadSummary: getThreadSummary(account.id, latest.threadId).summary,
   };
-
-  // Não của account: persona + model/maxSteps override (fallback cấu hình chung)
-  const agent = getAgentForAccount(account.agentId);
 
   const runOnce = () =>
     generateText({
@@ -152,6 +145,8 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
       accountId: account.id,
       threadId: latest.threadId,
       batchSize: batch.length,
+      // native = model tự đọc ảnh; describe = sidecar mô tả; blind = bỏ ảnh
+      imageMode,
       steps: result.steps.length,
       finishReason: result.finishReason,
       // Model THẬT đã trả lời (router có thể âm thầm route sang model khác)
@@ -189,31 +184,4 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
       steps: result.steps.length,
     },
   };
-}
-
-/** Gộp toàn bộ ảnh + text trong batch thành content của 1 lượt user */
-async function buildCurrentTurnContent(batch: ParsedMessage[]): Promise<UserContent> {
-  const parts: Exclude<UserContent, string> = [];
-
-  for (const msg of batch) {
-    for (const image of msg.images) {
-      // Ảnh đã persist trước đó (account-manager) thì đọc từ đĩa - không tải lại;
-      // persist lỗi thì rơi về tải thẳng từ URL Zalo như cũ
-      const stored = image.localPath ? loadStoredImage(image.localPath) : null;
-      const downloaded = stored ?? (await downloadImageAsBase64(image.url));
-      if (downloaded) {
-        // Part "file" thay cho "image": kiểu image bị AI SDK v7 đánh dấu
-        // deprecated (in cảnh báo mỗi ảnh) và sẽ xóa ở bản sau
-        parts.push({ type: "file", data: downloaded.base64, mediaType: downloaded.mediaType });
-      }
-    }
-  }
-
-  const texts = batch.map((m) => m.text.trim()).filter(Boolean);
-  const latest = batch[batch.length - 1]!;
-  const label = latest.isGroup ? `${latest.senderName}: ` : "";
-  const body = texts.length > 0 ? texts.join("\n") : "(người dùng gửi ảnh, không kèm chữ)";
-  parts.push({ type: "text", text: `${label}${body}` });
-
-  return parts;
 }
