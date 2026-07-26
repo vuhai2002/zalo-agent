@@ -142,7 +142,110 @@ từ ký tự 8314 nên bị cắt đúng trước phần có số.
 - [ ] Chưa test Zalo thật: gửi lại ảnh vé số -> kỳ vọng bot search, fetch, đối
   chiếu và trả lời trúng/trượt kèm nguồn + ngày quay
 
-## V2.5.2 - Không làm vội (ghi lại để khỏi quên)
+## V2.5.2 - Vòng 2 vụ dò vé số: nguồn xấu + tự neo thất bại cũ (2026-07-26)
+
+Thử lại sau V2.5.1 vẫn thua dù extraction đã tốt (audit 5 nguồn: 3 trang cho bảng
+sạch ngay đầu text). Lượt mới steps=3, câu trả lời gần như COPY câu thất bại cũ
+trong history - model tự neo vào tiền lệ xấu thay vì tin dữ liệu tool mới.
+
+- [x] Bảng HTML5 bỏ thẻ đóng: xoso.com.vn viết `<tr><td>8<td><span>36</span>` không
+  có `</td></tr>` (hợp lệ HTML5) - rule bám thẻ đóng làm cả bảng dính thành 1 dòng
+  "836791064644...". Đổi sang bám thẻ MỞ tr/td/th
+- [x] Số trong span liền kề dính chùm: chèn khoảng trắng ở ranh giới `</span><span`
+  (span đơn giữa từ không bị chẻ)
+- [x] Persona: thêm quy tắc "lượt trước tra không ra là chuyện cũ - lượt mới luôn
+  thử tool lại từ đầu, không lặp lại câu trả lời thất bại trong lịch sử"
+- [x] Log từng tool call (onStepFinish: tên + input + 300 ký tự đầu output) - vụ này
+  chẩn đoán phải đi đường vòng qua DB + tái hiện tay vì không thấy bot fetch gì
+- [x] Audit lại cả 4 nguồn sống: minhngoc (bảng tại ký tự 656), xs.com.vn (598),
+  xoso.net.vn (107), xoso.com.vn (333) - tất cả ra bảng đủ nhãn giải + số
+- [x] **Bắt được bệnh thật nhờ log mới**: lượt 00:17 hiện nguyên hình
+  `steps=1, toolCalls=[], usage toàn 0, không lỗi` - 9Router thỉnh thoảng trả
+  HTTP 200 với completion RỖNG. Chuỗi turn chập chờn (00:05 rỗng, 00:07 chạy ngon
+  34k token, 00:17 rỗng) chứng minh là upstream flaky, không phải code bot.
+  `maxRetries` của SDK không cứu vì response "thành công"
+- [x] Chống chịu glitch router: nhận diện chữ ký rỗng (text trống + 0 tool call +
+  0 token) -> tự retry 1 lần; vẫn rỗng thì trả lời fallback "đang trục trặc kỹ
+  thuật" thay vì im lặng bỏ treo người nhắn. Lượt "chỉ thả reaction" hợp lệ (có
+  tool call + token) không dính nhánh này. Log thêm finishReason mỗi lượt
+- [ ] Gốc bệnh nằm ở 9Router (ngoài repo này): soi log router xem vì sao trả 200
+  rỗng - tối 25/07 lặp ít nhất 5 lần
+- [ ] Chưa test Zalo thật: gửi lại ảnh vé - lưu ý history vẫn còn 2 câu thất bại cũ,
+  persona mới phải thắng được cái neo đó
+
+## V2.5.3 - Bật thinking cho model (2026-07-26)
+
+Lượt dò vé 07:30: steps=4, input 51k token - dữ liệu bảng kết quả ĐÃ vào context
+mà model vẫn kết luận "chưa lấy được bảng", kèm đọc số trên vé thiếu cẩn thận.
+Chẩn đoán: thiếu bước NGHĨ, không phải thiếu dữ liệu (log cũ cho thấy
+reasoningTokens luôn = 0 - thinking chưa từng bật).
+
+- [x] Học chokepoint resolve_reasoning_config của Hermes (một nơi quyết định
+  tham số thinking cho mọi surface, map theo provider): `reasoning-options.ts`
+  thuần + `resolveReasoningOptions` trong llm-provider dùng đúng thứ tự ưu tiên
+  provider như resolveLanguageModel
+- [x] `LLM_REASONING_EFFORT` (off/low/medium/high/xhigh, mặc định medium):
+  openai-compatible gửi `reasoning_effort` chuẩn OpenAI qua router;
+  anthropic trực tiếp dùng adaptive thinking + effort. off = tắt tường minh
+- [x] Log thêm `model` (model THẬT trả lời - lộ việc router âm thầm route sang
+  model khác) và `reasoningEffort` mỗi lượt. Kiểm chứng thinking hoạt động bằng
+  `usage.outputTokenDetails.reasoningTokens > 0`
+- [x] Summarizer + nút test kết nối không bật thinking - việc nhẹ, không đốt token
+- [ ] Chưa test Zalo thật: gửi lại ảnh vé, soi log xem reasoningTokens > 0 và
+  model có đọc bảng + đối chiếu đúng không. Nếu reasoningTokens vẫn = 0 thì
+  9Router đang nuốt tham số reasoning_effort - phải sửa ở router
+
+## V2.5.4 - Giảm token: ảnh mới là khoản chi chính (2026-07-26)
+
+Lượt dò vé đã chạy đúng nhưng tốn 70.824 token input cho 1 lượt (5 request).
+Đo trên dashboard 9Router: request text thuần ~2.600 token, request có ảnh
+~12.650 - chênh ~10.000 chính là 4 tấm ảnh (1 mới + 3 nạp lại từ history),
+nhân tiếp với số step vì mỗi step gửi lại toàn bộ hội thoại. Persona chỉ
+~1.087 token, không phải thủ phạm.
+
+- [x] **Ảnh Zalo lấy cỡ `normal` thay vì `hd`**: parser đang lấy `content.hd`
+  đầu tiên (bản to nhất - đúng cái badge "HD" trên tin nhắn). Ảnh vé đo được
+  977x2128 px ~2772 token mỗi lần vào context. Zalo gửi kèm sẵn nhiều cỡ nên
+  chỉ cần đổi thứ tự ưu tiên qua `zalo-image-variant.ts` + `ZALO_IMAGE_QUALITY`,
+  KHÔNG cần thư viện resize
+- [x] `HISTORY_IMAGE_CONTEXT_LIMIT` mặc định 3 -> 1: mỗi ảnh cũ tốn ~2500 token
+  ở MỌI step, mà nhu cầu thật chỉ là "hỏi lại về ảnh vừa gửi"
+- [x] Persona thêm guidance gọi tool song song (chưng cất
+  `PARALLEL_TOOL_CALL_GUIDANCE` của Hermes): gộp các tool độc lập vào 1 step để
+  giảm số lần gửi lại cả hội thoại
+- [x] Log kích thước ảnh thật + token ước lượng khi lưu ảnh - đo được hiệu quả
+  thay vì đoán
+- [x] Sửa lỗi tự tạo: parser lỡ import env (module vốn thuần) - test dùng import
+  tĩnh sẽ chết trên máy không có `.env`. Chuyển sang truyền `imageQuality` vào
+  như cách `botEnabledForThread` của allowlist-filter đang làm
+
+Ghi chú về caching: ban đầu kết luận nhầm là "phải cấu hình ở 9Router". Sau khi
+clone source 9Router về đọc thì hoá ra client TỰ LÀM được - xem V2.5.5 bên dưới.
+9Router còn có trang Token Saver (nén tool output RTK, nén prompt Headroom) - chưa bật.
+
+## V2.5.5 - Bật prompt caching từ phía bot (2026-07-26)
+
+Clone `9router` (MIT) về `zalo-agent-references/` đọc source, tìm được đường bật
+caching mà client tự làm - không phải chỉnh gì ở router.
+
+- [x] Chuỗi bằng chứng: `codex.js:420` bơm `body.prompt_cache_key = _currentSessionId`;
+  `_currentSessionId` từ `extractClientSessionId` đọc header `x-session-id` TRƯỚC,
+  rồi `body.prompt_cache_key`, cuối cùng FALLBACK băm text assistant;
+  `chatCore.js:120` xác nhận header client tới được đúng chỗ
+- [x] Nguyên nhân `CACHED TOKENS: 0`: bot không gửi gì nên rơi vào fallback, mà text
+  assistant dài thêm sau mỗi câu trả lời -> khóa đổi mỗi lượt -> cache luôn trượt
+- [x] `cache-session-id.ts`: khóa sha256(accountId:threadId) gửi qua header
+  `x-session-id`, bật/tắt bằng `LLM_CACHE_SESSION_ENABLED`. Băm chứ không ghép id
+  thô vì thread id là định danh người dùng thật
+- [x] Chọn HEADER thay vì `prompt_cache_key` trong body: header là đường chung cho
+  codex/grok/claude/kiro/antigravity, provider không hiểu thì bỏ qua - đổi provider
+  trên router sau này không phải sửa code bot
+- [x] Không tự gắn `cache_control`: đường Anthropic của router xoá sạch rồi tự đặt lại
+- [x] Log thêm `cachedTokens` mỗi lượt để kiểm chứng ngay trong terminal
+- [ ] Chưa test Zalo thật: gửi vài tin trong cùng cuộc chat, kỳ vọng `cachedTokens > 0`
+  từ lượt thứ 2 và `CACHED TOKENS` trên dashboard 9Router tăng
+
+## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic
   link-density bắt đầu hụt với các trang khác

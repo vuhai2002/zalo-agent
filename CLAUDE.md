@@ -18,6 +18,7 @@ Nằm ngoài project tại `D:\source-code\zalo-agent-references\`:
 | `deplao-builder` | Pattern quản lý nhiều instance zca-js cùng lúc |
 | `goclaw` | Pattern tool hệ thống (datetime, web search chain, UI Built-in Tools). **CC BY-NC 4.0: chỉ soi pattern, KHÔNG copy code** |
 | `hermes-agent` | Toolset theo kênh, webhook-safe toolset, cascade web search (MIT - dùng thoải mái) |
+| `9router` | Source của chính router đang dùng (MIT). Tra `open-sse/executors/` + `open-sse/translator/` khi cần biết router làm gì với request: khóa cache phiên, `cache_control`, `reasoning_effort`, cloaking |
 
 **Trước khi viết code đụng zca-js, hãy grep trong `zalo-agent-references\zca-js\src\apis\` để xác nhận chữ ký hàm thật thay vì đoán.** Đã có tiền lệ đoán sai: `loginQR` KHÔNG tự ghi file QR khi mình truyền callback - phải tự gọi `event.actions.saveToFile()`.
 
