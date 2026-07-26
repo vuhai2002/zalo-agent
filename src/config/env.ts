@@ -31,6 +31,15 @@ const envSchema = z.object({
   LLM_MODEL: z.string().min(1),
   LLM_MAX_STEPS: z.coerce.number().int().min(1).max(30).default(8),
   LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).default(2048),
+  // Mức "suy nghĩ" (reasoning/thinking) của model - học Hermes: không bật thì
+  // model lướt 50k token nội dung trang trong 1 lượt đọc, việc cần nghĩ từng
+  // bước (đối chiếu số vé, đọc bảng) sẽ ẩu. off = tắt hẳn.
+  LLM_REASONING_EFFORT: z.enum(["off", "low", "medium", "high", "xhigh"]).default("medium"),
+  // Gửi header x-session-id ổn định theo thread để router bật prompt caching.
+  // Không gửi thì 9Router rơi về fallback băm text assistant - text đó dài thêm
+  // mỗi lượt nên khóa đổi liên tục và cache không bao giờ trúng. Tắt khi router
+  // đổi quy ước header hoặc cần cô lập từng request.
+  LLM_CACHE_SESSION_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
 
   // Múi giờ của bot: bơm ngày vào system prompt + tool get_datetime.
   // Kiểm IANA hợp lệ ngay lúc boot thay vì để lượt agent đầu tiên mới lộ.
@@ -53,8 +62,13 @@ const envSchema = z.object({
 
   HISTORY_CONTEXT_LIMIT: z.coerce.number().int().min(1).max(200).default(20),
   // Ảnh cũ trong history được nạp lại vào context để model "nhớ" ảnh đã nhận.
-  // Mỗi ảnh tốn kha khá token nên giới hạn N ảnh gần nhất; 0 = tắt hẳn.
-  HISTORY_IMAGE_CONTEXT_LIMIT: z.coerce.number().int().min(0).max(20).default(3),
+  // MỖI ảnh tốn ~1500-2500 token và bị gửi lại ở MỌI step của lượt agent, nên
+  // để 3 là đắt gấp 3 lần cần thiết cho nhu cầu thường gặp (hỏi lại về ảnh
+  // vừa gửi). Mặc định 1; 0 = tắt hẳn.
+  HISTORY_IMAGE_CONTEXT_LIMIT: z.coerce.number().int().min(0).max(20).default(1),
+  // Cỡ ảnh lấy từ payload Zalo: normal (mặc định, đủ đọc chữ số, rẻ),
+  // hd (nét nhất, đắt gấp mấy lần), thumb (rẻ nhất nhưng hay mất chữ số).
+  ZALO_IMAGE_QUALITY: z.enum(["thumb", "normal", "hd"]).default("normal"),
   // Ảnh nhận được lưu vào data/media để xem lại; file cũ hơn N ngày bị xóa
   // (dọn lúc khởi động + mỗi 24h) để đĩa không phình vô hạn.
   MEDIA_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
