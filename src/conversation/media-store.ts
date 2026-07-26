@@ -4,6 +4,7 @@ import { dataDir, env } from "../config/env.js";
 import { startDailyTask } from "../shared/daily-task-schedule.js";
 import { downloadImage, type DownloadedImage } from "../shared/download-image.js";
 import { createLogger } from "../shared/logger.js";
+import { estimateImageTokens, readImageSize } from "../zalo/zalo-image-variant.js";
 
 const log = createLogger("media-store");
 const mediaDir = path.join(dataDir, "media");
@@ -62,6 +63,21 @@ export async function persistBatchImages(
         fs.mkdirSync(path.dirname(absPath), { recursive: true });
         fs.writeFileSync(absPath, downloaded.data);
         image.localPath = relPath;
+
+        // Ảnh là khoản token đắt nhất mỗi lượt - log kích thước thật + ước
+        // lượng token để đo được ngay khi đổi ZALO_IMAGE_QUALITY, khỏi đoán
+        const size = readImageSize(downloaded.data);
+        log.info(
+          {
+            accountId,
+            relPath,
+            kb: Math.round(downloaded.data.length / 1024),
+            ...(size
+              ? { size: `${size.width}x${size.height}`, tokenUocLuong: estimateImageTokens(size.width, size.height) }
+              : {}),
+          },
+          "Đã lưu ảnh nhận được",
+        );
       } catch (err) {
         log.debug({ accountId, msgId: msg.msgId, err }, "Không lưu được ảnh - bỏ qua");
       }

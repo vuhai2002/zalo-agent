@@ -37,8 +37,32 @@ describe("parseIncomingMessage", () => {
 
     assert.equal(msg.text, "ảnh này là gì");
     assert.equal(msg.images.length, 1);
-    // hd được ưu tiên hơn thumb để vision đọc ảnh nét
+    // Payload chỉ có thumb + hd: mức "normal" không có bản vừa nên lùi về hd
     assert.equal(msg.images[0]!.url, "https://z.vn/hd.jpg");
+  });
+
+  it("có đủ biến thể thì mặc định lấy bản normal, KHÔNG lấy hd (hd đắt gấp mấy lần token)", () => {
+    const content = {
+      title: "vé số",
+      thumb: "https://z.vn/thumb.jpg",
+      normalUrl: "https://z.vn/normal.jpg",
+      hd: "https://z.vn/hd.jpg",
+    };
+    const msg = parseIncomingMessage("acc-test", SELF_ID, {
+      threadId: "thread-1",
+      type: ThreadType.User,
+      data: { msgType: "chat.photo", content, uidFrom: "user-1" },
+    });
+    assert.equal(msg.images[0]!.url, "https://z.vn/normal.jpg");
+
+    // Đổi mức chất lượng thì đổi ảnh lấy về - dùng khi cần đọc chi tiết rất nhỏ
+    const hdMsg = parseIncomingMessage(
+      "acc-test",
+      SELF_ID,
+      { threadId: "thread-1", type: ThreadType.User, data: { msgType: "chat.photo", content, uidFrom: "user-1" } },
+      "hd",
+    );
+    assert.equal(hdMsg.images[0]!.url, "https://z.vn/hd.jpg");
   });
 
   it("không nhận media không phải ảnh làm image", () => {

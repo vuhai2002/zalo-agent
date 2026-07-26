@@ -1,4 +1,5 @@
 import { ThreadType } from "zca-js";
+import { pickImageVariant, type ImageQuality } from "./zalo-image-variant.js";
 
 export type IncomingImage = {
   url: string;
@@ -24,10 +25,16 @@ export type ParsedMessage = {
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * @param imageQuality cỡ ảnh lấy từ payload Zalo - caller truyền
+ * env.ZALO_IMAGE_QUALITY vào để module này thuần, test khỏi cần setupTestEnv
+ * (cùng lý do với `botEnabledForThread` của allowlist-filter).
+ */
 export function parseIncomingMessage(
   accountId: string,
   selfId: string,
   message: any,
+  imageQuality: ImageQuality = "normal",
 ): ParsedMessage {
   const data = message?.data ?? {};
   const content = data.content;
@@ -41,9 +48,13 @@ export function parseIncomingMessage(
   } else if (content && typeof content === "object") {
     // Tin nhắn media: content là object có href/thumb + title (caption)
     text = String(content.title ?? content.description ?? "");
-    const url = content.hd ?? content.href ?? content.oriUrl ?? content.normalUrl ?? content.thumb;
-    if (url && msgType.includes("photo")) {
-      images.push({ url: String(url) });
+    // Zalo gửi kèm nhiều cỡ của cùng 1 ảnh. Lấy `hd` (bản to nhất) là tốn
+    // token vô ích: ảnh HD 977x2128 ~2500 token mỗi lần vào context.
+    const picked = msgType.includes("photo")
+      ? pickImageVariant(content as Record<string, unknown>, imageQuality)
+      : null;
+    if (picked) {
+      images.push({ url: picked.url });
     }
   }
 
