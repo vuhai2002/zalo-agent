@@ -98,7 +98,7 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
       }),
       system: buildSystemPrompt(agent, latest, memory),
       messages,
-      tools: buildAgentTools({ api, account, message: latest }),
+      tools: buildAgentTools({ api, account, message: latest, batch }),
       stopWhen: stepCountIs(agent.maxSteps ?? env.LLM_MAX_STEPS),
       maxOutputTokens: env.LLM_MAX_OUTPUT_TOKENS,
       // Bật thinking theo LLM_REASONING_EFFORT - kiểm chứng bằng

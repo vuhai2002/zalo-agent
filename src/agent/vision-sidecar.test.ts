@@ -103,6 +103,41 @@ describe("vision-sidecar", () => {
     await assert.rejects(() => sidecar.testSidecar(async () => "ok"), /base URL \+ model \+ API key/);
   });
 
+  it("askAboutImage: prompt chứa nguyên câu hỏi, KHÔNG cache (mỗi câu mỗi khác)", async () => {
+    configureSidecar();
+    const prompts: string[] = [];
+    const call = async (_s: unknown, _i: unknown, prompt: string) => {
+      prompts.push(prompt);
+      return "2 con cá vàng";
+    };
+
+    const first = await sidecar.askAboutImage(IMG, "Đếm số cá màu vàng", call);
+    const second = await sidecar.askAboutImage(IMG, "Đếm số cá màu vàng", call);
+    assert.equal(first, "2 con cá vàng");
+    assert.equal(second, "2 con cá vàng");
+    assert.equal(prompts.length, 2, "câu hỏi tùy biến không được cache");
+    assert.match(prompts[0]!, /Đếm số cá màu vàng/);
+    assert.match(prompts[0]!, /không suy diễn/);
+  });
+
+  it("askAboutImage: chưa cấu hình sidecar thì ném lỗi (tool tự diễn giải cho model)", async () => {
+    unconfigureSidecar();
+    await assert.rejects(
+      () => sidecar.askAboutImage(IMG, "đếm cá", async () => "x"),
+      /base URL \+ model \+ API key/,
+    );
+  });
+
+  it("describeImage truyền đúng prompt mô tả cố định (chép nguyên văn chữ + số)", async () => {
+    configureSidecar();
+    let receivedPrompt = "";
+    await sidecar.describeImage({ ...IMG, cacheKey: "media/a/t/prompt-check.jpg" }, async (_s, _i, prompt) => {
+      receivedPrompt = prompt;
+      return "mô tả";
+    });
+    assert.match(receivedPrompt, /NGUYÊN VĂN/);
+  });
+
   it("pruneExpiredImageDescriptions xóa mô tả cũ, giữ mô tả mới", () => {
     descriptionStore.saveImageDescription("media/a/t/moi-nhat.jpg", "mới", "test");
     // retention 0 ngày = cutoff ngay bây giờ -> mọi row (tạo trước đó vài ms) bị xóa

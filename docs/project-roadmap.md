@@ -453,6 +453,29 @@ mù là ảnh bị lột êm, không lỗi, không dấu vết.
   kỳ vọng log `imageMode: "hybrid"`; lượt sau hỏi lại về ảnh (không gửi ảnh
   mới) khi combo rơi vào deepseek -> kỳ vọng bot vẫn biết nội dung ảnh
 
+## V2.9.2 - Tool read_image: agent tự "nhìn kỹ lại" ảnh (2026-07-27)
+
+Chốt nốt giới hạn lossy của mô tả một lần: user hỏi "trong ảnh có mấy con cá
+màu vàng" mà mô tả cache (sinh TRƯỚC khi biết câu hỏi, prompt cố định) không
+ghi số đếm thì model chính bó tay, không có đường "nhìn lại". Cùng lời giải
+với GoClaw (`read_image`) và Hermes (`vision_analyze` + hint "closer look").
+
+- [x] `askAboutImage` trong vision-sidecar: prompt là CHÍNH câu hỏi của agent,
+  không cache (mỗi câu mỗi khác - mô tả chung đã có cache riêng)
+- [x] Tool `read_image(question, imageIndex)`: chọn ảnh theo thứ tự MỚI NHẤT
+  TRƯỚC - batch lượt hiện tại (chưa vào DB nên không đọc từ history được) rồi
+  tới ảnh history, trần 10 ảnh. File đã dọn/index vượt/sidecar lỗi đều trả
+  thông báo trung thực cho model diễn giải, không throw ra agent loop
+- [x] Registry thêm cơ chế `available()` kiểm mỗi lượt: read_image chỉ vào
+  schema khi sidecar đã cấu hình - thiếu hạ tầng mà vẫn vào schema thì tốn
+  token mô tả và dụ model gọi để nhận lỗi. ToolContext mang thêm `batch`
+- [x] Test: 359 pass (13 test mới: thứ tự gom ảnh, chọn index, đủ nhánh lỗi
+  của tool, askAboutImage không cache + prompt nguyên câu hỏi, registry
+  bật/tắt theo sidecar + per account)
+- [ ] Chưa test Zalo thật: model chính deepseek + sidecar Gemini, gửi ảnh bể
+  cá hỏi "có mấy con cá màu vàng" -> kỳ vọng agent gọi read_image rồi trả
+  lời có số đếm từ Gemini, log tool `read_image` hiện input câu hỏi
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic

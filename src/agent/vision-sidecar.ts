@@ -42,10 +42,11 @@ export type SidecarImage = {
 export type SidecarCaller = (
   settings: VisionSidecarSettings,
   image: SidecarImage,
+  prompt: string,
 ) => Promise<string>;
 
 /** Đường gọi thật - tách ra để test tiêm caller giả, không chạm mạng */
-const defaultCaller: SidecarCaller = async (settings, image) => {
+const defaultCaller: SidecarCaller = async (settings, image, prompt) => {
   const provider = createOpenAICompatible({
     name: "vision-sidecar",
     baseURL: settings.baseUrl,
@@ -58,7 +59,7 @@ const defaultCaller: SidecarCaller = async (settings, image) => {
         role: "user",
         content: [
           { type: "file", data: image.base64, mediaType: image.mediaType },
-          { type: "text", text: DESCRIBE_PROMPT },
+          { type: "text", text: prompt },
         ],
       },
     ],
@@ -86,7 +87,7 @@ export async function describeImage(
   if (!isSidecarConfigured(settings)) return null;
 
   try {
-    const description = await call(settings.sidecar, image);
+    const description = await call(settings.sidecar, image, DESCRIBE_PROMPT);
     if (!description) return null;
     if (image.cacheKey) {
       saveImageDescription(image.cacheKey, description, settings.sidecar.model);
@@ -119,6 +120,31 @@ export async function ensureDescriptionsFor(
   }
 }
 
+/**
+ * Hỏi sidecar MỘT CÂU CỤ THỂ về ảnh (tool read_image) - khác describeImage:
+ * prompt là chính câu hỏi của agent, KHÔNG cache (mỗi câu mỗi khác, mô tả
+ * chung đã có cache riêng). Ném lỗi để tool tự diễn giải cho model.
+ */
+export async function askAboutImage(
+  image: SidecarImage,
+  question: string,
+  call: SidecarCaller = defaultCaller,
+): Promise<string> {
+  const settings = getVisionSettings();
+  if (!isSidecarConfigured(settings)) {
+    throw new Error("Chưa cấu hình đủ base URL + model + API key cho sidecar");
+  }
+  const prompt =
+    "Trả lời câu hỏi sau về ảnh bằng tiếng Việt, chính xác theo những gì nhìn thấy, " +
+    `không suy diễn thông tin không có trong ảnh: ${question}`;
+  const answer = await call(settings.sidecar, image, prompt);
+  log.info(
+    { model: settings.sidecar.model, question: question.slice(0, 100), chars: answer.length },
+    "Sidecar trả lời câu hỏi về ảnh",
+  );
+  return answer;
+}
+
 /** 1x1 PNG trắng - đủ để nút "Test sidecar" chứng minh đường vision chạy thật */
 const TEST_PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -129,5 +155,9 @@ export async function testSidecar(call: SidecarCaller = defaultCaller): Promise<
   if (!isSidecarConfigured(settings)) {
     throw new Error("Chưa cấu hình đủ base URL + model + API key cho sidecar");
   }
-  return call(settings.sidecar, { base64: TEST_PIXEL_PNG_BASE64, mediaType: "image/png" });
+  return call(
+    settings.sidecar,
+    { base64: TEST_PIXEL_PNG_BASE64, mediaType: "image/png" },
+    DESCRIBE_PROMPT,
+  );
 }

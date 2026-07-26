@@ -6,10 +6,12 @@ import { cleanupTestEnv, setupTestEnv } from "../../shared/test-env-setup.js";
 // Kéo theo env + DB nên phải setupTestEnv trước, import động sau
 let dataDir: string;
 let registry: typeof import("./tool-registry.js");
+let visionStore: typeof import("../../config/runtime-vision-settings.js");
 
 before(async () => {
   dataDir = setupTestEnv();
   registry = await import("./tool-registry.js");
+  visionStore = await import("../../config/runtime-vision-settings.js");
 });
 
 after(async () => {
@@ -37,17 +39,46 @@ function makeContext(disabledTools: string[]) {
       disabledTools,
     },
     message: { threadId: "t-1", threadType: 0 } as never,
+    batch: [],
   };
 }
 
+function unconfigureSidecar(): void {
+  visionStore.updateVisionSettings({ sidecarBaseUrl: "", sidecarModel: "", sidecarApiKey: "" });
+}
+
+function configureSidecar(): void {
+  visionStore.updateVisionSettings({
+    sidecarBaseUrl: "https://gemini.test/v1beta/openai",
+    sidecarModel: "gemini-2.5-flash-lite",
+    sidecarApiKey: "AIza-x",
+  });
+}
+
 describe("tool-registry", () => {
-  it("mặc định (không tắt gì) build đủ mọi tool trong catalog", () => {
+  it("mặc định (không tắt gì) build đủ catalog TRỪ read_image khi chưa có sidecar", () => {
+    unconfigureSidecar();
     const tools = registry.buildAgentTools(makeContext([]));
-    assert.deepEqual(Object.keys(tools).sort(), [...registry.TOOL_KEYS].sort());
+    const expected = registry.TOOL_KEYS.filter((k) => k !== "read_image");
+    assert.deepEqual(Object.keys(tools).sort(), expected.sort());
     // Các tool cốt lõi phải có mặt - đổi key là model "mất trí nhớ" về tool
     for (const key of ["get_datetime", "web_search", "web_fetch", "add_reaction", "send_file"]) {
       assert.ok(tools[key], `thiếu tool ${key}`);
     }
+  });
+
+  it("read_image chỉ vào schema khi sidecar đã cấu hình (kiểm mỗi lượt, không cần restart)", () => {
+    configureSidecar();
+    assert.ok(registry.buildAgentTools(makeContext([])).read_image, "có sidecar phải có tool");
+    unconfigureSidecar();
+    assert.equal(registry.buildAgentTools(makeContext([])).read_image, undefined);
+  });
+
+  it("read_image bị tắt per account thì kể cả có sidecar cũng không vào schema", () => {
+    configureSidecar();
+    const tools = registry.buildAgentTools(makeContext(["read_image"]));
+    assert.equal(tools.read_image, undefined);
+    unconfigureSidecar();
   });
 
   it("tool bị tắt biến mất khỏi schema - model không biết nó tồn tại", () => {
@@ -58,8 +89,10 @@ describe("tool-registry", () => {
   });
 
   it("key lạ trong disabledTools không làm crash, không ảnh hưởng tool khác", () => {
+    unconfigureSidecar();
     const tools = registry.buildAgentTools(makeContext(["khong-ton-tai"]));
-    assert.equal(Object.keys(tools).length, registry.TOOL_KEYS.length);
+    // read_image vắng vì sidecar chưa cấu hình, phần còn lại đủ
+    assert.equal(Object.keys(tools).length, registry.TOOL_KEYS.length - 1);
   });
 
   it("catalog: key duy nhất, đủ metadata cho UI, nhóm hợp lệ", () => {

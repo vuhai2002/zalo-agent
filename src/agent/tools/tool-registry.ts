@@ -1,10 +1,12 @@
 import type { Tool } from "ai";
 import type { API } from "zca-js";
 import type { AccountConfig } from "../../config/account-store.js";
+import { isSidecarConfigured } from "../../config/runtime-vision-settings.js";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 import { createAddReactionTool } from "./add-reaction-tool.js";
 import { createGetDatetimeTool } from "./get-datetime-tool.js";
 import { createGetGroupInfoTool } from "./get-group-info-tool.js";
+import { createReadImageTool } from "./read-image-tool.js";
 import { createSaveMemoryTool } from "./save-memory-tool.js";
 import { createSendFileTool } from "./send-file-tool.js";
 import { createTagMemberTool } from "./tag-member-tool.js";
@@ -15,7 +17,13 @@ import { createWebSearchTool } from "./web-search-tool.js";
 export type ToolContext = {
   api: API;
   account: AccountConfig;
+  /** Tin cuối của lượt - tools tác động (reaction, quote) nhắm vào tin này */
   message: ParsedMessage;
+  /**
+   * Cả batch của lượt (ảnh và caption Zalo gửi tách tin). read_image cần vì
+   * ảnh của lượt hiện tại CHƯA vào DB khi tool chạy - đọc history là hụt.
+   */
+  batch: ParsedMessage[];
 };
 
 /**
@@ -38,6 +46,12 @@ export type ToolDefinition = {
    * (mô hình Extractor Chain của GoClaw).
    */
   hasSettings?: boolean;
+  /**
+   * Điều kiện runtime để tool vào schema (kiểm mỗi lượt, ngoài chuyện bật/tắt
+   * per account). Tool thiếu hạ tầng (read_image chưa có sidecar) mà vẫn vào
+   * schema thì chỉ tốn token mô tả và dụ model gọi để nhận lỗi.
+   */
+  available?: () => boolean;
   build: (ctx: ToolContext) => Tool;
 };
 
@@ -68,6 +82,15 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     group: "read",
     hasSettings: true,
     build: () => createWebFetchTool(),
+  },
+  {
+    key: "read_image",
+    label: "Nhìn kỹ ảnh",
+    description:
+      "Hỏi model đọc ảnh (sidecar) một câu cụ thể về ảnh đã nhận - đếm, đọc chữ nhỏ, soi chi tiết. Cần cấu hình sidecar ở trang Providers",
+    group: "read",
+    available: () => isSidecarConfigured(),
+    build: (ctx) => createReadImageTool(ctx),
   },
   {
     key: "get_group_info",
@@ -117,7 +140,10 @@ export function buildAgentTools(ctx: ToolContext): Record<string, Tool> {
   const disabled = new Set(ctx.account.disabledTools);
   const tools: Record<string, Tool> = {};
   for (const def of TOOL_DEFINITIONS) {
-    if (!disabled.has(def.key)) tools[def.key] = def.build(ctx);
+    if (disabled.has(def.key)) continue;
+    // Kiểm mỗi lượt: cấu hình sidecar từ dashboard ăn ngay không cần restart
+    if (def.available && !def.available()) continue;
+    tools[def.key] = def.build(ctx);
   }
   return tools;
 }
