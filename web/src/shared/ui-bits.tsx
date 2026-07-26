@@ -3,11 +3,17 @@ import { IconSearch } from "./dashboard-icons";
 
 /** Mảnh UI dùng chung theo mẫu GoClaw: badge chấm màu, stat card + sparkline, tile, bảng */
 
-/** Núm gạt bật/tắt - phần hình của mọi toggle (drawer account, trang Tools) */
+/**
+ * Núm gạt bật/tắt - phần hình của mọi toggle (drawer account, trang Tools).
+ *
+ * `inline-block` là bắt buộc: span mặc định là display:inline, mà width/height
+ * KHÔNG áp dụng cho inline element - núm chỉ có kích thước khi cha tình cờ là
+ * flex container, đặt trong nút thường thì co về 0 và biến mất hẳn.
+ */
 export function ToggleKnob({ on }: { on: boolean }) {
   return (
     <span
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-zalo-500" : "bg-slate-300"}`}
+      className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-zalo-500" : "bg-slate-300"}`}
     >
       <span
         className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${on ? "left-[18px]" : "left-0.5"}`}

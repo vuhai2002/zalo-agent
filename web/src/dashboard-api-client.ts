@@ -149,7 +149,19 @@ export const api = {
     }),
 
   tools: () =>
-    request<{ items: ToolCatalogItem[]; webSearchProvider: string }>("/api/tools"),
+    request<{ items: ToolCatalogItem[]; search: SearchSettings; fetch: FetchSettings }>(
+      "/api/tools",
+    ),
+  updateSearchSettings: (update: { provider?: "duckduckgo" | "brave"; braveApiKey?: string }) =>
+    request<{ ok: true; search: SearchSettings }>("/api/tools/search", {
+      method: "PATCH",
+      body: JSON.stringify(update),
+    }),
+  updateFetchSettings: (update: { fallbackEnabled?: boolean }) =>
+    request<{ ok: true; fetch: FetchSettings }>("/api/tools/fetch", {
+      method: "PATCH",
+      body: JSON.stringify(update),
+    }),
 
   provider: () => request<ProviderSettings>("/api/provider"),
   updateProvider: (update: Partial<ProviderSettings> & { apiKey?: string }) =>
@@ -186,7 +198,17 @@ export type ToolCatalogItem = {
   label: string;
   description: string;
   group: "read" | "action";
+  /** Có nút Settings mở modal chuỗi nguồn không */
+  hasSettings: boolean;
 };
+
+export type SearchSettings = {
+  provider: "duckduckgo" | "brave";
+  braveApiKeyMasked: string;
+  hasBraveApiKey: boolean;
+};
+
+export type FetchSettings = { fallbackEnabled: boolean };
 
 export type ReactionIcon = { key: string; emoji: string; label: string };
 

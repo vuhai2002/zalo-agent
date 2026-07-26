@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ManagedAccount, ToolCatalogItem } from "../dashboard-api-client";
+import type {
+  FetchSettings,
+  ManagedAccount,
+  SearchSettings,
+  ToolCatalogItem,
+} from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { IconSliders } from "../shared/dashboard-icons";
 import { SelectMenu } from "../shared/select-menu";
 import { Badge, ToggleKnob } from "../shared/ui-bits";
+import { ToolChainSettingsModal } from "./tool-chain-settings-modal";
 
 /**
  * Trang Tools theo mẫu Built-in Tools của GoClaw: tool nhóm theo mức rủi ro,
@@ -18,7 +25,9 @@ const GROUP_META: Record<ToolCatalogItem["group"], { title: string; hint: string
 
 export function ToolsPage() {
   const [tools, setTools] = useState<ToolCatalogItem[]>([]);
-  const [webSearchProvider, setWebSearchProvider] = useState("");
+  const [search, setSearch] = useState<SearchSettings | null>(null);
+  const [fetchSettings, setFetchSettings] = useState<FetchSettings | null>(null);
+  const [settingsFor, setSettingsFor] = useState<ToolCatalogItem | null>(null);
   const [accounts, setAccounts] = useState<ManagedAccount[]>([]);
   const [accountId, setAccountId] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
@@ -28,7 +37,8 @@ export function ToolsPage() {
     Promise.all([api.tools(), api.accountsAdmin.list()])
       .then(([toolsRes, accountsRes]) => {
         setTools(toolsRes.items);
-        setWebSearchProvider(toolsRes.webSearchProvider);
+        setSearch(toolsRes.search);
+        setFetchSettings(toolsRes.fetch);
         setAccounts(accountsRes.items);
         if (accountsRes.items[0]) setAccountId(accountsRes.items[0].id);
       })
@@ -105,36 +115,69 @@ export function ToolsPage() {
               {items.map((tool) => {
                 const enabled = !account?.disabledTools.includes(tool.key);
                 return (
-                  <button
+                  // Không lồng button trong button (HTML không hợp lệ) nên hàng
+                  // là div, Settings và toggle là 2 nút riêng - đúng bố cục GoClaw
+                  <div
                     key={tool.key}
-                    type="button"
-                    disabled={saving !== null}
-                    onClick={() => toggleTool(tool.key)}
-                    className="flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition-colors hover:bg-tile/50 disabled:cursor-wait"
+                    className="flex w-full items-center justify-between gap-4 px-5 py-3.5"
                   >
-                    <span className="min-w-0">
-                      <span className="flex flex-wrap items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[14px] font-medium text-ink">{tool.label}</span>
                         <code className="rounded bg-tile px-1.5 py-0.5 text-[11px] text-ink-soft">
                           {tool.key}
                         </code>
-                        {tool.key === "web_search" && webSearchProvider && (
+                        {tool.key === "web_search" && search && (
                           <Badge tone="blue" dot={false}>
-                            {webSearchProvider}
+                            {search.provider === "brave"
+                              ? "Brave + DuckDuckGo"
+                              : "DuckDuckGo (miễn phí)"}
                           </Badge>
                         )}
-                      </span>
-                      <span className="mt-0.5 block text-[12.5px] text-ink-soft">
-                        {tool.description}
-                      </span>
-                    </span>
-                    <ToggleKnob on={enabled} />
-                  </button>
+                      </div>
+                      <p className="mt-0.5 text-[12.5px] text-ink-soft">{tool.description}</p>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2.5">
+                      {tool.hasSettings && (
+                        <button
+                          type="button"
+                          onClick={() => setSettingsFor(tool)}
+                          className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] text-ink-soft transition-colors hover:bg-tile hover:text-ink"
+                        >
+                          <IconSliders size={15} />
+                          Settings
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={saving !== null}
+                        onClick={() => toggleTool(tool.key)}
+                        aria-label={`Bật tắt ${tool.label}`}
+                        className="disabled:cursor-wait"
+                      >
+                        <ToggleKnob on={enabled} />
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
           </section>
         ))
+      )}
+
+      {settingsFor && search && fetchSettings && (
+        <ToolChainSettingsModal
+          tool={settingsFor}
+          search={search}
+          fetchSettings={fetchSettings}
+          onClose={() => setSettingsFor(null)}
+          onSaved={(next) => {
+            if (next.search) setSearch(next.search);
+            if (next.fetch) setFetchSettings(next.fetch);
+          }}
+        />
       )}
     </>
   );
