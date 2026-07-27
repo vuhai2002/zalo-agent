@@ -26,6 +26,24 @@ function forLog(value: unknown, max: number): string {
 }
 
 /**
+ * Các field NGẮN nhưng quyết định hành vi, tách ra log riêng để không bị cắt
+ * mất sau field dài. Đã dính thật: `prompt` của create_image dài hơn trần 200
+ * ký tự nên `imageIndex` đứng sau bị nuốt sạch - chẩn đoán phải suy luận ngược
+ * từ câu lỗi thay vì đọc thẳng.
+ */
+const SHORT_FIELDS = ["imageIndex", "transparentBackground", "fileName"];
+
+function shortArgsOf(input: unknown): Record<string, unknown> | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const record = input as Record<string, unknown>;
+  const picked: Record<string, unknown> = {};
+  for (const key of SHORT_FIELDS) {
+    if (record[key] !== undefined) picked[key] = record[key];
+  }
+  return Object.keys(picked).length > 0 ? picked : undefined;
+}
+
+/**
  * Chữ ký "router trả completion rỗng": 9Router thỉnh thoảng trả HTTP 200 với
  * message trống trơn - không text, không tool call, usage = 0. SDK coi đó là
  * thành công nên maxRetries không cứu. Phân biệt được với lượt "chỉ thả
@@ -96,7 +114,7 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
         accountId: account.id,
         threadId: latest.threadId,
       }),
-      system: buildSystemPrompt(agent, latest, memory),
+      system: buildSystemPrompt(agent, latest, memory, account),
       messages,
       tools: buildAgentTools({ api, account, message: latest, batch }),
       stopWhen: stepCountIs(agent.maxSteps ?? env.LLM_MAX_STEPS),
@@ -116,6 +134,9 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
               threadId: latest.threadId,
               tool: r.toolName,
               input: forLog(r.input, 200),
+              // Đứng SAU input trong object nhưng là field riêng nên không bị
+              // trần 200 ký tự của input nuốt mất
+              args: shortArgsOf(r.input),
               output: forLog(r.output, 300),
             },
             "Tool đã chạy",

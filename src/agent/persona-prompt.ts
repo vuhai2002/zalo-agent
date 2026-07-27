@@ -1,8 +1,10 @@
+import type { AccountConfig } from "../config/account-store.js";
 import type { AgentProfile } from "../config/agent-store.js";
 import { env } from "../config/env.js";
 import type { MemoryContext } from "../conversation/memory-store.js";
 import { currentDateLine } from "../shared/current-datetime.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
+import { listAvailableTools } from "./tools/tool-registry.js";
 
 const BASE_PERSONA = `Bạn là trợ lý AI trả lời tin nhắn trên Zalo bằng tiếng Việt tự nhiên, thân thiện.
 
@@ -13,6 +15,8 @@ Quy tắc trả lời:
 - Đọc dữ liệu từ ảnh (số chứng từ, mã, biển số...): tách phần CHỮ và phần SỐ đúng như in trên giấy, đừng dán liền nhau; có chỗ in lặp lại thì đối chiếu chéo cho chắc.
 - Tool hành động (thả reaction, gửi file, tag thành viên) chỉ dùng khi thực sự phục vụ yêu cầu - không lạm dụng.
 - Xuất file (create_word_document / create_excel_file) chỉ khi người dùng yêu cầu file, hoặc nội dung là bảng số liệu dài đọc trong chat sẽ rối. Bảng số liệu ưu tiên Excel, văn bản/báo cáo thì Word. Hai tool này TỰ GỬI file rồi - đừng gọi send_file để gửi lại.
+- Vẽ ảnh (create_image) chỉ khi người dùng thật sự muốn có ẢNH: nhờ vẽ/tạo/thiết kế/làm poster, banner, e-magazine. Mất khoảng 1 phút mỗi ảnh nên đừng vẽ khi họ chỉ hỏi thông tin. Prompt viết càng cụ thể càng đẹp (chủ thể, bối cảnh, ánh sáng, phong cách, tông màu); muốn ảnh dọc/ngang thì nói trong prompt. Tool này TỰ GỬI ảnh rồi.
+- Tham số imageIndex của create_image: MẶC ĐỊNH BỎ TRỐNG. Chỉ điền khi người dùng ĐÃ GỬI ẢNH trong hội thoại và nhờ sửa chính tấm đó (đổi màu, xóa vật thể, đổi phong cách). Yêu cầu vẽ mới thì không điền, dù mô tả có dài và chi tiết tới đâu.
 
 Quy tắc tra cứu thông tin (làm đúng thứ tự, đừng bỏ cuộc sớm):
 - Thông tin thay đổi theo thời gian hoặc mới hơn dữ liệu huấn luyện (kết quả xổ số, giá cả, tỷ giá, tỷ số, tin tức, lịch chiếu, thông tin sản phẩm...) -> BẮT BUỘC dùng web_search trước. Không trả lời từ trí nhớ, không nói "mình không xem được" khi chưa thử tool.
@@ -35,14 +39,33 @@ export type PromptMemory = {
   threadSummary: string;
 };
 
+/**
+ * Mục liệt kê tool account THỰC SỰ có trong lượt này. Không có mục này thì
+ * persona tĩnh vẫn kể tên tool đã bị tắt, và bot hứa làm được thứ model không
+ * hề nhận được. Danh sách lấy từ đúng bộ lọc của `buildAgentTools`.
+ *
+ * Dùng NHÃN tiếng Việt chứ không phải key kỹ thuật: bot phải nói "tạo file
+ * Excel" cho người dùng nghe, không phải "create_excel_file".
+ */
+function toolCapabilitySection(account: Pick<AccountConfig, "disabledTools">): string {
+  const lines = listAvailableTools(account).map((t) => `- ${t.label}: ${t.description}`);
+  if (lines.length === 0) {
+    return "Khả năng của bạn lúc này: KHÔNG có công cụ nào được bật - chỉ trò chuyện và trả lời bằng kiến thức sẵn có. Đừng hứa tra web, tạo file hay vẽ ảnh.";
+  }
+  return `Khả năng của bạn lúc này (đúng những công cụ đang bật, không hơn):\n${lines.join("\n")}\n\nAi hỏi "bạn làm được gì" thì trả lời DỰA TRÊN danh sách này, diễn đạt tự nhiên bằng lời thường. TUYỆT ĐỐI không hứa việc cần công cụ ngoài danh sách - không có trong đó nghĩa là bạn thật sự không làm được.`;
+}
+
 export function buildSystemPrompt(
   agent: AgentProfile,
   msg: ParsedMessage,
   memory?: PromptMemory,
+  account?: Pick<AccountConfig, "disabledTools">,
 ): string {
   // Chỉ ngày + thứ, không có giờ - giờ đổi mỗi phút sẽ vỡ prompt cache mỗi phút.
   // Không có dòng này model đoán ngày từ training data và trả lời sai.
   const sections = [BASE_PERSONA, currentDateLine(env.BOT_TIMEZONE)];
+
+  if (account) sections.push(toolCapabilitySection(account));
 
   if (agent.persona.trim()) {
     sections.push(`Persona riêng của bạn (tên agent: ${agent.name}):\n${agent.persona.trim()}`);
