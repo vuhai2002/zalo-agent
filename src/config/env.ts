@@ -30,7 +30,15 @@ const envSchema = z.object({
   LLM_API_KEY: z.string().default(""),
   LLM_MODEL: z.string().min(1),
   LLM_MAX_STEPS: z.coerce.number().int().min(1).max(30).default(8),
-  LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).default(2048),
+  // Trần token model được sinh ra mỗi lượt. Phải đủ chỗ cho lượt TỐN NHẤT là
+  // gọi tool tạo file: model viết cả nội dung file vào tool call. Đo thật một
+  // báo cáo 6 sheet (15.000 ký tự nội dung) tốn ~7.100 token payload; cộng
+  // reasoning (LLM_REASONING_EFFORT) và câu trả lời -> 16.384 là vừa đủ có biên.
+  // RÀNG BUỘC: hạ số này xuống dưới ~12.000 thì DOCUMENT_MAX_CHARS phải hạ theo,
+  // nếu không model bị cắt giữa tool call (finishReason "length") và mất cả lượt.
+  // Đây là TRẦN, không phải mục tiêu - trả lời chat thường vẫn vài trăm token.
+  // Model đang dùng đỡ được thoải mái: gpt-5.6-sol 128.000, deepseek-v4-pro 50.000.
+  LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).default(16_384),
   // Mức "suy nghĩ" (reasoning/thinking) của model - học Hermes: không bật thì
   // model lướt 50k token nội dung trang trong 1 lượt đọc, việc cần nghĩ từng
   // bước (đối chiếu số vé, đọc bảng) sẽ ẩu. off = tắt hẳn.
@@ -89,6 +97,17 @@ const envSchema = z.object({
   // Ảnh nhận được lưu vào data/media để xem lại; file cũ hơn N ngày bị xóa
   // (dọn lúc khởi động + mỗi 24h) để đĩa không phình vô hạn.
   MEDIA_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+  // Giới hạn tool tạo file .docx/.xlsx. Bot đọc tin người lạ nên phải chặn
+  // trước: nội dung khổng lồ vừa tốn CPU/đĩa vừa ra file không ai đọc nổi.
+  DOCUMENT_MAX_BLOCKS: z.coerce.number().int().min(1).max(500).default(60),
+  DOCUMENT_MAX_ROWS: z.coerce.number().int().min(1).max(5000).default(200),
+  DOCUMENT_MAX_CHARS: z.coerce.number().int().min(500).max(500_000).default(20_000),
+  // Báo cáo tử tế hay có 5-7 sheet (tổng quan, chi tiết, số liệu, rủi ro,
+  // nguồn) - trần 5 chặn oan nên để 10
+  DOCUMENT_MAX_SHEETS: z.coerce.number().int().min(1).max(50).default(10),
+  // Số file tối đa 1 thread được tạo trong 1 giờ - chặn spam "xuất file" liên tục
+  DOCUMENT_MAX_PER_HOUR: z.coerce.number().int().min(1).max(200).default(10),
+
   // Memory lớp 2: đủ N tin rớt khỏi cửa sổ replay thì gộp vào summary của thread
   SUMMARY_TRIGGER_MESSAGES: z.coerce.number().int().min(5).max(500).default(30),
   // Memory lớp 3: tối đa bao nhiêu fact được lưu cho mỗi người/nhóm

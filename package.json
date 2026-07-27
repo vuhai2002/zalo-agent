@@ -23,6 +23,8 @@
     "@ai-sdk/openai-compatible": "^3.0.14",
     "@hono/node-server": "^2.0.11",
     "ai": "^7.0.37",
+    "docx": "^9.7.1",
+    "exceljs": "^4.4.0",
     "hono": "^4.12.32",
     "image-size": "^2.0.2",
     "pino": "^10.3.1",
