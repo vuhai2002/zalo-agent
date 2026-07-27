@@ -23,6 +23,7 @@ import { memoryRoutes } from "./routes/memory-routes.js";
 import { overviewRoutes } from "./routes/overview-routes.js";
 import { providerRoutes } from "./routes/provider-routes.js";
 import { threadRoutes } from "./routes/thread-routes.js";
+import { imageRoutes } from "./routes/image-routes.js";
 import { toolRoutes } from "./routes/tool-routes.js";
 import { visionRoutes } from "./routes/vision-routes.js";
 
@@ -113,6 +114,7 @@ export function buildDashboardApp(): Hono {
   app.route("/api/agents", agentRoutes);
   app.route("/api/tools", toolRoutes);
   app.route("/api/vision", visionRoutes);
+  app.route("/api/image-gen", imageRoutes);
 
   // API không khớp route nào phải trả JSON 404, không được rơi xuống SPA
   // fallback bên dưới (client fetch JSON mà nhận HTML thì lỗi rất khó đọc)

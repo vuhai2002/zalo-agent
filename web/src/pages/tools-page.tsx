@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   FetchSettings,
+  ImageGenSettings,
   ManagedAccount,
   SearchSettings,
   ToolCatalogItem,
@@ -11,6 +12,7 @@ import { PageHeader } from "../layout/page-header";
 import { IconSliders } from "../shared/dashboard-icons";
 import { SelectMenu } from "../shared/select-menu";
 import { Badge, ToggleKnob } from "../shared/ui-bits";
+import { ImageSettingsModal } from "./image-settings-modal";
 import { ToolChainSettingsModal } from "./tool-chain-settings-modal";
 import { VisionSettingsModal } from "./vision-settings-modal";
 
@@ -41,22 +43,24 @@ export function ToolsPage() {
   const [search, setSearch] = useState<SearchSettings | null>(null);
   const [fetchSettings, setFetchSettings] = useState<FetchSettings | null>(null);
   const [vision, setVision] = useState<VisionSettings | null>(null);
+  const [imageGen, setImageGen] = useState<ImageGenSettings | null>(null);
   const [settingsFor, setSettingsFor] = useState<ToolCatalogItem | null>(null);
   const [accounts, setAccounts] = useState<ManagedAccount[]>([]);
   const [accountId, setAccountId] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  /** Nạp lại catalog: cấu hình sidecar đổi thì read_image available đổi theo */
+  /** Nạp lại catalog: cấu hình sidecar/vẽ ảnh đổi thì `available` của tool đổi theo */
   const reloadTools = () => api.tools().then((res) => setTools(res.items));
 
   useEffect(() => {
-    Promise.all([api.tools(), api.accountsAdmin.list(), api.vision()])
-      .then(([toolsRes, accountsRes, visionRes]) => {
+    Promise.all([api.tools(), api.accountsAdmin.list(), api.vision(), api.imageGen()])
+      .then(([toolsRes, accountsRes, visionRes, imageRes]) => {
         setTools(toolsRes.items);
         setSearch(toolsRes.search);
         setFetchSettings(toolsRes.fetch);
         setVision(visionRes);
+        setImageGen(imageRes);
         setAccounts(accountsRes.items);
         if (accountsRes.items[0]) setAccountId(accountsRes.items[0].id);
       })
@@ -157,6 +161,11 @@ export function ToolsPage() {
                             {IMAGE_MODE_BADGE[vision.imageMode].text}
                           </Badge>
                         )}
+                        {tool.key === "create_image" && imageGen?.configured && (
+                          <Badge tone="blue" dot={false}>
+                            {imageGen.model}
+                          </Badge>
+                        )}
                         {/* Bật mà thiếu hạ tầng thì model KHÔNG nhận được tool -
                             phải nói thẳng, không để người dùng tưởng bot có khả năng đó */}
                         {!tool.available && <Badge tone="amber">Chưa dùng được</Badge>}
@@ -211,18 +220,35 @@ export function ToolsPage() {
         />
       )}
 
-      {settingsFor && settingsFor.key !== "read_image" && search && fetchSettings && (
-        <ToolChainSettingsModal
-          tool={settingsFor}
-          search={search}
-          fetchSettings={fetchSettings}
+      {settingsFor?.key === "create_image" && imageGen && (
+        <ImageSettingsModal
+          settings={imageGen}
           onClose={() => setSettingsFor(null)}
           onSaved={(next) => {
-            if (next.search) setSearch(next.search);
-            if (next.fetch) setFetchSettings(next.fetch);
+            setImageGen(next);
+            // Cấu hình đổi -> create_image available đổi theo
+            void reloadTools();
           }}
         />
       )}
+
+      {/* Danh sách tường minh, KHÔNG dùng "mọi key còn lại": thêm tool có
+          settings riêng mà quên loại trừ ở đây là nó mở nhầm modal chuỗi web */}
+      {settingsFor &&
+        !["read_image", "create_image"].includes(settingsFor.key) &&
+        search &&
+        fetchSettings && (
+          <ToolChainSettingsModal
+            tool={settingsFor}
+            search={search}
+            fetchSettings={fetchSettings}
+            onClose={() => setSettingsFor(null)}
+            onSaved={(next) => {
+              if (next.search) setSearch(next.search);
+              if (next.fetch) setFetchSettings(next.fetch);
+            }}
+          />
+        )}
     </>
   );
 }

@@ -181,6 +181,19 @@ export const api = {
   clearVisionSidecar: () =>
     request<VisionSettings & { ok: true }>("/api/vision/sidecar", { method: "DELETE" }),
 
+  imageGen: () => request<ImageGenSettings>("/api/image-gen"),
+  updateImageGen: (update: { baseUrl?: string; model?: string; apiKey?: string }) =>
+    request<ImageGenSettings & { ok: true }>("/api/image-gen", {
+      method: "PATCH",
+      body: JSON.stringify(update),
+    }),
+  // Vẽ thật 1 ảnh nên chậm (~1 phút) và tốn tiền - UI phải nói trước
+  testImageGen: () =>
+    request<{ ok: boolean; kb?: number; ext?: string; error?: string }>("/api/image-gen/test", {
+      method: "POST",
+    }),
+  clearImageGen: () => request<ImageGenSettings & { ok: true }>("/api/image-gen", { method: "DELETE" }),
+
   provider: () => request<ProviderSettings>("/api/provider"),
   updateProvider: (update: Partial<ProviderSettings> & { apiKey?: string }) =>
     request<ProviderSettings & { ok: true }>("/api/provider", {
@@ -280,4 +293,18 @@ export type VisionSettings = {
    * hybrid = combo nhận cả pixel + mô tả, blind = bỏ ảnh
    */
   imageMode: "native" | "describe" | "hybrid" | "blind";
+};
+
+/**
+ * Cấu hình tool vẽ ảnh. Không có trường "mode" như vision vì không tự dò được:
+ * /v1/models của router chỉ liệt kê model chat, model vẽ ảnh nằm ở registry
+ * riêng nên người dùng phải tự gõ tên model.
+ */
+export type ImageGenSettings = {
+  baseUrl: string;
+  model: string;
+  apiKeyMasked: string;
+  /** apiKeyMasked trống vẫn ra chuỗi "chưa cấu hình" nên phải có cờ riêng */
+  hasApiKey: boolean;
+  configured: boolean;
 };
