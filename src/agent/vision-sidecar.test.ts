@@ -41,7 +41,7 @@ describe("vision-sidecar", () => {
     let calls = 0;
     const result = await sidecar.describeImage({ ...IMG, cacheKey: "media/a/t/x-0.jpg" }, async () => {
       calls++;
-      return "mô tả";
+      return { text: "mô tả", truncated: false };
     });
     assert.equal(result, null);
     assert.equal(calls, 0);
@@ -52,7 +52,7 @@ describe("vision-sidecar", () => {
     let calls = 0;
     const call = async () => {
       calls++;
-      return "vé số Đà Lạt 123456";
+      return { text: "vé số Đà Lạt 123456", truncated: false };
     };
 
     const first = await sidecar.describeImage({ ...IMG, cacheKey: "media/a/t/ve-0.jpg" }, call);
@@ -66,7 +66,7 @@ describe("vision-sidecar", () => {
 
   it("không có cacheKey (ảnh chưa persist) vẫn mô tả được, không ghi cache", async () => {
     configureSidecar();
-    const result = await sidecar.describeImage(IMG, async () => "ảnh chụp hóa đơn");
+    const result = await sidecar.describeImage(IMG, async () => ({ text: "ảnh chụp hóa đơn", truncated: false }));
     assert.equal(result, "ảnh chụp hóa đơn");
   });
 
@@ -89,7 +89,7 @@ describe("vision-sidecar", () => {
       (relPath) => (relPath === "media/a/t/mat-file.jpg" ? null : IMG),
       async () => {
         described.push("call");
-        return "mô tả mới";
+        return { text: "mô tả mới", truncated: false };
       },
     );
 
@@ -100,7 +100,7 @@ describe("vision-sidecar", () => {
 
   it("testSidecar: chưa cấu hình thì ném lỗi có hướng dẫn", async () => {
     unconfigureSidecar();
-    await assert.rejects(() => sidecar.testSidecar(async () => "ok"), /base URL \+ model \+ API key/);
+    await assert.rejects(() => sidecar.testSidecar(async () => ({ text: "ok", truncated: false })), /base URL \+ model \+ API key/);
   });
 
   it("askAboutImage: prompt chứa nguyên câu hỏi, KHÔNG cache (mỗi câu mỗi khác)", async () => {
@@ -108,7 +108,7 @@ describe("vision-sidecar", () => {
     const prompts: string[] = [];
     const call = async (_s: unknown, _i: unknown, prompt: string) => {
       prompts.push(prompt);
-      return "2 con cá vàng";
+      return { text: "2 con cá vàng", truncated: false };
     };
 
     const first = await sidecar.askAboutImage(IMG, "Đếm số cá màu vàng", call);
@@ -123,7 +123,7 @@ describe("vision-sidecar", () => {
   it("askAboutImage: chưa cấu hình sidecar thì ném lỗi (tool tự diễn giải cho model)", async () => {
     unconfigureSidecar();
     await assert.rejects(
-      () => sidecar.askAboutImage(IMG, "đếm cá", async () => "x"),
+      () => sidecar.askAboutImage(IMG, "đếm cá", async () => ({ text: "x", truncated: false })),
       /base URL \+ model \+ API key/,
     );
   });
@@ -133,9 +133,40 @@ describe("vision-sidecar", () => {
     let receivedPrompt = "";
     await sidecar.describeImage({ ...IMG, cacheKey: "media/a/t/prompt-check.jpg" }, async (_s, _i, prompt) => {
       receivedPrompt = prompt;
-      return "mô tả";
+      return { text: "mô tả", truncated: false };
     });
     assert.match(receivedPrompt, /NGUYÊN VĂN/);
+  });
+
+  it("mô tả BỊ CẮT: vẫn dùng cho lượt này nhưng TUYỆT ĐỐI không cache", async () => {
+    configureSidecar();
+    let calls = 0;
+    const call = async () => {
+      calls++;
+      return { text: "vé số Đà Lạt 1234", truncated: true };
+    };
+
+    const first = await sidecar.describeImage({ ...IMG, cacheKey: "media/a/t/cut-0.jpg" }, call);
+    assert.equal(first, "vé số Đà Lạt 1234", "mô tả cụt vẫn dùng được - có còn hơn không");
+    assert.equal(
+      descriptionStore.getImageDescription("media/a/t/cut-0.jpg"),
+      null,
+      "bản cụt mà cache thì nó sống vĩnh viễn, mọi lượt sau đọc phải nó",
+    );
+
+    // Lần sau gọi lại vì không có cache -> có cơ hội lấy được bản đầy đủ
+    await sidecar.describeImage({ ...IMG, cacheKey: "media/a/t/cut-0.jpg" }, call);
+    assert.equal(calls, 2, "không cache thì lượt sau phải gọi lại");
+  });
+
+  it("askAboutImage bị cắt: nói thật cho model biết phần sau còn thiếu", async () => {
+    configureSidecar();
+    const answer = await sidecar.askAboutImage(IMG, "liệt kê hết", async () => ({
+      text: "Có 3 mục: A, B",
+      truncated: true,
+    }));
+    assert.match(answer, /Có 3 mục: A, B/);
+    assert.match(answer, /bị cắt vì quá dài/, "model phải biết dữ liệu chưa đủ để đừng kết luận chắc nịch");
   });
 
   it("pruneExpiredImageDescriptions xóa mô tả cũ, giữ mô tả mới", () => {

@@ -14,7 +14,12 @@ import type { ToolContext } from "./index.js";
  * Chỉ vào schema khi sidecar đã cấu hình (tool-registry `available`).
  */
 
-/** Trần số ảnh gần đây agent chọn được qua imageIndex */
+/**
+ * Trần số ảnh gần đây agent chọn được qua imageIndex. Chính sách tự đặt: đủ
+ * rộng cho "ảnh thứ 3 tính từ dưới lên", đủ hẹp để model không phải đếm mò
+ * trong danh sách dài. Không đọc file nào cho tới khi model chọn nên trần này
+ * không tốn gì.
+ */
 const RECENT_IMAGE_LIMIT = 10;
 
 /**

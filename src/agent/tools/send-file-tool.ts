@@ -8,6 +8,12 @@ import { downloadFromPublicUrl } from "../../shared/safe-remote-download.js";
 import { withTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
 
+/**
+ * Trần tải file từ URL - CHÍNH SÁCH tự đặt, không phải giới hạn của Zalo.
+ * Giới hạn thật nằm ở `settings.features.sharefile.max_size_share_file_v3` do
+ * server Zalo trả về lúc login và zca-js tự kiểm (ném lỗi kèm số MB cụ thể).
+ * Con số ở đây chỉ để khỏi tải hàng trăm MB rồi mới biết là vô ích.
+ */
 const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
 
 // Chỉ cho gửi file trong data/shared-files (chặn agent đọc file tùy ý trên máy,

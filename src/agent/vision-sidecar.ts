@@ -30,7 +30,13 @@ const DESCRIBE_PROMPT =
   "ngày tháng, tên, giá tiền, biển số...), tách phần chữ và phần số đúng như in. " +
   "Sau đó tả bố cục, vật thể, người, màu sắc. Không suy diễn thông tin không có trong ảnh.";
 
-const DESCRIBE_MAX_TOKENS = 1024;
+/**
+ * Trần token cho một lượt mô tả ảnh. 1024 (số cũ) đủ cho ảnh thường nhưng
+ * KHÔNG đủ với ảnh nhiều chữ - menu, bảng giá, danh sách, ảnh chụp màn hình -
+ * vì prompt bắt chép nguyên văn mọi chữ và số. Tiếng Việt có dấu ~2.7 ký tự
+ * mỗi token nên 2048 tương đương ~5.500 ký tự mô tả, đủ cho ảnh dày chữ.
+ */
+const DESCRIBE_MAX_TOKENS = 2048;
 
 export type SidecarImage = {
   base64: string;
@@ -39,11 +45,18 @@ export type SidecarImage = {
   cacheKey?: string;
 };
 
+/**
+ * Kết quả một lượt gọi sidecar. `truncated` là thứ bắt buộc phải có: mô tả bị
+ * cắt giữa chừng mà đem cache thì bản cụt sống VĨNH VIỄN, mọi lượt sau đều đọc
+ * nó và không ai biết vì sao bot trả lời thiếu.
+ */
+export type SidecarResult = { text: string; truncated: boolean };
+
 export type SidecarCaller = (
   settings: VisionSidecarSettings,
   image: SidecarImage,
   prompt: string,
-) => Promise<string>;
+) => Promise<SidecarResult>;
 
 /** Đường gọi thật - tách ra để test tiêm caller giả, không chạm mạng */
 const defaultCaller: SidecarCaller = async (settings, image, prompt) => {
@@ -66,7 +79,8 @@ const defaultCaller: SidecarCaller = async (settings, image, prompt) => {
     maxOutputTokens: DESCRIBE_MAX_TOKENS,
     maxRetries: 1,
   });
-  return result.text.trim();
+  // finishReason "length" = model đang viết dở thì chạm trần token
+  return { text: result.text.trim(), truncated: result.finishReason === "length" };
 };
 
 /**
@@ -87,15 +101,24 @@ export async function describeImage(
   if (!isSidecarConfigured(settings)) return null;
 
   try {
-    const description = await call(settings.sidecar, image, DESCRIBE_PROMPT);
+    const { text: description, truncated } = await call(settings.sidecar, image, DESCRIBE_PROMPT);
     if (!description) return null;
-    if (image.cacheKey) {
+    // Mô tả cụt vẫn DÙNG được cho lượt này (có còn hơn không), nhưng TUYỆT ĐỐI
+    // không cache: bản cụt sẽ sống mãi và mọi lượt sau đều đọc phải nó
+    if (image.cacheKey && !truncated) {
       saveImageDescription(image.cacheKey, description, settings.sidecar.model);
     }
-    log.info(
-      { cacheKey: image.cacheKey, model: settings.sidecar.model, chars: description.length },
-      "Sidecar đã mô tả ảnh",
-    );
+    if (truncated) {
+      log.warn(
+        { cacheKey: image.cacheKey, chars: description.length },
+        "Mô tả ảnh bị cắt vì chạm trần token - dùng tạm, KHÔNG cache. Cân nhắc nâng DESCRIBE_MAX_TOKENS",
+      );
+    } else {
+      log.info(
+        { cacheKey: image.cacheKey, model: settings.sidecar.model, chars: description.length },
+        "Sidecar đã mô tả ảnh",
+      );
+    }
     return description;
   } catch (err) {
     log.warn({ cacheKey: image.cacheKey, err }, "Sidecar mô tả ảnh thất bại - bỏ qua ảnh này");
@@ -137,12 +160,14 @@ export async function askAboutImage(
   const prompt =
     "Trả lời câu hỏi sau về ảnh bằng tiếng Việt, chính xác theo những gì nhìn thấy, " +
     `không suy diễn thông tin không có trong ảnh: ${question}`;
-  const answer = await call(settings.sidecar, image, prompt);
+  const { text: answer, truncated } = await call(settings.sidecar, image, prompt);
   log.info(
-    { model: settings.sidecar.model, question: question.slice(0, 100), chars: answer.length },
+    { model: settings.sidecar.model, question: question.slice(0, 100), chars: answer.length, truncated },
     "Sidecar trả lời câu hỏi về ảnh",
   );
-  return answer;
+  // Câu trả lời không cache nên cụt chỉ hại lượt này - nói thật để model biết
+  // phần sau còn thiếu, đừng kết luận chắc nịch từ dữ liệu dở dang
+  return truncated ? `${answer}\n\n(Phần mô tả bị cắt vì quá dài - có thể còn chi tiết chưa liệt kê.)` : answer;
 }
 
 /** 1x1 PNG trắng - đủ để nút "Test sidecar" chứng minh đường vision chạy thật */
@@ -155,9 +180,10 @@ export async function testSidecar(call: SidecarCaller = defaultCaller): Promise<
   if (!isSidecarConfigured(settings)) {
     throw new Error("Chưa cấu hình đủ base URL + model + API key cho sidecar");
   }
-  return call(
+  const { text } = await call(
     settings.sidecar,
     { base64: TEST_PIXEL_PNG_BASE64, mediaType: "image/png" },
     DESCRIBE_PROMPT,
   );
+  return text;
 }
