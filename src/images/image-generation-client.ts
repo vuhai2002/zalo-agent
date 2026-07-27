@@ -94,10 +94,12 @@ export async function generateImage(
   }
 
   const url = `${settings.baseUrl.replace(/\/+$/, "")}/v1/images/generations`;
+  // Đuôi file theo format đã XIN: stream SSE và JSON chỉ mang base64 trần, không
+  // kèm MIME. Riêng nhánh bytes thô thì Content-Type thật mới là nguồn đúng.
+  const requestedExt: ImageExt = outputFormat === "png" ? "png" : "jpg";
 
-  let response: Response;
   try {
-    response = await fetchImpl(url, {
+    const response = await fetchImpl(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -108,22 +110,27 @@ export async function generateImage(
       },
       body: JSON.stringify(body),
       // fetch không có timeout mặc định - thiếu dòng này thì provider treo là
-      // treo luôn cả lượt agent, người dùng đợi vô hạn
+      // treo luôn cả lượt agent, người dùng đợi vô hạn. Signal này phủ CẢ phần
+      // đọc stream chứ không riêng lúc mở kết nối.
       signal: AbortSignal.timeout(env.IMAGE_GEN_TIMEOUT_MS),
     });
+
+    if (!response.ok) throw new Error(await readErrorMessage(response));
+    return await readImageResponse(response, requestedExt);
   } catch (err) {
+    // Bọc CẢ lượt gọi lẫn lượt đọc stream: với SSE, fetch trả về sau vài giây
+    // rồi mình còn đọc thêm cả phút - quá hạn giữa chừng là ca dễ xảy ra nhất,
+    // mà bọc mỗi fetch thì nó lọt ra ngoài dạng "This operation was aborted".
     const name = err instanceof Error ? err.name : "";
     if (name === "AbortError" || name === "TimeoutError") {
       throw new Error(`Vẽ ảnh quá lâu (hơn ${Math.round(env.IMAGE_GEN_TIMEOUT_MS / 1000)} giây) nên đã dừng`);
     }
     throw err;
   }
+}
 
-  if (!response.ok) throw new Error(await readErrorMessage(response));
-
-  // Đuôi file theo format đã XIN: stream SSE và JSON chỉ mang base64 trần, không
-  // kèm MIME. Riêng nhánh bytes thô thì Content-Type thật mới là nguồn đúng.
-  const requestedExt: ImageExt = outputFormat === "png" ? "png" : "jpg";
+/** Đọc ảnh ra khỏi response, chịu được cả 3 kiểu provider có thể trả về */
+async function readImageResponse(response: Response, requestedExt: ImageExt): Promise<GeneratedImage> {
   const contentType = (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
 
   if (contentType === "text/event-stream") {

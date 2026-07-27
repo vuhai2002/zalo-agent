@@ -142,6 +142,26 @@ describe("generateImage - đọc stream SSE", () => {
     await assert.rejects(() => client.generateImage({ prompt: "x" }, SETTINGS, impl), /không trả về ảnh/i);
   });
 
+  it("lỗi giữa chừng vẫn ĐÓNG stream - bot chạy thường trú, bỏ mặc là rò rỉ kết nối", async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const enc = new TextEncoder();
+        controller.enqueue(enc.encode('event: error\ndata: {"message":"provider hỏng"}\n\n'));
+        // KHÔNG close: mô phỏng stream còn dở khi mình bỏ đi giữa chừng
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const { impl } = captureFetch(
+      new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } }),
+    );
+
+    await assert.rejects(() => client.generateImage({ prompt: "x" }, SETTINGS, impl), /provider hỏng/);
+    assert.equal(cancelled, true, "phải cancel reader khi thoát sớm");
+  });
+
   it("block SSE bị chẻ làm đôi giữa 2 chunk mạng vẫn ghép lại đúng", async () => {
     const full = `${SSE_PROGRESS}\n\n${sseDone(JPEG_B64)}\n\n`;
     const cut = Math.floor(full.length / 2);
@@ -241,10 +261,28 @@ describe("generateImage - đường lỗi", () => {
     await assert.rejects(() => client.generateImage({ prompt: "x" }, SETTINGS, impl), /502/);
   });
 
-  it("quá hạn chờ -> câu tiếng Việt nói rõ là timeout, không phải AbortError trần trụi", async () => {
+  it("quá hạn ngay khi gọi -> câu tiếng Việt nói rõ là timeout, không phải AbortError trần trụi", async () => {
     const impl = (async () => {
       throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
     }) as unknown as typeof fetch;
+    await assert.rejects(() => client.generateImage({ prompt: "x" }, SETTINGS, impl), /quá lâu|quá hạn/i);
+  });
+
+  it("quá hạn GIỮA CHỪNG lúc đọc stream cũng phải ra câu tiếng Việt đó", async () => {
+    // Đây mới là ca dễ xảy ra nhất với SSE: fetch trả về sau ~1.8 giây rồi mình
+    // đọc stream thêm cả phút. Nếu chỉ bọc try/catch quanh fetch thì abort lúc
+    // đang đọc lọt ra ngoài dạng "This operation was aborted" trần trụi.
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`${SSE_PROGRESS}\n\n`));
+      },
+      pull() {
+        throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+      },
+    });
+    const { impl } = captureFetch(
+      new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } }),
+    );
     await assert.rejects(() => client.generateImage({ prompt: "x" }, SETTINGS, impl), /quá lâu|quá hạn/i);
   });
 
