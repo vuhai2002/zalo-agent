@@ -38,9 +38,21 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
       "Vẽ ảnh mới bằng AI hoặc SỬA ảnh người dùng vừa gửi, rồi gửi thẳng vào cuộc trò chuyện. " +
       "Dùng khi người dùng nhờ vẽ/tạo/thiết kế ảnh, hoặc nhờ sửa ảnh họ gửi (đổi màu, xóa vật thể, đổi phong cách).\n" +
       "Mất khoảng 1 phút mỗi ảnh nên chỉ gọi khi người dùng thật sự muốn có ảnh.\n" +
-      "Prompt càng cụ thể càng đẹp: tả chủ thể, bối cảnh, ánh sáng, phong cách, tông màu. " +
+      "QUAN TRỌNG NHẤT - người dùng đưa sẵn CHỮ để đưa vào ảnh (tiêu đề, bài viết, câu trích, giá, tên, " +
+      "số điện thoại): phải CHÉP NGUYÊN VĂN đoạn chữ đó vào prompt, đặt trong ngoặc kép và ghi rõ vai trò " +
+      '(TIÊU ĐỀ: "...", ĐOẠN MỞ: "...", TRÍCH DẪN: "..."). TUYỆT ĐỐI không tóm tắt thành chủ đề - viết ' +
+      '"Chủ đề thiền Phật giáo" thì model vẽ ra chữ bịa, còn chép nguyên văn thì nó vẽ đúng chữ người dùng cần. ' +
+      "Giữ nguyên dấu tiếng Việt và dặn model viết đúng chính tả.\n" +
+      "Phần còn lại của prompt tả phong cách: bố cục, ánh sáng, tông màu, chất liệu. " +
       "Muốn ảnh dọc hay ngang thì NÓI TRONG PROMPT (vd 'khung hình dọc'), không có tham số riêng cho kích thước.",
     inputSchema: z.object({
+      mode: z
+        .enum(["ve_moi", "sua_anh_da_gui"])
+        .describe(
+          'BẮT BUỘC chọn. "ve_moi" = vẽ ảnh hoàn toàn mới từ mô tả (dùng cho hầu hết yêu cầu: poster, banner, ' +
+            'e-magazine, minh họa). "sua_anh_da_gui" = CHỈ khi người dùng đã gửi ảnh trong hội thoại và nhờ sửa ' +
+            "chính tấm đó (đổi màu, xóa vật thể, đổi phong cách)",
+        ),
       prompt: z
         .string()
         .min(1)
@@ -52,8 +64,7 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
         .min(1)
         .optional()
         .describe(
-          "BỎ TRỐNG trong hầu hết trường hợp. CHỈ điền khi người dùng đã GỬI ẢNH trong hội thoại và nhờ sửa chính tấm đó " +
-            "(1 = ảnh mới nhất). Yêu cầu vẽ/thiết kế/tạo ảnh mới thì TUYỆT ĐỐI không điền, kể cả khi mô tả rất chi tiết",
+          'Chỉ có tác dụng khi mode = "sua_anh_da_gui": sửa ảnh thứ mấy tính từ mới nhất. Bỏ trống = ảnh mới nhất',
         ),
       transparentBackground: z
         .boolean()
@@ -61,7 +72,7 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
         .describe("Cần nền trong suốt (logo, sticker, icon để ghép lên nền khác)"),
       caption: z.string().optional().describe("Lời nhắn gửi kèm ảnh"),
     }),
-    execute: async ({ prompt, imageIndex, transparentBackground, caption }) => {
+    execute: async ({ mode, prompt, imageIndex, transparentBackground, caption }) => {
       const threadKey = `${ctx.account.id}:${ctx.message.threadId}`;
 
       if (!isImageGenConfigured()) {
@@ -71,21 +82,27 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
       // Nạp ảnh gốc TRƯỚC khi tính vào trần: xin sửa ảnh không tồn tại thì
       // không có gì được vẽ, không có lý do gì trừ suất của người dùng
       let refImage: { base64: string; mediaType: string } | undefined;
-      if (imageIndex !== undefined) {
+      // CHỈ `mode` được quyền quyết định, không phải sự có mặt của imageIndex.
+      // Model có thói quen điền đủ mọi tham số (bắt được trên Zalo thật:
+      // args {imageIndex: 1} cho một yêu cầu vẽ e-magazine MỚI). Để imageIndex
+      // tự quyết thì nó sẽ đi sửa tấm ảnh cũ trong hội thoại và người dùng nhận
+      // về ảnh lạ mà không có gì báo sai.
+      if (mode === "sua_anh_da_gui") {
+        const wantedIndex = imageIndex ?? 1;
         const paths = collectRecentImagePaths(ctx);
 
         // Hội thoại CHƯA TỪNG có ảnh -> "sửa ảnh" là ý định bất khả thi (không
-        // ai bảo sửa ảnh khi chưa gửi ảnh bao giờ), chắc chắn model điền thừa
-        // tham số. Vẽ mới là việc duy nhất hợp lý. Từ chối thì model không nhận
-        // ra phải BỎ một tham số - nó loay hoay viết lại prompt rồi bỏ cuộc,
-        // đã dính thật: 5 lần gọi, 68k token, người dùng không nhận được gì.
+        // ai bảo sửa ảnh khi chưa gửi ảnh bao giờ), chắc chắn model chọn nhầm
+        // mode. Vẽ mới là việc duy nhất hợp lý. Từ chối thì model loay hoay
+        // viết lại prompt rồi bỏ cuộc - đã dính thật: 5 lần gọi, 68k token,
+        // người dùng không nhận được gì.
         //
         // Khác hẳn 2 nhánh dưới: ở đó hội thoại CÓ ảnh nên người dùng thật sự
         // đang nhắc tới một tấm ảnh - vẽ mới là làm sai ý họ, phải nói thật.
         if (paths.length > 0) {
-          const relPath = paths[imageIndex - 1];
+          const relPath = paths[wantedIndex - 1];
           if (!relPath) {
-            return `Hội thoại chỉ còn ${paths.length} ảnh gần đây - imageIndex ${imageIndex} vượt quá. Dùng imageIndex từ 1 đến ${paths.length}, hoặc bỏ hẳn imageIndex để vẽ ảnh mới.`;
+            return `Hội thoại chỉ còn ${paths.length} ảnh gần đây - imageIndex ${wantedIndex} vượt quá. Dùng imageIndex từ 1 đến ${paths.length}, hoặc đổi mode sang "ve_moi".`;
           }
           const loaded = loadStoredImage(relPath);
           if (!loaded) {

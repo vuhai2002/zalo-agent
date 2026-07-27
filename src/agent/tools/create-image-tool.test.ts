@@ -117,7 +117,7 @@ const run = (ctx: ToolContext, input: unknown): Promise<string> =>
 
 describe("create_image - vẽ mới", () => {
   it("báo trước RỒI mới vẽ RỒI mới gửi ảnh - đúng thứ tự đó", async () => {
-    await run(makeCtx(), { prompt: "một con mèo đội mũ" });
+    await run(makeCtx(), { mode: "ve_moi", prompt: "một con mèo đội mũ" });
 
     assert.deepEqual(
       events.map((e) => e.kind),
@@ -127,14 +127,14 @@ describe("create_image - vẽ mới", () => {
   });
 
   it("câu báo trước nói rõ là đang vẽ và sẽ mất thời gian", async () => {
-    await run(makeCtx(), { prompt: "con mèo" });
+    await run(makeCtx(), { mode: "ve_moi", prompt: "con mèo" });
     const notice = events.find((e) => e.kind === "text");
     assert.ok(notice && notice.kind === "text");
     assert.match(notice.msg, /vẽ|tạo ảnh/i);
   });
 
   it("gửi ảnh với đuôi .jpg đúng như provider trả về, kèm caption", async () => {
-    await run(makeCtx(), { prompt: "con mèo", caption: "Ảnh đây ạ" });
+    await run(makeCtx(), { mode: "ve_moi", prompt: "con mèo", caption: "Ảnh đây ạ" });
 
     const file = events.find((e) => e.kind === "file");
     assert.ok(file && file.kind === "file");
@@ -144,39 +144,52 @@ describe("create_image - vẽ mới", () => {
   });
 
   it("DẶN model đừng gửi lại - không dặn thì người dùng nhận ảnh 2 lần", async () => {
-    const result = await run(makeCtx(), { prompt: "con mèo" });
+    const result = await run(makeCtx(), { mode: "ve_moi", prompt: "con mèo" });
     assert.match(result, /KHÔNG gọi send_file/);
   });
 
   it("nền trong suốt truyền xuống client", async () => {
-    await run(makeCtx(), { prompt: "logo hình tròn", transparentBackground: true });
+    await run(makeCtx(), { mode: "ve_moi", prompt: "logo hình tròn", transparentBackground: true });
     const gen = events.find((e) => e.kind === "generate");
     assert.ok(gen && gen.kind === "generate" && gen.transparent);
   });
 });
 
 describe("create_image - sửa ảnh có sẵn", () => {
-  it("imageIndex 1 lấy ảnh mới nhất của lượt làm ảnh gốc", async () => {
-    const ctx = makeCtx([batchMsg([{ url: "u", localPath: writeMediaFile("media/acc-img/t-img/m1-0.png") }])]);
-    await run(ctx, { prompt: "đổi mũ thành beret đỏ", imageIndex: 1 });
+  const withImage = (name: string) =>
+    makeCtx([batchMsg([{ url: "u", localPath: writeMediaFile(`media/acc-img/t-img/${name}.png`) }])]);
+
+  it("mode sua_anh_da_gui lấy ảnh mới nhất làm ảnh gốc", async () => {
+    await run(withImage("m1-0"), { mode: "sua_anh_da_gui", prompt: "đổi mũ thành beret đỏ" });
 
     const gen = events.find((e) => e.kind === "generate");
     assert.ok(gen && gen.kind === "generate" && gen.hasRef, "thiếu ảnh gốc là thành VẼ MỚI chứ không phải sửa");
   });
 
-  it("không truyền imageIndex thì vẽ mới, không tự lôi ảnh cũ vào", async () => {
-    const ctx = makeCtx([batchMsg([{ url: "u", localPath: writeMediaFile("media/acc-img/t-img/m2-0.png") }])]);
-    await run(ctx, { prompt: "vẽ cảnh hoàng hôn" });
+  it("mode ve_moi thì KHÔNG lôi ảnh cũ vào, dù hội thoại đang có ảnh", async () => {
+    await run(withImage("m2-0"), { mode: "ve_moi", prompt: "vẽ cảnh hoàng hôn" });
 
     const gen = events.find((e) => e.kind === "generate");
     assert.ok(gen && gen.kind === "generate" && !gen.hasRef);
   });
 
-  it("model lỡ xin imageIndex mà hội thoại CHƯA TỪNG có ảnh -> vẫn vẽ mới, không từ chối", async () => {
-    // Không ai bảo "sửa ảnh" khi chưa gửi ảnh bao giờ - đây chắc chắn là model
-    // điền thừa tham số. Từ chối thì nó loay hoay sửa prompt rồi bỏ cuộc (đã
-    // dính thật: 5 lần gọi, 68k token, người dùng không nhận được ảnh nào).
-    const result = await run(makeCtx(), { prompt: "vẽ trang e-magazine dọc", imageIndex: 1 });
+  it("mode ve_moi kèm imageIndex thừa vẫn vẽ MỚI - đây là lá chắn chính", async () => {
+    // Model có thói quen điền đủ mọi tham số (đã bắt được trên Zalo thật:
+    // args {imageIndex: 1} cho một yêu cầu vẽ e-magazine mới). Nếu imageIndex
+    // vẫn có quyền quyết định thì nó sẽ đi SỬA tấm ảnh cũ trong hội thoại và
+    // người dùng nhận về ảnh lạ mà không có gì báo sai.
+    await run(withImage("m3-0"), { mode: "ve_moi", prompt: "vẽ con mèo", imageIndex: 1 });
+
+    const gen = events.find((e) => e.kind === "generate");
+    assert.ok(gen && gen.kind === "generate", "phải vẽ");
+    assert.equal(gen.hasRef, false, "mode quyết định, imageIndex thừa bị bỏ qua");
+  });
+
+  it("xin sửa ảnh mà hội thoại CHƯA TỪNG có ảnh -> vẫn vẽ mới, không từ chối", async () => {
+    // Không ai bảo "sửa ảnh" khi chưa gửi ảnh bao giờ. Từ chối thì model loay
+    // hoay sửa prompt rồi bỏ cuộc (đã dính thật: 5 lần gọi, 68k token, người
+    // dùng không nhận được ảnh nào).
+    const result = await run(makeCtx(), { mode: "sua_anh_da_gui", prompt: "vẽ trang e-magazine dọc" });
 
     const gen = events.find((e) => e.kind === "generate");
     assert.ok(gen && gen.kind === "generate", "phải vẽ chứ không được từ chối");
@@ -188,8 +201,11 @@ describe("create_image - sửa ảnh có sẵn", () => {
   it("hội thoại CÓ ảnh nhưng imageIndex vượt quá -> báo cho model, KHÔNG đốt tiền gọi API", async () => {
     // Khác hẳn trường hợp trên: đã có ảnh nghĩa là người dùng thật sự nhắc tới
     // một tấm ảnh, vẽ mới là làm sai ý họ
-    const ctx = makeCtx([batchMsg([{ url: "u", localPath: writeMediaFile("media/acc-img/t-img/m9-0.png") }])]);
-    const result = await run(ctx, { prompt: "sửa ảnh thứ 5", imageIndex: 5 });
+    const result = await run(withImage("m9-0"), {
+      mode: "sua_anh_da_gui",
+      prompt: "sửa ảnh thứ 5",
+      imageIndex: 5,
+    });
 
     assert.equal(events.filter((e) => e.kind === "generate").length, 0);
     assert.match(result, /chỉ còn 1 ảnh/i);
@@ -197,7 +213,7 @@ describe("create_image - sửa ảnh có sẵn", () => {
 
   it("ảnh đã bị dọn khỏi đĩa -> báo rõ, không gọi API", async () => {
     const ctx = makeCtx([batchMsg([{ url: "u", localPath: "media/acc-img/t-img/da-bi-xoa.png" }])]);
-    const result = await run(ctx, { prompt: "sửa", imageIndex: 1 });
+    const result = await run(ctx, { mode: "sua_anh_da_gui", prompt: "sửa" });
 
     assert.equal(events.filter((e) => e.kind === "generate").length, 0);
     assert.match(result, /không đọc được|đã bị dọn/i);
@@ -209,20 +225,31 @@ describe("create_image - schema đầu vào (đi qua inputSchema thật, không 
   const parse = (input: unknown) =>
     (toolModule.createImageTool(makeCtx(), fakeGenerate) as any).inputSchema.safeParse(input);
 
+  it("mode là BẮT BUỘC - thiếu thì schema chặn, model phải chọn có ý thức", () => {
+    // Tham số tùy chọn thì model điền theo quán tính; bắt buộc thì nó phải nghĩ
+    assert.equal(parse({ prompt: "vẽ con mèo" }).success, false);
+  });
+
+  it("mode lạ bị chặn, chỉ nhận đúng 2 giá trị", () => {
+    assert.equal(parse({ mode: "edit", prompt: "x" }).success, false);
+    assert.equal(parse({ mode: "ve_moi", prompt: "x" }).success, true);
+    assert.equal(parse({ mode: "sua_anh_da_gui", prompt: "x" }).success, true);
+  });
+
   it("bỏ trống imageIndex ra đúng undefined, KHÔNG phải NaN", () => {
-    // NaN thì "imageIndex !== undefined" là true và tool đi nhầm nhánh sửa ảnh
-    const parsed = parse({ prompt: "vẽ con mèo" });
+    // NaN thì mọi phép so với undefined đều sai và tool đi nhầm nhánh
+    const parsed = parse({ mode: "ve_moi", prompt: "vẽ con mèo" });
     assert.equal(parsed.success, true);
     assert.equal(parsed.data.imageIndex, undefined);
     assert.equal(Number.isNaN(parsed.data.imageIndex), false);
   });
 
   it("prompt rỗng bị chặn ngay ở schema", () => {
-    assert.equal(parse({ prompt: "" }).success, false);
+    assert.equal(parse({ mode: "ve_moi", prompt: "" }).success, false);
   });
 
   it("imageIndex dạng chuỗi số vẫn nhận (model hay trả chuỗi)", () => {
-    const parsed = parse({ prompt: "sửa", imageIndex: "2" });
+    const parsed = parse({ mode: "sua_anh_da_gui", prompt: "sửa", imageIndex: "2" });
     assert.equal(parsed.success, true);
     assert.equal(parsed.data.imageIndex, 2);
   });
@@ -230,18 +257,18 @@ describe("create_image - schema đầu vào (đi qua inputSchema thật, không 
 
 describe("create_image - chặn và lỗi", () => {
   it("chạm trần thì KHÔNG gọi API và KHÔNG nhắn báo trước", async () => {
-    await run(makeCtx(), { prompt: "1" });
-    await run(makeCtx(), { prompt: "2" });
+    await run(makeCtx(), { mode: "ve_moi", prompt: "1" });
+    await run(makeCtx(), { mode: "ve_moi", prompt: "2" });
     events = [];
 
-    const result = await run(makeCtx(), { prompt: "3" });
+    const result = await run(makeCtx(), { mode: "ve_moi", prompt: "3" });
     assert.deepEqual(events, [], "chạm trần mà vẫn nhắn 'đang vẽ' là hứa lèo");
     assert.match(result, /trần 2/);
   });
 
   it("provider lỗi -> trả câu cho model đọc, KHÔNG throw ra agent loop", async () => {
     generateError = new Error("API key required for remote API access");
-    const result = await run(makeCtx(), { prompt: "con mèo" });
+    const result = await run(makeCtx(), { mode: "ve_moi", prompt: "con mèo" });
 
     assert.match(result, /API key required/);
     assert.equal(events.filter((e) => e.kind === "file").length, 0, "lỗi thì không được gửi file rác");
@@ -249,17 +276,17 @@ describe("create_image - chặn và lỗi", () => {
 
   it("provider lỗi vẫn tính vào trần - không cho spam retry đốt quota", async () => {
     generateError = new Error("quá tải");
-    await run(makeCtx(), { prompt: "1" });
-    await run(makeCtx(), { prompt: "2" });
+    await run(makeCtx(), { mode: "ve_moi", prompt: "1" });
+    await run(makeCtx(), { mode: "ve_moi", prompt: "2" });
     generateError = null;
 
-    const result = await run(makeCtx(), { prompt: "3" });
+    const result = await run(makeCtx(), { mode: "ve_moi", prompt: "3" });
     assert.match(result, /trần 2/);
   });
 
   it("chưa cấu hình đủ thì báo lỗi thay vì gọi API với key rỗng", async () => {
     settings.clearImageSettings();
-    const result = await run(makeCtx(), { prompt: "con mèo" });
+    const result = await run(makeCtx(), { mode: "ve_moi", prompt: "con mèo" });
     settings.updateImageSettings({
       baseUrl: "https://router.test",
       model: "cx/gpt-5.5-image",
