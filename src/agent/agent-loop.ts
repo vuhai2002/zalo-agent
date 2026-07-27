@@ -31,7 +31,7 @@ function forLog(value: unknown, max: number): string {
  * ký tự nên `imageIndex` đứng sau bị nuốt sạch - chẩn đoán phải suy luận ngược
  * từ câu lỗi thay vì đọc thẳng.
  */
-const SHORT_FIELDS = ["imageIndex", "transparentBackground", "fileName"];
+const SHORT_FIELDS = ["mode", "imageIndex", "transparentBackground", "fileName"];
 
 function shortArgsOf(input: unknown): Record<string, unknown> | undefined {
   if (!input || typeof input !== "object") return undefined;
@@ -40,6 +40,10 @@ function shortArgsOf(input: unknown): Record<string, unknown> | undefined {
   for (const key of SHORT_FIELDS) {
     if (record[key] !== undefined) picked[key] = record[key];
   }
+  // Độ dài prompt phân biệt được "model chép nguyên văn nội dung người dùng đưa"
+  // với "model tóm tắt thành chủ đề" - hai thứ cho ra ảnh khác hẳn nhau mà nhìn
+  // 200 ký tự đầu thì không tài nào biết được
+  if (typeof record.prompt === "string") picked.promptChars = record.prompt.length;
   return Object.keys(picked).length > 0 ? picked : undefined;
 }
 
