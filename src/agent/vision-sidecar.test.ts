@@ -169,11 +169,28 @@ describe("vision-sidecar", () => {
     assert.match(answer, /bị cắt vì quá dài/, "model phải biết dữ liệu chưa đủ để đừng kết luận chắc nịch");
   });
 
-  it("pruneExpiredImageDescriptions xóa mô tả cũ, giữ mô tả mới", () => {
-    descriptionStore.saveImageDescription("media/a/t/moi-nhat.jpg", "mới", "test");
-    // retention 0 ngày = cutoff ngay bây giờ -> mọi row (tạo trước đó vài ms) bị xóa
-    const removed = descriptionStore.pruneExpiredImageDescriptions(0);
-    assert.ok(removed >= 1);
-    assert.equal(descriptionStore.getImageDescription("media/a/t/moi-nhat.jpg"), null);
+  it("pruneExpiredImageDescriptions xóa mô tả cũ, GIỮ mô tả mới", () => {
+    // Lùi ngày bằng SQL thay vì dựa vào thời gian trôi: bản cũ gọi retention 0
+    // rồi kỳ vọng "vài ms đã qua là đủ cũ", nhưng phép so là `created_at <
+    // cutoff` CHẶT và cả hai mốc đều chính xác tới mili-giây - ghi với dọn rơi
+    // vào cùng một mili-giây là row sống sót. Test đổ ~1/10 lần chạy vì thế.
+    // Đây thuần túy là lỗi của test: chạy thật retention là 7 ngày.
+    descriptionStore.saveImageDescription("media/a/t/cu.jpg", "mô tả cũ", "test");
+    descriptionStore.saveImageDescription("media/a/t/moi.jpg", "mô tả mới", "test");
+
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    database.db
+      .prepare("UPDATE image_descriptions SET created_at = ? WHERE rel_path = ?")
+      .run(tenDaysAgo, "media/a/t/cu.jpg");
+
+    const removed = descriptionStore.pruneExpiredImageDescriptions(7);
+
+    assert.equal(removed, 1, "chỉ được xóa đúng row quá hạn");
+    assert.equal(descriptionStore.getImageDescription("media/a/t/cu.jpg"), null, "mô tả 10 ngày tuổi phải bị dọn");
+    assert.equal(
+      descriptionStore.getImageDescription("media/a/t/moi.jpg"),
+      "mô tả mới",
+      "mô tả còn hạn phải được GIỮ - vế này bản cũ hứa trong tên nhưng không hề kiểm",
+    );
   });
 });
