@@ -7,11 +7,13 @@ import { cleanupTestEnv, setupTestEnv } from "../../shared/test-env-setup.js";
 let dataDir: string;
 let registry: typeof import("./tool-registry.js");
 let visionStore: typeof import("../../config/runtime-vision-settings.js");
+let imageStore: typeof import("../../config/runtime-image-settings.js");
 
 before(async () => {
   dataDir = setupTestEnv();
   registry = await import("./tool-registry.js");
   visionStore = await import("../../config/runtime-vision-settings.js");
+  imageStore = await import("../../config/runtime-image-settings.js");
 });
 
 after(async () => {
@@ -55,11 +57,23 @@ function configureSidecar(): void {
   });
 }
 
+/** Các tool chỉ vào schema khi hạ tầng riêng của chúng đã sẵn sàng */
+const GATED_TOOLS = ["read_image", "create_image"];
+
+function configureImageGen(): void {
+  imageStore.updateImageSettings({
+    baseUrl: "https://router.test",
+    model: "cx/gpt-5.5-image",
+    apiKey: "sk-x",
+  });
+}
+
 describe("tool-registry", () => {
-  it("mặc định (không tắt gì) build đủ catalog TRỪ read_image khi chưa có sidecar", () => {
+  it("mặc định (không tắt gì) build đủ catalog TRỪ các tool chưa có hạ tầng", () => {
     unconfigureSidecar();
+    imageStore.clearImageSettings();
     const tools = registry.buildAgentTools(makeContext([]));
-    const expected = registry.TOOL_KEYS.filter((k) => k !== "read_image");
+    const expected = registry.TOOL_KEYS.filter((k) => !GATED_TOOLS.includes(k));
     assert.deepEqual(Object.keys(tools).sort(), expected.sort());
     // Các tool cốt lõi phải có mặt - đổi key là model "mất trí nhớ" về tool
     for (const key of ["get_datetime", "web_search", "web_fetch", "add_reaction", "send_file"]) {
@@ -88,11 +102,26 @@ describe("tool-registry", () => {
     assert.ok(tools.get_datetime, "tool không tắt vẫn phải còn");
   });
 
+  it("create_image chỉ vào schema khi đã cấu hình endpoint vẽ ảnh", () => {
+    imageStore.clearImageSettings();
+    assert.equal(registry.buildAgentTools(makeContext([])).create_image, undefined);
+    configureImageGen();
+    assert.ok(registry.buildAgentTools(makeContext([])).create_image, "có cấu hình phải có tool");
+    imageStore.clearImageSettings();
+  });
+
+  it("create_image bị tắt per account thì kể cả đã cấu hình cũng không vào schema", () => {
+    configureImageGen();
+    assert.equal(registry.buildAgentTools(makeContext(["create_image"])).create_image, undefined);
+    imageStore.clearImageSettings();
+  });
+
   it("key lạ trong disabledTools không làm crash, không ảnh hưởng tool khác", () => {
     unconfigureSidecar();
+    imageStore.clearImageSettings();
     const tools = registry.buildAgentTools(makeContext(["khong-ton-tai"]));
-    // read_image vắng vì sidecar chưa cấu hình, phần còn lại đủ
-    assert.equal(Object.keys(tools).length, registry.TOOL_KEYS.length - 1);
+    // 2 tool có điều kiện vắng vì chưa cấu hình, phần còn lại đủ
+    assert.equal(Object.keys(tools).length, registry.TOOL_KEYS.length - GATED_TOOLS.length);
   });
 
   it("catalog: key duy nhất, đủ metadata cho UI, nhóm hợp lệ", () => {

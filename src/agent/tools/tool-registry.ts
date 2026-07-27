@@ -1,10 +1,12 @@
 import type { Tool } from "ai";
 import type { API } from "zca-js";
 import type { AccountConfig } from "../../config/account-store.js";
+import { isImageGenConfigured } from "../../config/runtime-image-settings.js";
 import { isSidecarConfigured } from "../../config/runtime-vision-settings.js";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 import { createAddReactionTool } from "./add-reaction-tool.js";
 import { createExcelFileTool, createWordDocumentTool } from "./create-document-tools.js";
+import { createImageTool } from "./create-image-tool.js";
 import { createGetDatetimeTool } from "./get-datetime-tool.js";
 import { createGetGroupInfoTool } from "./get-group-info-tool.js";
 import { createReadImageTool } from "./read-image-tool.js";
@@ -139,6 +141,16 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     build: (ctx) => createExcelFileTool(ctx),
   },
   {
+    key: "create_image",
+    label: "Vẽ ảnh AI",
+    description: "Vẽ ảnh mới hoặc sửa ảnh người dùng vừa gửi (đổi màu, xóa vật thể, đổi phong cách) rồi gửi luôn",
+    group: "action",
+    hasSettings: true,
+    available: () => isImageGenConfigured(),
+    unavailableHint: "Bấm Settings để cấu hình endpoint + model vẽ ảnh",
+    build: (ctx) => createImageTool(ctx),
+  },
+  {
     key: "tag_member",
     label: "Tag thành viên",
     description: "Nhắc tên (@mention) thành viên trong nhóm khi trả lời",
@@ -162,13 +174,24 @@ export const TOOL_KEYS = TOOL_DEFINITIONS.map((t) => t.key);
  * không tốn token mô tả, không thể bị prompt injection dụ gọi.
  */
 export function buildAgentTools(ctx: ToolContext): Record<string, Tool> {
-  const disabled = new Set(ctx.account.disabledTools);
   const tools: Record<string, Tool> = {};
-  for (const def of TOOL_DEFINITIONS) {
-    if (disabled.has(def.key)) continue;
-    // Kiểm mỗi lượt: cấu hình sidecar từ dashboard ăn ngay không cần restart
-    if (def.available && !def.available()) continue;
+  for (const def of listAvailableTools(ctx.account)) {
     tools[def.key] = def.build(ctx);
   }
   return tools;
+}
+
+/**
+ * Tool account THỰC SỰ nhận được trong lượt này. Dùng chung bộ lọc với
+ * `buildAgentTools` (chính nó gọi hàm này) vì system prompt cũng cần danh sách
+ * để trả lời câu "bạn làm được gì" - hai nơi tự lọc riêng là sớm muộn cũng
+ * lệch, và lệch nghĩa là bot hứa một tool mà model không hề nhận được.
+ */
+export function listAvailableTools(account: Pick<AccountConfig, "disabledTools">): ToolDefinition[] {
+  const disabled = new Set(account.disabledTools);
+  return TOOL_DEFINITIONS.filter((def) => {
+    if (disabled.has(def.key)) return false;
+    // Kiểm mỗi lượt: cấu hình từ dashboard ăn ngay không cần restart
+    return !def.available || def.available();
+  });
 }
