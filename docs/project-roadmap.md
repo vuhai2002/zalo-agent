@@ -417,9 +417,8 @@ chết cả lượt. Research trước khi làm: Hermes `image_input_mode` auto|
   fetcher tiêm, vision-sidecar với caller tiêm, describe-mode của
   history-to-model-messages, blind-mode của agent-turn-content; sửa
   media-store.test đóng DB trước khi dọn thư mục tạm - EPERM trên Windows)
-- [ ] Chưa test thật: điền key Gemini + đổi model chính sang model không vision
-  (vd ds/deepseek-v4-pro) -> gửi ảnh, kỳ vọng bot vẫn mô tả được nội dung;
-  bấm Test sidecar trên UI
+- [x] **Đã test thật (2026-07-27)**: cấu hình sidecar Gemini trên dashboard,
+  Test sidecar chạy, gửi ảnh qua Zalo -> bot đọc được nội dung ảnh
 
 ## V2.9.1 - Combo hybrid + reactive fallback khi model từ chối ảnh (2026-07-27)
 
@@ -449,9 +448,8 @@ mù là ảnh bị lột êm, không lỗi, không dấu vết.
   isImageRejectionError từng mã HTTP, hasImageParts, describe/hybrid của cả
   history lẫn lượt hiện tại với file thật trên đĩa + cache mô tả, forceMode).
   Test sống trên 9Router thật: 5 case phân loại + cache âm + imageMode đều đúng
-- [ ] Chưa test Zalo thật: cấu hình sidecar Gemini rồi gửi ảnh vào combo ->
-  kỳ vọng log `imageMode: "hybrid"`; lượt sau hỏi lại về ảnh (không gửi ảnh
-  mới) khi combo rơi vào deepseek -> kỳ vọng bot vẫn biết nội dung ảnh
+- [x] **Đã test thật (2026-07-27)**: gửi ảnh vào combo, chế độ hybrid chạy
+  đúng - bot đọc được ảnh cả khi lượt rơi vào thành viên không vision
 
 ## V2.9.2 - Tool read_image: agent tự "nhìn kỹ lại" ảnh (2026-07-27)
 
@@ -472,9 +470,8 @@ với GoClaw (`read_image`) và Hermes (`vision_analyze` + hint "closer look").
 - [x] Test: 359 pass (13 test mới: thứ tự gom ảnh, chọn index, đủ nhánh lỗi
   của tool, askAboutImage không cache + prompt nguyên câu hỏi, registry
   bật/tắt theo sidecar + per account)
-- [ ] Chưa test Zalo thật: model chính deepseek + sidecar Gemini, gửi ảnh bể
-  cá hỏi "có mấy con cá màu vàng" -> kỳ vọng agent gọi read_image rồi trả
-  lời có số đếm từ Gemini, log tool `read_image` hiện input câu hỏi
+- [x] **Đã test thật (2026-07-27)**: hỏi câu cần soi kỹ ảnh, agent gọi
+  `read_image` và trả lời được từ kết quả sidecar
 
 ## V2.9.3 - Đính chính model sidecar: 2.5-flash-lite đã chết (2026-07-27)
 
@@ -497,8 +494,8 @@ trang Rate Limit của AI Studio nhờ soi lại. Test sống bằng chính key 
   test; system-architecture ghi lại vụ 404 + lý do loại Gemma
 - [x] Bài học ghi docs: quota free Gemini phải đọc từ trang Rate Limit của
   CHÍNH account (thay đổi theo thế hệ model + tier), không tin số liệu web
-- [ ] User đổi model trên dashboard thành `gemini-3.5-flash-lite` + bấm Test
-  sidecar (key giữ nguyên)
+- [x] **Đã test thật (2026-07-27)**: đổi model trên dashboard sang
+  `gemini-3.5-flash-lite`, Test sidecar trả kết quả ok
 
 ## V2.9.4 - Xóa được sidecar + trang Tools hết nói dối (2026-07-27)
 

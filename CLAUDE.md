@@ -4,7 +4,7 @@ Bot AI thường trú trên Zalo **tài khoản cá nhân**, nhiều account ch�
 Luồng: tin nhắn Zalo -> lọc -> gộp theo thread -> agent loop (LLM tự gọi tool) -> trả lời.
 
 Chi tiết kiến trúc + lý do từng quyết định kỹ thuật: `docs/system-architecture.md`.
-Trạng thái V1/V2/V3: `docs/project-roadmap.md`.
+Trạng thái V1/V2/V3 + việc còn treo: `docs/project-roadmap.md`.
 
 ## Repo tham khảo (chỉ đọc, KHÔNG sửa)
 
