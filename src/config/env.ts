@@ -108,6 +108,21 @@ const envSchema = z.object({
   // Số file tối đa 1 thread được tạo trong 1 giờ - chặn spam "xuất file" liên tục
   DOCUMENT_MAX_PER_HOUR: z.coerce.number().int().min(1).max(200).default(10),
 
+  // Tool vẽ ảnh. Endpoint OpenAI-compatible /v1/images/generations (9Router,
+  // OpenAI, hoặc gateway bất kỳ nói cùng giao thức). Cấu hình được từ dashboard
+  // (Settings của dòng tool trên trang Tools) - env chỉ là giá trị khởi điểm.
+  // KHÔNG tự dò được model như sidecar: /v1/models chỉ liệt kê model chat.
+  IMAGE_GEN_BASE_URL: z.preprocess(emptyToUndefined, z.string().startsWith("http").optional()),
+  IMAGE_GEN_MODEL: z.string().default(""),
+  IMAGE_GEN_API_KEY: z.string().default(""),
+  // Vẽ 1 ảnh mất ~70 giây (đo trên cx/gpt-5.5-image) và TỐN TIỀN THẬT mỗi lần.
+  // Bot đọc tin người lạ nên trần này là hàng phòng thủ chính chống đốt quota.
+  IMAGE_GEN_MAX_PER_HOUR: z.coerce.number().int().min(1).max(100).default(10),
+  // Trần thời gian chờ provider. fetch không có timeout mặc định - provider treo
+  // là treo cả lượt agent. 180s = gấp ~2.5 lần thời gian vẽ thật, đủ dư cho lúc
+  // provider chậm mà vẫn cắt được kết nối chết.
+  IMAGE_GEN_TIMEOUT_MS: z.coerce.number().int().min(30_000).max(600_000).default(180_000),
+
   // Memory lớp 2: đủ N tin rớt khỏi cửa sổ replay thì gộp vào summary của thread
   SUMMARY_TRIGGER_MESSAGES: z.coerce.number().int().min(5).max(500).default(30),
   // Memory lớp 3: tối đa bao nhiêu fact được lưu cho mỗi người/nhóm
