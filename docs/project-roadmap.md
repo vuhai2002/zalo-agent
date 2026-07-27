@@ -796,6 +796,99 @@ chạm trần -> bản CỤT được `saveImageDescription` cache vĩnh viễn 
 - [ ] Chưa test Zalo thật lại: restart bot rồi nhắn "tạo file excel báo cáo"
   -> kỳ vọng nội dung đầy đủ nhiều sheet, màu hợp ngữ cảnh, sheet tab CÓ dấu
 
+## V3.1 - Tool vẽ ảnh AI, vẽ mới và sửa ảnh người dùng gửi (2026-07-27)
+
+Tool `create_image` gọi endpoint OpenAI-compatible `/v1/images/generations`. Làm
+theo TDD: viết test đỏ trước, xem nó fail đúng lý do, rồi mới viết code - 57 test
+mới, tổng 496 pass.
+
+### Khảo sát trước khi viết dòng code nào (4 lần gọi API thật + đọc source 9Router)
+
+- **`?response_format=binary` + JPEG nhẹ hơn 15 lần.** Cùng một ảnh: JSON base64
+  PNG 2.4 MB so với binary JPEG 157 KB, mắt không phân biệt được. Đường JSON còn
+  bắt parse chuỗi 3.3 MB rồi decode trong khi ta chỉ cần bytes để ghi file
+- **`size` bị model BỎ QUA.** Xin `1024x1024` hai lần, nhận `1024x1536` rồi
+  `1536x1024`. Không gửi tham số này và không hứa chỉnh được kích thước
+- **Ảnh gốc ở trường `image` (không phải `ref_image`), dạng data URI.** Sai tên
+  thì provider bỏ qua âm thầm: vẫn ra ảnh nhưng là ảnh VẼ MỚI. Sửa ảnh là sửa
+  thật - gửi ảnh mèo + "đổi mũ thành beret đỏ" thì mũ đổi, mèo/sách/đèn giữ
+  nguyên từng pixel
+- **Lỗi có HAI hình dạng:** `400` trả `error` là OBJECT có `.message`, `401` trả
+  `error` là CHUỖI. Parser chỉ đọc `.message` sẽ hiện `undefined` đúng lúc người
+  dùng cần biết nhất là sai key
+- **63-69 giây mỗi ảnh**, cả 4 lần đo
+- **Model vẽ ảnh KHÔNG có trong `/v1/models`** (22 model chat, không cái nào có
+  `imageOutput`) - nằm ở registry Media Providers riêng, nên không copy được mẹo
+  auto-detect capability của sidecar đọc ảnh
+
+### Đã làm
+
+- [x] `runtime-image-settings.ts`: base URL + model + key, DB đè env, key mã hóa
+  AES-256-GCM, có đường xóa riêng (PATCH quy ước "trống = giữ key cũ")
+- [x] `image-generation-client.ts`: binary + JPEG mặc định, `transparent` ép sang
+  PNG (JPEG không có kênh alpha), timeout tường minh qua `AbortSignal` vì `fetch`
+  không có timeout mặc định - provider treo là treo cả lượt agent
+- [x] `shared/hourly-rate-limit.ts`: tách phần đếm + DỌN bộ nhớ dùng chung, rồi
+  chuyển `document-rate-limit.ts` sang dùng (6 test cũ của nó xanh nguyên vẹn làm
+  lưới an toàn). Chép logic sang chỗ thứ hai là chép cả bẫy rò rỉ Map của V2.4
+- [x] `create-image-tool.ts`: thứ tự bắt buộc là kiểm cấu hình -> nạp ảnh gốc ->
+  kiểm trần -> NHẮN "đang vẽ" -> vẽ. Nhắn trước khi biết có vẽ được không là hứa
+  lèo; nhắn sau khi vẽ xong thì nhắn để làm gì. Có test khẳng định đúng thứ tự
+- [x] Ảnh gốc lấy từ hội thoại qua `collectRecentImagePaths` sẵn có của
+  `read_image` - `imageIndex=1` là ảnh mới nhất, bỏ trống là vẽ mới
+- [x] Lỗi provider VẪN tính vào trần: không thì spam retry đốt quota thoải mái
+- [x] Dashboard: `/api/image-gen` (GET/PATCH/DELETE/test) + modal riêng ở trang
+  Tools, badge hiện tên model đang dùng
+- [x] Nút "Vẽ thử 1 ảnh" vẽ THẬT (~1 phút, tính phí) - cách duy nhất chứng minh
+  tên model đúng vì không có danh sách nào để đối chiếu
+- [x] Test đầu-cuối gọi API thật qua chính module client: vẽ mới 282 KB/58s, sửa
+  ảnh 190 KB/57s, model sai bị từ chối kèm câu lỗi có nội dung thật. Prompt tiếng
+  Việt có dấu ra cảnh Việt Nam đúng, chữ trên biển hiệu cũng đúng chính tả
+
+### Quyết định của user
+
+- Nhắn báo trước rồi vẽ (thay vì im lặng 70 giây)
+- Trần 10 ảnh/giờ/thread
+- Cho bot tự lấy ảnh gần nhất làm ảnh gốc
+
+### Sửa sau lượt test Zalo thật đầu tiên (2026-07-28)
+
+Test thật lộ 2 lỗi, cả hai đều là lỗi thiết kế chứ không phải lỗi code:
+
+**Model điền thừa `imageIndex` cho yêu cầu vẽ MỚI.** Gọi tool 5 lần, lần nào cũng
+nhận "Hội thoại chưa có ảnh nào để sửa", tốn 68k token, người dùng không nhận
+được ảnh nào. Loại trừ schema Zod trước (thử 6 dạng đầu vào, bỏ trống ra đúng
+`undefined` chứ không phải `NaN`) nên thủ phạm là model. Đọc log thấy nó CÓ cố
+sửa - đổi prompt thành "Tạo mới hoàn toàn..." - tức là nó tưởng phải sửa NỘI
+DUNG chứ không nhận ra cần BỎ một tham số đi.
+
+- [x] Hội thoại CHƯA TỪNG có ảnh -> vẽ mới luôn thay vì từ chối. Không ai bảo
+  "sửa ảnh" khi chưa gửi ảnh bao giờ, nên đó chắc chắn là tham số thừa và vẽ mới
+  là việc duy nhất hợp lý. Hai nhánh còn lại (index vượt quá khi CÓ ảnh; ảnh đã
+  bị dọn khỏi đĩa) vẫn báo lỗi thật vì lúc đó người dùng có nhắc tới ảnh thật
+- [x] Mô tả tham số + dòng persona viết lại: dòng cũ "điền imageIndex=1 để lấy
+  ảnh mới nhất" đọc lên như đang XÚI model điền
+- [x] Test đi qua `inputSchema` thật, không gọi thẳng `execute` - đúng điểm mù
+  đã để lọt bug discriminatedUnion của Excel
+- [x] Log: tách các field ngắn quyết định hành vi ra `args` riêng. `prompt` dài
+  hơn trần 200 ký tự nên `imageIndex` đứng sau bị nuốt sạch, phải suy luận ngược
+  từ câu lỗi mới biết model gửi gì
+
+**Persona tĩnh kể tên tool cứng, không biết tool nào đang tắt.** `BASE_PERSONA`
+là hằng số giống hệt nhau cho mọi account, trong khi `buildAgentTools` lọc theo
+`disabledTools` + `available()`. Tắt một tool đi thì prompt vẫn dạy cách dùng nó,
+bot vẫn hứa làm được dù model không hề nhận được tool đó.
+
+- [x] `listAvailableTools(account)` trong tool-registry - `buildAgentTools` gọi
+  chính hàm này nên hai bên KHÔNG THỂ lệch. Có test khẳng định danh sách khớp
+  chính xác bộ tool dựng ra
+- [x] System prompt có mục "Khả năng của bạn lúc này" dùng NHÃN tiếng Việt (bot
+  phải nói "tạo file Excel" chứ không phải "create_excel_file"), kèm dặn trả lời
+  câu "làm được gì" theo đúng danh sách và không hứa thứ ngoài danh sách
+
+- [ ] Chưa test Zalo thật lại sau 2 sửa này: restart bot rồi nhắn "tạo e-magazine
+  dọc về ..." -> kỳ vọng ra ảnh ngay lần đầu, không lặp lại vòng lỗi
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic

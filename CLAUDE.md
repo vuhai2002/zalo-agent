@@ -39,6 +39,7 @@ Nằm ngoài project tại `D:\source-code\zalo-agent-references\`:
 - tsconfig để `moduleResolution: Bundler` - `index.d.ts` của zca-js dùng directory import, NodeNext không resolve được types.
 - Tạo file Office bằng `docx` + `exceljs` (npm), **không** dùng `write-excel-file` dù nhẹ hơn 12 lần: nó không ghi được giá trị cache `<v>` cho công thức nên mọi công cụ xem trước hiện ô trống, và ghi thừa dấu bằng trong `<f>` (sai ECMA-376). Cũng **không** cài LibreOffice để recalc - bot tự tính kết quả rồi ghi kèm.
 - Tool tạo file chỉ nhận **dữ liệu** (tiêu đề, đoạn văn, bảng), tuyệt đối không chạy code do model sinh ra: bot đọc tin người lạ nên đó là đường prompt injection thành RCE.
+- Vẽ ảnh gọi `/v1/images/generations` với **`?response_format=binary` + JPEG** (157 KB so với 2.4 MB của JSON base64 PNG). Ảnh gốc để sửa nằm ở trường **`image`** dạng data URI, KHÔNG phải `ref_image` - sai tên thì provider bỏ qua âm thầm và ra ảnh vẽ mới. **Không gửi `size`**: model bỏ qua tham số này (đo: xin 1024x1024 nhận 1536x1024). Lỗi có 2 hình dạng - `400` trả `error.message`, `401` trả `error` là chuỗi.
 
 ## Lệnh hay dùng
 

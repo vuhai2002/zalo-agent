@@ -1,6 +1,6 @@
 # zalo-agent
 
-Bot AI thường trú trên Zalo (tài khoản cá nhân, multi-account): nhận tin nhắn -> agent loop (LLM tự gọi tool: tra ngày giờ, tìm kiếm web, đọc trang web, thả reaction, gửi file, tag thành viên, xem info nhóm, đọc ảnh) -> trả lời. Tool bật/tắt được per account ngay trên dashboard (trang Tools).
+Bot AI thường trú trên Zalo (tài khoản cá nhân, multi-account): nhận tin nhắn -> agent loop (LLM tự gọi tool: tra ngày giờ, tìm kiếm web, đọc trang web, thả reaction, gửi file, tag thành viên, xem info nhóm, đọc ảnh, vẽ ảnh) -> trả lời. Tool bật/tắt được per account ngay trên dashboard (trang Tools).
 
 - Zalo layer: [zca-js](https://github.com/RFS-ADRENO/zca-js) (unofficial API - CÓ RỦI RO KHÓA NICK, chỉ dùng nick phụ)
 - Agent layer: Vercel AI SDK - provider cắm rời qua env (router proxy OpenAI-compatible hoặc Anthropic trực tiếp), đổi được runtime từ dashboard
@@ -9,6 +9,10 @@ Bot AI thường trú trên Zalo (tài khoản cá nhân, multi-account): nhận
 - Web search miễn phí qua DuckDuckGo (không cần key); điền `BRAVE_SEARCH_API_KEY` (free tier) nếu muốn kết quả tốt hơn
 - Tự soạn file Word (.docx) và Excel (.xlsx) rồi gửi thẳng trong chat - bảng tính có công thức
   kèm sẵn kết quả nên xem trước trên điện thoại vẫn thấy số, không cần tải về
+- Vẽ ảnh AI ngay trong chat: vẽ mới theo mô tả, hoặc SỬA ảnh người dùng vừa gửi (đổi màu,
+  xóa vật thể, đổi phong cách) - phần còn lại của ảnh giữ nguyên từng pixel. Cắm endpoint
+  OpenAI-compatible `/v1/images/generations` ở nút Settings trên dòng "Vẽ ảnh AI".
+  Mỗi ảnh mất khoảng 1 phút nên bot tự nhắn báo trước, và có trần số ảnh mỗi giờ
 - Model chính không đọc được ảnh? Bot tự phát hiện (hỏi router) và có thể thuê model vision phụ
   (Gemini free tier) mô tả ảnh thành chữ - cấu hình ở nút Settings trên dòng "Nhìn kỹ ảnh"
   của trang Tools. Có sidecar thì agent còn dùng được tool `read_image` để "nhìn kỹ lại"
