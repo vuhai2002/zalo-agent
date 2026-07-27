@@ -29,7 +29,13 @@ const log = createLogger("create-image");
 const DELIVERED_NOTE =
   "Đã vẽ và GỬI ảnh cho người dùng rồi. KHÔNG gọi send_file để gửi lại ảnh này.";
 
-/** Trần ký tự prompt - chặn model đổ cả bài văn vào, provider cũng không nhận nổi */
+/**
+ * Trần ký tự prompt. Đây là CHÍNH SÁCH tự đặt, KHÔNG phải giới hạn của provider
+ * (chưa đo được giới hạn thật). Mốc tham chiếu: prompt 700 ký tự chép nguyên
+ * văn một bài viết cho ra e-magazine đúng ý, nên 4000 là rộng gấp mấy lần nhu
+ * cầu thường gặp mà vẫn chặn được model đổ nguyên một tài liệu dài vào.
+ * Vượt trần thì schema báo lỗi cho model tự rút gọn, không cắt ngầm.
+ */
 const MAX_PROMPT_CHARS = 4000;
 
 export function createImageTool(ctx: ToolContext, generate = generateImage) {
@@ -119,9 +125,11 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
       await enqueueSend(threadKey, () =>
         ctx.api.sendMessage(
           {
+            // "1-3 phút" chứ không phải "1 phút": đo thật 60 giây cho ảnh
+            // thường, 135 giây cho trang nhiều chữ. Hứa 1 phút là hứa hụt.
             msg: refImage
-              ? "Đang sửa ảnh, đợi khoảng 1 phút nhé..."
-              : "Đang vẽ ảnh, đợi khoảng 1 phút nhé...",
+              ? "Đang sửa ảnh, đợi 1-3 phút nhé..."
+              : "Đang vẽ ảnh, đợi 1-3 phút nhé...",
           },
           ctx.message.threadId,
           ctx.message.threadType,

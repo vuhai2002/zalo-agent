@@ -16,7 +16,13 @@ export type TypingIndicatorParams = {
   maxDurationMs?: number;
 };
 
-const DEFAULT_MAX_DURATION_MS = 2 * 60_000;
+/**
+ * Chốt chặn khi caller quên gọi stop. Phải phủ được lượt agent DÀI NHẤT hợp lệ,
+ * mà giờ đó là lượt vẽ ảnh: đo thật một prompt phức tạp mất 135 giây, còn trần
+ * là 10 phút. Để 2 phút như trước thì chỉ báo tắt giữa chừng và bot trông như
+ * đã chết trong khi vẫn đang vẽ.
+ */
+const DEFAULT_MAX_DURATION_MS = 10 * 60_000;
 
 /**
  * Giữ chỉ báo "đang nhập" trong suốt lượt xử lý.

@@ -118,10 +118,15 @@ const envSchema = z.object({
   // Vẽ 1 ảnh mất ~70 giây (đo trên cx/gpt-5.5-image) và TỐN TIỀN THẬT mỗi lần.
   // Bot đọc tin người lạ nên trần này là hàng phòng thủ chính chống đốt quota.
   IMAGE_GEN_MAX_PER_HOUR: z.coerce.number().int().min(1).max(100).default(10),
-  // Trần thời gian chờ provider. fetch không có timeout mặc định - provider treo
-  // là treo cả lượt agent. 180s = gấp ~2.5 lần thời gian vẽ thật, đủ dư cho lúc
-  // provider chậm mà vẫn cắt được kết nối chết.
-  IMAGE_GEN_TIMEOUT_MS: z.coerce.number().int().min(30_000).max(600_000).default(180_000),
+  // Phép đo ĐÚNG cho stream: im lặng bao lâu thì coi là kết nối chết. Đo thật
+  // trên prompt nặng (tổng 135 giây): provider bắn keepalive đều mỗi 30 giây,
+  // khoảng im lặng dài nhất 30.1 giây. 90s = gấp 3 lần nhịp đó. Vẽ lâu mà stream
+  // còn chảy là KHỎE, im lặng lâu mới là CHẾT - trần tổng không phân biệt được.
+  IMAGE_GEN_STALL_MS: z.coerce.number().int().min(30_000).max(300_000).default(90_000),
+  // Chốt chặn cuối cho cả lượt vẽ. KHÔNG phải để cắt lượt vẽ chậm (trần im lặng
+  // lo việc đó) mà chỉ chặn ca bệnh lý: provider bắn keepalive mãi không vẽ
+  // xong. Để rộng vì prompt phức tạp đo được 135 giây, và trên web có ca 3-4 phút.
+  IMAGE_GEN_TIMEOUT_MS: z.coerce.number().int().min(30_000).max(1_800_000).default(600_000),
 
   // Memory lớp 2: đủ N tin rớt khỏi cửa sổ replay thì gộp vào summary của thread
   SUMMARY_TRIGGER_MESSAGES: z.coerce.number().int().min(5).max(500).default(30),

@@ -1,3 +1,5 @@
+import { env } from "../config/env.js";
+
 /**
  * Đọc stream SSE của endpoint vẽ ảnh, trả về base64 của ảnh hoàn chỉnh.
  *
@@ -52,7 +54,43 @@ function errorFrom(block: SseBlock): string | null {
   }
 }
 
-export async function readImageFromSseStream(response: Response): Promise<string> {
+/**
+ * Đọc một chunk, nhưng bỏ cuộc nếu IM LẶNG quá lâu.
+ *
+ * Đây là phép đo đúng cho stream, khác hẳn trần tổng thời gian. Đo thật trên
+ * prompt nặng (tổng 135 giây): provider bắn `keepalive` đều đặn mỗi 30 giây,
+ * khoảng im lặng dài nhất chỉ 30.1 giây. Nên vẽ lâu mà stream còn chảy là KHỎE
+ * MẠNH, còn im lặng lâu là đã CHẾT - trần tổng không phân biệt được hai thứ đó,
+ * nó giết cả hai như nhau.
+ */
+type StreamReader = ReadableStreamDefaultReader<Uint8Array>;
+
+async function readChunkOrStall(
+  reader: StreamReader,
+  stallMs: number,
+): Promise<Awaited<ReturnType<StreamReader["read"]>>> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Mất tín hiệu từ nhà cung cấp (im lặng quá ${Math.round(stallMs / 1000)} giây)`)),
+          stallMs,
+        );
+      }),
+    ]);
+  } finally {
+    // Dọn timer sau MỖI chunk: không dọn thì stream dài để lại hàng trăm timer
+    // sống tới khi hết hạn, và tiến trình không thoát được
+    clearTimeout(timer);
+  }
+}
+
+export async function readImageFromSseStream(
+  response: Response,
+  stallMs: number = env.IMAGE_GEN_STALL_MS,
+): Promise<string> {
   if (!response.body) throw new Error("Provider không trả về ảnh (stream rỗng)");
 
   const reader = response.body.getReader();
@@ -62,22 +100,28 @@ export async function readImageFromSseStream(response: Response): Promise<string
   let buffer = "";
   let imageB64: string | null = null;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    while (true) {
+      const { done, value } = await readChunkOrStall(reader, stallMs);
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    let sep: number;
-    while ((sep = buffer.indexOf(BLOCK_SEPARATOR)) !== -1) {
-      const block = parseBlock(buffer.slice(0, sep));
-      buffer = buffer.slice(sep + BLOCK_SEPARATOR.length);
-      if (!block) continue;
+      let sep: number;
+      while ((sep = buffer.indexOf(BLOCK_SEPARATOR)) !== -1) {
+        const block = parseBlock(buffer.slice(0, sep));
+        buffer = buffer.slice(sep + BLOCK_SEPARATOR.length);
+        if (!block) continue;
 
-      const failure = errorFrom(block);
-      if (failure) throw new Error(failure);
+        const failure = errorFrom(block);
+        if (failure) throw new Error(failure);
 
-      imageB64 = imageFromDone(block) ?? imageB64;
+        imageB64 = imageFromDone(block) ?? imageB64;
+      }
     }
+  } finally {
+    // Thoát giữa chừng (event error, quá hạn) mà bỏ mặc stream là giữ kết nối
+    // sống - bot chạy thường trú nên rò rỉ dần theo từng lượt hỏng
+    await reader.cancel().catch(() => {});
   }
 
   if (!imageB64) {
