@@ -42,6 +42,32 @@ export async function withTempFile<T>(
   }
 }
 
+/**
+ * Như `withTempFile` nhưng GIỮ NGUYÊN tên file: phần random nằm ở thư mục con
+ * chứ không phải tiền tố tên. Dùng cho file bot tự dựng (.docx/.xlsx) vì người
+ * nhận nhìn thấy tên này - "bao-gia.docx" đọc được, "a1b2c3-bao-gia.docx" thì không.
+ */
+export async function withNamedTempFile<T>(
+  fileName: string,
+  data: Buffer,
+  use: (filePath: string) => Promise<T>,
+): Promise<T> {
+  const dir = path.join(tempDir, crypto.randomBytes(6).toString("hex"));
+  fs.mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, path.basename(fileName));
+  fs.writeFileSync(filePath, data, { mode: 0o600 });
+
+  try {
+    return await use(filePath);
+  } finally {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch (err) {
+      log.debug({ dir, err }, "Không xóa được thư mục tạm - sweep định kỳ sẽ dọn");
+    }
+  }
+}
+
 /** Dọn ngay lúc gọi + lặp lại mỗi 24h - bắt file mồ côi sau khi process bị kill */
 export function startTempFileCleanupSchedule(): void {
   startDailyTask("temp-file-cleanup", () => {
@@ -62,15 +88,16 @@ export function cleanupOrphanTempFiles(maxAgeMs = ORPHAN_AGE_MS): number {
 
   let removed = 0;
   for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const filePath = path.join(tempDir, entry.name);
+    // Thư mục con là của withNamedTempFile - dọn cả cụm, không bỏ sót
+    if (!entry.isFile() && !entry.isDirectory()) continue;
+    const entryPath = path.join(tempDir, entry.name);
     try {
-      if (fs.statSync(filePath).mtimeMs < cutoff) {
-        fs.unlinkSync(filePath);
-        removed++;
-      }
+      if (fs.statSync(entryPath).mtimeMs >= cutoff) continue;
+      if (entry.isDirectory()) fs.rmSync(entryPath, { recursive: true, force: true });
+      else fs.unlinkSync(entryPath);
+      removed++;
     } catch (err) {
-      log.debug({ filePath, err }, "Không dọn được file tạm - bỏ qua");
+      log.debug({ entryPath, err }, "Không dọn được file tạm - bỏ qua");
     }
   }
   return removed;
