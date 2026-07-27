@@ -4,6 +4,7 @@ import type { AccountConfig } from "../../config/account-store.js";
 import { isSidecarConfigured } from "../../config/runtime-vision-settings.js";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 import { createAddReactionTool } from "./add-reaction-tool.js";
+import { createExcelFileTool, createWordDocumentTool } from "./create-document-tools.js";
 import { createGetDatetimeTool } from "./get-datetime-tool.js";
 import { createGetGroupInfoTool } from "./get-group-info-tool.js";
 import { createReadImageTool } from "./read-image-tool.js";
@@ -122,6 +123,20 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     description: "Gửi file từ kho shared-files hoặc tải từ URL công khai rồi gửi",
     group: "action",
     build: (ctx) => createSendFileTool(ctx),
+  },
+  {
+    key: "create_word_document",
+    label: "Tạo file Word",
+    description: "Soạn nội dung thành file .docx (tiêu đề, đoạn văn, gạch đầu dòng, bảng) rồi gửi luôn",
+    group: "action",
+    build: (ctx) => createWordDocumentTool(ctx),
+  },
+  {
+    key: "create_excel_file",
+    label: "Tạo file Excel",
+    description: "Soạn bảng số liệu thành file .xlsx có công thức tính sẵn rồi gửi luôn",
+    group: "action",
+    build: (ctx) => createExcelFileTool(ctx),
   },
   {
     key: "tag_member",
