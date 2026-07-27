@@ -934,7 +934,69 @@ chỉ che được khi hội thoại KHÔNG có ảnh nào. Có ảnh cũ trong 
 - [x] Giữ nguyên fallback: chọn nhầm "sua_anh_da_gui" mà hội thoại chưa từng có
   ảnh thì vẫn vẽ mới
 
-- [ ] Chưa test Zalo thật lại sau các sửa này
+- [x] **Đã nghiệm thu trên Zalo thật (2026-07-28).** Cùng yêu cầu e-magazine đã
+  làm hỏng 2 lần trước: ra ảnh ngay lần đầu, nội dung đúng nguyên văn bài viết
+  (kể cả địa chỉ 90/153 Trường Chinh và nguồn trích dẫn), đủ dấu tiếng Việt,
+  hiện inline trong chat dạng ảnh HD chứ không phải file phải bấm tải.
+- [x] Lượt chỉnh sửa tiếp theo cũng chạy đúng: "chỉnh lại tỉ lệ 2:3, thay hình
+  minh họa bằng kiểu thiên nhiên" -> ra đúng khung dọc 2:3 và nền thiên nhiên.
+  Xác nhận luôn quyết định KHÔNG gửi tham số `size`: tỉ lệ nói trong prompt thì
+  model làm đúng, còn gửi qua `size` thì nó bỏ qua.
+
+### Rà lại sau khi nghiệm thu (2026-07-28)
+
+Hai lỗi trong chính code vừa ship, tìm ra khi soi lại chứ chưa gặp ngoài thực tế:
+
+- [x] **Quá hạn giữa chừng lọt ra ngoài dạng lỗi thô.** Với SSE thì `fetch` trả
+  về sau ~2 giây rồi còn đọc stream cả phút, mà `try/catch` bắt timeout chỉ bọc
+  quanh `fetch`. Abort lúc đang đọc sẽ hiện "This operation was aborted" thay vì
+  câu tiếng Việt. Đây lại đúng là ca dễ xảy ra nhất với đường stream. Bọc cả hai
+  chặng, tách `readImageResponse` cho gọn
+- [x] **Không đóng stream khi thoát sớm.** Gặp `event: error` hay quá hạn thì
+  reader bị bỏ mặc - bot chạy thường trú nên rò rỉ kết nối dần theo từng lượt
+  hỏng. Thêm `reader.cancel()` trong `finally`
+- [x] Test chập chờn `pruneExpiredImageDescriptions` (đổ ~1/10 lần chạy): viết
+  lại lùi ngày tường minh bằng SQL thay vì dựa vào thời gian trôi, và kiểm CẢ vế
+  "giữ mô tả mới" mà tên test hứa nhưng bản cũ không hề kiểm. Đã kiểm định bằng
+  cách phá code production (đổi `<` thành `>`) để chắc chắn test bắt được lỗi.
+  Nay đã khớp nếp các test dọn dẹp khác trong repo (đều lùi ngày bằng `utimesSync`)
+- [x] Sửa chú thích `MAX_PROMPT_CHARS` nói "provider không nhận nổi" - đó là
+  suy đoán chưa đo. Ghi lại đúng bản chất: chính sách tự đặt, mốc tham chiếu là
+  prompt 700 ký tự chạy tốt
+- [x] Quét 12 lượt chạy toàn bộ test liên tiếp: không còn test chập chờn nào
+
+### Trần thời gian: đo sai bản chất (2026-07-28)
+
+User hỏi "prompt phức tạp mà ChatGPT tạo 3-4 phút thì sao". Đo lại bằng prompt
+nặng (nhiều chữ phải render) và phát hiện mình đã chọn SAI PHÉP ĐO:
+
+```
+  1.1s  HEADER          1.8s  output_item.added
+ 14.7s  generating      (cách 12.9s)
+ 44.8s  keepalive       (cách 30.1s)
+ 74.7s  keepalive       (cách 29.9s)
+104.7s  keepalive       (cách 30.0s)
+132.7s  partial_image   (cách 28.0s)
+135.0s  done
+TỔNG 135.1s   -   KHOẢNG IM LẶNG DÀI NHẤT 30.1s
+```
+
+Prompt này mất 135 giây: đã vượt chỉ báo "đang nhập" (120s) và chỉ còn cách trần
+180s có 45 giây. Nhưng quan trọng hơn là provider bắn `keepalive` ĐỀU MỖI 30
+GIÂY, nên với stream thì im lặng mới là dấu hiệu chết, còn tổng thời gian dài
+không nói lên điều gì. Trần tổng giết cả lượt vẽ khỏe lẫn kết nối chết như nhau.
+
+- [x] `IMAGE_GEN_STALL_MS` = 90s (gấp 3 nhịp keepalive đo được): đây mới là thứ
+  cắt kết nối chết. Vẽ 5 phút mà stream còn chảy thì cứ chạy
+- [x] `IMAGE_GEN_TIMEOUT_MS` 180s -> 600s, đổi vai thành chốt chặn cuối cho ca
+  bệnh lý (keepalive mãi không vẽ xong), không còn là thứ cắt lượt vẽ chậm
+- [x] Chỉ báo "đang nhập" 2 phút -> 10 phút: phải phủ được lượt agent dài nhất
+  hợp lệ, mà giờ đó là lượt vẽ ảnh
+- [x] Câu báo "đợi khoảng 1 phút" -> "đợi 1-3 phút": đo thật 60s cho ảnh thường,
+  135s cho trang nhiều chữ. Trần 180s cũ được đặt từ mẫu 4 lần đo toàn prompt
+  đơn giản (63-69s) - mẫu quá hẹp
+- [x] Dọn timer sau MỖI chunk: không dọn thì stream dài để lại hàng trăm timer
+  sống, tiến trình không thoát được
 
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
