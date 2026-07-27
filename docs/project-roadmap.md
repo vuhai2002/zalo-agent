@@ -886,8 +886,55 @@ bot vẫn hứa làm được dù model không hề nhận được tool đó.
   phải nói "tạo file Excel" chứ không phải "create_excel_file"), kèm dặn trả lời
   câu "làm được gì" theo đúng danh sách và không hứa thứ ngoài danh sách
 
-- [ ] Chưa test Zalo thật lại sau 2 sửa này: restart bot rồi nhắn "tạo e-magazine
-  dọc về ..." -> kỳ vọng ra ảnh ngay lần đầu, không lặp lại vòng lỗi
+### Lượt test Zalo thật thứ hai: 524 của Cloudflare + prompt mất nội dung (2026-07-28)
+
+**HTTP 524 - đây mới là thứ chặn hẳn tính năng.** 524 là mã Cloudflare "origin
+không trả lời kịp". Đường binary chỉ trả byte đầu tiên LÚC VẼ XONG, nên vẽ lâu
+là Cloudflare cắt. Đo cùng một prompt chạy song song, tái hiện sạch:
+
+```
+SSE     -> byte đầu sau   1.76s | xong 62.7s  | HTTP 200 | JPEG 184 KB
+BINARY  -> byte đầu sau 125.38s | xong 125.4s | HTTP 524
+```
+
+- [x] Chuyển sang xin SSE bằng `Accept: text/event-stream`. Router bắn event
+  `progress` liên tục nên Cloudflare luôn thấy dữ liệu chảy. Tốn ~2.5 lần băng
+  thông (504 KB so với 199 KB) - đáng, vì đường kia có lúc không ra ảnh nào
+- [x] `read-image-sse-stream.ts` tách riêng: có bẫy riêng là một block SSE có
+  thể bị chẻ làm đôi giữa 2 chunk mạng, xử lý từng chunk rời là mất event `done`
+  của ảnh lớn. Bỏ qua `partial_image` (ảnh dở dang - gửi nhầm là gửi ảnh chưa
+  vẽ xong)
+- [x] Vẫn đọc được JSON thường và bytes thô: chỉ codex mới stream
+- [x] `IMAGE_GEN_TIMEOUT_MS` giữ nguyên nhưng ghi rõ nó KHÔNG cứu được 524 -
+  Cloudflare cắt ở ~100-125s, trước cả trần 180s
+
+**Prompt mất sạch nội dung người dùng đưa.** User dán nguyên một bài viết rồi
+nhờ làm e-magazine, model rút gọn thành "Chủ đề thiền Phật giáo tại TP. Hồ Chí
+Minh" - ảnh ra sẽ toàn chữ bịa. Nguyên nhân: mô tả tool chỉ dạy tả PHONG CÁCH
+(chủ thể, ánh sáng, tông màu), không có chữ nào về việc chép lại NỘI DUNG.
+
+- [x] Mô tả tool + persona bắt chép nguyên văn, đặt trong ngoặc kép kèm vai trò
+  (TIÊU ĐỀ / ĐOẠN MỞ / TRÍCH DẪN), giữ dấu tiếng Việt
+- [x] Log thêm `promptChars`: nhìn 200 ký tự đầu không phân biệt được "chép
+  nguyên văn" với "tóm tắt", mà hai thứ cho ra ảnh khác hẳn nhau
+- [x] Kiểm chứng đầu-cuối: prompt 700 ký tự chép nguyên văn -> trang e-magazine
+  dọc đúng từng câu, đủ dấu, 201 KB, 64 giây
+
+**`imageIndex` tùy chọn đổi thành `mode` bắt buộc.** Log mới chụp được bằng
+chứng: model VẪN gửi `args: {imageIndex: 1}` cho yêu cầu vẽ e-magazine mới, dù
+mô tả tham số đã ghi "MẶC ĐỊNH BỎ TRỐNG" và "TUYỆT ĐỐI không điền". Bằng chứng
+này lật lại quyết định trước đó (giữ imageIndex, chỉ thêm fallback): fallback
+chỉ che được khi hội thoại KHÔNG có ảnh nào. Có ảnh cũ trong hội thoại là bot
+đi sửa nhầm tấm đó, người dùng nhận về ảnh lạ mà không có gì báo sai.
+
+- [x] `mode: "ve_moi" | "sua_anh_da_gui"` BẮT BUỘC. Tham số tùy chọn thì model
+  điền theo quán tính; bắt buộc thì nó phải chọn có ý thức
+- [x] CHỈ `mode` quyết định nhánh, `imageIndex` chỉ còn tác dụng bên trong nhánh
+  sửa ảnh. Có test cho đúng ca "mode ve_moi kèm imageIndex thừa" - lá chắn chính
+- [x] Giữ nguyên fallback: chọn nhầm "sua_anh_da_gui" mà hội thoại chưa từng có
+  ảnh thì vẫn vẽ mới
+
+- [ ] Chưa test Zalo thật lại sau các sửa này
 
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
