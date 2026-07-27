@@ -1,18 +1,26 @@
 import { env } from "../config/env.js";
 import { getImageSettings, isImageGenConfigured, type ImageGenSettings } from "../config/runtime-image-settings.js";
+import { readImageFromSseStream } from "./read-image-sse-stream.js";
 
 /**
  * Gọi endpoint OpenAI-compatible `/v1/images/generations` để vẽ hoặc SỬA ảnh.
  *
  * Ba quyết định đến từ đo thật trên 9Router (cx/gpt-5.5-image), không phải suy đoán:
  *
- * 1. Luôn thêm `?response_format=binary`. Đường JSON mặc định trả base64 trong
- *    chuỗi 3.3MB rồi phải decode; đường binary trả thẳng bytes. Cùng một ảnh:
- *    JPEG binary 157KB, PNG base64 2.4MB - nhẹ hơn 15 lần.
+ * 1. XIN SSE bằng header `Accept: text/event-stream`, KHÔNG dùng
+ *    `?response_format=binary`. Binary nhẹ hơn thật (157KB so với 2.4MB base64)
+ *    nhưng nó chỉ trả byte đầu tiên LÚC VẼ XONG, mà router nằm sau Cloudflare -
+ *    vẽ lâu là ăn HTTP 524 "origin timeout". Đo cùng prompt chạy song song:
+ *    binary byte đầu sau 125.4s -> 524; SSE byte đầu sau 1.8s -> 200 ở giây 62.7.
+ *    Đổi lại tốn ~2.5 lần băng thông (base64 + event tiến độ) - đáng, vì đường
+ *    kia có lúc không ra được ảnh nào.
  * 2. KHÔNG gửi `size`. Model bỏ qua tham số này: xin 1024x1024 hai lần nhận về
  *    1024x1536 rồi 1536x1024. Muốn dọc/ngang phải nói trong prompt.
  * 3. Ảnh gốc nằm ở trường `image` (không phải `ref_image`), dạng data URI. Sai
  *    tên trường thì provider bỏ qua âm thầm - vẫn ra ảnh nhưng là ảnh vẽ mới.
+ *
+ * Vẫn đọc được JSON thường và bytes thô: chỉ provider codex mới stream, endpoint
+ * khác nhận header Accept rồi trả JSON như cũ.
  *
  * `fetchImpl` tiêm được để test không chạm mạng - cùng nếp với SidecarCaller.
  */
@@ -25,13 +33,14 @@ export type GenerateImageParams = {
   transparentBackground?: boolean;
 };
 
+export type ImageExt = "jpg" | "png" | "webp";
+
 export type GeneratedImage = {
   data: Buffer;
-  /** Đuôi file theo Content-Type thật của response, không theo cái mình xin */
-  ext: "jpg" | "png" | "webp";
+  ext: ImageExt;
 };
 
-const EXT_BY_MIME: Record<string, GeneratedImage["ext"]> = {
+const EXT_BY_MIME: Record<string, ImageExt> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
@@ -84,13 +93,19 @@ export async function generateImage(
     body.image_detail = "high";
   }
 
-  const url = `${settings.baseUrl.replace(/\/+$/, "")}/v1/images/generations?response_format=binary`;
+  const url = `${settings.baseUrl.replace(/\/+$/, "")}/v1/images/generations`;
 
   let response: Response;
   try {
     response = await fetchImpl(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.apiKey}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${settings.apiKey}`,
+        // Header quyết định: router chỉ stream khi thấy dòng này. Không có nó
+        // thì kết nối im lặng tới lúc vẽ xong và Cloudflare cắt bằng 524.
+        Accept: "text/event-stream",
+      },
       body: JSON.stringify(body),
       // fetch không có timeout mặc định - thiếu dòng này thì provider treo là
       // treo luôn cả lượt agent, người dùng đợi vô hạn
@@ -106,13 +121,27 @@ export async function generateImage(
 
   if (!response.ok) throw new Error(await readErrorMessage(response));
 
+  // Đuôi file theo format đã XIN: stream SSE và JSON chỉ mang base64 trần, không
+  // kèm MIME. Riêng nhánh bytes thô thì Content-Type thật mới là nguồn đúng.
+  const requestedExt: ImageExt = outputFormat === "png" ? "png" : "jpg";
   const contentType = (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
-  const ext = EXT_BY_MIME[contentType];
-  if (!ext) {
-    // Router không hỗ trợ response_format=binary thì nó trả JSON 200. Đừng ghi
-    // JSON ra file .jpg rồi gửi cho người dùng một file hỏng.
-    throw new Error(`Provider không trả về ảnh (Content-Type: ${contentType || "trống"})`);
+
+  if (contentType === "text/event-stream") {
+    return { data: Buffer.from(await readImageFromSseStream(response), "base64"), ext: requestedExt };
   }
 
+  if (contentType === "application/json") {
+    const parsed = (await response.json().catch(() => null)) as { data?: { b64_json?: string }[] } | null;
+    const b64 = parsed?.data?.[0]?.b64_json;
+    if (!b64) throw new Error("Provider không trả về ảnh (JSON thiếu b64_json)");
+    return { data: Buffer.from(b64, "base64"), ext: requestedExt };
+  }
+
+  const ext = EXT_BY_MIME[contentType];
+  if (!ext) {
+    // Trang lỗi HTML của proxy chẳng hạn - đừng ghi ra file .jpg rồi gửi cho
+    // người dùng một file hỏng
+    throw new Error(`Provider không trả về ảnh (Content-Type: ${contentType || "trống"})`);
+  }
   return { data: Buffer.from(await response.arrayBuffer()), ext };
 }
