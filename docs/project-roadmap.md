@@ -569,6 +569,233 @@ User chỉ ra hộp thoại `window.confirm` mặc định của trình duyệt 
   bấm nền hủy (account còn nguyên), bấm Xóa thì xóa thật + cả 2 modal đóng,
   autofocus đúng nút xác nhận
 
+## V3.0 - Bot tự tạo file .docx và .xlsx (2026-07-27, plan: plans/260727-1135-tao-file-docx-xlsx/)
+
+User hỏi bot có tạo được file Word không. Đo thật: **LLM API chỉ trả text** - cả
+DeepSeek trực tiếp lẫn qua 9Router đều không có kênh file (message chỉ có `role`
++ `content`, không field nào chứa attachment). IDE code tạo được file là vì IDE
+**chạy code** model viết ra - đường đó không dùng được cho bot Zalo (đọc tin
+người lạ, không ai duyệt lệnh = RCE qua prompt injection).
+
+Lời giải: bot tự dựng file, model chỉ cung cấp nội dung có cấu trúc. Know-how
+định dạng lấy từ skill `docx`/`xlsx` của Anthropic nhưng nhét vào **renderer**
+thay vì prompt - nhờ vậy file luôn đẹp như nhau kể cả chạy model rẻ.
+
+- [x] Schema trung gian (`document-content-schema.ts`): model chỉ cần hiểu
+  heading/paragraph/bullets/table, không cần biết DXA hay WidthType. Đổi thư viện
+  sau này không phải sửa prompt
+- [x] Renderer .docx (`docx` 9.7.1) áp đủ gotcha của skill: dual width DXA (dùng
+  PERCENTAGE là vỡ ở Google Docs), `ShadingType.CLEAR` (SOLID render nền đen),
+  bullet qua numbering config (chèn `•` thô thì Word không nhận là danh sách),
+  tách `\n` thành nhiều Paragraph, header bảng lặp lại khi tràn trang
+- [x] Renderer .xlsx (`exceljs` 4.4.0) + `spreadsheet-formula-values.ts` tự tính
+  kết quả công thức
+- [x] 2 tool `create_word_document` / `create_excel_file`: tự dựng, **tự gửi**,
+  tự xóa file tạm. Học pattern `deliver` của GoClaw - câu trả về dặn thẳng
+  "KHÔNG gọi send_file gửi lại" (không dặn thì model gửi 2 lần)
+- [x] Chống lạm dụng: 5 env giới hạn (block/dòng/ký tự/sheet) + trần số file mỗi
+  giờ per thread (Map tự dọn - hồi quy rò rỉ ở V2.4) + sanitize tên file (chặn
+  path traversal, ép đúng đuôi)
+- [x] `withNamedTempFile`: file gửi đi giữ nguyên tên model đặt (phần random nằm
+  ở thư mục con). `withTempFile` cũ chèn prefix vào tên nên người nhận thấy
+  "a1b2c3-bao-gia.docx"; sweep định kỳ được mở rộng để dọn cả thư mục con
+- [x] `read-zip-entry.ts`: đọc file OOXML qua **central directory** (bắt buộc -
+  có thư viện ghi zip streaming để `compSize = 0` ở local header, đọc theo đó ra
+  dữ liệu rỗng và test sẽ xanh một cách vô nghĩa)
+- [x] Test: 416 pass (46 test mới). Bắt được 2 bug thật của chính đợt này:
+  `safeFileName` để lọt `..` trong tên file, và giả định sai rằng `#,##0` phải
+  xuất hiện dạng chuỗi trong styles.xml (thực ra là định dạng có sẵn `numFmtId=3`)
+
+### Hai câu hỏi lớn trả lời bằng đo đạc, không suy đoán
+
+- **Không cần LibreOffice recalc.** Skill Anthropic phải chạy nó vì `openpyxl`
+  ghi công thức không kèm kết quả -> mọi công cụ **xem trước** (Zalo, Drive) đọc
+  `<v>` nên thấy ô trống. Đo 2 thư viện Node: `write-excel-file` 0/3 ô có `<v>`,
+  `exceljs` 3/3. `exceljs` cho truyền thẳng `{ formula, result }` mà bot tự biết
+  result - tiết kiệm ~1GB dependency và 1-3 giây mỗi lần gọi tiến trình con.
+  Đổi lại: chỉ hỗ trợ 2 phép bot tính được (nhân 2 cột, SUM một dải)
+- **Zalo KHÔNG chặn .docx/.xlsx.** Cơ chế chặn là `restricted_ext_file` - danh
+  sách cấm do server Zalo trả về lúc login, kiểm ở client trước khi chạm mạng.
+  Thử thật: `.exe` bị chặn (`'File extension "exe" is not allowed'`),
+  `.docx`/`.xlsx` qua được
+
+Bỏ `write-excel-file` dù nhẹ hơn 12 lần: ngoài chuyện thiếu `<v>`, nó còn ghi
+`<f>=A2*B2</f>` thừa dấu `=` (chuẩn ECMA-376 là không có).
+
+### Vòng 2 - sửa "file xấu" theo phản hồi thật (2026-07-27)
+
+User so file bot tạo với file Claude web tạo (skill docx + chạy code): bot thua
+rõ - heading XANH theme Calibri, title lệch trái, bảng chữ dính viền, dòng
+"Số: ... / ngày ..." vỡ bố cục. Nguyên nhân gốc: renderer mới phủ know-how CẤU
+TRÚC (DXA, shading, numbering) mà bỏ trống TYPOGRAPHY + các bố cục đặc thù văn
+bản Việt Nam, nên Word rơi về theme mặc định.
+
+- [x] `render-docx-styles.ts`: Times New Roman 13pt đen toàn văn bản (override
+  cả heading 4-6 không dùng tới - style mặc định của chúng vẫn nằm trong file
+  với màu xanh), title canh giữa, lề chuẩn NĐ 30/2020 (trên/dưới 2cm, trái 3cm,
+  phải 1.5cm), giãn dòng 1.3 + giãn đoạn
+- [x] Bảng: đệm trong ô (tblCellMar) - hết cảnh chữ dính sát viền
+- [x] `**đậm**` inline (`docx-text-runs.ts`): model bôi đậm giữa dòng được
+  ("**Thời gian:** từ 7h00...") - schema block cả khối cùng kiểu chữ nên trước
+  đó không có cách nào
+- [x] Block `two_columns` (bảng 2 cột không viền): phần đầu văn bản hành chính
+  (cơ quan | quốc hiệu) và khối ký tên (nơi nhận | chức vụ) - trước đó model
+  phải fake bằng khoảng trắng và bố cục vỡ
+- [x] `paragraph.align` (justify mặc định + thụt đầu dòng 1cm; center/right cho
+  lạc khoản thì không thụt)
+- [x] Test: 422 pass (14 test docx, thêm 6: typography đen, lề trang, marker
+  đậm, align, two_columns không viền, cell margin). Test typography bắt được
+  heading 4-6 còn xanh trước khi kịp ship
+- [x] Rà chéo Excel sau khi thêm marker: xlsx vốn không dính lỗi theme (font/màu
+  set từ đầu) nhưng chưa parse `**đậm**` - model được dạy marker đó ở tool Word
+  nên ô Excel viết `**Tổng cộng**` là dấu sao lọt nguyên vào file. Đã sửa: rich
+  text bold cho ô chữ, header lọc marker (vốn đã đậm sẵn). 423 test pass
+- [x] Ranh giới cứng/mềm ghi rõ: renderer khóa NỀN trình bày (font, màu, lề,
+  giãn dòng - model không đổi được, kể cả người dùng yêu cầu); model quyết
+  NỘI DUNG + BỐ CỤC (chữ nghĩa, thứ tự, đậm, canh dòng, bảng, quốc hiệu/ký
+  tên). Muốn mở style sau này thì thêm nút vặn enum vào schema, không cho tự do
+
+### Vòng 3 - vụ chết trên Zalo thật: create_excel_file hỏng 100% (2026-07-27)
+
+Test Zalo thật đầu tiên: Word chạy ngon, Excel chết cả 2 lần thử ("công cụ xuất
+file đang báo lỗi định dạng nội bộ"). Chẩn đoán bằng cách parse schema với các
+payload giả định:
+
+- **Root cause**: `z.discriminatedUnion("kind", [text, number, multiplyFormula,
+  sumFormula])` - HAI schema công thức cùng `kind: "formula"` (chỉ khác `op`),
+  mà discriminatedUnion đòi giá trị discriminator DUY NHẤT. Zod build map lười
+  nên lúc đăng ký tool không nổ, nhưng MỌI lần parse ô object đều throw
+  "Duplicate discriminator value" -> tool chết bất kể model gửi gì
+- **Vì sao 423 test không bắt được**: test tool gọi thẳng `execute` (bỏ qua
+  tầng validate của AI SDK), test renderer dùng object TS thuần - KHÔNG test
+  nào từng chạy `sheetSchema.parse`. Bài học: tool có inputSchema thì phải có
+  test parse chính schema đó với payload kiểu model hay gửi
+
+- [x] Đổi sang `z.union` thường + test hồi quy `assert.doesNotThrow(safeParse)`
+- [x] Nhân vụ này nới schema nhận dạng model gửi TỰ NHIÊN: chuỗi/số thuần
+  (giống bảng Word) và công thức dạng chuỗi "=B2*C2" / "=SUM(D2:D9)" (DeepSeek
+  từng viết đúng vậy khi test API) - transform chuẩn hóa về object, chữ thường
+  tự uppercase. Công thức ngoài 2 dạng bị từ chối kèm hướng dẫn tiếng Việt,
+  KHÔNG âm thầm rơi thành chữ
+- [x] Chốt chặn trùng tên sheet (exceljs throw khi 2 sheet cùng tên - đánh số
+  phía sau thay vì chết cả file)
+- [x] Test: 431 pass (schema test mới cho cả spreadsheet cell + document block;
+  test tool end-to-end đi qua ĐÚNG inputSchema như SDK trước khi execute)
+
+### Vòng 4 - Excel "xấu quá xấu": bóc design từ file Claude thật (2026-07-27)
+
+User đặt file bot cạnh file Claude web tạo (skill xlsx + chạy code): bot thua
+thảm - lưới trắng trơn, chữ tràn ô, không title, không màu; sheet tab còn mất
+dấu tiếng Việt. Cách sửa: user đưa chính file Claude tạo -> ĐỌC NGƯỢC file đó
+bằng exceljs để bóc design tokens thật thay vì đoán.
+
+- [x] Bộ tokens bóc được: navy `FF1F3864` (banner + header bảng), banner chữ
+  trắng 16pt merge hết bề ngang, subtitle xám `D9D9D9` nghiêng, header bảng
+  chữ TRẮNG trên navy + wrap + border, số liệu XANH `FF0000FF` (quy ước skill:
+  số nhập tay xanh - công thức đen), ghi chú đỏ `C00000` nghiêng, cột STT hẹp
+  5 - cột nội dung 34-42, freeze ngay dưới header
+- [x] `render-xlsx-styles.ts` + renderer mới: title/subtitle/note per sheet
+  (schema thêm 3 field optional), wrap ô chữ + vAlign top, border đủ cạnh,
+  bề rộng cột kẹp [6, 45]
+- [x] **Công thức TỰ DỊCH DÒNG khi có banner**: model đánh số coi header là
+  dòng 1, banner đẩy bảng xuống thì SUM(D2:D3) phải thành SUM(D5:D6) - không
+  dịch là công thức trỏ vào banner. Có test khóa riêng
+- [x] Vụ sheet tab mất dấu: KHÔNG phải renderer strip (safeSheetName giữ
+  unicode) mà model tự viết ASCII - dặn thẳng trong tool description: "MỌI chữ
+  giữ nguyên dấu tiếng Việt". Đây là phần 'agent thinking' chỉnh được bằng lời
+- [x] Test: 434 pass (3 test mới: banner merge + navy + 16pt, dịch dòng công
+  thức + freeze theo header, note đỏ nghiêng + wrap + số xanh)
+
+### Vòng 5 - nội dung ít + 1 màu duy nhất (2026-07-27)
+
+User hỏi 2 câu bắt trúng chỗ hổng: (1) sao file ít nội dung hơn Claude, (2) màu
+fix cứng thì 10 file ra 10 bản giống hệt nhau à. Câu 2 đúng - thiết kế cũ sai.
+
+**Nội dung ít - đo bằng số, không đoán:**
+
+File Claude: 6 sheet, 89 dòng, 317 ô, 15.037 ký tự -> model phải viết payload
+JSON ~19.200 ký tự = **~7.100 token**. Trong khi `LLM_MAX_OUTPUT_TOKENS` đang là
+**2.048** - thiếu 3,5 lần. Tra `9router/open-sse/providers/capabilities.js` thì
+`cx/gpt-5.6-sol` maxOutput **128.000**, `ds/deepseek-v4-pro` **50.000** - tức là
+2048 hoàn toàn do mình tự bó, không phải giới hạn model.
+
+- [x] `LLM_MAX_OUTPUT_TOKENS` 2048 -> **16.384**, con số tính ngược từ
+  `DOCUMENT_MAX_CHARS`: 20.000 ký tự nội dung -> payload ~25.000 ký tự ->
+  ~9.300 token, cộng reasoning + câu trả lời. Ghi RÀNG BUỘC vào env: hạ trần
+  này xuống dưới ~12.000 thì phải hạ DOCUMENT_MAX_CHARS theo, không thì model
+  bị cắt giữa tool call (finishReason "length") và mất cả lượt
+- [x] `DOCUMENT_MAX_SHEETS` 5 -> 10 (Claude làm 6 sheet, trần 5 chặn oan)
+- [x] Mô tả tool dạy model VIẾT ĐẦY ĐỦ: báo cáo tách nhiều sheet (tổng quan,
+  chi tiết, số liệu, rủi ro, nguồn), mỗi sheet có title + subtitle + note, mỗi
+  ô mô tả trọn ý - "đã bỏ công tạo file thì nội dung phải đáng để mở ra đọc"
+
+**Một màu duy nhất - sửa bằng palette có kiểm định:**
+
+Research: skill xlsx của Anthropic KHÔNG có theme - navy trong file Claude là
+model tự chọn lúc viết code, nên mỗi lần một khác. Cách đúng (design system):
+model chọn từ bộ palette đã kiểm định, không cho tự do hex (sẽ ra cặp màu chữ
+trắng trên nền sáng không đọc nổi).
+
+- [x] `xlsx-themes.ts`: 6 tông kèm ngữ cảnh dùng - navy (trang trọng, mặc
+  định) · blue (tài chính, báo giá) · green (tăng trưởng, môi trường) ·
+  burgundy (rủi ro, pháp lý) · slate (kỹ thuật) · teal (y tế, giáo dục).
+  Mỗi tông có 4 màu: header, số liệu, viền, sọc xen kẽ
+- [x] Contrast tính bằng công thức WCAG 2.1: cả 6 đạt AA cho chữ trắng
+  (navy 11.62:1 · tím 9.60:1 · blue 8.66:1 · burgundy 8.65:1 · slate 7.71:1 ·
+  teal 6.84:1 · green 6.52:1). Cam sáng ED7D31 (2.77:1) và vàng FFC000
+  (1.64:1) bị LOẠI vì trượt. Có test khóa ngưỡng này
+- [x] Thêm sọc xen kẽ dòng chẵn (nền rất nhạt cùng tông) - mắt dò bảng dài
+  không lạc dòng. Số nhập tay tô màu theme, ô công thức để đen (quy ước skill:
+  phân biệt dữ liệu gốc với kết quả tính)
+- [x] Test: 437 pass (3 test mới: theme khác nhau ra file khác nhau, mọi theme
+  đạt WCAG AA, sọc xen kẽ)
+
+### Vòng 6 - quét lại mọi hằng số "tự đặt" (2026-07-27)
+
+Sau vụ `LLM_MAX_OUTPUT_TOKENS = 2048` là số đoán, user yêu cầu quét toàn bộ xem
+còn chỗ nào tương tự. Rà hết hằng số trong code viết đợt này, phân 3 loại:
+
+**Bug thật tìm được: mô tả ảnh bị cắt vẫn được cache vĩnh viễn**
+
+`DESCRIBE_MAX_TOKENS = 1024` là số đoán, và tệ hơn: `vision-sidecar` KHÔNG kiểm
+`finishReason`. Ảnh nhiều chữ (menu, bảng giá, ảnh chụp màn hình) làm mô tả
+chạm trần -> bản CỤT được `saveImageDescription` cache vĩnh viễn -> mọi lượt sau
+đều đọc phải nó, không ai biết vì sao bot trả lời thiếu.
+
+- [x] Nâng lên 2048 (tiếng Việt ~2.7 ký tự/token -> ~5.500 ký tự, đủ ảnh dày chữ)
+- [x] `SidecarCaller` trả `{ text, truncated }`; mô tả cụt VẪN dùng cho lượt
+  hiện tại (có còn hơn không) nhưng TUYỆT ĐỐI không cache -> lượt sau có cơ hội
+  lấy bản đầy đủ. Kèm log cảnh báo
+- [x] `askAboutImage` cụt thì nói thật với model ("phần mô tả bị cắt") để nó
+  đừng kết luận chắc nịch từ dữ liệu dở dang
+- [x] 2 test hồi quy khóa hành vi này
+
+**Số lệch nhẹ so với nguồn tham chiếu - đã khớp lại:**
+
+- [x] Chiều cao dòng xlsx: 26/16/28 (áng chừng) -> **25.5/15.75/30** đúng số đo
+  từ file mẫu
+- [x] Bề rộng cột: 6-45 -> **5-42** (file mẫu: cột STT 5, cột nội dung 34-42)
+
+**Số CÓ CƠ SỞ, không phải đoán (kiểm lại vẫn đúng):**
+
+- docx: cỡ chữ 13pt (26 half-point), lề 2cm/3cm/1.5cm (1134/1701/850 twips),
+  thụt đầu dòng 1cm (567), bề rộng nội dung = A4 11906 - lề. Tất cả theo
+  NĐ 30/2020 (lề trên/dưới 20-25mm, trái 30-35mm, phải 15-20mm, cỡ 13-14)
+- xlsx: Arial 10pt + màu theme (đo từ file mẫu), tên sheet 31 ký tự (giới hạn
+  Excel), contrast mọi theme >= 4.5:1 (tính bằng công thức WCAG 2.1)
+
+**Số là CHÍNH SÁCH tự đặt (không có "đúng/sai") - đã ghi rõ trong comment:**
+
+- [x] `MAX_DOWNLOAD_BYTES` 25MB: ghi rõ đây KHÔNG phải giới hạn Zalo - giới hạn
+  thật là `max_size_share_file_v3` do server trả, zca-js tự kiểm và ném lỗi kèm
+  số MB cụ thể; con số này chỉ để khỏi tải hàng trăm MB rồi mới biết vô ích
+- [x] `RECENT_IMAGE_LIMIT` 10, `WINDOW_MS` 1 giờ, `DOCUMENT_MAX_PER_HOUR` 10,
+  `DOCUMENT_MAX_BLOCKS/ROWS`: chống spam và giới hạn dung lượng - chỉnh được
+  bằng env, đã chú thích lý do chọn
+
+- [ ] Chưa test Zalo thật lại: restart bot rồi nhắn "tạo file excel báo cáo"
+  -> kỳ vọng nội dung đầy đủ nhiều sheet, màu hợp ngữ cảnh, sheet tab CÓ dấu
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic

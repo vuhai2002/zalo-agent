@@ -37,6 +37,8 @@ Nằm ngoài project tại `D:\source-code\zalo-agent-references\`:
 - LLM gọi qua **router proxy 9Router** (`LLM_PROVIDER=openai-compatible`) để đổi provider bằng env, không sửa code.
 - History dùng **`node:sqlite` built-in**, không dùng better-sqlite3 (cần Visual Studio Build Tools trên Windows).
 - tsconfig để `moduleResolution: Bundler` - `index.d.ts` của zca-js dùng directory import, NodeNext không resolve được types.
+- Tạo file Office bằng `docx` + `exceljs` (npm), **không** dùng `write-excel-file` dù nhẹ hơn 12 lần: nó không ghi được giá trị cache `<v>` cho công thức nên mọi công cụ xem trước hiện ô trống, và ghi thừa dấu bằng trong `<f>` (sai ECMA-376). Cũng **không** cài LibreOffice để recalc - bot tự tính kết quả rồi ghi kèm.
+- Tool tạo file chỉ nhận **dữ liệu** (tiêu đề, đoạn văn, bảng), tuyệt đối không chạy code do model sinh ra: bot đọc tin người lạ nên đó là đường prompt injection thành RCE.
 
 ## Lệnh hay dùng
 
