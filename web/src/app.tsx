@@ -11,6 +11,8 @@ import { MemoryPage } from "./pages/memory-page";
 import { OverviewPage } from "./pages/overview-page";
 import { ProvidersPage } from "./pages/providers-page";
 import { SessionsPage } from "./pages/sessions-page";
+import { LogsPage } from "./pages/logs-page";
+import { TracePage } from "./pages/trace-page";
 import { ToolsPage } from "./pages/tools-page";
 import { IconMenu } from "./shared/dashboard-icons";
 
@@ -82,6 +84,8 @@ function DashboardShell() {
             <Route path="/accounts" element={<AccountsPage />} />
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/tools" element={<ToolsPage />} />
+            <Route path="/trace" element={<TracePage />} />
+            <Route path="/logs" element={<LogsPage />} />
             <Route path="/providers" element={<ProvidersPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

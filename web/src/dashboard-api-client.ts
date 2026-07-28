@@ -181,6 +181,24 @@ export const api = {
   clearVisionSidecar: () =>
     request<VisionSettings & { ok: true }>("/api/vision/sidecar", { method: "DELETE" }),
 
+  // Log toàn hệ thống đọc từ file - chỉ đọc, không có đường xóa
+  logs: (q: { level?: string; scope?: string; search?: string; limit?: number }) => {
+    const p = new URLSearchParams();
+    if (q.level) p.set("level", q.level);
+    if (q.scope) p.set("scope", q.scope);
+    if (q.search) p.set("search", q.search);
+    if (q.limit) p.set("limit", String(q.limit));
+    return request<LogsResponse>(`/api/logs?${p.toString()}`);
+  },
+
+  // Trace từng step của lượt agent - chỉ đọc, không có đường sửa/xóa
+  traceAll: () => request<{ turns: TraceTurnAcrossThreads[] }>("/api/traces"),
+  traceTurns: (accountId: string, threadId: string) =>
+    request<{ turns: TraceTurn[] }>(
+      `/api/traces/${encodeURIComponent(accountId)}/${encodeURIComponent(threadId)}`,
+    ),
+  traceSteps: (turnId: number) => request<{ steps: TraceStep[] }>(`/api/traces/turn/${turnId}`),
+
   imageGen: () => request<ImageGenSettings>("/api/image-gen"),
   updateImageGen: (update: { baseUrl?: string; model?: string; apiKey?: string }) =>
     request<ImageGenSettings & { ok: true }>("/api/image-gen", {
@@ -293,6 +311,58 @@ export type VisionSettings = {
    * hybrid = combo nhận cả pixel + mô tả, blind = bỏ ảnh
    */
   imageMode: "native" | "describe" | "hybrid" | "blind";
+};
+
+/** Một lượt agent trong danh sách trace */
+export type TraceTurn = {
+  id: number;
+  totalTokens: number;
+  steps: number;
+  /** Số step THỰC SỰ có trace - lệch với `steps` nghĩa là trace bị tắt giữa chừng */
+  stepCount: number;
+  createdAt: string;
+};
+
+/** Một dòng log. `level` là SỐ theo quy ước pino: 20 debug, 30 info, 40 warn, 50 error */
+export type LogEntry = {
+  time: number;
+  level: number;
+  scope: string;
+  msg: string;
+  /** Trường phụ (threadId, accountId, err...) - chỗ chứa ngữ cảnh */
+  fields: Record<string, unknown>;
+};
+
+export type LogsResponse = {
+  entries: LogEntry[];
+  /** Scope có trong log - dựng ô lọc từ đây, không hardcode */
+  scopes: string[];
+  /** true khi LOG_FILE_ENABLED tắt: không có file để đọc */
+  disabled: boolean;
+  hint?: string;
+};
+
+/** Lượt agent kèm thông tin hội thoại - cho trang Trace gộp mọi hội thoại */
+export type TraceTurnAcrossThreads = TraceTurn & {
+  accountId: string;
+  threadId: string;
+  /** Tên hội thoại, rơi về threadId khi chưa có tên */
+  displayName: string;
+};
+
+/** Một step trong lượt agent: model nói gì, gọi tool nào với tham số gì */
+export type TraceStep = {
+  stepNumber: number;
+  text: string;
+  /** Rỗng với model không phơi chuỗi suy nghĩ (OpenAI); có với DeepSeek */
+  reasoning: string;
+  toolCalls: { name: string; input: string }[];
+  toolResults: { name: string; output: string }[];
+  finishReason: string;
+  /** Nhà cung cấp báo tham số bị bỏ qua - chỗ hay lộ lỗi âm thầm */
+  warnings: string[];
+  inputTokens: number;
+  outputTokens: number;
 };
 
 /**

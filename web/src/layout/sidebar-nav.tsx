@@ -2,6 +2,8 @@ import type { ReactNode, SVGProps } from "react";
 import { NavLink } from "react-router-dom";
 import {
   IconBolt,
+  IconCpu,
+  IconDatabase,
   IconBot,
   IconBrain,
   IconChat,
@@ -36,6 +38,8 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
       { to: "/accounts", label: "Accounts", icon: IconSignal },
       { to: "/agents", label: "Agents", icon: IconBot },
       { to: "/tools", label: "Tools", icon: IconBolt },
+      { to: "/trace", label: "Trace agent", icon: IconCpu },
+      { to: "/logs", label: "Logs", icon: IconDatabase },
       { to: "/providers", label: "Providers", icon: IconSliders },
     ],
   },

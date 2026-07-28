@@ -2,8 +2,13 @@ import { useEffect, useState } from "react";
 import type { MessageItem, ThreadItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { formatTime } from "../shared/ui-bits";
+import { SessionTraceView } from "./session-trace-view";
 
-/** Drawer trượt từ phải: xem hội thoại của 1 thread, nút tải thêm tin cũ hơn */
+/**
+ * Drawer trượt từ phải: xem hội thoại của 1 thread, nút tải thêm tin cũ hơn.
+ * Tab "Trace" xem lại từng step agent đã chạy - dùng khi bot trả lời sai và cần
+ * biết nó đã gọi tool nào với tham số gì.
+ */
 export function SessionDetailDrawer({
   thread,
   onClose,
@@ -13,6 +18,7 @@ export function SessionDetailDrawer({
 }) {
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [hasOlder, setHasOlder] = useState(false);
+  const [tab, setTab] = useState<"chat" | "trace">("chat");
 
   useEffect(() => {
     api.threadMessages(thread.accountId, thread.threadId).then((data) => {
@@ -50,7 +56,35 @@ export function SessionDetailDrawer({
           </button>
         </div>
 
-        {thread.summary && (
+        <div className="flex gap-1 border-b border-line px-5 pt-2">
+          {(
+            [
+              ["chat", "Hội thoại"],
+              ["trace", "Trace agent"],
+            ] as const
+          ).map(([key, nhan]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`rounded-t-lg px-3 py-2 text-[13px] font-medium transition-colors ${
+                tab === key
+                  ? "border-b-2 border-zalo-500 text-zalo-700"
+                  : "text-ink-soft hover:text-ink"
+              }`}
+            >
+              {nhan}
+            </button>
+          ))}
+        </div>
+
+        {tab === "trace" && (
+          <div className="flex-1 overflow-y-auto bg-canvas px-5 py-4">
+            <SessionTraceView accountId={thread.accountId} threadId={thread.threadId} />
+          </div>
+        )}
+
+        {tab === "chat" && thread.summary && (
           <div className="border-b border-line bg-zalo-50/70 px-5 py-3">
             <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zalo-700">
               Tóm tắt phần hội thoại cũ
@@ -59,7 +93,9 @@ export function SessionDetailDrawer({
           </div>
         )}
 
-        <div className="flex-1 space-y-3 overflow-y-auto bg-canvas px-5 py-4">
+        <div
+          className={`flex-1 space-y-3 overflow-y-auto bg-canvas px-5 py-4 ${tab === "chat" ? "" : "hidden"}`}
+        >
           {hasOlder && (
             <button
               onClick={loadOlder}
