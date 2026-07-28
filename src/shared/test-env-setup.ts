@@ -20,6 +20,9 @@ export function setupTestEnv(overrides: Record<string, string> = {}): string {
   const values: Record<string, string> = {
     NODE_ENV: "test",
     LOG_LEVEL: "error",
+    // Test không cần file log: mỗi file test sẽ đẻ một worker pino-roll và một
+    // file trong thư mục tạm, tốn công mà chẳng ai đọc
+    LOG_FILE_ENABLED: "false",
     DATA_DIR: dataDir,
 
     // anthropic để khỏi cần LLM_BASE_URL; test không gọi LLM thật
