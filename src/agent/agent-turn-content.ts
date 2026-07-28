@@ -1,5 +1,4 @@
 import type { ModelMessage, UserContent } from "ai";
-import { env } from "../config/env.js";
 import { isSidecarConfigured } from "../config/runtime-vision-settings.js";
 import type { StoredMessage } from "../conversation/history-store.js";
 import { getImageDescription } from "../conversation/image-description-store.js";
@@ -9,11 +8,13 @@ import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 import {
   collectImagesWithinBudget,
   historyToModelMessages,
+  senderTrustFrom,
   type HistoryImageRendering,
 } from "./history-to-model-messages.js";
 import type { ModelOverride } from "./llm-provider.js";
 import { classifyModelVision } from "./model-vision-detection.js";
 import { describeImage, ensureDescriptionsFor } from "./vision-sidecar.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
  * Dựng input cho 1 lượt agent theo 4 chế độ ảnh (mô hình auto|native|text của
@@ -75,10 +76,12 @@ export async function buildTurnMessages(params: {
   batch: ParsedMessage[];
   override?: ModelOverride;
   forceMode?: ImageContextMode;
+  /** Có thì tin của người ngoài danh sách bị gắn nhãn chưa xác minh trong history */
+  allowlist?: { mode: "all" | "list"; userIds: string[] };
 }): Promise<{ messages: ModelMessage[]; imageMode: ImageContextMode }> {
   const imageMode = params.forceMode ?? (await resolveImageContextMode(params.override));
   // blind: ngân sách ảnh history = 0, content tự rơi về text "[gửi kèm N ảnh]"
-  const imageLimit = imageMode === "blind" ? 0 : env.HISTORY_IMAGE_CONTEXT_LIMIT;
+  const imageLimit = imageMode === "blind" ? 0 : getTuning("HISTORY_IMAGE_CONTEXT_LIMIT");
 
   if (imageMode === "describe" || imageMode === "hybrid") {
     // Mô tả TRƯỚC các ảnh history sắp vào context - gồm cả ảnh passive-listen
@@ -92,6 +95,7 @@ export async function buildTurnMessages(params: {
     imageLimit,
     loadStoredImage,
     historyRendering(imageMode),
+    params.allowlist ? senderTrustFrom(params.allowlist) : undefined,
   );
   messages.push({ role: "user", content: await buildCurrentTurnContent(params.batch, imageMode) });
   return { messages, imageMode };

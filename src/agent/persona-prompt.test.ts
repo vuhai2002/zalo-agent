@@ -83,6 +83,17 @@ describe("buildSystemPrompt - danh sách tool đang bật", () => {
     assert.deepEqual(listed, built, "lệch nhau là prompt kể sai bộ tool model thực nhận");
   });
 
+
+  it("dạy model kể tiến trình khi dùng tool - nguồn của khối 'Model nói' trong trace", () => {
+    // User cần xem model nhận xét gì sau mỗi lượt tool (đủ nguồn chưa, bước kế
+    // là gì). OpenAI không phơi chain-of-thought nên lời dẫn TỰ VIẾT này là
+    // đường duy nhất - đã đo thật: gpt-5.6-sol chịu viết kèm tool call khi được
+    // dặn, và không kể lể ở câu hỏi không cần tool.
+    const text = prompt.buildSystemPrompt(AGENT, MSG);
+    assert.match(text, /tiến trình/);
+    assert.match(text, /TRƯỚC mỗi lần gọi tool/);
+  });
+
   it("không truyền account thì vẫn dựng được prompt (đường gọi cũ không vỡ)", () => {
     const text = prompt.buildSystemPrompt(AGENT, MSG);
     assert.match(text, /trợ lý AI/i);

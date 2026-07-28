@@ -2,6 +2,7 @@ import path from "node:path";
 import pino from "pino";
 import { dataDir, env } from "../config/env.js";
 import { ensureUtf8Console } from "./console-encoding.js";
+import { serializeErrorSafely } from "./safe-error-serializer.js";
 
 // Phải chạy trước khi có output đầu tiên, nếu không log tiếng Việt bị vỡ trên Windows
 ensureUtf8Console();
@@ -56,6 +57,10 @@ export const logger = pino({
   // Mức GỐC phải thấp bằng target thấp nhất, không thì dòng debug bị chặn ngay
   // từ đây và target file không bao giờ nhận được
   level: env.LOG_FILE_ENABLED ? "trace" : env.LOG_LEVEL,
+  // Đè bộ serialize `err` mặc định: bản gốc chép mọi thuộc tính của error, kéo
+  // theo `requestBodyValues` của APICallError = system prompt + hội thoại + ảnh
+  // base64 ra thẳng file log. Xem safe-error-serializer.ts để biết chi tiết.
+  serializers: { err: serializeErrorSafely },
   transport: {
     targets: env.LOG_FILE_ENABLED ? [consoleTarget, fileTarget] : [consoleTarget],
   },

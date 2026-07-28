@@ -64,6 +64,31 @@ export function collectImagesWithinBudget(
 }
 
 /**
+ * Nhãn gắn trước tin của người KHÔNG có trong allowlist. Persona giải thích nhãn
+ * này nghĩa là gì; ở đây chỉ lo gắn cho đúng chỗ.
+ */
+export const UNVERIFIED_TAG = "[chưa xác minh]";
+
+export type SenderTrust = {
+  isUnverified: (senderId?: string) => boolean;
+};
+
+/**
+ * Dựng bộ kiểm tra từ cấu hình allowlist của account.
+ *
+ * Chế độ "all" trả về không-bao-giờ-đánh-dấu: chủ bot đã chủ động cho mọi người
+ * nhắn, gắn nhãn lên tất cả thì nhãn mất hết ý nghĩa và chỉ tổ tốn token. Chỉ
+ * chế độ "list" mới có khái niệm người-ngoài-danh-sách.
+ */
+export function senderTrustFrom(allowlist: { mode: "all" | "list"; userIds: string[] }): SenderTrust {
+  if (allowlist.mode !== "list") return { isUnverified: () => false };
+  const trong = new Set(allowlist.userIds);
+  // Tin cũ lưu trước khi có cột sender_id không có id - không đoán bừa là người
+  // lạ, vì gắn nhãn sai lên chính chủ bot còn tai hại hơn là bỏ sót
+  return { isUnverified: (senderId?: string) => senderId !== undefined && !trong.has(senderId) };
+}
+
+/**
  * History -> ModelMessage, kèm lại tối đa `imageLimit` ảnh gần nhất để model
  * xem lại được ảnh cũ ("group trên ảnh tên gì?" sau khi gửi ảnh vài phút).
  * Ảnh ngoài ngân sách (hoặc file đã bị dọn) rơi về text sẵn có "[gửi kèm N ảnh]".
@@ -73,6 +98,7 @@ export function historyToModelMessages(
   imageLimit: number,
   loadImage: StoredImageLoader,
   rendering?: HistoryImageRendering,
+  senderTrust?: SenderTrust,
 ): ModelMessage[] {
   const imageBudgetByIndex = planImageBudget(history, imageLimit);
 
@@ -85,7 +111,12 @@ export function historyToModelMessages(
     // (người quay lại sau 3 ngày không bị nối chuyện như vừa nhắn xong)
     const ts = message.createdAt ? formatTimestamp(message.createdAt) : "";
     const name = message.senderName ? `${message.senderName}: ` : "";
-    const text = `${ts} ${name}${message.content}`.trim();
+    // Người ngoài allowlist vẫn được ghi vào lịch sử (nhánh recordOnly và
+    // groupPassiveListen) rồi phát lại cho model ở lượt sau. Không đánh dấu thì
+    // chữ họ viết nằm trong lịch sử y hệt chữ của chủ bot - một tin soạn khéo
+    // trong nhóm là đủ để thử điều khiển model ở lượt sau.
+    const nhan = senderTrust?.isUnverified(message.senderId) ? `${UNVERIFIED_TAG} ` : "";
+    const text = `${ts} ${nhan}${name}${message.content}`.trim();
 
     const take = imageBudgetByIndex.get(index) ?? 0;
     if (take === 0) return { role: "user", content: text };
