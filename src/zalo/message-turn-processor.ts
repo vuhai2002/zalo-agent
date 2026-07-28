@@ -4,6 +4,7 @@ import type { AccountConfig } from "../config/account-store.js";
 import { appendMessage } from "../conversation/history-store.js";
 import { imagePathsOf, persistBatchImages } from "../conversation/media-store.js";
 import { maybeSummarizeThread } from "../conversation/thread-summarizer.js";
+import { saveTurnTrace } from "../agent/agent-trace-store.js";
 import { recordAgentTurn } from "../conversation/usage-store.js";
 import { createLogger } from "../shared/logger.js";
 import { sendSeenReceipt } from "./message-receipts.js";
@@ -101,7 +102,10 @@ export async function processBatch(
     // Chạy agent TRƯỚC khi ghi history: runAgentTurn tự đọc history cũ và tự
     // ghép batch hiện tại vào input - ghi trước sẽ khiến tin mới lặp 2 lần.
     const result = await runAgentTurn({ api, account: config, batch });
-    recordAgentTurn(config.id, latest.threadId, result.usage);
+    const turnId = recordAgentTurn(config.id, latest.threadId, result.usage);
+    // Trace nối vào lượt vừa ghi. Lưu ở đây chứ không trong agent-loop: chỗ này
+    // vốn đã là nơi ghi usage của lượt, gom một mối cho dễ tìm.
+    if (result.trace.length > 0) saveTurnTrace(turnId, result.trace);
 
     writeBatchToHistory();
 

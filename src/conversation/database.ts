@@ -126,6 +126,27 @@ function runMigrations(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_agent_turns_account_created
       ON agent_turns (account_id, created_at);
+
+    -- Trace từng step của lượt agent: model nói gì, gọi tool nào với tham số
+    -- gì, provider cảnh báo gì. Không có bảng này thì bot trả lời sai chỉ còn
+    -- cách suy luận ngược từ câu lỗi (đã dính vụ dò vé số và vụ imageIndex).
+    -- Bảng này phình nhanh nhất trong DB nên có dọn theo AGENT_TRACE_RETENTION_DAYS.
+    CREATE TABLE IF NOT EXISTS agent_steps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      turn_id INTEGER NOT NULL,
+      step_number INTEGER NOT NULL,
+      text TEXT NOT NULL DEFAULT '',
+      reasoning TEXT NOT NULL DEFAULT '',
+      tool_calls TEXT NOT NULL DEFAULT '[]',
+      tool_results TEXT NOT NULL DEFAULT '[]',
+      finish_reason TEXT NOT NULL DEFAULT '',
+      warnings TEXT NOT NULL DEFAULT '[]',
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_steps_turn ON agent_steps (turn_id, step_number);
+    CREATE INDEX IF NOT EXISTS idx_agent_steps_created ON agent_steps (created_at);
   `);
 
   // DB tạo trước khi có cột sender_id: ALTER thêm (nullable - tin cũ không có id)

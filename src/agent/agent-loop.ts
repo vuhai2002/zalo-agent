@@ -10,6 +10,7 @@ import { getThreadSummary } from "../conversation/thread-store.js";
 import { createLogger } from "../shared/logger.js";
 import { TECHNICAL_ERROR_REPLY } from "../zalo/send-reply-in-parts.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
+import { summarizeStep, type StepTrace } from "./agent-step-trace.js";
 import { buildTurnMessages, type ImageContextMode } from "./agent-turn-content.js";
 import { resolveLanguageModel, resolveReasoningOptions } from "./llm-provider.js";
 import { markModelNoVision } from "./model-vision-detection.js";
@@ -78,6 +79,12 @@ export type AgentTurnParams = {
 export type AgentTurnResult = {
   text: string;
   usage: { inputTokens: number; outputTokens: number; totalTokens: number; steps: number };
+  /**
+   * Trace từng step để caller lưu vào DB (nối qua turn id của agent_turns).
+   * Rỗng khi tắt AGENT_TRACE_ENABLED. Trả về thay vì tự ghi DB ở đây: agent-loop
+   * vốn không đụng bảng agent_turns, để chỗ ghi usage lo luôn cho gọn một mối.
+   */
+  trace: StepTrace[];
 };
 
 /**
@@ -111,6 +118,11 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
     }),
     threadSummary: getThreadSummary(account.id, latest.threadId).summary,
   };
+
+  // Gom trace suốt lượt. Khai NGOÀI runOnce để lượt retry (glitch router, hoặc
+  // fallback bỏ ảnh) nối tiếp vào cùng một trace - đúng lúc hỏng mới cần nhìn
+  // đủ cả hai lần chạy.
+  const trace: StepTrace[] = [];
 
   const runOnce = () =>
     generateText({
@@ -146,6 +158,30 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
             "Tool đã chạy",
           );
         }
+
+        if (!env.AGENT_TRACE_ENABLED) return;
+        const t = summarizeStep(step, env.AGENT_TRACE_MAX_CHARS);
+        trace.push(t);
+        // Mức DEBUG vì đây là dữ liệu chẩn đoán, bật khi cần chứ không đổ vào
+        // log thường. Ghi cả TOOL CALL (model gửi gì) chứ không chỉ kết quả,
+        // và cả warnings - chỗ provider báo tham số bị âm thầm bỏ qua.
+        log.debug(
+          {
+            accountId: account.id,
+            threadId: latest.threadId,
+            step: t.stepNumber,
+            finishReason: t.finishReason,
+            text: t.text,
+            // Rỗng với model OpenAI (không phơi chuỗi suy nghĩ), có nội dung
+            // với DeepSeek - phụ thuộc MODEL chứ không phải cấu hình
+            reasoning: t.reasoning,
+            toolCalls: t.toolCalls,
+            toolResults: t.toolResults,
+            warnings: t.warnings,
+            tokens: { in: t.inputTokens, out: t.outputTokens },
+          },
+          "Chi tiết step agent",
+        );
       },
     });
 
@@ -223,9 +259,11 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
       { accountId: account.id, threadId: latest.threadId },
       "Router trả completion rỗng 2 lần liên tiếp - trả lời fallback. Cần soi log 9Router.",
     );
+    // Vẫn trả trace: lượt glitch là đúng lúc cần nhìn nhất
     return {
       text: ROUTER_DOWN_REPLY,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: result.steps.length },
+      trace,
     };
   }
 
@@ -237,5 +275,6 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
       totalTokens: result.totalUsage.totalTokens ?? 0,
       steps: result.steps.length,
     },
+    trace,
   };
 }

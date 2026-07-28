@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { pruneOldTraces } from "../agent/agent-trace-store.js";
 import { dataDir, env } from "../config/env.js";
 import { startDailyTask } from "../shared/daily-task-schedule.js";
 import { downloadImage, type DownloadedImage } from "../shared/download-image.js";
@@ -140,12 +141,19 @@ function removeExpiredIn(dir: string, cutoff: number): number {
 
 /** Dọn ngay lúc gọi + lặp lại mỗi 24h */
 export function startMediaCleanupSchedule(): void {
+  // Callback phải ĐỒNG BỘ: startDailyTask bọc try/catch quanh lời gọi, hàm
+  // async thì promise reject lọt ra ngoài thành unhandled rejection
   startDailyTask("media-cleanup", () => {
     const removed = cleanupExpiredMedia();
     // Mô tả ảnh của sidecar dọn cùng nhịp: quá hạn thì cả pixel lẫn mô tả cùng đi
     const prunedDescriptions = pruneExpiredImageDescriptions(env.MEDIA_RETENTION_DAYS);
-    if (removed > 0 || prunedDescriptions > 0) {
-      log.info({ removed, prunedDescriptions }, "Đã dọn file media + mô tả ảnh hết hạn");
+    // Trace step agent dọn cùng nhịp - bảng phình nhanh nhất trong DB
+    const prunedTraces = pruneOldTraces();
+    if (removed > 0 || prunedDescriptions > 0 || prunedTraces > 0) {
+      log.info(
+        { removed, prunedDescriptions, prunedTraces },
+        "Đã dọn file media + mô tả ảnh + trace hết hạn",
+      );
     }
   });
 }

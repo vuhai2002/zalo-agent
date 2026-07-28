@@ -12,9 +12,16 @@ const insertStmt = db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?)
 `);
 
-/** Ghi usage 1 lượt agent - nguồn cho cột Context màn Sessions + thống kê chi phí */
-export function recordAgentTurn(accountId: string, threadId: string, usage: AgentTurnUsage): void {
-  insertStmt.run(
+/**
+ * Ghi usage 1 lượt agent - nguồn cho cột Context màn Sessions + thống kê chi phí.
+ * Trả về id của lượt để trace từng step nối vào (agent_steps.turn_id).
+ */
+export function recordAgentTurn(
+  accountId: string,
+  threadId: string,
+  usage: AgentTurnUsage,
+): number {
+  const info = insertStmt.run(
     accountId,
     threadId,
     usage.inputTokens,
@@ -22,6 +29,7 @@ export function recordAgentTurn(accountId: string, threadId: string, usage: Agen
     usage.totalTokens,
     usage.steps,
   );
+  return Number(info.lastInsertRowid);
 }
 
 const threadTotalsStmt = db.prepare(`
