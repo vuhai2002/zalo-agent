@@ -26,6 +26,14 @@ export type RawStep = {
   reasoningText?: string;
   toolCalls?: { toolName?: string; input?: unknown }[];
   toolResults?: { toolName?: string; output?: unknown }[];
+  /**
+   * Các phần nội dung thô của step. Tool CHẠY LỖI nằm ở đây dạng
+   * `type: "tool-error"` và KHÔNG BAO GIỜ lọt vào `toolResults` - getter đó chỉ
+   * lọc `type === "tool-result"`. Đã đo thật với AI SDK 7.0.37: tool ném lỗi cho
+   * ra `toolResults.length === 0` còn `content` có `tool-call, tool-error`.
+   * Đọc thiếu chỗ này là mù toàn bộ lớp sự kiện tool thất bại.
+   */
+  content?: { type?: string; toolName?: string; error?: unknown }[];
   finishReason?: string;
   warnings?: unknown[];
   usage?: { inputTokens?: number; outputTokens?: number };
@@ -37,6 +45,8 @@ export type StepTrace = {
   reasoning: string;
   toolCalls: { name: string; input: string }[];
   toolResults: { name: string; output: string }[];
+  /** Tool chạy lỗi: schema chặn input, tool ném exception, provider trả lỗi */
+  toolErrors: { name: string; error: string }[];
   finishReason: string;
   warnings: string[];
   inputTokens: number;
@@ -61,6 +71,18 @@ function thanhChuoi(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+/**
+ * Ép lỗi về câu đọc được. KHÔNG dùng thẳng `thanhChuoi`: `message` và `stack`
+ * của Error là non-enumerable nên `JSON.stringify(err)` ra `{}` - đúng thứ cần
+ * đọc lại là thứ bị mất. Zod báo lỗi schema dạng mảng issue nên vẫn cần nhánh
+ * JSON cho trường hợp không phải Error.
+ */
+function loiThanhChuoi(err: unknown): string {
+  if (err instanceof Error) return err.message || err.name;
+  if (typeof err === "string") return err;
+  return thanhChuoi(err);
 }
 
 /** Warning của SDK là object đủ hình dạng - ép về câu người đọc được */
@@ -89,6 +111,12 @@ export function summarizeStep(step: RawStep, maxChars: number): StepTrace {
       name: r.toolName ?? "?",
       output: cat(thanhChuoi(r.output), maxChars),
     })),
+    toolErrors: (step.content ?? [])
+      .filter((p) => p.type === "tool-error")
+      .map((p) => ({
+        name: p.toolName ?? "?",
+        error: cat(loiThanhChuoi(p.error), maxChars),
+      })),
     finishReason: step.finishReason ?? "",
     // Warnings là chỗ provider báo tham số bị bỏ qua - đúng loại lỗi đã dính 2
     // lần (`size` bị model phớt lờ, `quality` không được gửi)

@@ -1,6 +1,6 @@
-import { env } from "../config/env.js";
 import { db } from "../conversation/database.js";
 import type { StepTrace } from "./agent-step-trace.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
  * Lưu trace từng step của lượt agent vào SQLite, nối với `agent_turns` qua
@@ -17,14 +17,14 @@ import type { StepTrace } from "./agent-step-trace.js";
 
 const insertStmt = db.prepare(`
   INSERT INTO agent_steps
-    (turn_id, step_number, text, reasoning, tool_calls, tool_results, finish_reason,
-     warnings, input_tokens, output_tokens)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (turn_id, step_number, text, reasoning, tool_calls, tool_results, tool_errors,
+     finish_reason, warnings, input_tokens, output_tokens)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const selectStmt = db.prepare(`
-  SELECT step_number, text, reasoning, tool_calls, tool_results, finish_reason,
-         warnings, input_tokens, output_tokens
+  SELECT step_number, text, reasoning, tool_calls, tool_results, tool_errors,
+         finish_reason, warnings, input_tokens, output_tokens
   FROM agent_steps WHERE turn_id = ? ORDER BY step_number ASC, id ASC
 `);
 
@@ -62,6 +62,7 @@ type StepRow = {
   reasoning: string;
   tool_calls: string;
   tool_results: string;
+  tool_errors: string;
   finish_reason: string;
   warnings: string;
   input_tokens: number;
@@ -86,6 +87,7 @@ export function saveTurnTrace(turnId: number, steps: StepTrace[]): void {
       s.reasoning,
       JSON.stringify(s.toolCalls),
       JSON.stringify(s.toolResults),
+      JSON.stringify(s.toolErrors),
       s.finishReason,
       JSON.stringify(s.warnings),
       s.inputTokens,
@@ -102,6 +104,9 @@ export function getTurnTrace(turnId: number): StepTrace[] {
     reasoning: r.reasoning,
     toolCalls: doJson<StepTrace["toolCalls"]>(r.tool_calls, []),
     toolResults: doJson<StepTrace["toolResults"]>(r.tool_results, []),
+    // Dòng ghi TRƯỚC khi có cột này đọc ra chuỗi mặc định '[]' của ALTER - không
+    // phải null, nên doJson không cần nhánh riêng
+    toolErrors: doJson<StepTrace["toolErrors"]>(r.tool_errors, []),
     finishReason: r.finish_reason,
     warnings: doJson<string[]>(r.warnings, []),
     inputTokens: r.input_tokens,
@@ -169,7 +174,7 @@ export function getRecentTurnsAllThreads(limit: number): TurnAcrossThreads[] {
 }
 
 /** Xóa trace cũ hơn N ngày. Trả về số dòng đã xóa. */
-export function pruneOldTraces(retentionDays = env.AGENT_TRACE_RETENTION_DAYS): number {
+export function pruneOldTraces(retentionDays = getTuning("AGENT_TRACE_RETENTION_DAYS")): number {
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
   return Number(pruneStmt.run(cutoff).changes);
 }

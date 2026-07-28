@@ -33,6 +33,7 @@ function buoc(n: number, extra: Partial<StepTrace> = {}): StepTrace {
     reasoning: "",
     toolCalls: [],
     toolResults: [],
+    toolErrors: [],
     finishReason: "stop",
     warnings: [],
     inputTokens: 100 * n,
@@ -189,5 +190,36 @@ describe("dọn trace cũ - trace phình nhanh hơn mọi bảng khác", () => {
     assert.equal(xoa, 1);
     assert.deepEqual(store.getTurnTrace(cu), [], "trace 10 ngày tuổi phải bị dọn");
     assert.equal(store.getTurnTrace(moi).length, 1, "trace còn hạn phải được giữ");
+  });
+});
+
+/**
+ * Lỗi tool phải sống sót qua vòng ghi-đọc DB. Cột `tool_errors` thêm bằng ALTER
+ * nên dòng ghi trước khi có cột đọc ra chuỗi mặc định '[]', không phải NULL.
+ */
+describe("saveTurnTrace - lỗi tool", () => {
+  it("ghi và đọc lại được lỗi tool", () => {
+    const turnId = usage.recordAgentTurn("acc", "thread-loi", {
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+      steps: 1,
+    });
+    store.saveTurnTrace(turnId, [
+      buoc(1, { toolErrors: [{ name: "create_image", error: "prompt vượt 4000 ký tự" }] }),
+    ]);
+    const doc = store.getTurnTrace(turnId);
+    assert.deepEqual(doc[0]!.toolErrors, [{ name: "create_image", error: "prompt vượt 4000 ký tự" }]);
+  });
+
+  it("dòng cũ không có lỗi tool đọc ra mảng rỗng, không phải undefined", () => {
+    const turnId = usage.recordAgentTurn("acc", "thread-cu", {
+      inputTokens: 1,
+      outputTokens: 1,
+      totalTokens: 2,
+      steps: 1,
+    });
+    store.saveTurnTrace(turnId, [buoc(1)]);
+    assert.deepEqual(store.getTurnTrace(turnId)[0]!.toolErrors, []);
   });
 });

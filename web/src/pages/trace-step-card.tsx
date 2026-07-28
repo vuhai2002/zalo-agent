@@ -81,6 +81,22 @@ export function TraceStepCard({ step }: { step: TraceStep }) {
         </div>
       )}
 
+      {/* Đặt TRƯỚC mọi khối khác: tool hỏng là kết cục của step, đọc nó trước
+          rồi mới xuống chi tiết. Trước khi có khối này, step tool lỗi hiện
+          "Gọi tool" rồi cụt - nhìn y hệt lượt đang chạy dở. */}
+      {step.toolErrors.length > 0 && (
+        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-red-800">
+            Tool chạy lỗi
+          </div>
+          {step.toolErrors.map((e, i) => (
+            <div key={i} className="text-[12px] leading-[1.6] text-red-900">
+              <span className="font-medium">{e.name}</span>: {e.error}
+            </div>
+          ))}
+        </div>
+      )}
+
       <KhoiChu nhan="Model suy nghĩ" noiDung={step.reasoning} mau="bg-violet-50 text-violet-900" />
       <KhoiChu nhan="Model nói" noiDung={step.text} />
 

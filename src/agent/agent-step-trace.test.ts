@@ -104,3 +104,64 @@ describe("summarizeStep - dữ liệu thiếu không được làm chết lượ
     assert.ok(t.toolCalls[0]!.input.length > 0, "phải có gì đó thay vì rỗng hoặc throw");
   });
 });
+
+/**
+ * Lỗi tool là lớp sự kiện QUAN TRỌNG NHẤT mà bản đầu bỏ sót hoàn toàn: AI SDK v7
+ * để chúng ở `content` dạng `tool-error`, còn `toolResults` chỉ lọc
+ * `type === "tool-result"` nên luôn rỗng khi tool hỏng. Đo thật với ai@7.0.37:
+ * tool ném exception cho ra `toolResults.length === 0`, `content` có
+ * `tool-call, tool-error`. Đọc thiếu là bot hứa vẽ ảnh, không có ảnh, mà log và
+ * trace đều trống trơn.
+ */
+describe("summarizeStep - lỗi tool", () => {
+  it("nhặt tool-error từ content, chỗ toolResults không bao giờ có", () => {
+    const t = summarizeStep(
+      {
+        toolCalls: [{ toolName: "create_image", input: { prompt: "x" } }],
+        toolResults: [],
+        content: [
+          { type: "tool-call", toolName: "create_image" },
+          { type: "tool-error", toolName: "create_image", error: new Error("prompt vượt 4000 ký tự") },
+        ],
+      },
+      500,
+    );
+    assert.deepEqual(t.toolResults, [], "SDK không đưa lỗi vào đây - đó chính là cái bẫy");
+    assert.equal(t.toolErrors.length, 1);
+    assert.deepEqual(t.toolErrors[0], { name: "create_image", error: "prompt vượt 4000 ký tự" });
+  });
+
+  it("lấy được message của Error - JSON.stringify(err) ra {} vì message non-enumerable", () => {
+    const t = summarizeStep({ content: [{ type: "tool-error", toolName: "web_fetch", error: new Error("mạng rớt") }] }, 500);
+    assert.equal(t.toolErrors[0]!.error, "mạng rớt", "stringify thẳng sẽ ra '{}' - vô dụng");
+  });
+
+  it("lỗi không phải Error (Zod trả mảng issue) vẫn đọc được", () => {
+    const t = summarizeStep(
+      { content: [{ type: "tool-error", toolName: "x", error: [{ path: ["mode"], message: "Required" }] }] },
+      500,
+    );
+    assert.match(t.toolErrors[0]!.error, /Required/);
+  });
+
+  it("lỗi dài bị cắt kèm độ dài thật", () => {
+    const t = summarizeStep({ content: [{ type: "tool-error", toolName: "x", error: new Error("y".repeat(300)) }] }, 50);
+    assert.match(t.toolErrors[0]!.error, /\(300 ký tự\)$/);
+  });
+
+  it("step không có content vẫn ra mảng rỗng, không throw", () => {
+    assert.deepEqual(summarizeStep({}, 500).toolErrors, []);
+  });
+
+  it("step chạy tốt thì toolErrors rỗng, không lẫn tool-result vào", () => {
+    const t = summarizeStep(
+      {
+        toolResults: [{ toolName: "web_search", output: "ok" }],
+        content: [{ type: "tool-call", toolName: "web_search" }, { type: "tool-result", toolName: "web_search" }],
+      },
+      500,
+    );
+    assert.deepEqual(t.toolErrors, []);
+    assert.equal(t.toolResults.length, 1);
+  });
+});
