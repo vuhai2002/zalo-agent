@@ -51,3 +51,37 @@ describe("isEmptyRouterCompletion", () => {
   });
 });
 
+
+/**
+ * Chạm trần step là ca hỏng THẦM LẶNG nhất: vòng lặp dừng vì hết lượt chứ không
+ * phải vì model xong việc, nên `result.text` là text của step đang-gọi-tool. Từ
+ * khi persona dạy model kể tiến trình, text đó là câu tường thuật nội bộ kiểu
+ * "Đủ 2 nguồn - giờ đối chiếu và trả lời." - gửi thẳng xuống Zalo là người dùng
+ * nhận đúng câu đó làm câu trả lời, rồi lượt sau model đọc history tưởng mình đã
+ * trả lời xong. Trước khi có persona đó thì text rỗng và bot im lặng.
+ */
+describe("hitStepLimit - phân biệt hết lượt với xong việc", () => {
+  it("đủ step MÀ step cuối vẫn gọi tool = bị cắt ngang", () => {
+    assert.equal(loop.hitStepLimit({ stepCount: 8, maxSteps: 8, lastStepToolCalls: 2 }), true);
+  });
+
+  it("đủ step nhưng step cuối KHÔNG gọi tool = model chốt kịp, không phải bị cắt", () => {
+    assert.equal(loop.hitStepLimit({ stepCount: 8, maxSteps: 8, lastStepToolCalls: 0 }), false);
+  });
+
+  it("chưa đủ step thì dù có tool call cũng không phải bị cắt", () => {
+    assert.equal(loop.hitStepLimit({ stepCount: 3, maxSteps: 8, lastStepToolCalls: 1 }), false);
+  });
+
+  it("maxSteps = 1 - dashboard cho đặt giá trị này, mọi lượt dùng tool đều dính", () => {
+    assert.equal(loop.hitStepLimit({ stepCount: 1, maxSteps: 1, lastStepToolCalls: 1 }), true);
+  });
+
+  it("lượt trò chuyện thường (1 step, không tool) không bao giờ dính", () => {
+    assert.equal(loop.hitStepLimit({ stepCount: 1, maxSteps: 8, lastStepToolCalls: 0 }), false);
+  });
+
+  it("vượt quá trần (retry nối thêm step) vẫn nhận ra", () => {
+    assert.equal(loop.hitStepLimit({ stepCount: 9, maxSteps: 8, lastStepToolCalls: 1 }), true);
+  });
+});
