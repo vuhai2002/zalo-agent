@@ -94,7 +94,7 @@ export function AccountsPage() {
                     <Badge tone="amber">Chưa login QR</Badge>
                   )}
                 </div>
-                <div className="mt-0.5 text-xs text-ink-soft">
+                <div className="mt-0.5 text-[12px] text-ink-soft">
                   {acc.id} · não: {agent ? `${agent.icon} ${agent.name}` : acc.agentId}
                 </div>
               </div>

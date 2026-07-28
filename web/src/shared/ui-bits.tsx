@@ -40,7 +40,7 @@ export function Badge({
   }[tone];
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${tones.chip}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-medium ${tones.chip}`}
     >
       {dot && <span className={`h-1.5 w-1.5 rounded-full ${tones.dot}`} />}
       {children}
@@ -152,7 +152,7 @@ export function InfoTile({
         <Icon size={16} />
       </span>
       <div className="min-w-0">
-        <div className="text-xs text-ink-soft">{label}</div>
+        <div className="text-[12px] text-ink-soft">{label}</div>
         <div className="truncate text-[15px] font-semibold text-ink">{value}</div>
       </div>
     </div>
@@ -258,7 +258,7 @@ export function ListToolbar({
 export function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-12 text-center text-[14px] text-ink-soft/70">
+      <td colSpan={colSpan} className="px-4 py-12 text-center text-[14px] text-ink-soft/60">
         {text}
       </td>
     </tr>

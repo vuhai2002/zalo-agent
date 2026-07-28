@@ -66,16 +66,16 @@ export function AgentsPage() {
                     <Badge tone="gray" dot={false}>{agent.modelName}</Badge>
                   )}
                 </div>
-                <div className="text-xs text-ink-soft/70">{agent.id}</div>
+                <div className="text-[12px] text-ink-soft/60">{agent.id}</div>
               </div>
             </div>
 
-            <p className="mt-3 line-clamp-3 min-h-10 flex-1 text-[13.5px] leading-relaxed text-ink-soft">
+            <p className="mt-3 line-clamp-3 min-h-10 flex-1 text-[13px] leading-relaxed text-ink-soft">
               {agent.persona || "(chưa có persona - dùng giọng mặc định của bot)"}
             </p>
 
             <div className="mt-4 flex items-center justify-between border-t border-line/70 pt-3">
-              <span className="text-[12.5px] text-ink-soft">
+              <span className="text-[12px] text-ink-soft">
                 {agent.accountCount > 0 ? `${agent.accountCount} account đang dùng` : "Chưa gắn account nào"}
               </span>
               <div className="flex gap-2">

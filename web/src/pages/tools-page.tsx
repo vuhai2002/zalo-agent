@@ -130,7 +130,7 @@ export function ToolsPage() {
             {/* Mobile: hint xuống dòng riêng - đứng cạnh sẽ bóp tiêu đề wrap giữa chữ */}
             <div className="mb-2 flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2.5">
               <h2 className="text-[15px] font-semibold text-ink">{GROUP_META[group].title}</h2>
-              <span className="text-xs text-ink-soft">{GROUP_META[group].hint}</span>
+              <span className="text-[12px] text-ink-soft">{GROUP_META[group].hint}</span>
             </div>
 
             <div className="gc-card divide-y divide-line">

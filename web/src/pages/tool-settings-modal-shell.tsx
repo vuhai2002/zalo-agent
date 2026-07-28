@@ -54,7 +54,7 @@ export function ChainStep({
           )}
         </div>
         {locked ? (
-          <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-ink-soft/70">
+          <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-ink-soft/60">
             Luôn bật
           </span>
         ) : onToggle ? (

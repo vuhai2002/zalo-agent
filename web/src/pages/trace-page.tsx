@@ -64,12 +64,12 @@ export function TracePage() {
             >
               <div className="min-w-0">
                 <div className="truncate text-[14px] font-medium text-ink">{t.displayName}</div>
-                <div className="text-[11.5px] text-ink-soft/70">
+                <div className="text-[11px] text-ink-soft/60">
                   {formatTime(t.createdAt)} - {t.stepCount} step -{" "}
                   {t.totalTokens.toLocaleString("vi-VN")} token
                 </div>
               </div>
-              <span className="shrink-0 text-[12.5px] text-ink-soft">
+              <span className="shrink-0 text-[12px] text-ink-soft">
                 {dangMo === t.id ? "Thu gọn" : "Xem"}
               </span>
             </button>

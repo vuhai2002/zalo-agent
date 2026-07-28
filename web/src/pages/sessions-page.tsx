@@ -80,7 +80,7 @@ export function SessionsPage({ accounts }: { accounts: AccountInfo[] }) {
                 <InitialAvatar name={t.displayName || t.threadId} />
                 <div className="min-w-0">
                   <div className="truncate font-medium text-ink">{t.displayName || t.threadId}</div>
-                  <div className="truncate text-xs text-ink-soft/70">{t.threadId}</div>
+                  <div className="truncate text-[12px] text-ink-soft/60">{t.threadId}</div>
                 </div>
               </div>
             </td>
@@ -97,7 +97,7 @@ export function SessionsPage({ accounts }: { accounts: AccountInfo[] }) {
             <td className="px-4 py-3 text-ink-soft">{formatNumber(t.messageCount)}</td>
             <td className="px-4 py-3 text-ink-soft">
               {formatNumber(t.usage.totalTokens)}
-              <span className="text-xs text-ink-soft/60"> / {t.usage.turns} lượt</span>
+              <span className="text-[12px] text-ink-soft/60"> / {t.usage.turns} lượt</span>
             </td>
             <td className="px-4 py-3 text-ink-soft">{formatTime(t.lastMessageAt)}</td>
             <td className="px-4 py-3">

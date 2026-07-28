@@ -48,7 +48,7 @@ export function SessionTraceView({ accountId, threadId }: { accountId: string; t
               <div className="text-[13px] font-medium text-ink">
                 {t.stepCount} step - {t.totalTokens.toLocaleString("vi-VN")} token
               </div>
-              <div className="text-[11px] text-ink-soft/70">{formatTime(t.createdAt)}</div>
+              <div className="text-[11px] text-ink-soft/60">{formatTime(t.createdAt)}</div>
             </div>
             <span className="text-[12px] text-ink-soft">{dangMo === t.id ? "Thu gọn" : "Xem"}</span>
           </button>

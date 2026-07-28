@@ -57,7 +57,7 @@ function DongLog({ e }: { e: LogEntry }) {
         )}
       </div>
       {mo && coTruongPhu && (
-        <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-tile px-3 py-2 text-[11.5px] leading-relaxed text-ink-soft">
+        <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-tile px-3 py-2 text-[11px] leading-relaxed text-ink-soft">
           {JSON.stringify(e.fields, null, 2)}
         </pre>
       )}
@@ -161,7 +161,7 @@ export function LogsPage() {
           <DongLog key={i} e={e} />
         ))}
         {entries.length === 0 && !dangTai && !tat && (
-          <p className="py-10 text-center text-[13px] text-ink-soft/70">
+          <p className="py-10 text-center text-[13px] text-ink-soft/60">
             Không có dòng log nào khớp.
           </p>
         )}

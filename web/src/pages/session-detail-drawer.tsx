@@ -44,7 +44,7 @@ export function SessionDetailDrawer({
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>
             <div className="font-semibold text-ink">{thread.displayName || thread.threadId}</div>
-            <div className="text-xs text-ink-soft">
+            <div className="text-[12px] text-ink-soft">
               {thread.messageCount} tin - {thread.usage.totalTokens.toLocaleString("vi-VN")} token
             </div>
           </div>
@@ -86,10 +86,10 @@ export function SessionDetailDrawer({
 
         {tab === "chat" && thread.summary && (
           <div className="border-b border-line bg-zalo-50/70 px-5 py-3">
-            <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zalo-700">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-zalo-700">
               Tóm tắt phần hội thoại cũ
             </div>
-            <p className="text-xs leading-relaxed text-ink-soft">{thread.summary}</p>
+            <p className="text-[12px] leading-relaxed text-ink-soft">{thread.summary}</p>
           </div>
         )}
 
@@ -99,7 +99,7 @@ export function SessionDetailDrawer({
           {hasOlder && (
             <button
               onClick={loadOlder}
-              className="mx-auto block rounded-full border border-line bg-white px-4 py-1 text-xs text-ink-soft hover:bg-tile"
+              className="mx-auto block rounded-full border border-line bg-white px-4 py-1 text-[12px] text-ink-soft hover:bg-tile"
             >
               Tải tin cũ hơn
             </button>
@@ -114,7 +114,7 @@ export function SessionDetailDrawer({
                 }`}
               >
                 {m.role === "user" && m.senderName && (
-                  <div className="mb-0.5 text-xs font-medium text-zalo-600">{m.senderName}</div>
+                  <div className="mb-0.5 text-[12px] font-medium text-zalo-600">{m.senderName}</div>
                 )}
                 <div className="whitespace-pre-wrap break-words">{m.content}</div>
                 <div
@@ -128,7 +128,7 @@ export function SessionDetailDrawer({
             </div>
           ))}
           {messages.length === 0 && (
-            <p className="py-10 text-center text-[14px] text-ink-soft/70">Chưa có tin nhắn</p>
+            <p className="py-10 text-center text-[14px] text-ink-soft/60">Chưa có tin nhắn</p>
           )}
         </div>
       </div>

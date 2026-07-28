@@ -101,7 +101,7 @@ export function SidebarNav({
         <nav className="mt-1 flex-1 overflow-y-auto px-3">
           {SECTIONS.map((section) => (
             <div key={section.title} className="mb-5">
-              <div className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-soft/70">
+              <div className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-soft/60">
                 {section.title}
               </div>
               {section.items.map((item) => (

@@ -13,8 +13,8 @@ function Toggle({ value, onChange, label, hint }: {
   return (
     <button type="button" onClick={() => onChange(!value)} className="flex w-full items-center justify-between gap-3 py-1 text-left">
       <span>
-        <span className="block text-[13.5px] font-medium text-ink">{label}</span>
-        {hint && <span className="block text-xs text-ink-soft">{hint}</span>}
+        <span className="block text-[13px] font-medium text-ink">{label}</span>
+        {hint && <span className="block text-[12px] leading-[1.6] text-ink-soft">{hint}</span>}
       </span>
       <ToggleKnob on={value} />
     </button>

@@ -26,7 +26,7 @@ function KhoiChu({ nhan, noiDung, mau }: { nhan: string; noiDung: string; mau?: 
   return (
     <div className="mt-2">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-soft/70">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-soft/60">
           {nhan}
         </span>
         {daiQua && (
@@ -62,7 +62,7 @@ export function TraceStepCard({ step }: { step: TraceStep }) {
             {step.finishReason}
           </span>
         )}
-        <span className="text-[11px] text-ink-soft/70">
+        <span className="text-[11px] text-ink-soft/60">
           {step.inputTokens.toLocaleString("vi-VN")} vào /{" "}
           {step.outputTokens.toLocaleString("vi-VN")} ra
         </span>
@@ -102,7 +102,7 @@ export function TraceStepCard({ step }: { step: TraceStep }) {
 /** Câu giải thích khi chưa có trace nào - dùng chung cho cả hai chỗ */
 export function TraceRong() {
   return (
-    <p className="py-10 text-center text-[13px] leading-relaxed text-ink-soft/70">
+    <p className="py-10 text-center text-[13px] leading-relaxed text-ink-soft/60">
       Chưa có trace nào.
       <br />
       Trace chỉ ghi từ lúc bật AGENT_TRACE_ENABLED, và tự dọn sau
