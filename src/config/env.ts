@@ -118,6 +118,11 @@ const envSchema = z.object({
   // Vẽ 1 ảnh mất ~70 giây (đo trên cx/gpt-5.5-image) và TỐN TIỀN THẬT mỗi lần.
   // Bot đọc tin người lạ nên trần này là hàng phòng thủ chính chống đốt quota.
   IMAGE_GEN_MAX_PER_HOUR: z.coerce.number().int().min(1).max(100).default(10),
+  // Mức chi tiết khi vẽ. Đo A/B cùng prompt: "high" ra ảnh giàu chi tiết hơn
+  // hẳn (khối phát sáng, lớp sóng hạt, nhiều tầng biểu đồ) mà KHÔNG chậm hơn
+  // (50s so với 60s). Đổi lại nhà cung cấp thường tính phí cao hơn mức mặc
+  // định - hạ xuống "medium" nếu thấy tốn. "standard"/"hd" là của dòng dall-e.
+  IMAGE_GEN_QUALITY: z.enum(["auto", "low", "medium", "high", "standard", "hd"]).default("high"),
   // Phép đo ĐÚNG cho stream: im lặng bao lâu thì coi là kết nối chết. Đo thật
   // trên prompt nặng (tổng 135 giây): provider bắn keepalive đều mỗi 30 giây,
   // khoảng im lặng dài nhất 30.1 giây. 90s = gấp 3 lần nhịp đó. Vẽ lâu mà stream

@@ -85,6 +85,9 @@ export async function generateImage(
     prompt: params.prompt,
     n: 1,
     output_format: outputFormat,
+    // Không gửi thì nhà cung cấp tự chọn mức thấp hơn. Đo A/B cùng prompt:
+    // "high" ra ảnh giàu chi tiết hơn hẳn mà không chậm hơn.
+    quality: env.IMAGE_GEN_QUALITY,
   };
   if (params.transparentBackground) body.background = "transparent";
   if (params.refImage) {

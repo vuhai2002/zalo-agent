@@ -98,6 +98,14 @@ describe("generateImage - dựng request", () => {
     assert.equal(JSON.parse(String(calls[0]!.init.body)).size, undefined);
   });
 
+  it("gửi quality theo env - bỏ trống thì provider tự chọn mức thấp hơn", async () => {
+    // Đo A/B cùng prompt: có quality=high ra ảnh giàu chi tiết hơn hẳn (khối
+    // phát sáng, lớp sóng hạt, nhiều tầng biểu đồ) mà KHÔNG chậm hơn.
+    const { calls, impl } = captureFetch(okSse());
+    await client.generateImage({ prompt: "x" }, SETTINGS, impl);
+    assert.equal(JSON.parse(String(calls[0]!.init.body)).quality, "high");
+  });
+
   it("mặc định JPEG - nhẹ hơn PNG hàng chục lần", async () => {
     const { calls, impl } = captureFetch(okSse());
     const result = await client.generateImage({ prompt: "x" }, SETTINGS, impl);
