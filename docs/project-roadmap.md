@@ -1130,7 +1130,37 @@ SQLite chậm" - sai, bot cá nhân vài tài khoản thì volume rất thấp. 
 ĐỘ BỀN của chính đường ghi log: log là thứ tuyệt đối không được hỏng, vì lúc cần
 nó nhất là lúc mọi thứ khác đang hỏng. Ghi file không phụ thuộc DB.
 
-- [ ] Chưa xem được giao diện: dashboard cần mật khẩu, chưa test bằng dữ liệu thật
+### Nghiệm thu trên dashboard thật + 5 lỗi tự tìm ra (2026-07-28)
+
+User đăng nhập giúp nên xem được giao diện chạy thật. Kiểm chứng đủ: trang Logs
+lọc mức/scope/tìm chữ đều chạy, ô scope tự lấy 11 scope từ file; trang Trace bung
+ra thấy 5 step, 6 lệnh `web_search` song song kèm đúng tham số, step cuối `stop`
+kèm MODEL NÓI. Xác nhận `reasoning: ""` đúng như đã đo về `gpt-5.6-sol`.
+
+Quét file log thật: **không lộ secret nào** (0 khớp `sk-*`, `AIza*`, cookie Zalo,
+`Bearer`, password), `data/` đã gitignore, phình ~950 KB/ngày tức 6.5 MB cho 7 ngày.
+
+Năm lỗi tìm được và đã sửa:
+
+- [x] **`heartbeat` chiếm 32% log** - hệ quả trực tiếp của việc cho file ghi
+  debug. Comment cũ ghi "debug level để prod không noise", giả định đó vỡ. Giãn
+  từ 1 phút lên 15 phút (96 dòng/ngày thay vì 1440) và cho scope riêng để lọc ra
+- [x] **7 dòng log trong `index.ts` không có scope** (khởi động, tắt,
+  `uncaughtException`) - badge trống và KHÔNG LỌC ĐƯỢC, đúng lúc cần nhất. Đặt
+  scope `bootstrap`
+- [x] **Đọc log nuốt cả tuần mỗi lần vào trang**: parse toàn bộ 6.5 MB chỉ để
+  trả 200 dòng. Giờ đi từ file mới nhất về cũ và DỪNG khi đủ; trả thêm
+  `filesRead` để biết kết quả trải bao nhiêu ngày
+- [x] **Cuộn trang Trace bị khung con nuốt**: mỗi khối kết quả có `overflow-auto`
+  riêng nên con lăn bị khối dưới con trỏ bắt, phải rê ra lề mới cuộn được trang
+  (tự vấp lúc kiểm tra). Đổi sang cắt chiều cao + nút "Xem đầy đủ", bỏ hẳn khung
+  cuộn lồng nhau. Kiểm chứng trên trang thật: 0 khung cuộn con, 23 nút bung
+- [x] **Đánh số step từ 0** (theo AI SDK) đọc lạ. Đổi ngay tại `summarizeStep`
+  để log, DB và giao diện cùng một con số - đổi ở riêng giao diện thì đọc log lại
+  lệch một đơn vị
+
+- [ ] Các dòng trace ĐÃ LƯU trước lúc sửa vẫn đánh số từ 0, hiện lệch 1 so với
+  dòng mới. Tự hết sau `AGENT_TRACE_RETENTION_DAYS` ngày
 
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
