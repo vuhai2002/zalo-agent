@@ -118,6 +118,25 @@ const envSchema = z.object({
   // Vẽ 1 ảnh mất ~70 giây (đo trên cx/gpt-5.5-image) và TỐN TIỀN THẬT mỗi lần.
   // Bot đọc tin người lạ nên trần này là hàng phòng thủ chính chống đốt quota.
   IMAGE_GEN_MAX_PER_HOUR: z.coerce.number().int().min(1).max(100).default(10),
+  // Ghi log ra file JSON xoay vòng trong data/logs. Không bật thì log chỉ tồn
+  // tại trong terminal đang chạy bot - đóng terminal là mất sạch, và trên VPS
+  // thì không có gì để lần lại khi có sự cố.
+  LOG_FILE_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
+  // Giữ lại bao nhiêu file (xoay vòng mỗi ngày 1 file). File ghi MỌI mức kể cả
+  // debug, độc lập với LOG_LEVEL của terminal - terminal cần gọn, file cần đủ.
+  LOG_FILE_KEEP_DAYS: z.coerce.number().int().min(1).max(90).default(7),
+
+  // Trace từng step của lượt agent (model nói gì, gọi tool nào với tham số gì,
+  // provider cảnh báo gì). Tắt thì bot vẫn chạy, chỉ mất đường chẩn đoán.
+  AGENT_TRACE_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
+  // Trần ký tự mỗi mẩu nội dung trong trace. Trace chứa NGUYÊN VĂN tin nhắn của
+  // người thật nên cắt ngắn vừa đỡ phình DB vừa đỡ lưu dư thông tin cá nhân.
+  // Phần bị cắt vẫn ghi kèm độ dài thật để biết mình đang mất bao nhiêu.
+  AGENT_TRACE_MAX_CHARS: z.coerce.number().int().min(50).max(20_000).default(500),
+  // Bảng agent_steps phình nhanh nhất trong DB (mỗi lượt vài step, mỗi step vài
+  // mẩu nội dung), nên dọn cùng nhịp với media.
+  AGENT_TRACE_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+
   // Mức chi tiết khi vẽ. Đo A/B cùng prompt: "high" ra ảnh giàu chi tiết hơn
   // hẳn (khối phát sáng, lớp sóng hạt, nhiều tầng biểu đồ) mà KHÔNG chậm hơn
   // (50s so với 60s). Đổi lại nhà cung cấp thường tính phí cao hơn mức mặc
