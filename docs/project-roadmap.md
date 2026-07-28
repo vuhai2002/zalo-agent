@@ -998,6 +998,58 @@ không nói lên điều gì. Trần tổng giết cả lượt vẽ khỏe lẫ
 - [x] Dọn timer sau MỖI chunk: không dọn thì stream dài để lại hàng trăm timer
   sống, tiến trình không thoát được
 
+### Ảnh bot vẽ xấu hơn ảnh tạo trên web (2026-07-28)
+
+User so ảnh bot vẽ với ảnh tự tạo trên ChatGPT web, và hỏi có tham số kiểu
+Instant/Medium/High như dropdown trên web không. Tìm ra HAI thứ khác nhau:
+
+**Dropdown trên web KHÔNG phải chất lượng ảnh.** Đó là mức suy nghĩ của model
+CHAT (tương đương `LLM_REASONING_EFFORT`, bot đang `medium`). Trên web có hai
+model: model chat đọc yêu cầu rồi VIẾT RA prompt vẽ, model vẽ mới nhận prompt đó.
+
+**Nhưng có tham số riêng cho ảnh mà bot chưa gửi: `quality`.**
+
+- [x] `IMAGE_GEN_QUALITY` mặc định `high`. Đo A/B cùng prompt: giàu chi tiết hơn
+  hẳn mà KHÔNG chậm hơn (50s so với 60s). Để chỉnh được bằng env vì nhà cung cấp
+  thường tính phí cao hơn ở mức này
+
+**Thử dạy model viết "brief thiết kế 5 mục" - SAI, đã gỡ bỏ.** Bản thử nghiệm
+bắt model nêu khung hình + vị trí từng khối, dải màu chuyển sắc, phong cách,
+mật độ, cỡ chữ, kèm ví dụ cụ thể. Prompt model viết ra dài hơn hẳn (810 ->
+1818 ký tự) nên thoạt nhìn tưởng thành công.
+
+User chấm ảnh và nói ngay ảnh cũ đẹp hơn, kèm câu hỏi đúng trọng tâm: *"gợi ý
+cho model kiểu đưa nội dung bên trái bên phải thì các thiết kế sau bị ảnh hưởng
+rồi sao, cái này bạn đang áp 1 cái design cho tất cả mà"*. Và hỏi có chắc model
+vẽ không tự nghĩ thêm, hay chỉ là đoán.
+
+Đo lại thì cả hai đều đúng:
+
+- **Có thinking, và mình đã đoán sai.** `cx/gpt-5.5-image` KHÔNG phải model vẽ.
+  Router bóc đuôi `-image` rồi gọi GPT-5.5 với `instructions: ""` + tool
+  `image_generation` + `tool_choice: "auto"`. Có HAI model trong đường ống, cái
+  thứ hai tự thiết kế
+- **Prompt trần trụi cho kết quả TỐT HƠN.** Vẽ 3 lần chỉ với đúng câu người
+  dùng gõ: ra 3 thiết kế khác hẳn nhau, đều dày dặn, GPT-5.5 còn tự nghĩ thêm
+  cụm icon kèm chữ tiếng Việt không ai bảo. Brief chỉ trói tay nó và giết mất
+  sự đa dạng
+- **Mỗi ví dụ cụ thể trong mô tả tool = một khuôn mẫu áp lên mọi ảnh về sau.**
+  Model chép gần nguyên văn cụm "tối giản, nhiều khoảng trống, không rối mắt"
+  mình viết làm ví dụ
+
+- [x] Gỡ sạch phần dạy thiết kế. `create-image-tool-description.ts` giờ chỉ giữ
+  điều có LÝ DO CHỨC NĂNG: chữ chép nguyên văn (không thì ảnh ra chữ bịa), tỉ lệ
+  nói trong prompt (API không có tham số kích thước), và TRUNG THÀNH với ý người
+  dùng - họ không nói phong cách thì đừng tự bịa ràng buộc
+- [x] Kiểm lại sau khi gỡ: prompt model viết còn 562 ký tự, không còn tự bịa
+  màu/bố cục/mật độ nào; vẽ 3 lần ra 3 thiết kế khác nhau
+- [ ] CHƯA nâng `LLM_REASONING_EFFORT` lên high: nó ảnh hưởng MỌI lượt chat chứ
+  không riêng lúc vẽ, tốn token cho cả câu hỏi thường
+
+**Bài học ghi vào đầu file mô tả tool:** gu thẩm mỹ của người viết code lọt vào
+mô tả tool là mọi ảnh của mọi người dùng đều dính. Mô tả tool chỉ được nói điều
+có lý do chức năng.
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic
