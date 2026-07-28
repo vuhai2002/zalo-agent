@@ -3,9 +3,13 @@ import { getEffectiveLlmSettings } from "./config/runtime-llm-settings.js";
 import { closeHistoryStore } from "./conversation/history-store.js";
 import { startMediaCleanupSchedule } from "./conversation/media-store.js";
 import { startDashboardServer, stopDashboardServer } from "./server/dashboard-server.js";
-import { logger } from "./shared/logger.js";
+import { createLogger } from "./shared/logger.js";
 import { startTempFileCleanupSchedule } from "./shared/temp-file-store.js";
 import { startAllAccounts, stopAllAccounts } from "./zalo/account-manager.js";
+
+// Vòng đời tiến trình cũng cần scope: không có thì badge scope trên trang Logs
+// trống trơn và KHÔNG LỌC ĐƯỢC - đúng lúc cần nhất là khi có uncaughtException
+const logger = createLogger("bootstrap");
 
 logger.info(
   { nodeEnv: env.NODE_ENV, provider: env.LLM_PROVIDER, model: env.LLM_MODEL },
@@ -39,8 +43,18 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
-// Heartbeat: xác nhận process còn sống trong log (debug level để prod không noise)
-setInterval(() => logger.debug("heartbeat"), 60_000).unref();
+/**
+ * Heartbeat: xác nhận process còn sống trong log, cho những khoảng bot rảnh
+ * hàng giờ không có tin nhắn nào.
+ *
+ * Nhịp 15 phút chứ không phải 1 phút, và có scope riêng. Bản cũ để 1 phút với
+ * lập luận "debug level nên prod không noise" - lập luận đó VỠ khi log bắt đầu
+ * ghi ra file ở mức trace: đo trên file thật, heartbeat chiếm 32% số dòng và tỉ
+ * lệ đó còn tăng khi bot rảnh (1440 dòng/ngày trên vài trăm dòng thật).
+ * Scope riêng để lọc nó ra khỏi trang Logs khi cần.
+ */
+const heartbeatLog = createLogger("heartbeat");
+setInterval(() => heartbeatLog.debug("còn sống"), 15 * 60_000).unref();
 
 // Dọn ảnh nhận được đã quá MEDIA_RETENTION_DAYS (chạy ngay + mỗi 24h)
 startMediaCleanupSchedule();
