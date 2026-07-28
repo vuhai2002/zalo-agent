@@ -1050,6 +1050,88 @@ vẽ không tự nghĩ thêm, hay chỉ là đoán.
 mô tả tool là mọi ảnh của mọi người dùng đều dính. Mô tả tool chỉ được nói điều
 có lý do chức năng.
 
+## V3.2 - Trace từng step agent (2026-07-28)
+
+User phản ánh log sơ sài, bật `LOG_LEVEL=debug` cũng không thấy thêm gì, không
+lần được model quyết định thế nào.
+
+**Nguyên nhân trực tiếp:** `agent-loop.ts` không có MỘT dòng `log.debug` nào -
+chỉ `info`/`warn`/`error`. Hạ log level không lộ thêm gì ở đúng chỗ cần.
+
+**Nguyên nhân sâu hơn:** `onStepFinish` chỉ đọc `toolResults`. AI SDK v7 đưa ra
+mỗi step cả `text`, `reasoningText`, `toolCalls` (model GỬI gì), `finishReason`,
+`usage` riêng, `warnings` - bỏ hết. `warnings` đáng tiếc nhất: đó là chỗ nhà
+cung cấp báo tham số bị âm thầm bỏ qua, đúng loại lỗi đã dính 2 lần (`size` bị
+phớt lờ, `quality` không được gửi).
+
+**Đo trước khi hứa:** phần "model suy nghĩ" phụ thuộc MODEL chứ không phải code.
+
+| Model | Không stream | Có stream |
+|---|---|---|
+| `cx/gpt-5.6-sol` (đang dùng) | không có gì | 1 dòng nhãn tóm tắt |
+| `ds/deepseek-v4-pro` | đầy đủ + `reasoning_tokens` | đầy đủ |
+
+OpenAI cố tình không phơi chain-of-thought. Muốn soi model nghĩ gì thì đổi sang
+DeepSeek, không phải sửa code.
+
+- [x] `agent-step-trace.ts` (thuần, không env/DB): gói một step thành bản ghi,
+  cắt ngắn KÈM ĐỘ DÀI THẬT (cắt lén thì không biết đang mất 50 hay 50.000 ký tự)
+- [x] `agent-trace-store.ts` + bảng `agent_steps` nối qua `agent_turns.id`
+- [x] `log.debug` từng step trong agent-loop
+- [x] `/api/traces` (chỉ ĐỌC - trace là bằng chứng, sửa được thì hết giá trị)
+- [x] Tab "Trace agent" trong drawer Sessions: cảnh báo hiện lên trước, rồi
+  reasoning, model nói, tool gọi kèm tham số, tool trả về
+- [x] Dọn theo `AGENT_TRACE_RETENTION_DAYS` cùng nhịp dọn media
+- [x] Trace gom NGOÀI `runOnce` để lượt retry (glitch router, fallback bỏ ảnh)
+  nối vào cùng một trace - hỏng mới là lúc cần nhìn đủ cả hai lần chạy
+
+**Vì sao SQLite chứ không Langfuse/OpenTelemetry:** trace chứa nguyên văn tin
+nhắn của người thật. Đẩy lên SaaS là đẩy hội thoại của họ ra khỏi máy - quyết
+định về quyền riêng tư, không phải kỹ thuật. Tự nuôi Langfuse cần cả Postgres
+lẫn ClickHouse, nặng hơn cả con bot.
+
+**Đặt trong drawer Sessions là SAI - user đi tìm không thấy.** Bản đầu chỉ có
+tab Trace bên trong drawer, tức chôn sâu 3 lớp (Sessions -> bấm hội thoại -> đổi
+tab) mà không có gợi ý nào ở ngoài. Người dùng duy nhất của tính năng chẩn đoán
+này là chủ bot, mà chủ bot không tìm ra thì coi như không có.
+
+- [x] Thêm trang `/trace` riêng ở sidebar (nhóm Hệ thống), gộp lượt của MỌI hội
+  thoại - bấm một cái là thấy, không phải nhớ lỗi xảy ra ở hội thoại nào
+- [x] `getRecentTurnsAllThreads` dùng INNER JOIN sang agent_steps: chỉ liệt kê
+  lượt CÓ trace, lượt không trace mà lên danh sách thì bấm vào rỗng
+- [x] Tách `trace-step-card.tsx` dùng chung cho cả trang và drawer, không chép đôi
+
+### Log toàn hệ thống ghi ra file + trang Logs (2026-07-28)
+
+User hỏi tiếp "còn log thì sao, log toàn hệ thống á, hiện tôi chưa thấy". Kiểm
+tra thì đúng là **không có log nào tồn tại ngoài terminal**: pino chỉ ghi ra
+stdout, không có file nào, không có trang nào xem. Đóng terminal là mất sạch;
+trên VPS thì không còn gì để lần lại khi có sự cố lúc 3 giờ sáng.
+
+Trace ở trên chỉ bao phủ lượt agent - không có gì về kết nối Zalo, login QR,
+định tuyến tin, hay lỗi của 30 scope khác.
+
+- [x] `pino-roll`: ghi `data/logs/bot.<ngày>.log`, xoay vòng mỗi ngày, giữ
+  `LOG_FILE_KEEP_DAYS` file
+- [x] HAI target với HAI mức khác nhau: terminal theo `LOG_LEVEL` (cần gọn để
+  đọc lướt), file ở mức `trace` nhận hết kể cả debug (cần đủ, vì lúc cần tới nó
+  là sự cố đã xảy ra rồi, không quay ngược lại bật debug được). Mức GỐC của
+  logger phải hạ xuống `trace`, không thì dòng debug bị chặn ngay từ đầu và
+  target file không bao giờ nhận được
+- [x] `read-log-file.ts` (thuần, nhận thư mục qua tham số): lọc theo mức/scope/
+  chữ, chỉ đọc 4MB cuối mỗi file, dòng JSON hỏng thì bỏ qua chứ không chết trang
+- [x] `/api/logs` + trang Logs ở sidebar, có ô lọc mức, lọc scope (danh sách
+  scope lấy từ chính log, không hardcode), tìm chữ, bung xem trường phụ
+- [x] Test tắt ghi file (`LOG_FILE_ENABLED: false` trong `test-env-setup`): mỗi
+  file test sẽ đẻ một worker pino-roll và một file, tốn công mà chẳng ai đọc
+
+**Vì sao file chứ không SQLite:** ban đầu suýt lập luận "log volume cao nên
+SQLite chậm" - sai, bot cá nhân vài tài khoản thì volume rất thấp. Lý do thật là
+ĐỘ BỀN của chính đường ghi log: log là thứ tuyệt đối không được hỏng, vì lúc cần
+nó nhất là lúc mọi thứ khác đang hỏng. Ghi file không phụ thuộc DB.
+
+- [ ] Chưa xem được giao diện: dashboard cần mật khẩu, chưa test bằng dữ liệu thật
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic
