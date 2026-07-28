@@ -141,7 +141,7 @@ export function ToolChainSettingsModal({
               placeholder={search.hasBraveApiKey ? "Để trống nếu giữ key cũ" : "Dán key vào đây"}
               className="mt-1.5"
             />
-            <p className="mt-1.5 text-xs text-ink-soft">
+            <p className="mt-1.5 text-[12px] leading-[1.6] text-ink-soft">
               Lấy key miễn phí tại{" "}
               <a
                 href="https://brave.com/search/api/"
@@ -151,7 +151,7 @@ export function ToolChainSettingsModal({
               >
                 brave.com/search/api
               </a>
-              . Key được mã hóa trước khi lưu, không bao giờ hiện lại đầy đủ.
+              .
             </p>
           </ChainStep>
 

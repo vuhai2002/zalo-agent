@@ -3,7 +3,7 @@ import type { ImageGenSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { SecretInput } from "../shared/secret-input";
-import { modalButton, ToolModalShell } from "./tool-settings-modal-shell";
+import { ModalField, modalButton, ToolModalShell } from "./tool-settings-modal-shell";
 
 /**
  * Modal cấu hình vẽ ảnh, mở từ nút Settings trên dòng tool "Vẽ ảnh AI".
@@ -94,7 +94,7 @@ export function ImageSettingsModal({
     <>
       <ToolModalShell
         title="Vẽ ảnh AI"
-        subtitle="Endpoint OpenAI-compatible /v1/images/generations. Dùng được cả để vẽ mới lẫn sửa ảnh người dùng gửi."
+        subtitle="Endpoint OpenAI-compatible /v1/images/generations - vẽ mới hoặc sửa ảnh người dùng gửi."
         onClose={onClose}
         footer={
           <>
@@ -130,65 +130,51 @@ export function ImageSettingsModal({
           </>
         }
       >
-        <div className="space-y-2.5">
-          <div>
-            <label className="block text-[13px] font-medium text-ink" htmlFor="image-base-url">
-              Base URL
-            </label>
+        <div className="space-y-3">
+          <ModalField
+            id="image-base-url"
+            label="Base URL"
+            hint="Chỉ phần gốc, không kèm /v1/images/generations - bot tự nối."
+          >
             <input
               id="image-base-url"
-              className="gc-input mt-1.5 w-full"
+              className="gc-input w-full"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder="https://9router.example.com"
             />
-            <p className="mt-1.5 text-xs text-ink-soft">
-              Chỉ phần gốc, không kèm /v1/images/generations - bot tự nối.
-            </p>
-          </div>
+          </ModalField>
 
-          <div>
-            <label className="block text-[13px] font-medium text-ink" htmlFor="image-model">
-              Model
-            </label>
+          <ModalField
+            id="image-model"
+            label="Model"
+            hint='Không có danh sách để chọn - bấm "Vẽ thử 1 ảnh" để kiểm tra tên.'
+          >
             <input
               id="image-model"
-              className="gc-input mt-1.5 w-full"
+              className="gc-input w-full"
               value={model}
               onChange={(e) => setModel(e.target.value)}
               placeholder="cx/gpt-5.5-image"
             />
-            <p className="mt-1.5 text-xs text-ink-soft">
-              Phải gõ tay: model vẽ ảnh không xuất hiện trong /v1/models nên không có danh sách để
-              chọn. Bấm "Vẽ thử 1 ảnh" để chắc chắn tên model đúng.
-            </p>
-          </div>
+          </ModalField>
 
-          <div>
-            <label className="block text-[13px] font-medium text-ink" htmlFor="image-api-key">
-              API key
-            </label>
-            <div className="mt-1.5">
-              <SecretInput
-                id="image-api-key"
-                value={apiKey}
-                onChange={setApiKey}
-                placeholder={
-                  settings.hasApiKey
-                    ? `API key (hiện tại: ${settings.apiKeyMasked} - bỏ trống để giữ)`
-                    : "API key của endpoint vẽ ảnh"
-                }
-              />
-            </div>
-            <p className="mt-1.5 text-xs text-ink-soft">
-              Key được mã hóa trước khi lưu, không bao giờ hiện lại đầy đủ.
-            </p>
-          </div>
+          <ModalField id="image-api-key" label="API key">
+            <SecretInput
+              id="image-api-key"
+              value={apiKey}
+              onChange={setApiKey}
+              placeholder={
+                settings.hasApiKey
+                  ? `Hiện tại ${settings.apiKeyMasked} - bỏ trống để giữ`
+                  : "Dán API key vào đây"
+              }
+            />
+          </ModalField>
         </div>
 
-        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-[12.5px] text-amber-800">
-          Mỗi ảnh mất khoảng 1 phút và tốn phí của nhà cung cấp. Bot tự nhắn báo trước khi vẽ, và
-          giới hạn số ảnh mỗi cuộc trò chuyện theo giờ (chỉnh bằng IMAGE_GEN_MAX_PER_HOUR).
+        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-[12px] leading-[1.6] text-amber-800">
+          Mỗi ảnh mất khoảng 1 phút và tốn phí của nhà cung cấp.
         </div>
 
         {status && (

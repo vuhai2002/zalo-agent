@@ -3,14 +3,14 @@ import type { VisionSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { SecretInput } from "../shared/secret-input";
-import { ChainStep, modalButton, ToolModalShell } from "./tool-settings-modal-shell";
+import { ChainStep, ModalField, modalButton, ToolModalShell } from "./tool-settings-modal-shell";
 
 /**
  * Modal cấu hình đọc ảnh, mở từ nút Settings trên dòng tool "Nhìn kỹ ảnh".
  *
  * Đọc ảnh cũng là một CHUỖI nên trình bày y hệt web_search/web_fetch:
- *   #1 model chính tự đọc pixel (nếu nó có vision)
- *   #2 model sidecar mô tả ảnh thành chữ (đỡ khi bậc 1 không đọc được)
+ *   1. model chính tự đọc pixel (nếu nó có vision)
+ *   2. model sidecar mô tả ảnh thành chữ (đỡ khi bậc 1 không đọc được)
  * Trước đây phần này là card riêng ở trang Providers - user phản hồi 2 nơi
  * khó hiểu, gom về đúng 1 chỗ cùng các tool khác.
  */
@@ -80,7 +80,7 @@ export function VisionSettingsModal({
     // Mất key thật (phải xin lại từ nhà cung cấp) nên hỏi trước - cùng nếp với
     // xóa account/agent
     const ok = await confirm({
-      title: "Xóa cấu hình sidecar?",
+      title: "Xóa cấu hình?",
       message: "Cả API key cũng bị xóa. Bot sẽ không đọc được ảnh cho tới khi bạn cấu hình lại.",
     });
     if (!ok) return;
@@ -101,7 +101,7 @@ export function VisionSettingsModal({
     <>
     <ToolModalShell
       title="Đọc ảnh - chuỗi nguồn"
-      subtitle="Model chính đọc pixel trước; không đọc được thì model sidecar mô tả ảnh thành chữ."
+      subtitle="Model chính đọc pixel trước; không đọc được thì sidecar mô tả ảnh thành chữ."
       onClose={onClose}
       footer={
         <>
@@ -136,64 +136,72 @@ export function VisionSettingsModal({
       <ChainStep
         index={1}
         title="Model chính tự đọc ảnh"
-        description="Model trả lời cũng nhìn thẳng pixel - luôn tốt nhất khi nó có vision."
         enabled
       >
-        <label className="block text-[13px] font-medium text-ink" htmlFor="vision-mode">
-          Model chính có đọc được ảnh không?
-        </label>
-        <select
+        {/* Nhãn ngắn: tiêu đề mục ngay trên đã nói "Model chính tự đọc ảnh",
+            để lại nguyên câu hỏi ở đây là nói cùng một điều hai lần */}
+        <ModalField
           id="vision-mode"
-          className="gc-input mt-1.5 w-full"
-          value={mode}
-          onChange={(e) => setMode(e.target.value as VisionSettings["mode"])}
+          label="Chế độ"
+          hint='Tự phát hiện chỉ đúng với 9Router - endpoint khác nên tự chọn "Có"/"Không".'
         >
-          {(["auto", "on", "off"] as const).map((m) => (
-            <option key={m} value={m}>
-              {MODE_LABEL[m]}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1.5 text-xs text-ink-soft">
-          Tự phát hiện chỉ chính xác với 9Router; endpoint khác không báo capability thì được coi
-          là đọc được - chọn "Không" nếu model thật sự không có vision.
-        </p>
+          <select
+            id="vision-mode"
+            className="gc-input w-full"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as VisionSettings["mode"])}
+          >
+            {(["auto", "on", "off"] as const).map((m) => (
+              <option key={m} value={m}>
+                {MODE_LABEL[m]}
+              </option>
+            ))}
+          </select>
+        </ModalField>
       </ChainStep>
 
       <ChainStep
         index={2}
         title="Model sidecar mô tả ảnh"
-        description="Đọc ảnh thuê rồi trả về chữ cho model chính. Cũng là thứ cấp sức cho chính tool này khi cần soi kỹ (đếm, đọc chữ nhỏ)."
         enabled={vision.sidecar.configured}
         locked={vision.sidecar.configured}
       >
-        <div className="space-y-2.5">
-          <input
-            className="gc-input w-full"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://generativelanguage.googleapis.com/v1beta/openai"
-          />
-          <input
-            className="gc-input w-full"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="gemini-3.5-flash-lite"
-          />
-          <SecretInput
-            value={apiKey}
-            onChange={setApiKey}
-            placeholder={
-              vision.sidecar.hasApiKey
-                ? `API key (hiện tại: ${vision.sidecar.apiKeyMasked} - bỏ trống để giữ)`
-                : "API key sidecar"
-            }
-          />
-        </div>
-        <p className="mt-1.5 text-xs text-ink-soft">
-          Gemini free là lựa chọn tiêu chuẩn (~500 lượt/ngày với flash-lite đời mới). Key được mã
-          hóa trước khi lưu, không bao giờ hiện lại đầy đủ.
-        </p>
+        <>
+          <ModalField id="sidecar-url" label="Base URL">
+            <input
+              id="sidecar-url"
+              className="gc-input w-full"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://generativelanguage.googleapis.com/v1beta/openai"
+            />
+          </ModalField>
+          <ModalField
+            id="sidecar-model"
+            label="Model"
+            hint="Gemini free cho khoảng 500 lượt/ngày."
+          >
+            <input
+              id="sidecar-model"
+              className="gc-input w-full"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="gemini-3.5-flash-lite"
+            />
+          </ModalField>
+          <ModalField id="sidecar-key" label="API key">
+            <SecretInput
+              id="sidecar-key"
+              value={apiKey}
+              onChange={setApiKey}
+              placeholder={
+                vision.sidecar.hasApiKey
+                  ? `Hiện tại ${vision.sidecar.apiKeyMasked} - bỏ trống để giữ`
+                  : "Dán API key vào đây"
+              }
+            />
+          </ModalField>
+        </>
       </ChainStep>
 
       {status && (
