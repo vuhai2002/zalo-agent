@@ -88,7 +88,7 @@ function ConfirmDialog({
           )}
           <div className="min-w-0 pt-0.5">
             <h2 className="text-[15px] font-semibold text-ink">{options.title}</h2>
-            <p className="mt-1 text-[13.5px] leading-relaxed text-ink-soft">{options.message}</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{options.message}</p>
           </div>
         </div>
 

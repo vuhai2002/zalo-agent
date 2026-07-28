@@ -170,9 +170,9 @@ export function ToolsPage() {
                             phải nói thẳng, không để người dùng tưởng bot có khả năng đó */}
                         {!tool.available && <Badge tone="amber">Chưa dùng được</Badge>}
                       </div>
-                      <p className="mt-0.5 text-[12.5px] text-ink-soft">{tool.description}</p>
+                      <p className="mt-0.5 text-[12px] leading-[1.6] text-ink-soft">{tool.description}</p>
                       {!tool.available && tool.unavailableHint && (
-                        <p className="mt-1 text-[12.5px] text-amber-700">{tool.unavailableHint}</p>
+                        <p className="mt-1 text-[12px] leading-[1.6] text-amber-700">{tool.unavailableHint}</p>
                       )}
                     </div>
 

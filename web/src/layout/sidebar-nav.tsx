@@ -101,7 +101,7 @@ export function SidebarNav({
         <nav className="mt-1 flex-1 overflow-y-auto px-3">
           {SECTIONS.map((section) => (
             <div key={section.title} className="mb-5">
-              <div className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-soft/70">
+              <div className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-soft/70">
                 {section.title}
               </div>
               {section.items.map((item) => (
@@ -127,7 +127,7 @@ export function SidebarNav({
         </nav>
 
         <div className="flex items-center justify-between border-t border-line px-4 py-3">
-          <span className="flex items-center gap-2 text-[12.5px] text-ink-soft">
+          <span className="flex items-center gap-2 text-[12px] text-ink-soft">
             <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-slate-300"}`} />
             {online ? "Connected" : "Offline"} · v0.1.0
           </span>

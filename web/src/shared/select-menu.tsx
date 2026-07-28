@@ -56,7 +56,7 @@ export function SelectMenu({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className={`flex w-full items-center gap-2 rounded-lg border bg-white px-2.5 py-2 text-left text-[13.5px] text-ink transition-colors hover:bg-tile/50 ${
+        className={`flex w-full items-center gap-2 rounded-lg border bg-white px-2.5 py-2 text-left text-[13px] text-ink transition-colors hover:bg-tile/50 ${
           open ? "border-zalo-500 ring-2 ring-zalo-100" : "border-line"
         }`}
       >
@@ -65,7 +65,7 @@ export function SelectMenu({
         )}
         <span className="min-w-0 flex-1 truncate font-medium">{current?.label ?? "-"}</span>
         {current?.hint && (
-          <span className="shrink-0 text-[11.5px] text-ink-soft">{current.hint}</span>
+          <span className="shrink-0 text-[11px] text-ink-soft">{current.hint}</span>
         )}
         <IconChevronDown
           size={15}
@@ -90,13 +90,13 @@ export function SelectMenu({
                   onChange(opt.value);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center gap-2 px-2.5 py-2 text-left text-[13.5px] transition-colors ${
+                className={`flex w-full items-center gap-2 px-2.5 py-2 text-left text-[13px] transition-colors ${
                   active ? "bg-zalo-50 text-zalo-700" : "text-ink hover:bg-tile/60"
                 }`}
               >
                 {opt.dotClass && <span className={`h-2 w-2 shrink-0 rounded-full ${opt.dotClass}`} />}
                 <span className="min-w-0 flex-1 truncate font-medium">{opt.label}</span>
-                {opt.hint && <span className="shrink-0 text-[11.5px] text-ink-soft">{opt.hint}</span>}
+                {opt.hint && <span className="shrink-0 text-[11px] text-ink-soft">{opt.hint}</span>}
                 {active && <IconCheck size={14} className="shrink-0 text-zalo-600" />}
               </button>
             );

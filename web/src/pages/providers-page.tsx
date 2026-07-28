@@ -76,8 +76,9 @@ export function ProvidersPage() {
 
       <div className="gc-card space-y-4 p-6">
         <div>
-          <label className="mb-1.5 block text-[13px] font-medium text-ink">Provider</label>
+          <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-provider">Provider</label>
           <select
+            id="pv-provider"
             className="gc-input w-full"
             value={form.provider}
             onChange={(e) => setForm({ ...form, provider: e.target.value })}
@@ -89,8 +90,9 @@ export function ProvidersPage() {
 
         {form.provider === "openai-compatible" && (
           <div>
-            <label className="mb-1.5 block text-[13px] font-medium text-ink">Base URL</label>
+            <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-base-url">Base URL</label>
             <input
+              id="pv-base-url"
               className="gc-input w-full"
               value={form.baseUrl}
               onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
@@ -100,8 +102,9 @@ export function ProvidersPage() {
         )}
 
         <div>
-          <label className="mb-1.5 block text-[13px] font-medium text-ink">Model</label>
+          <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-model">Model</label>
           <input
+            id="pv-model"
             className="gc-input w-full"
             value={form.model}
             onChange={(e) => setForm({ ...form, model: e.target.value })}
@@ -109,16 +112,17 @@ export function ProvidersPage() {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-[13px] font-medium text-ink">
+          <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-api-key">
             API key <span className="font-normal text-ink-soft">(hiện tại: {settings.apiKeyMasked})</span>
           </label>
           <SecretInput
+            id="pv-api-key"
             value={form.apiKey}
             onChange={(apiKey) => setForm({ ...form, apiKey })}
             placeholder="Bỏ trống để giữ key hiện tại"
           />
-          <p className="mt-1.5 text-xs text-ink-soft/80">
-            Key mới được mã hóa AES-256-GCM khi lưu; server không bao giờ trả lại key đầy đủ.
+          <p className="mt-1.5 text-[12px] leading-[1.6] text-ink-soft">
+            Key được mã hóa AES-256-GCM khi lưu, không bao giờ trả lại đầy đủ.
           </p>
         </div>
 
