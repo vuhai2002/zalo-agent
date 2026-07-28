@@ -7,6 +7,7 @@ import { checkImageRateLimit } from "../../images/image-rate-limit.js";
 import { enqueueSend } from "../../middleware/rate-limiter.js";
 import { createLogger } from "../../shared/logger.js";
 import { withNamedTempFile } from "../../shared/temp-file-store.js";
+import { CREATE_IMAGE_DESCRIPTION } from "./create-image-tool-description.js";
 import { collectRecentImagePaths } from "./read-image-tool.js";
 import type { ToolContext } from "./index.js";
 
@@ -40,17 +41,7 @@ const MAX_PROMPT_CHARS = 4000;
 
 export function createImageTool(ctx: ToolContext, generate = generateImage) {
   return tool({
-    description:
-      "Vẽ ảnh mới bằng AI hoặc SỬA ảnh người dùng vừa gửi, rồi gửi thẳng vào cuộc trò chuyện. " +
-      "Dùng khi người dùng nhờ vẽ/tạo/thiết kế ảnh, hoặc nhờ sửa ảnh họ gửi (đổi màu, xóa vật thể, đổi phong cách).\n" +
-      "Mất khoảng 1 phút mỗi ảnh nên chỉ gọi khi người dùng thật sự muốn có ảnh.\n" +
-      "QUAN TRỌNG NHẤT - người dùng đưa sẵn CHỮ để đưa vào ảnh (tiêu đề, bài viết, câu trích, giá, tên, " +
-      "số điện thoại): phải CHÉP NGUYÊN VĂN đoạn chữ đó vào prompt, đặt trong ngoặc kép và ghi rõ vai trò " +
-      '(TIÊU ĐỀ: "...", ĐOẠN MỞ: "...", TRÍCH DẪN: "..."). TUYỆT ĐỐI không tóm tắt thành chủ đề - viết ' +
-      '"Chủ đề thiền Phật giáo" thì model vẽ ra chữ bịa, còn chép nguyên văn thì nó vẽ đúng chữ người dùng cần. ' +
-      "Giữ nguyên dấu tiếng Việt và dặn model viết đúng chính tả.\n" +
-      "Phần còn lại của prompt tả phong cách: bố cục, ánh sáng, tông màu, chất liệu. " +
-      "Muốn ảnh dọc hay ngang thì NÓI TRONG PROMPT (vd 'khung hình dọc'), không có tham số riêng cho kích thước.",
+    description: CREATE_IMAGE_DESCRIPTION,
     inputSchema: z.object({
       mode: z
         .enum(["ve_moi", "sua_anh_da_gui"])
