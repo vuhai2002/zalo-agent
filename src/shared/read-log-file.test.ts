@@ -86,6 +86,27 @@ describe("readRecentLogs", () => {
   });
 });
 
+describe("readRecentLogs - chỉ đọc đủ dùng, không nuốt cả tuần log", () => {
+  it("đủ dòng ở file mới nhất thì DỪNG, không mở file cũ", () => {
+    // Thư mục có 2 file; xin 1 dòng thì chỉ cần mở file mới nhất
+    const r = readRecentLogs(dir, { limit: 1 });
+    assert.equal(r.entries.length, 1);
+    assert.equal(r.filesRead, 1, "mở cả file cũ là đọc thừa cả tuần log mỗi lần vào trang");
+  });
+
+  it("thiếu dòng thì mới lần ngược sang file cũ hơn", () => {
+    const r = readRecentLogs(dir, { limit: 100 });
+    assert.equal(r.filesRead, 2);
+    assert.equal(r.entries.length, 6);
+  });
+
+  it("lọc chặt (không khớp gì ở file mới) vẫn lần ngược tìm tiếp", () => {
+    const r = readRecentLogs(dir, { limit: 10, scope: "cu" });
+    assert.equal(r.entries.length, 2, "phải tìm được ở file cũ");
+    assert.equal(r.filesRead, 2);
+  });
+});
+
 describe("readRecentLogs - hỏng hóc không được làm chết trang", () => {
   it("thư mục chưa tồn tại trả rỗng, không throw", () => {
     const r = readRecentLogs(path.join(dir, "khong-co"), { limit: 10 });

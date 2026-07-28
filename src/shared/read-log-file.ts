@@ -41,8 +41,13 @@ export type ReadLogsOptions = {
 
 export type ReadLogsResult = {
   entries: LogEntry[];
-  /** Các scope xuất hiện trong log - để dashboard dựng ô lọc, không hardcode */
+  /**
+   * Scope xuất hiện trong các file ĐÃ ĐỌC - để dashboard dựng ô lọc, không
+   * hardcode. Không phải toàn bộ scope từng có: file cũ chưa cần mở thì không mở.
+   */
   scopes: string[];
+  /** Số file đã phải mở - cho biết kết quả trải dài bao nhiêu ngày */
+  filesRead: number;
 };
 
 /** Đọc đuôi file, bỏ dòng đầu nếu bị cắt giữa chừng */
@@ -86,26 +91,16 @@ export function readRecentLogs(dir: string, options: ReadLogsOptions): ReadLogsR
     files = fs
       .readdirSync(dir)
       .filter((f) => f.endsWith(".log"))
-      // Tên pino-roll dạng bot.<ngày>.<số>.log nên sắp theo tên là theo thời gian
-      .sort();
+      // Tên pino-roll dạng bot.<ngày>.<số>.log nên sắp theo tên là theo thời gian.
+      // Đảo lại để đi từ MỚI NHẤT về cũ và dừng được sớm.
+      .sort()
+      .reverse();
   } catch {
-    return { entries: [], scopes: [] };
-  }
-
-  const tatCa: LogEntry[] = [];
-  const scopes = new Set<string>();
-  for (const f of files) {
-    for (const raw of docDuoiFile(path.join(dir, f)).split("\n")) {
-      if (!raw.trim()) continue;
-      const e = tachDong(raw);
-      if (!e) continue;
-      if (e.scope) scopes.add(e.scope);
-      tatCa.push(e);
-    }
+    return { entries: [], scopes: [], filesRead: 0 };
   }
 
   const timKiem = options.search?.toLowerCase();
-  const loc = tatCa.filter((e) => {
+  const khop = (e: LogEntry): boolean => {
     if (options.minLevel !== undefined && e.level < options.minLevel) return false;
     if (options.scope && e.scope !== options.scope) return false;
     if (timKiem) {
@@ -113,9 +108,33 @@ export function readRecentLogs(dir: string, options: ReadLogsOptions): ReadLogsR
       if (!trongDong.includes(timKiem)) return false;
     }
     return true;
-  });
+  };
 
-  // Mới nhất đứng đầu, rồi mới cắt theo limit - cắt trước thì mất đúng phần cần xem
-  loc.reverse();
-  return { entries: loc.slice(0, options.limit), scopes: [...scopes].sort() };
+  // Đi từ file mới nhất về cũ, DỪNG ngay khi đủ dòng. Bản cũ đọc và parse toàn
+  // bộ log 7 ngày (đo thật ~6.5MB) mỗi lần vào trang, chỉ để trả về 200 dòng.
+  const entries: LogEntry[] = [];
+  const scopes = new Set<string>();
+  let filesRead = 0;
+
+  for (const f of files) {
+    if (entries.length >= options.limit) break;
+    filesRead++;
+
+    // Trong một file: dòng cuối là mới nhất nên duyệt ngược
+    const dong = docDuoiFile(path.join(dir, f)).split("\n");
+    const cuaFile: LogEntry[] = [];
+    for (let i = dong.length - 1; i >= 0; i--) {
+      const raw = dong[i]!;
+      if (!raw.trim()) continue;
+      const e = tachDong(raw);
+      if (!e) continue;
+      // Scope gom từ MỌI dòng của file đã mở, kể cả dòng bị lọc bỏ - không thì
+      // lọc theo một scope xong là ô chọn chỉ còn đúng scope đó
+      if (e.scope) scopes.add(e.scope);
+      if (khop(e)) cuaFile.push(e);
+    }
+    entries.push(...cuaFile);
+  }
+
+  return { entries: entries.slice(0, options.limit), scopes: [...scopes].sort(), filesRead };
 }
