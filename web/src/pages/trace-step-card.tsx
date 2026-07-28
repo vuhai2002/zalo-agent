@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { TraceStep } from "../dashboard-api-client";
 
 /**
@@ -8,18 +9,40 @@ import type { TraceStep } from "../dashboard-api-client";
  * cấp báo tham số bị âm thầm bỏ qua - loại lỗi tốn nhiều thời gian nhất để tìm.
  */
 
-/** Khối chữ dài - cuộn trong khung riêng, không kéo dài cả trang */
+/**
+ * Khối chữ dài: cắt bớt chiều cao, bấm để bung hết.
+ *
+ * KHÔNG dùng khung cuộn riêng (`overflow-auto`): một step có cả chục khối như
+ * này, mỗi khối một thanh cuộn thì con lăn chuột bị khối bên dưới con trỏ bắt
+ * mất, phải rê ra tận lề mới cuộn được trang. Cắt + bung là thao tác rõ ràng hơn.
+ */
 function KhoiChu({ nhan, noiDung, mau }: { nhan: string; noiDung: string; mau?: string }) {
+  const [bung, setBung] = useState(false);
   if (!noiDung) return null;
+
+  // Ước lượng theo số dòng: dài hơn chừng này mới cần nút bung
+  const daiQua = noiDung.length > 260 || noiDung.split("\n").length > 5;
+
   return (
     <div className="mt-2">
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-soft/70">
-        {nhan}
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-soft/70">
+          {nhan}
+        </span>
+        {daiQua && (
+          <button
+            type="button"
+            onClick={() => setBung((v) => !v)}
+            className="shrink-0 text-[11px] text-ink-soft hover:text-ink"
+          >
+            {bung ? "Thu gọn" : "Xem đầy đủ"}
+          </button>
+        )}
       </div>
       <pre
-        className={`max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-[12px] leading-relaxed ${
-          mau ?? "bg-tile text-ink-soft"
-        }`}
+        className={`overflow-hidden whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-[12px] leading-relaxed ${
+          daiQua && !bung ? "max-h-32" : ""
+        } ${mau ?? "bg-tile text-ink-soft"}`}
       >
         {noiDung}
       </pre>
