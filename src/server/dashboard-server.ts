@@ -27,6 +27,7 @@ import { threadRoutes } from "./routes/thread-routes.js";
 import { imageRoutes } from "./routes/image-routes.js";
 import { toolRoutes } from "./routes/tool-routes.js";
 import { traceRoutes } from "./routes/trace-routes.js";
+import { tuningRoutes } from "./routes/tuning-routes.js";
 import { visionRoutes } from "./routes/vision-routes.js";
 
 const log = createLogger("dashboard-server");
@@ -115,6 +116,7 @@ export function buildDashboardApp(): Hono {
   app.route("/api/accounts", accountRoutes);
   app.route("/api/agents", agentRoutes);
   app.route("/api/tools", toolRoutes);
+  app.route("/api/tuning", tuningRoutes);
   app.route("/api/vision", visionRoutes);
   app.route("/api/image-gen", imageRoutes);
   app.route("/api/traces", traceRoutes);

@@ -149,6 +149,13 @@ function runMigrations(): void {
     CREATE INDEX IF NOT EXISTS idx_agent_steps_created ON agent_steps (created_at);
   `);
 
+  // Tool CHẠY LỖI: AI SDK để chúng ở content dạng tool-error, không vào
+  // toolResults, nên trước cột này mọi lần tool hỏng đều mất tăm khỏi trace.
+  addColumnIfMissing("agent_steps", "tool_errors", "TEXT NOT NULL DEFAULT '[]'");
+
+  // Mức suy nghĩ riêng cho từng agent (NULL = theo mức mặc định chung)
+  addColumnIfMissing("agents", "reasoning_effort", "TEXT");
+
   // DB tạo trước khi có cột sender_id: ALTER thêm (nullable - tin cũ không có id)
   addColumnIfMissing("messages", "sender_id", "TEXT");
   // Ảnh kèm tin nhắn: JSON array đường dẫn file trong data/media (tương đối DATA_DIR)

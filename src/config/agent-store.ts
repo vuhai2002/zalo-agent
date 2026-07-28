@@ -1,4 +1,5 @@
 import { db } from "../conversation/database.js";
+import type { ReasoningEffort } from "../agent/reasoning-options.js";
 
 /** Não của bot: persona + model override. Gắn vào account qua accounts.agent_id. */
 export type AgentProfile = {
@@ -10,6 +11,8 @@ export type AgentProfile = {
   modelProvider: "openai-compatible" | "anthropic" | null;
   modelName: string | null;
   maxSteps: number | null;
+  /** Mức suy nghĩ riêng; null = dùng mức mặc định ở trang Cấu hình */
+  reasoningEffort: ReasoningEffort | null;
   isDefault: boolean;
 };
 
@@ -21,6 +24,7 @@ type Row = {
   model_provider: string | null;
   model_name: string | null;
   max_steps: number | null;
+  reasoning_effort: string | null;
   is_default: number;
 };
 
@@ -32,10 +36,11 @@ const toProfile = (r: Row): AgentProfile => ({
   modelProvider: (r.model_provider as AgentProfile["modelProvider"]) ?? null,
   modelName: r.model_name,
   maxSteps: r.max_steps,
+  reasoningEffort: (r.reasoning_effort as ReasoningEffort | null) ?? null,
   isDefault: r.is_default === 1,
 });
 
-const SELECT = `SELECT id, icon, name, persona, model_provider, model_name, max_steps, is_default
+const SELECT = `SELECT id, icon, name, persona, model_provider, model_name, max_steps, reasoning_effort, is_default
                 FROM agents`;
 
 const DEFAULT_AGENT_ID = "tro-ly-mac-dinh";
@@ -89,15 +94,15 @@ export function createAgent(input: {
 
 export function updateAgent(
   id: string,
-  patch: Partial<Pick<AgentProfile, "icon" | "name" | "persona" | "modelProvider" | "modelName" | "maxSteps">>,
+  patch: Partial<Pick<AgentProfile, "icon" | "name" | "persona" | "modelProvider" | "modelName" | "maxSteps" | "reasoningEffort">>,
 ): AgentProfile | null {
   const current = getAgent(id);
   if (!current) return null;
   const next = { ...current, ...patch };
   db.prepare(
-    `UPDATE agents SET icon = ?, name = ?, persona = ?, model_provider = ?, model_name = ?, max_steps = ?
+    `UPDATE agents SET icon = ?, name = ?, persona = ?, model_provider = ?, model_name = ?, max_steps = ?, reasoning_effort = ?
      WHERE id = ?`,
-  ).run(next.icon, next.name, next.persona, next.modelProvider, next.modelName, next.maxSteps, id);
+  ).run(next.icon, next.name, next.persona, next.modelProvider, next.modelName, next.maxSteps, next.reasoningEffort, id);
   return getAgent(id);
 }
 

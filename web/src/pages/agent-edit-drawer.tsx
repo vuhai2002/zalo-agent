@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ManagedAgent } from "../dashboard-api-client";
+import type { ManagedAgent, ReasoningEffort } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 
 /** Drawer tạo/sửa agent. agent=null nghĩa là tạo mới. */
@@ -18,6 +18,9 @@ export function AgentEditDrawer({
     name: agent?.name ?? "",
     persona: agent?.persona ?? "",
     modelOverride: agent?.modelName ?? "",
+    // Chuỗi rỗng = "theo mặc định chung", gửi lên thành null
+    maxSteps: agent?.maxSteps == null ? "" : String(agent.maxSteps),
+    reasoningEffort: agent?.reasoningEffort ?? "",
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,6 +35,8 @@ export function AgentEditDrawer({
           name: form.name,
           persona: form.persona,
           modelName: form.modelOverride.trim() || null,
+          maxSteps: form.maxSteps.trim() === "" ? null : Number(form.maxSteps),
+          reasoningEffort: form.reasoningEffort === "" ? null : (form.reasoningEffort as ReasoningEffort),
         });
       } else {
         const created = await api.agentsAdmin.create({
@@ -40,8 +45,13 @@ export function AgentEditDrawer({
           name: form.name,
           persona: form.persona,
         });
-        if (form.modelOverride.trim()) {
-          await api.agentsAdmin.update(created.agent.id, { modelName: form.modelOverride.trim() });
+        const themVao = {
+          ...(form.modelOverride.trim() ? { modelName: form.modelOverride.trim() } : {}),
+          ...(form.maxSteps.trim() ? { maxSteps: Number(form.maxSteps) } : {}),
+          ...(form.reasoningEffort ? { reasoningEffort: form.reasoningEffort as ReasoningEffort } : {}),
+        };
+        if (Object.keys(themVao).length > 0) {
+          await api.agentsAdmin.update(created.agent.id, themVao);
         }
       }
       onSaved();
@@ -126,6 +136,47 @@ export function AgentEditDrawer({
               placeholder="vd: claude-sonnet-5"
             />
           </div>
+
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label htmlFor="agent-max-steps" className="mb-1.5 block text-[13px] font-medium text-ink">
+                Số bước tối đa <span className="font-normal text-ink-soft">(bỏ trống = theo Cấu hình)</span>
+              </label>
+              <input
+                id="agent-max-steps"
+                type="number"
+                min={1}
+                max={30}
+                className="gc-input w-full"
+                value={form.maxSteps}
+                onChange={(e) => setForm({ ...form, maxSteps: e.target.value })}
+                placeholder="vd: 8"
+              />
+            </div>
+            <div className="flex-1">
+              <label htmlFor="agent-effort" className="mb-1.5 block text-[13px] font-medium text-ink">
+                Mức suy nghĩ <span className="font-normal text-ink-soft">(bỏ trống = theo Cấu hình)</span>
+              </label>
+              <select
+                id="agent-effort"
+                className="gc-input w-full cursor-pointer"
+                value={form.reasoningEffort}
+                onChange={(e) => setForm({ ...form, reasoningEffort: e.target.value })}
+              >
+                <option value="">Theo mặc định chung</option>
+                <option value="off">Tắt</option>
+                <option value="low">Thấp</option>
+                <option value="medium">Vừa</option>
+                <option value="high">Cao</option>
+                <option value="xhigh">Rất cao</option>
+              </select>
+            </div>
+          </div>
+
+          <p className="text-[12px] leading-[1.6] text-ink-soft">
+            Nghĩ càng kỹ thì trả lời càng chắc nhưng chậm hơn và tốn token hơn. Việc đối chiếu số liệu,
+            dò bảng nên để mức cao; trò chuyện thường để vừa là đủ.
+          </p>
 
           {error && <p className="text-[13px] text-red-600">{error}</p>}
         </div>

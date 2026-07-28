@@ -30,6 +30,13 @@ const envSchema = z.object({
   LLM_API_KEY: z.string().default(""),
   LLM_MODEL: z.string().min(1),
   LLM_MAX_STEPS: z.coerce.number().int().min(1).max(30).default(8),
+  // Trần thời gian cho CẢ lượt agent. Không có nó thì chặn trên duy nhất là mặc
+  // định của undici (300s chờ header) nhân maxRetries nhân số step - router nhận
+  // kết nối rồi treo là khóa luôn thread đó hàng giờ, và mọi tin nhắn sau phải
+  // xếp hàng chờ. RÀNG BUỘC: phải LỚN HƠN IMAGE_GEN_TIMEOUT_MS (mặc định 600s),
+  // vì thời gian chạy tool nằm trong lượt; đặt thấp hơn là giết ngang lượt vẽ
+  // ảnh hợp lệ. Đo thật: lượt nặng nhất quan sát được là 236s (tạo file Word).
+  LLM_TURN_TIMEOUT_MS: z.coerce.number().int().min(60_000).max(3_600_000).default(900_000),
   // Trần token model được sinh ra mỗi lượt. Phải đủ chỗ cho lượt TỐN NHẤT là
   // gọi tool tạo file: model viết cả nội dung file vào tool call. Đo thật một
   // báo cáo 6 sheet (15.000 ký tự nội dung) tốn ~7.100 token payload; cộng

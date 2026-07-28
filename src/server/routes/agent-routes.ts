@@ -27,6 +27,7 @@ const patchSchema = z.object({
   modelProvider: z.enum(["openai-compatible", "anthropic"]).nullable().optional(),
   modelName: z.string().min(1).nullable().optional(),
   maxSteps: z.number().int().min(1).max(30).nullable().optional(),
+  reasoningEffort: z.enum(["off", "low", "medium", "high", "xhigh"]).nullable().optional(),
 });
 
 /** /api/agents - quản lý "não" (persona + model override), gắn vào account */

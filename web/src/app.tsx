@@ -13,6 +13,7 @@ import { ProvidersPage } from "./pages/providers-page";
 import { SessionsPage } from "./pages/sessions-page";
 import { LogsPage } from "./pages/logs-page";
 import { TracePage } from "./pages/trace-page";
+import { TuningPage } from "./pages/tuning-page";
 import { ToolsPage } from "./pages/tools-page";
 import { IconMenu } from "./shared/dashboard-icons";
 
@@ -85,6 +86,7 @@ function DashboardShell() {
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/tools" element={<ToolsPage />} />
             <Route path="/trace" element={<TracePage />} />
+            <Route path="/tuning" element={<TuningPage />} />
             <Route path="/logs" element={<LogsPage />} />
             <Route path="/providers" element={<ProvidersPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

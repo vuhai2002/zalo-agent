@@ -123,13 +123,20 @@ export const api = {
       request<{ ok: true }>(`/api/accounts/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
 
+  tuning: {
+    get: () =>
+      request<{ groups: TuningGroup[]; defs: Record<string, TuningDef>; values: TuningValue[] }>("/api/tuning"),
+    save: (values: Record<string, number | boolean | string | null>) =>
+      request<{ values: TuningValue[] }>("/api/tuning", { method: "PUT", body: JSON.stringify({ values }) }),
+  },
+
   agentsAdmin: {
     list: () => request<{ items: ManagedAgent[] }>("/api/agents"),
     create: (input: { id: string; name: string; icon?: string; persona?: string }) =>
       request<{ agent: ManagedAgent }>("/api/agents", { method: "POST", body: JSON.stringify(input) }),
     update: (
       id: string,
-      patch: Partial<Pick<ManagedAgent, "name" | "icon" | "persona" | "modelProvider" | "modelName" | "maxSteps">>,
+      patch: Partial<Pick<ManagedAgent, "name" | "icon" | "persona" | "modelProvider" | "modelName" | "maxSteps" | "reasoningEffort">>,
     ) =>
       request<{ agent: ManagedAgent }>(`/api/agents/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -265,6 +272,23 @@ export type FetchSettings = { fallbackEnabled: boolean };
 
 export type ReactionIcon = { key: string; emoji: string; label: string };
 
+export type ReasoningEffort = "off" | "low" | "medium" | "high" | "xhigh";
+
+/** Một tham số chỉnh được, mô tả lấy thẳng từ backend nên web không chép lại danh mục */
+export type TuningDef = {
+  group: string;
+  label: string;
+  hint: string;
+} & (
+  | { kind: "number"; min: number; max: number; unit?: string }
+  | { kind: "boolean" }
+  | { kind: "enum"; options: string[] }
+);
+
+export type TuningGroup = { id: string; title: string; hint: string };
+
+export type TuningValue = { key: string; value: number | boolean | string; fromEnv: boolean };
+
 export type ManagedAgent = {
   id: string;
   icon: string;
@@ -273,6 +297,8 @@ export type ManagedAgent = {
   modelProvider: "openai-compatible" | "anthropic" | null;
   modelName: string | null;
   maxSteps: number | null;
+  /** Mức suy nghĩ riêng; null = theo mức mặc định ở trang Cấu hình */
+  reasoningEffort: ReasoningEffort | null;
   isDefault: boolean;
   accountCount: number;
 };
@@ -358,6 +384,8 @@ export type TraceStep = {
   reasoning: string;
   toolCalls: { name: string; input: string }[];
   toolResults: { name: string; output: string }[];
+  /** Tool chạy lỗi - SDK để ở content, không vào toolResults nên từng bị mù hẳn */
+  toolErrors: { name: string; error: string }[];
   finishReason: string;
   /** Nhà cung cấp báo tham số bị bỏ qua - chỗ hay lộ lỗi âm thầm */
   warnings: string[];

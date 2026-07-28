@@ -41,6 +41,7 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
       { to: "/trace", label: "Trace agent", icon: IconCpu },
       { to: "/logs", label: "Logs", icon: IconDatabase },
       { to: "/providers", label: "Providers", icon: IconSliders },
+      { to: "/tuning", label: "Cấu hình", icon: IconSliders },
     ],
   },
 ];

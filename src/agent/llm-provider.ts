@@ -6,7 +6,12 @@ import { getEffectiveLlmSettings } from "../config/runtime-llm-settings.js";
 import { createLogger } from "../shared/logger.js";
 import { cacheSessionHeaders } from "./cache-session-id.js";
 import { createSanitizingFetch } from "./llm-response-sanitizer.js";
-import { reasoningProviderOptions, ROUTER_PROVIDER_OPTIONS_KEY } from "./reasoning-options.js";
+import {
+  reasoningProviderOptions,
+  ROUTER_PROVIDER_OPTIONS_KEY,
+  type ReasoningEffort,
+} from "./reasoning-options.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 const log = createLogger("llm-provider");
 
@@ -19,6 +24,8 @@ const sanitizingFetch = createSanitizingFetch({
 export type ModelOverride = {
   modelProvider?: "openai-compatible" | "anthropic" | null;
   modelName?: string | null;
+  /** Mức suy nghĩ riêng của agent; null/undefined = theo mức mặc định chung */
+  reasoningEffort?: ReasoningEffort | null;
 };
 
 /**
@@ -86,5 +93,10 @@ export function resolveLanguageModel(
  */
 export function resolveReasoningOptions(override?: ModelOverride) {
   const provider = override?.modelProvider ?? getEffectiveLlmSettings().provider;
-  return reasoningProviderOptions(provider, env.LLM_REASONING_EFFORT);
+  return reasoningProviderOptions(provider, resolveReasoningEffort(override));
+}
+
+/** Mức suy nghĩ hiệu lực: agent đặt riêng thắng mức mặc định ở trang Cấu hình */
+export function resolveReasoningEffort(override?: ModelOverride): ReasoningEffort {
+  return override?.reasoningEffort ?? getTuning("LLM_REASONING_EFFORT");
 }
