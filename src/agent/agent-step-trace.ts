@@ -76,7 +76,9 @@ function warningThanhChuoi(w: unknown): string {
 
 export function summarizeStep(step: RawStep, maxChars: number): StepTrace {
   return {
-    stepNumber: step.stepNumber ?? 0,
+    // AI SDK đánh số từ 0; đổi sang đếm-từ-1 NGAY TẠI ĐÂY để log, DB và giao
+    // diện cùng một con số. Đổi ở riêng giao diện thì đọc log lại lệch một đơn vị.
+    stepNumber: (step.stepNumber ?? 0) + 1,
     text: cat(step.text ?? "", maxChars),
     reasoning: cat(step.reasoningText ?? "", maxChars),
     toolCalls: (step.toolCalls ?? []).map((c) => ({

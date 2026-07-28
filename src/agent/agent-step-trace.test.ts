@@ -9,10 +9,13 @@ import { summarizeStep, type RawStep } from "./agent-step-trace.js";
 const EMPTY: RawStep = {};
 
 describe("summarizeStep - lấy đủ thứ cần để chẩn đoán", () => {
-  it("giữ text model nói và số step", () => {
-    const t = summarizeStep({ stepNumber: 2, text: "Để mình tra giúp anh" }, 500);
-    assert.equal(t.stepNumber, 2);
+  it("giữ text model nói, và đánh số step TỪ 1 cho người đọc", () => {
+    // AI SDK đánh từ 0. Đổi ngay tại đây để log, DB và giao diện cùng một con
+    // số - đổi ở riêng giao diện thì đọc log lại thấy lệch một đơn vị.
+    const t = summarizeStep({ stepNumber: 0, text: "Để mình tra giúp anh" }, 500);
+    assert.equal(t.stepNumber, 1);
     assert.equal(t.text, "Để mình tra giúp anh");
+    assert.equal(summarizeStep({ stepNumber: 4 }, 500).stepNumber, 5);
   });
 
   it("giữ reasoning khi model có trả (DeepSeek), rỗng khi không (OpenAI)", () => {
@@ -90,7 +93,7 @@ describe("summarizeStep - dữ liệu thiếu không được làm chết lượ
     assert.deepEqual(t.toolResults, []);
     assert.deepEqual(t.warnings, []);
     assert.equal(t.inputTokens, 0);
-    assert.equal(t.stepNumber, 0);
+    assert.equal(t.stepNumber, 1, "step rong van dem tu 1");
   });
 
   it("input tool không stringify được (có vòng lặp) vẫn không throw", () => {
