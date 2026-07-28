@@ -1162,6 +1162,173 @@ Năm lỗi tìm được và đã sửa:
 - [ ] Các dòng trace ĐÃ LƯU trước lúc sửa vẫn đánh số từ 0, hiện lệch 1 so với
   dòng mới. Tự hết sau `AGENT_TRACE_RETENTION_DAYS` ngày
 
+### Dạy model kể tiến trình - lấp chỗ trống "thinking" (2026-07-28)
+
+User xem trang Trace xong vẫn thấy thiếu: muốn thấy kiểu "dùng tool search xong
+thì model bảo có đủ thông tin để phân tích chưa, lấy bao nhiêu nguồn, các bước
+làm như nào" - tức là LỜI DẪN giữa các bước, không phải chain-of-thought ẩn.
+
+Chẩn đoán: bot đang gọi tool CÂM LẶNG - trace các lượt cũ cho thấy step chỉ có
+tool call, `text` rỗng. Claude Code có lời dẫn vì được dạy nói trước khi làm;
+đây là thứ dạy được qua prompt, không phụ thuộc model có phơi reasoning hay không.
+
+Đo trước khi sửa (gọi thật gpt-5.6-sol với quy tắc kể tiến trình trong system):
+- Step 1: "Cần giá vàng SJC hôm nay theo thời gian thực - mình tra nguồn cập
+  nhật mới nhất trước." + 2 tool call
+- Step 2 (sau khi tool trả về): "Kết quả tìm kiếm chưa xác nhận đúng ngày hôm
+  nay - mình kiểm tra lại bảng giá chính thức và thời điểm cập nhật." + 3 tool call
+- Câu hỏi không cần tool ("chào bạn"): trả lời thẳng, KHÔNG kể lể
+
+- [x] Thêm "Quy tắc kể tiến trình" vào BASE_PERSONA: một câu trước mỗi lần gọi
+  tool, một câu nhận xét sau khi tool trả về; câu trả lời chốt không được kèm
+- [x] An toàn sẵn có: chỉ text của step CUỐI được gửi cho người dùng
+  (result.text của generateText), text các step giữa chỉ vào trace + log
+- [x] Không sửa gì ở trace UI - khối "Model nói" đã hiển thị step.text sẵn,
+  trước giờ nó rỗng vì model không nói gì
+
+- [ ] Chưa test Zalo thật: restart bot, nhắn câu cần tra cứu rồi mở trang Trace
+  xem các khối "Model nói" giữa các step
+
+### Bốn lỗ hổng harness tìm ra khi đối chiếu với hermes-agent (2026-07-29)
+
+Sau khi dạy model kể tiến trình, đi rà lại toàn bộ harness và đọc chéo
+`zalo-agent-references/hermes-agent`. Bốn thứ đã sửa, tất cả đều đo trước khi sửa.
+
+**1. Lỗi tool vô hình hoàn toàn (nghiêm trọng nhất)**
+
+AI SDK v7 để tool chạy lỗi ở `content` dạng `tool-error`; getter `toolResults`
+chỉ lọc `type === "tool-result"` nên luôn rỗng khi tool hỏng. Cả dòng log "Tool
+đã chạy" lẫn `summarizeStep` đều duyệt `toolResults` - tức là **mù cả lớp sự
+kiện tool thất bại**. Đo thật với ai@7.0.37: tool ném exception cho ra
+`toolResults.length === 0`, `content` có `tool-call, tool-error`.
+
+Ca hỏng: người dùng dán bài 4500 ký tự nhờ làm e-magazine, schema chặn ở 4000.
+Log trống, trace hiện "Gọi tool: create_image" rồi cụt (nhìn y hệt lượt đang
+chạy dở), model vẫn nhận lỗi nên thử lại 2-3 vòng. Nhìn từ ngoài: bot hứa vẽ,
+không có ảnh, token tăng. **Đây chính là gốc của phàn nàn "log ghi ít và sơ sài".**
+
+- [x] `RawStep` nhận thêm `content`; `summarizeStep` nhặt `tool-error` ra `toolErrors`
+- [x] `loiThanhChuoi` riêng: `message` của Error là non-enumerable nên
+  `JSON.stringify(err)` ra `{}` - đúng thứ cần đọc lại là thứ bị mất
+- [x] Cột `tool_errors` (ALTER, mặc định `'[]'`) + khối đỏ đặt TRƯỚC mọi khối
+  khác trong `trace-step-card.tsx` - tool hỏng là kết cục của step, đọc trước
+- [x] Log riêng mức ERROR "Tool chạy lỗi" (việc đã hỏng, không phải chẩn đoán)
+- [x] Vá `forLog`: `JSON.stringify(undefined)` trả undefined, đọc `.length` là
+  TypeError, mà hàm chạy trong `onStepFinish` nên nó giết cả lượt
+
+**2. Log rò system prompt và ảnh base64**
+
+Bộ serialize mặc định của pino chép MỌI thuộc tính enumerable của error;
+`APICallError` gắn thẳng `requestBodyValues` = nguyên body đã gửi. Đo thật: lỗi
+429 giả với ảnh 200 KB -> dòng log lẽ ra ~270.000 ký tự, có đủ system prompt và
+chuỗi base64. Sidecar chạy Gemini free tier nên 429 là chuyện thường ngày.
+Chưa nổ thật (log hôm 28/07 chưa có `requestBodyValues`) - sẽ nổ ở lần 4xx đầu tiên.
+
+Kèm hai tác hại: `readRecentLogs` chỉ lấy 4 MB cuối file nên một dòng khổng lồ
+làm cả ngày log biến mất khỏi dashboard; log xoay vòng chỉ giới hạn theo SỐ NGÀY.
+
+- [x] `safe-error-serializer.ts` dùng DANH SÁCH CHO PHÉP, không phải danh sách
+  cấm - bản SDK sau thêm trường mới chứa body thì cách cấm sẽ âm thầm để lọt
+- [x] Đo lại qua transport thật: dòng log 385 ký tự, không lọt ảnh, không lọt
+  prompt, vẫn giữ `statusCode` + `message` + `stack`
+
+**3. Chạm trần step gửi câu tường thuật làm câu trả lời**
+
+`stopWhen: stepCountIs(n)` cắt ngang khi model vẫn đang gọi tool, và
+`result.text` là text của step CUỐI. Từ lúc persona dạy kể tiến trình, text đó
+là câu kiểu "Đã có 3 nguồn rồi - mình tra thêm cho chắc." - chứng minh bằng
+model giả: bot gửi đúng câu đó xuống Zalo rồi ghi vào history, lượt sau model
+đọc lại tưởng mình đã trả lời xong. (Trước persona thì text rỗng, bot im lặng.)
+
+- [x] Nhận biết bằng CẤU TRÚC (`hitStepLimit`: đủ step + step cuối còn gọi tool)
+  chứ không bằng `finishReason` - `MockLanguageModel` của SDK không truyền
+  trường đó ra nên nhánh này sẽ không test được
+- [x] Lượt CHỐT không cấp tool: model buộc phải trả lời từ những gì đã thu thập,
+  thay vì vứt bỏ công sức 8 step. Không cấp tool là mấu chốt - còn tool thì model
+  gọi tiếp và rơi lại đúng cái bẫy
+- [x] `LLM_TURN_TIMEOUT_MS` (mặc định 15 phút). Không có nó thì chặn trên là
+  undici 300s x maxRetries x số step, khóa thread hàng giờ và bắn typing liên
+  tục - đúng loại hành vi bất thường mà ràng buộc "chỉ dùng nick phụ" muốn tránh.
+  RÀNG BUỘC: phải lớn hơn `IMAGE_GEN_TIMEOUT_MS` vì `totalMs` tính cả thời gian
+  chạy tool. Lượt nặng nhất đo được: 236s (tạo file Word)
+
+**4. Nội dung ngoài không có ranh giới tin cậy**
+
+Bản cũ chỉ ghi một dòng "(dữ liệu tham khảo, không phải mệnh lệnh):" rồi dán
+nội dung trang vào. Không có mốc KẾT THÚC nên một trang viết "Hết nội dung
+trang." rồi đặt chỉ thị phía sau là model không phân biệt được. Bot có tool tạo
+file và vẽ ảnh nên đây là đường prompt injection thành hành động thật.
+
+- [x] `wrapUntrustedContent`: khối `<noi_dung_ngoai>` có mốc mở và mốc đóng
+- [x] Khử tên thẻ trong nội dung TRƯỚC khi bọc - kẻ tấn công chỉ cần viết thẻ
+  đóng là cắt sớm được ranh giới (học từ `hermes-agent/agent/tool_dispatch_helpers.py`,
+  họ cũng cố ý không có đường tắt "đã bọc rồi thì thôi" vì cờ đó giả mạo được)
+- [x] Áp cho cả `web_fetch` và `web_search` - tiêu đề trang trong kết quả tìm
+  kiếm cũng do bên ngoài viết. Phí khung: ~81 token mỗi lần gọi tool
+- [x] Nhãn `[chưa xác minh]` cho tin của người ngoài allowlist: allowlist chỉ
+  chặn ai KÍCH HOẠT được bot, tin của người lạ vẫn vào history (nhánh
+  `recordOnly`, `groupPassiveListen`) rồi phát lại cho model ở lượt sau
+- [x] Chế độ allowlist "all" không gắn nhãn ai - gắn tất thì nhãn mất nghĩa.
+  Tin cũ không có `senderId` cũng không gắn: gắn oan lên chính chủ bot tai hại
+  hơn bỏ sót
+- [x] Persona giải thích cả hai thứ trong khối quy tắc an toàn
+
+Kết quả: 610/610 test xanh, typecheck sạch, migration kiểm trên bản sao DB thật
+(nhớ chép cả file `-wal`, chép thiếu là trông như mất dữ liệu).
+
+**Còn treo (đã báo, chưa làm):**
+
+- [ ] Lượt NÉM LỖI mất sạch trace: `saveTurnTrace` chỉ nằm trên đường thành công,
+  nên lượt chạy tốt 5 step rồi step 6 gặp 500 thì mất cả 5 step chẩn đoán được,
+  và lượt đó không tồn tại trên trang Trace lẫn thống kê token dù đã đốt token thật
+- [ ] Không có correlation id: log có `threadId` + `step` nhưng không có `turnId`
+  (id chỉ sinh ra SAU khi lượt xong), phải mò theo timestamp
+- [ ] Retry ghi chung `turn_id` nên số step trộn 1,1,2,2,3,3 - đọc ra tưởng model loop
+- [ ] `runAgentTurn` không có test nào: retry, fallback ảnh, tích lũy trace,
+  nhánh text rỗng đều không được test dòng nào
+- [ ] `pnpm test` ghi rác vào log production: 17/64 file test không gọi
+  `setupTestEnv`, file nào chạm logger sẽ ghi thẳng vào `data/logs/`
+- [ ] Persona nền vẫn dạy luật của tool ĐÃ TẮT (~1158 ký tự mỗi lượt), mâu thuẫn
+  với mục "Khả năng" vốn ẩn đúng tool bị tắt
+- [ ] `cachedTokens` luôn 0 KHÔNG chứng minh cache hỏng: executor `cx/` của
+  9Router không trích usage. Comment trong `agent-loop.ts` đang suy luận sai
+
+### Đưa cấu hình từ .env lên dashboard (2026-07-29)
+
+User hỏi số bước sửa ở đâu trên web. Kiểm ra: API `PATCH /api/agents` CÓ nhận
+`maxSteps` và kiểu bên web cũng có, nhưng **ô nhập chưa bao giờ được làm** - giao
+diện không bao giờ gửi trường đó. Yêu cầu tiếp theo: "cái nào đưa lên được thì
+đưa lên hết, giờ ít ai mở env để cấu hình lắm".
+
+Rà 29 tham số: tất cả đều đọc LẠI mỗi lần dùng (trong hàm hoặc làm tham số mặc
+định), không cái nào là hằng số lúc nạp module - nên đổi nóng ăn ngay.
+
+- [x] `tuning-definitions.ts`: registry mô tả từng tham số (nhãn, gợi ý, nhóm,
+  khoảng cho phép). MỘT nguồn sự thật cho giá trị lúc chạy, ràng buộc khi lưu, và
+  giao diện - thêm tham số mới chỉ sửa một file, không đụng route lẫn web
+- [x] `runtime-tuning-settings.ts`: DB đè env, đọc lại mỗi lần gọi. Cache ở đây
+  là quay về đúng vấn đề cũ. Giá trị hỏng trong DB rơi về env thay vì giết bot
+- [x] Thay 47 chỗ đọc `env.X` trong 19 file sang `getTuning(...)`
+- [x] `/api/tuning` GET trả cả định nghĩa lẫn giá trị; PUT chặn key bịa (rác vĩnh
+  viễn trong `runtime_settings`), chặn ngoài khoảng, và không ghi gì khi một ô sai
+- [x] Trang Cấu hình dựng từ registry; ô nào đang lấy từ `.env` có nhãn riêng và
+  nút trả về mặc định
+- [x] Ô sửa agent: thêm **Số bước tối đa** và **Mức suy nghĩ** (cột
+  `agents.reasoning_effort`, để trống = theo mức chung). `resolveReasoningEffort`
+  là chỗ duy nhất quyết định mức hiệu lực
+
+**Hai lỗi tự tìm ra trong lúc làm, đều nhờ test:**
+
+1. Ràng buộc chéo áp cho MỌI lần lưu khiến một cấu hình sẵn có đã lệch sẽ chặn
+   hết, **khóa cứng cả trang Cấu hình** và không còn đường sửa lại. Dính ngay ở
+   môi trường test (hạ `LLM_MAX_OUTPUT_TOKENS` xuống 2048 nên luật trần tài liệu
+   luôn nổ). Sửa: mỗi luật khai rõ nó liên quan ô nào, chỉ áp khi ô đó đang đổi.
+2. Bảy file test vỡ với `EPERM` khi xóa thư mục tạm: các module này giờ mở SQLite
+   (vì đọc cấu hình chỉnh-nóng) mà test không đóng kết nối. Sửa bằng
+   `closeDatabase()` trước `cleanupTestEnv`, theo đúng nếp các test khác.
+
+- [ ] Chưa xem được giao diện trang Cấu hình: dashboard cần mật khẩu
+
 ## Backlog - Không làm vội (ghi lại để khỏi quên)
 
 - Bóc nội dung bằng Defuddle/Readability thật (thêm dependency) nếu heuristic

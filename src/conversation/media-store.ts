@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pruneOldTraces } from "../agent/agent-trace-store.js";
-import { dataDir, env } from "../config/env.js";
+import { dataDir } from "../config/env.js";
 import { startDailyTask } from "../shared/daily-task-schedule.js";
 import { downloadImage, type DownloadedImage } from "../shared/download-image.js";
 import { createLogger } from "../shared/logger.js";
 import { estimateImageTokens, readImageSize } from "../zalo/zalo-image-variant.js";
 import { pruneExpiredImageDescriptions } from "./image-description-store.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 const log = createLogger("media-store");
 const mediaDir = path.join(dataDir, "media");
@@ -110,7 +111,7 @@ export function loadStoredImage(relPath: string): { base64: string; mediaType: s
 
 /** Xóa file media cũ hơn MEDIA_RETENTION_DAYS + gỡ thư mục rỗng. Trả về số file đã xóa. */
 export function cleanupExpiredMedia(): number {
-  const cutoff = Date.now() - env.MEDIA_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - getTuning("MEDIA_RETENTION_DAYS") * 24 * 60 * 60 * 1000;
   return removeExpiredIn(mediaDir, cutoff);
 }
 
@@ -146,7 +147,7 @@ export function startMediaCleanupSchedule(): void {
   startDailyTask("media-cleanup", () => {
     const removed = cleanupExpiredMedia();
     // Mô tả ảnh của sidecar dọn cùng nhịp: quá hạn thì cả pixel lẫn mô tả cùng đi
-    const prunedDescriptions = pruneExpiredImageDescriptions(env.MEDIA_RETENTION_DAYS);
+    const prunedDescriptions = pruneExpiredImageDescriptions(getTuning("MEDIA_RETENTION_DAYS"));
     // Trace step agent dọn cùng nhịp - bảng phình nhanh nhất trong DB
     const prunedTraces = pruneOldTraces();
     if (removed > 0 || prunedDescriptions > 0 || prunedTraces > 0) {

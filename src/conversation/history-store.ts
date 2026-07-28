@@ -1,5 +1,5 @@
-import { env } from "../config/env.js";
 import { closeDatabase, db } from "./database.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 export type StoredMessage = {
   role: "user" | "assistant";
@@ -61,7 +61,7 @@ export function appendMessage(
     message.images && message.images.length > 0 ? JSON.stringify(message.images) : null,
   );
   // Dọn ngay thread vừa ghi: không cần cron, và thread im lặng thì không tốn gì
-  pruneStmt.run(accountId, threadId, accountId, threadId, env.HISTORY_MAX_MESSAGES_PER_THREAD);
+  pruneStmt.run(accountId, threadId, accountId, threadId, getTuning("HISTORY_MAX_MESSAGES_PER_THREAD"));
   return Number(result.lastInsertRowid);
 }
 
@@ -76,7 +76,7 @@ export function setMessageImages(messageId: number, images: string[]): void {
 export function getRecentMessages(
   accountId: string,
   threadId: string,
-  limit = env.HISTORY_CONTEXT_LIMIT,
+  limit = getTuning("HISTORY_CONTEXT_LIMIT"),
 ): StoredMessage[] {
   type Row = {
     role: "user" | "assistant";

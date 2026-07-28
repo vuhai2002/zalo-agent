@@ -1,6 +1,7 @@
 import { env } from "../config/env.js";
 import { getImageSettings, isImageGenConfigured, type ImageGenSettings } from "../config/runtime-image-settings.js";
 import { readImageFromSseStream } from "./read-image-sse-stream.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
  * Gọi endpoint OpenAI-compatible `/v1/images/generations` để vẽ hoặc SỬA ảnh.
@@ -115,7 +116,7 @@ export async function generateImage(
       // fetch không có timeout mặc định - thiếu dòng này thì provider treo là
       // treo luôn cả lượt agent, người dùng đợi vô hạn. Signal này phủ CẢ phần
       // đọc stream chứ không riêng lúc mở kết nối.
-      signal: AbortSignal.timeout(env.IMAGE_GEN_TIMEOUT_MS),
+      signal: AbortSignal.timeout(getTuning("IMAGE_GEN_TIMEOUT_MS")),
     });
 
     if (!response.ok) throw new Error(await readErrorMessage(response));
@@ -126,7 +127,7 @@ export async function generateImage(
     // mà bọc mỗi fetch thì nó lọt ra ngoài dạng "This operation was aborted".
     const name = err instanceof Error ? err.name : "";
     if (name === "AbortError" || name === "TimeoutError") {
-      throw new Error(`Vẽ ảnh quá lâu (hơn ${Math.round(env.IMAGE_GEN_TIMEOUT_MS / 1000)} giây) nên đã dừng`);
+      throw new Error(`Vẽ ảnh quá lâu (hơn ${Math.round(getTuning("IMAGE_GEN_TIMEOUT_MS") / 1000)} giây) nên đã dừng`);
     }
     throw err;
   }

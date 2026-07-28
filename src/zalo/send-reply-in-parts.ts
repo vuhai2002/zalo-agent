@@ -1,8 +1,8 @@
 import type { API, ThreadType } from "zca-js";
-import { env } from "../config/env.js";
 import { enqueueSend } from "../middleware/rate-limiter.js";
 import { createLogger } from "../shared/logger.js";
 import { splitLongMessage } from "./split-long-message.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
  * Gửi câu trả lời của agent xuống Zalo, cắt thành nhiều tin khi quá dài.
@@ -53,8 +53,8 @@ function sendOne(target: ReplyTarget, text: string): Promise<unknown> {
  */
 export async function sendReplyInParts(target: ReplyTarget, text: string): Promise<ReplyResult> {
   const parts = splitLongMessage(text, {
-    maxChars: env.ZALO_MAX_MESSAGE_CHARS,
-    maxParts: env.ZALO_MAX_MESSAGE_PARTS,
+    maxChars: getTuning("ZALO_MAX_MESSAGE_CHARS"),
+    maxParts: getTuning("ZALO_MAX_MESSAGE_PARTS"),
   });
 
   if (parts.length === 0) return { deliveredText: "", sentParts: 0 };

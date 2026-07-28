@@ -11,7 +11,12 @@ before(async () => {
   indicator = await import("./typing-indicator.js");
 });
 
-after(() => cleanupTestEnv(dataDir));
+after(async () => {
+  // Đọc cấu hình chỉnh-nóng nên module này mở SQLite - không đóng thì
+  // Windows chặn xóa thư mục tạm (EPERM)
+  (await import("../conversation/database.js")).closeDatabase();
+  cleanupTestEnv(dataDir);
+});
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 

@@ -14,8 +14,11 @@ before(async () => {
   batcher = await import("./message-batcher.js");
 });
 
-after(() => {
+after(async () => {
   batcher.clearPendingBatches();
+  // Đọc cấu hình chỉnh-nóng nên module này mở SQLite - không đóng thì
+  // Windows chặn xóa thư mục tạm (EPERM)
+  (await import("../conversation/database.js")).closeDatabase();
   cleanupTestEnv(dataDir);
 });
 

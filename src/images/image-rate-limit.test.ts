@@ -11,7 +11,12 @@ before(async () => {
   rateLimit = await import("./image-rate-limit.js");
 });
 
-after(() => cleanupTestEnv(dataDir));
+after(async () => {
+  // Đọc cấu hình chỉnh-nóng nên module này mở SQLite - không đóng thì
+  // Windows chặn xóa thư mục tạm (EPERM)
+  (await import("../conversation/database.js")).closeDatabase();
+  cleanupTestEnv(dataDir);
+});
 
 beforeEach(() => rateLimit.resetImageRateLimit());
 

@@ -1,5 +1,5 @@
-import { env } from "../config/env.js";
 import type { DocumentBlock, Sheet } from "./document-content-schema.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
  * Chặn nội dung quá khổ TRƯỚC khi dựng file. Bot đọc tin người lạ nên đây là
@@ -33,16 +33,16 @@ function countBlockChars(block: DocumentBlock): number {
 }
 
 export function checkDocumentLimits(blocks: DocumentBlock[]): LimitCheck {
-  if (blocks.length > env.DOCUMENT_MAX_BLOCKS) {
+  if (blocks.length > getTuning("DOCUMENT_MAX_BLOCKS")) {
     return fail(
-      `Tài liệu có ${blocks.length} phần, vượt trần ${env.DOCUMENT_MAX_BLOCKS}. Hãy rút gọn rồi gọi lại.`,
+      `Tài liệu có ${blocks.length} phần, vượt trần ${getTuning("DOCUMENT_MAX_BLOCKS")}. Hãy rút gọn rồi gọi lại.`,
     );
   }
 
   for (const block of blocks) {
-    if (block.type === "table" && block.rows.length > env.DOCUMENT_MAX_ROWS) {
+    if (block.type === "table" && block.rows.length > getTuning("DOCUMENT_MAX_ROWS")) {
       return fail(
-        `Bảng có ${block.rows.length} dòng, vượt trần ${env.DOCUMENT_MAX_ROWS}. Hãy bớt dòng rồi gọi lại.`,
+        `Bảng có ${block.rows.length} dòng, vượt trần ${getTuning("DOCUMENT_MAX_ROWS")}. Hãy bớt dòng rồi gọi lại.`,
       );
     }
     // Bảng lệch số cột so với header thì file dựng ra méo mó - chặn ngay
@@ -57,9 +57,9 @@ export function checkDocumentLimits(blocks: DocumentBlock[]): LimitCheck {
   }
 
   const chars = blocks.reduce((sum, block) => sum + countBlockChars(block), 0);
-  if (chars > env.DOCUMENT_MAX_CHARS) {
+  if (chars > getTuning("DOCUMENT_MAX_CHARS")) {
     return fail(
-      `Nội dung dài ${chars} ký tự, vượt trần ${env.DOCUMENT_MAX_CHARS}. Hãy tóm gọn lại rồi gọi lại.`,
+      `Nội dung dài ${chars} ký tự, vượt trần ${getTuning("DOCUMENT_MAX_CHARS")}. Hãy tóm gọn lại rồi gọi lại.`,
     );
   }
 
@@ -67,15 +67,15 @@ export function checkDocumentLimits(blocks: DocumentBlock[]): LimitCheck {
 }
 
 export function checkSpreadsheetLimits(sheets: Sheet[]): LimitCheck {
-  if (sheets.length > env.DOCUMENT_MAX_SHEETS) {
-    return fail(`Có ${sheets.length} sheet, vượt trần ${env.DOCUMENT_MAX_SHEETS}.`);
+  if (sheets.length > getTuning("DOCUMENT_MAX_SHEETS")) {
+    return fail(`Có ${sheets.length} sheet, vượt trần ${getTuning("DOCUMENT_MAX_SHEETS")}.`);
   }
 
   let chars = 0;
   for (const sheet of sheets) {
-    if (sheet.rows.length > env.DOCUMENT_MAX_ROWS) {
+    if (sheet.rows.length > getTuning("DOCUMENT_MAX_ROWS")) {
       return fail(
-        `Sheet "${sheet.name}" có ${sheet.rows.length} dòng, vượt trần ${env.DOCUMENT_MAX_ROWS}.`,
+        `Sheet "${sheet.name}" có ${sheet.rows.length} dòng, vượt trần ${getTuning("DOCUMENT_MAX_ROWS")}.`,
       );
     }
     const bad = sheet.rows.findIndex((row) => row.length !== sheet.headers.length);
@@ -92,8 +92,8 @@ export function checkSpreadsheetLimits(sheets: Sheet[]): LimitCheck {
     }
   }
 
-  if (chars > env.DOCUMENT_MAX_CHARS) {
-    return fail(`Nội dung dài ${chars} ký tự, vượt trần ${env.DOCUMENT_MAX_CHARS}.`);
+  if (chars > getTuning("DOCUMENT_MAX_CHARS")) {
+    return fail(`Nội dung dài ${chars} ký tự, vượt trần ${getTuning("DOCUMENT_MAX_CHARS")}.`);
   }
 
   return ok;

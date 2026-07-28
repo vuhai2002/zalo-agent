@@ -1,4 +1,4 @@
-import { env } from "../config/env.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 // Gửi tuần tự theo từng thread + delay ngẫu nhiên trước mỗi lần gửi.
 // Mục đích: hành vi giống người, giảm nguy cơ Zalo đánh dấu spam.
@@ -8,8 +8,8 @@ const queues = new Map<string, Promise<unknown>>();
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function randomSendDelay(): number {
-  const range = env.SEND_DELAY_MAX_MS - env.SEND_DELAY_MIN_MS;
-  return env.SEND_DELAY_MIN_MS + Math.floor(Math.random() * (range + 1));
+  const range = getTuning("SEND_DELAY_MAX_MS") - getTuning("SEND_DELAY_MIN_MS");
+  return getTuning("SEND_DELAY_MIN_MS") + Math.floor(Math.random() * (range + 1));
 }
 
 export function enqueueSend<T>(threadKey: string, task: () => Promise<T>): Promise<T> {

@@ -1,6 +1,6 @@
 import type { ThreadType } from "zca-js";
-import { env } from "../config/env.js";
 import { createLogger } from "../shared/logger.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 const log = createLogger("typing-indicator");
 
@@ -35,7 +35,7 @@ export function startTypingIndicator({
   send,
   threadId,
   threadType,
-  intervalMs = env.TYPING_REFRESH_MS,
+  intervalMs = getTuning("TYPING_REFRESH_MS"),
   maxDurationMs = DEFAULT_MAX_DURATION_MS,
 }: TypingIndicatorParams): () => void {
   let stopped = false;

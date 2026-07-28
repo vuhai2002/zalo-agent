@@ -1,5 +1,5 @@
-import { env } from "../config/env.js";
 import { createHourlyRateLimit } from "../shared/hourly-rate-limit.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
  * Trần số file mỗi thread được tạo trong 1 giờ. Bot đọc tin người lạ, mà dựng
@@ -11,7 +11,7 @@ import { createHourlyRateLimit } from "../shared/hourly-rate-limit.js";
  */
 
 const limiter = createHourlyRateLimit({
-  limit: () => env.DOCUMENT_MAX_PER_HOUR,
+  limit: () => getTuning("DOCUMENT_MAX_PER_HOUR"),
   buildReason: ({ used, limit, waitMinutes }) =>
     `Đã tạo ${used} file trong 1 giờ qua (trần ${limit}). Thử lại sau khoảng ${waitMinutes} phút, hoặc trả lời trực tiếp trong chat thay vì gửi file.`,
 });

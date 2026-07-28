@@ -1,5 +1,5 @@
-import { env } from "../config/env.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
  * Gộp các tin nhắn đến gần nhau trong cùng 1 thread thành 1 lượt agent.
@@ -29,7 +29,7 @@ export function enqueueMessage(
   threadKey: string,
   message: ParsedMessage,
   handler: BatchHandler,
-  debounceMs = env.MESSAGE_BATCH_DEBOUNCE_MS,
+  debounceMs = getTuning("MESSAGE_BATCH_DEBOUNCE_MS"),
 ): void {
   const existing = pending.get(threadKey);
 

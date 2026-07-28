@@ -1,5 +1,5 @@
-import { env } from "../config/env.js";
 import { db } from "./database.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 export type MemoryFact = {
   id: number;
@@ -44,7 +44,7 @@ export function saveMemoryFact(params: {
     params.subjectId,
     params.accountId,
     params.subjectId,
-    env.MEMORY_MAX_FACTS_PER_SUBJECT,
+    getTuning("MEMORY_MAX_FACTS_PER_SUBJECT"),
   );
 }
 

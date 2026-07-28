@@ -1,4 +1,4 @@
-import { env } from "../config/env.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
  * Đọc stream SSE của endpoint vẽ ảnh, trả về base64 của ảnh hoàn chỉnh.
@@ -89,7 +89,7 @@ async function readChunkOrStall(
 
 export async function readImageFromSseStream(
   response: Response,
-  stallMs: number = env.IMAGE_GEN_STALL_MS,
+  stallMs: number = getTuning("IMAGE_GEN_STALL_MS"),
 ): Promise<string> {
   if (!response.body) throw new Error("Provider không trả về ảnh (stream rỗng)");
 

@@ -1,5 +1,5 @@
-import { env } from "../config/env.js";
 import { createHourlyRateLimit } from "../shared/hourly-rate-limit.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
  * Trần số ảnh mỗi thread được vẽ trong 1 giờ.
@@ -10,7 +10,7 @@ import { createHourlyRateLimit } from "../shared/hourly-rate-limit.js";
  */
 
 const limiter = createHourlyRateLimit({
-  limit: () => env.IMAGE_GEN_MAX_PER_HOUR,
+  limit: () => getTuning("IMAGE_GEN_MAX_PER_HOUR"),
   buildReason: ({ used, limit, waitMinutes }) =>
     `Đã vẽ ${used} ảnh trong 1 giờ qua (trần ${limit}). Thử lại sau khoảng ${waitMinutes} phút. ` +
     `Trong lúc chờ vẫn có thể mô tả bằng lời cho người dùng hình dung.`,

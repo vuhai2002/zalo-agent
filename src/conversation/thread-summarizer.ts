@@ -1,8 +1,8 @@
 import { generateText } from "ai";
-import { env } from "../config/env.js";
 import { createLogger } from "../shared/logger.js";
 import { db } from "./database.js";
 import { getThreadSummary, setThreadSummary } from "./thread-store.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 
 const log = createLogger("thread-summarizer");
 
@@ -36,7 +36,7 @@ export function collectSummaryBacklog(
 ): { backlog: BacklogRow[]; oldSummary: string; coversTo: number } {
   const { summary: oldSummary, coversTo } = getThreadSummary(accountId, threadId);
 
-  const windowStart = windowStartStmt.get(accountId, threadId, env.HISTORY_CONTEXT_LIMIT - 1) as
+  const windowStart = windowStartStmt.get(accountId, threadId, getTuning("HISTORY_CONTEXT_LIMIT") - 1) as
     | { id: number }
     | undefined;
   if (!windowStart) return { backlog: [], oldSummary, coversTo };
@@ -89,7 +89,7 @@ export async function maybeSummarizeThread(
 ): Promise<boolean> {
   try {
     const { backlog, oldSummary } = collectSummaryBacklog(accountId, threadId);
-    if (backlog.length < env.SUMMARY_TRIGGER_MESSAGES) return false;
+    if (backlog.length < getTuning("SUMMARY_TRIGGER_MESSAGES")) return false;
 
     const newSummary = await generate(buildSummaryPrompt(oldSummary, backlog));
     if (!newSummary) return false;
