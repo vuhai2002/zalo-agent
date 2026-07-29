@@ -97,17 +97,19 @@ export type AgentTurnParams = {
   account: AccountConfig;
   /** Các tin nhắn đã gộp của lượt này (ảnh và caption Zalo gửi tách nhau) */
   batch: ParsedMessage[];
+  /**
+   * Mảng trace do CALLER sở hữu, hàm này chỉ push vào.
+   *
+   * Trước đây mảng này là biến cục bộ rồi trả về ở cuối - nghĩa là lượt ném lỗi
+   * làm nó rơi theo stack, mất sạch phần chẩn đoán đúng lúc cần nhất. Caller giữ
+   * mảng thì nhánh catch vẫn còn đủ những gì đã chạy được.
+   */
+  trace: StepTrace[];
 };
 
 export type AgentTurnResult = {
   text: string;
   usage: { inputTokens: number; outputTokens: number; totalTokens: number; steps: number };
-  /**
-   * Trace từng step để caller lưu vào DB (nối qua turn id của agent_turns).
-   * Rỗng khi tắt AGENT_TRACE_ENABLED. Trả về thay vì tự ghi DB ở đây: agent-loop
-   * vốn không đụng bảng agent_turns, để chỗ ghi usage lo luôn cho gọn một mối.
-   */
-  trace: StepTrace[];
 };
 
 /**
@@ -117,7 +119,7 @@ export type AgentTurnResult = {
  * History được đọc TRƯỚC khi ghi batch hiện tại vào DB, nếu không tin nhắn mới
  * sẽ xuất hiện 2 lần trong input của model.
  */
-export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Promise<AgentTurnResult> {
+export async function runAgentTurn({ api, account, batch, trace }: AgentTurnParams): Promise<AgentTurnResult> {
   // Tin cuối đại diện cho lượt: tools (thả reaction, quote) tác động lên tin này
   const latest = batch[batch.length - 1]!;
 
@@ -142,11 +144,9 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
     threadSummary: getThreadSummary(account.id, latest.threadId).summary,
   };
 
-  // Gom trace suốt lượt. Khai NGOÀI runOnce để lượt retry (glitch router, hoặc
-  // fallback bỏ ảnh) nối tiếp vào cùng một trace - đúng lúc hỏng mới cần nhìn
-  // đủ cả hai lần chạy.
-  const trace: StepTrace[] = [];
-
+  // `trace` do caller truyền vào và dùng chung cho MỌI lần chạy trong lượt: lượt
+  // retry (glitch router) và lượt dựng lại không kèm pixel đều nối tiếp vào đó -
+  // đúng lúc hỏng mới cần nhìn đủ cả hai lần chạy.
   const runOnce = () =>
     generateText({
       model: resolveLanguageModel(agent, {
@@ -341,11 +341,9 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
       { accountId: account.id, threadId: latest.threadId },
       "Router trả completion rỗng 2 lần liên tiếp - trả lời fallback. Cần soi log 9Router.",
     );
-    // Vẫn trả trace: lượt glitch là đúng lúc cần nhìn nhất
     return {
       text: ROUTER_DOWN_REPLY,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: result.steps.length },
-      trace,
     };
   }
 
@@ -381,7 +379,6 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
         totalTokens: result.totalUsage.totalTokens ?? 0,
         steps: result.steps.length,
       },
-      trace,
     };
   }
 
@@ -393,6 +390,5 @@ export async function runAgentTurn({ api, account, batch }: AgentTurnParams): Pr
       totalTokens: result.totalUsage.totalTokens ?? 0,
       steps: result.steps.length,
     },
-    trace,
   };
 }

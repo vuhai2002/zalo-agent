@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
+// import type bị xóa lúc chạy nên không kéo module lên trước setupTestEnv
+import type { AgentTurnUsage } from "./usage-store.js";
 
 let dataDir: string;
 let usage: typeof import("./usage-store.js");
@@ -17,11 +19,18 @@ after(() => {
   cleanupTestEnv(dataDir);
 });
 
+/** Lượt trọn vẹn: mở rồi chốt - hai bước tách rời đúng như production */
+function ghiLuot(accountId: string, threadId: string, u: AgentTurnUsage): number {
+  const turnId = usage.openAgentTurn(accountId, threadId);
+  usage.finishAgentTurn(turnId, u);
+  return turnId;
+}
+
 describe("usage-store", () => {
   it("ghi và tổng hợp usage theo thread", () => {
-    usage.recordAgentTurn("acc-1", "t-1", { inputTokens: 100, outputTokens: 20, totalTokens: 120, steps: 1 });
-    usage.recordAgentTurn("acc-1", "t-1", { inputTokens: 200, outputTokens: 30, totalTokens: 230, steps: 3 });
-    usage.recordAgentTurn("acc-1", "t-khac", { inputTokens: 50, outputTokens: 5, totalTokens: 55, steps: 1 });
+    ghiLuot("acc-1", "t-1", { inputTokens: 100, outputTokens: 20, totalTokens: 120, steps: 1 });
+    ghiLuot("acc-1", "t-1", { inputTokens: 200, outputTokens: 30, totalTokens: 230, steps: 3 });
+    ghiLuot("acc-1", "t-khac", { inputTokens: 50, outputTokens: 5, totalTokens: 55, steps: 1 });
 
     const totals = usage.getThreadUsageTotals("acc-1", "t-1");
     assert.equal(totals.turns, 2);
@@ -34,8 +43,8 @@ describe("usage-store", () => {
   });
 
   it("thống kê theo ngày gộp đúng và lọc theo account", () => {
-    usage.recordAgentTurn("acc-daily", "t-1", { inputTokens: 10, outputTokens: 1, totalTokens: 11, steps: 1 });
-    usage.recordAgentTurn("acc-daily", "t-2", { inputTokens: 20, outputTokens: 2, totalTokens: 22, steps: 1 });
+    ghiLuot("acc-daily", "t-1", { inputTokens: 10, outputTokens: 1, totalTokens: 11, steps: 1 });
+    ghiLuot("acc-daily", "t-2", { inputTokens: 20, outputTokens: 2, totalTokens: 22, steps: 1 });
 
     const days = usage.getDailyUsage("acc-daily", "2000-01-01");
     assert.equal(days.length, 1); // cùng ngày hôm nay

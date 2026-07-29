@@ -37,7 +37,8 @@ after(async () => {
 const authed = (path: string) => app.request(path, { headers: { cookie: sessionCookie } });
 
 function taoLuotCoTrace(): number {
-  const turnId = usage.recordAgentTurn("acc-1", "t-1", {
+  const turnId = usage.openAgentTurn("acc-1", "t-1");
+  usage.finishAgentTurn(turnId, {
     inputTokens: 900,
     outputTokens: 120,
     totalTokens: 1020,

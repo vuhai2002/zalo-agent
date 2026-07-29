@@ -42,16 +42,19 @@ function buoc(n: number, extra: Partial<StepTrace> = {}): StepTrace {
   };
 }
 
-function ghiLuot(): number {
-  return usage.recordAgentTurn("acc-1", "t-1", {
+/** Một lượt trọn vẹn: mở lượt rồi chốt usage - đúng đường production đi */
+function ghiLuot(threadId = "t-1", steps = 2): number {
+  const turnId = usage.openAgentTurn("acc-1", threadId);
+  usage.finishAgentTurn(turnId, {
     inputTokens: 1000,
     outputTokens: 100,
     totalTokens: 1100,
-    steps: 2,
+    steps,
   });
+  return turnId;
 }
 
-describe("recordAgentTurn trả về id để nối trace", () => {
+describe("openAgentTurn trả về id để nối trace", () => {
   it("id là số dương và tăng dần", () => {
     const a = ghiLuot();
     const b = ghiLuot();
@@ -117,12 +120,7 @@ describe("agent-trace-store", () => {
   it("thread khác không lẫn vào nhau", () => {
     const a = ghiLuot();
     store.saveTurnTrace(a, [buoc(1)]);
-    const b = usage.recordAgentTurn("acc-1", "t-KHAC", {
-      inputTokens: 1,
-      outputTokens: 1,
-      totalTokens: 2,
-      steps: 1,
-    });
+    const b = ghiLuot("t-KHAC", 1);
     store.saveTurnTrace(b, [buoc(1)]);
 
     assert.equal(store.getRecentTurns("acc-1", "t-1", 10).length, 1);
@@ -140,12 +138,7 @@ describe("liệt kê lượt toàn hệ thống - cho trang Trace ở sidebar", 
 
     const a = ghiLuot();
     store.saveTurnTrace(a, [buoc(1)]);
-    const b = usage.recordAgentTurn("acc-1", "t-KHAC", {
-      inputTokens: 5,
-      outputTokens: 5,
-      totalTokens: 10,
-      steps: 1,
-    });
+    const b = ghiLuot("t-KHAC", 1);
     store.saveTurnTrace(b, [buoc(1), buoc(2)]);
 
     const luot = store.getRecentTurnsAllThreads(10);
@@ -199,12 +192,7 @@ describe("dọn trace cũ - trace phình nhanh hơn mọi bảng khác", () => {
  */
 describe("saveTurnTrace - lỗi tool", () => {
   it("ghi và đọc lại được lỗi tool", () => {
-    const turnId = usage.recordAgentTurn("acc", "thread-loi", {
-      inputTokens: 10,
-      outputTokens: 5,
-      totalTokens: 15,
-      steps: 1,
-    });
+    const turnId = ghiLuot("thread-loi", 1);
     store.saveTurnTrace(turnId, [
       buoc(1, { toolErrors: [{ name: "create_image", error: "prompt vượt 4000 ký tự" }] }),
     ]);
@@ -213,12 +201,7 @@ describe("saveTurnTrace - lỗi tool", () => {
   });
 
   it("dòng cũ không có lỗi tool đọc ra mảng rỗng, không phải undefined", () => {
-    const turnId = usage.recordAgentTurn("acc", "thread-cu", {
-      inputTokens: 1,
-      outputTokens: 1,
-      totalTokens: 2,
-      steps: 1,
-    });
+    const turnId = ghiLuot("thread-cu", 1);
     store.saveTurnTrace(turnId, [buoc(1)]);
     assert.deepEqual(store.getTurnTrace(turnId)[0]!.toolErrors, []);
   });

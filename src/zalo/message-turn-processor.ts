@@ -1,11 +1,12 @@
 import type { API } from "zca-js";
 import { runAgentTurn } from "../agent/agent-loop.js";
+import type { StepTrace } from "../agent/agent-step-trace.js";
 import type { AccountConfig } from "../config/account-store.js";
 import { appendMessage } from "../conversation/history-store.js";
 import { imagePathsOf, persistBatchImages } from "../conversation/media-store.js";
 import { maybeSummarizeThread } from "../conversation/thread-summarizer.js";
 import { saveTurnTrace } from "../agent/agent-trace-store.js";
-import { recordAgentTurn } from "../conversation/usage-store.js";
+import { finishAgentTurn, openAgentTurn } from "../conversation/usage-store.js";
 import { createLogger } from "../shared/logger.js";
 import { sendSeenReceipt } from "./message-receipts.js";
 import { toZaloReaction } from "./reaction-icons.js";
@@ -50,6 +51,13 @@ export async function processBatch(
     threadId: latest.threadId,
     threadType: latest.threadType,
   };
+
+  // Mở lượt TRƯỚC khi chạy agent để nhánh lỗi bên dưới có chỗ mà gắn trace vào.
+  const turnId = openAgentTurn(config.id, latest.threadId);
+  // Mảng do CHỖ NÀY sở hữu: agent-loop chỉ push vào. Lượt ném lỗi vẫn còn đủ
+  // những step đã chạy được - trước đây mảng nằm trong agent-loop nên throw là
+  // mất sạch, lượt chạy tốt 5 step rồi step 6 gặp 500 không để lại dấu vết nào.
+  const trace: StepTrace[] = [];
 
   log.info(
     {
@@ -101,11 +109,11 @@ export async function processBatch(
 
     // Chạy agent TRƯỚC khi ghi history: runAgentTurn tự đọc history cũ và tự
     // ghép batch hiện tại vào input - ghi trước sẽ khiến tin mới lặp 2 lần.
-    const result = await runAgentTurn({ api, account: config, batch });
-    const turnId = recordAgentTurn(config.id, latest.threadId, result.usage);
-    // Trace nối vào lượt vừa ghi. Lưu ở đây chứ không trong agent-loop: chỗ này
-    // vốn đã là nơi ghi usage của lượt, gom một mối cho dễ tìm.
-    if (result.trace.length > 0) saveTurnTrace(turnId, result.trace);
+    const result = await runAgentTurn({ api, account: config, batch, trace });
+    finishAgentTurn(turnId, result.usage);
+    // Trace lưu ở đây chứ không trong agent-loop: chỗ này vốn đã là nơi chốt
+    // usage của lượt, gom một mối cho dễ tìm.
+    if (trace.length > 0) saveTurnTrace(turnId, trace);
 
     writeBatchToHistory();
 
@@ -138,7 +146,17 @@ export async function processBatch(
     // Agent lỗi (provider chết, hết quota, timeout) thì tin của người dùng VẪN
     // phải vào history - bỏ qua là lượt sau bot không biết họ đã nói gì
     writeBatchToHistory();
-    log.error({ accountId: config.id, threadId: latest.threadId, err }, "Lỗi xử lý lượt tin nhắn");
+    // Trace của những step ĐÃ chạy được là thứ quý nhất lúc này: lượt đi tốt 5
+    // step rồi step 6 gặp 500 thì đây là toàn bộ manh mối. Trước đây nhánh này
+    // không lưu gì nên lượt hỏng vừa không có trace vừa không lên trang Trace.
+    if (trace.length > 0) saveTurnTrace(turnId, trace);
+    // Chốt luôn số step đã chạy. Token thì KHÔNG biết - lỗi ném ra từ giữa lượt
+    // không mang theo usage - nên để 0 và đọc số step trên trang Trace.
+    finishAgentTurn(turnId, { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: trace.length });
+    log.error(
+      { accountId: config.id, threadId: latest.threadId, err, steps: trace.length },
+      "Lỗi xử lý lượt tin nhắn",
+    );
     // Báo cho người nhắn thay vì im lặng bỏ treo. KHÔNG ghi câu này vào history:
     // nó là thông báo hệ thống, để lại chỉ khiến lượt sau model neo vào tiền lệ hỏng.
     await notifyTechnicalError(replyTarget);
