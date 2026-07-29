@@ -105,6 +105,13 @@ export type AgentTurnParams = {
    * mảng thì nhánh catch vẫn còn đủ những gì đã chạy được.
    */
   trace: StepTrace[];
+  /**
+   * Điểm tiêm model, chỉ test truyền vào (mặc định là `resolveLanguageModel`).
+   * Cùng nếp đã dùng ở `persistBatchImages` (tiêm downloader) và
+   * `web-search-providers` (tiêm fetch): không có seam này thì mọi nhánh của
+   * vòng lặp - retry, bỏ pixel, lượt chốt - đều phải gọi provider thật để test.
+   */
+  resolveModel?: typeof resolveLanguageModel;
 };
 
 export type AgentTurnResult = {
@@ -119,7 +126,13 @@ export type AgentTurnResult = {
  * History được đọc TRƯỚC khi ghi batch hiện tại vào DB, nếu không tin nhắn mới
  * sẽ xuất hiện 2 lần trong input của model.
  */
-export async function runAgentTurn({ api, account, batch, trace }: AgentTurnParams): Promise<AgentTurnResult> {
+export async function runAgentTurn({
+  api,
+  account,
+  batch,
+  trace,
+  resolveModel = resolveLanguageModel,
+}: AgentTurnParams): Promise<AgentTurnResult> {
   // Tin cuối đại diện cho lượt: tools (thả reaction, quote) tác động lên tin này
   const latest = batch[batch.length - 1]!;
 
@@ -149,7 +162,7 @@ export async function runAgentTurn({ api, account, batch, trace }: AgentTurnPara
   // đúng lúc hỏng mới cần nhìn đủ cả hai lần chạy.
   const runOnce = () =>
     generateText({
-      model: resolveLanguageModel(agent, {
+      model: resolveModel(agent, {
         accountId: account.id,
         threadId: latest.threadId,
       }),
@@ -242,7 +255,7 @@ export async function runAgentTurn({ api, account, batch, trace }: AgentTurnPara
    */
   const runWrapUp = async (daLam: ModelMessage[]): Promise<string> => {
     const r = await generateText({
-      model: resolveLanguageModel(agent, { accountId: account.id, threadId: latest.threadId }),
+      model: resolveModel(agent, { accountId: account.id, threadId: latest.threadId }),
       system: buildSystemPrompt(agent, latest, memory, account),
       messages: [
         ...messages,
