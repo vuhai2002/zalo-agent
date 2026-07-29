@@ -3,6 +3,7 @@ import pino from "pino";
 import { dataDir, env } from "../config/env.js";
 import { ensureUtf8Console } from "./console-encoding.js";
 import { serializeErrorSafely } from "./safe-error-serializer.js";
+import { currentTurnLogContext } from "./turn-log-context.js";
 
 // Phải chạy trước khi có output đầu tiên, nếu không log tiếng Việt bị vỡ trên Windows
 ensureUtf8Console();
@@ -57,6 +58,20 @@ export const logger = pino({
   // Mức GỐC phải thấp bằng target thấp nhất, không thì dòng debug bị chặn ngay
   // từ đây và target file không bao giờ nhận được
   level: env.LOG_FILE_ENABLED ? "trace" : env.LOG_LEVEL,
+  // Ghép accountId/threadId/turnId vào MỌI dòng sinh ra trong một lượt, kể cả
+  // dòng của module tự tạo logger riêng (các tool). Xem turn-log-context.ts để
+  // biết vì sao không dùng child logger hay luồn tham số qua chữ ký hàm.
+  // Ngoài lượt (khởi động, dashboard, cron dọn) không ghép gì.
+  //
+  // PHẢI trả BẢN SAO mới mỗi lần. `defaultMixinMergeStrategy` của pino
+  // (`lib/proto.js`) làm `Object.assign(mixinObject, mergeObject)` - nó GHI ĐÈ
+  // vào chính object mình trả về. Trả thẳng object trong AsyncLocalStorage thì
+  // mỗi dòng log lại nhét trường của nó vào đó vĩnh viễn: đo trên lượt thật,
+  // một dòng `web-fetch` phình lên 28 trường, mang theo cả `text`, `reasoning`,
+  // `toolResults` của những dòng trước - vừa rác vừa rò nội dung tin nhắn sang
+  // dòng chẳng liên quan, mà `readRecentLogs` chỉ đọc 4MB cuối nên dòng phình
+  // ăn mất cửa sổ đọc.
+  mixin: () => ({ ...currentTurnLogContext() }),
   // Đè bộ serialize `err` mặc định: bản gốc chép mọi thuộc tính của error, kéo
   // theo `requestBodyValues` của APICallError = system prompt + hội thoại + ảnh
   // base64 ra thẳng file log. Xem safe-error-serializer.ts để biết chi tiết.

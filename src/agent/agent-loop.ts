@@ -187,8 +187,6 @@ export async function runAgentTurn({
         for (const r of step.toolResults) {
           log.info(
             {
-              accountId: account.id,
-              threadId: latest.threadId,
               tool: r.toolName,
               input: forLog(r.input, 200),
               // Đứng SAU input trong object nhưng là field riêng nên không bị
@@ -211,8 +209,6 @@ export async function runAgentTurn({
           if (p.type !== "tool-error") continue;
           log.error(
             {
-              accountId: account.id,
-              threadId: latest.threadId,
               tool: p.toolName,
               args: shortArgsOf(p.input),
               error: forLog(p.error instanceof Error ? p.error.message : p.error, 300),
@@ -229,8 +225,6 @@ export async function runAgentTurn({
         // và cả warnings - chỗ provider báo tham số bị âm thầm bỏ qua.
         log.debug(
           {
-            accountId: account.id,
-            threadId: latest.threadId,
             step: t.stepNumber,
             finishReason: t.finishReason,
             text: t.text,
@@ -296,7 +290,7 @@ export async function runAgentTurn({
     markModelNoVision(agent);
     const fallbackMode: ImageContextMode = isSidecarConfigured() ? "describe" : "blind";
     log.warn(
-      { accountId: account.id, threadId: latest.threadId, imageMode, fallbackMode, err: forLog(err, 200) },
+      { imageMode, fallbackMode, err: forLog(err, 200) },
       "Provider từ chối lượt có ảnh (4xx) - thử lại không kèm pixel",
     );
     const rebuilt = await buildTurnMessages({
@@ -314,10 +308,7 @@ export async function runAgentTurn({
   // 9Router thỉnh thoảng trả 200 + completion rỗng (0 token). maxRetries của
   // SDK không retry vì response "thành công" - phải tự thử lại 1 lần.
   if (isGlitch(result)) {
-    log.warn(
-      { accountId: account.id, threadId: latest.threadId },
-      "Router trả completion rỗng (0 token) - thử lại 1 lần",
-    );
+    log.warn("Router trả completion rỗng (0 token) - thử lại 1 lần");
     result = await runOnce();
   }
 
@@ -325,8 +316,6 @@ export async function runAgentTurn({
   // nhìn được ngay nó ĐÃ gọi gì - trước đây chỉ có số steps, debug toàn phải đoán
   log.info(
     {
-      accountId: account.id,
-      threadId: latest.threadId,
       batchSize: batch.length,
       // native = model tự đọc ảnh; describe = sidecar mô tả; hybrid = combo
       // nhận cả pixel + mô tả; blind = bỏ ảnh. Lượt bị reactive fallback thì
@@ -351,7 +340,6 @@ export async function runAgentTurn({
   // Lượt "chỉ thả reaction" hợp lệ không dính nhánh này (có tool call + token).
   if (isGlitch(result)) {
     log.error(
-      { accountId: account.id, threadId: latest.threadId },
       "Router trả completion rỗng 2 lần liên tiếp - trả lời fallback. Cần soi log 9Router.",
     );
     return {
@@ -377,11 +365,11 @@ export async function runAgentTurn({
     })
   ) {
     log.warn(
-      { accountId: account.id, threadId: latest.threadId, steps: result.steps.length, maxSteps },
+      { steps: result.steps.length, maxSteps },
       "Chạm trần số step khi model vẫn đang gọi tool - chạy một lượt chốt không cấp tool",
     );
     const chot = await runWrapUp(result.response.messages).catch((err: unknown) => {
-      log.error({ accountId: account.id, threadId: latest.threadId, err }, "Lượt chốt cũng lỗi");
+      log.error({ err }, "Lượt chốt cũng lỗi");
       return null;
     });
     return {

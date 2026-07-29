@@ -8,6 +8,7 @@ import { maybeSummarizeThread } from "../conversation/thread-summarizer.js";
 import { saveTurnTrace } from "../agent/agent-trace-store.js";
 import { finishAgentTurn, openAgentTurn } from "../conversation/usage-store.js";
 import { createLogger } from "../shared/logger.js";
+import { runInTurnLogContext } from "../shared/turn-log-context.js";
 import { sendSeenReceipt } from "./message-receipts.js";
 import { toZaloReaction } from "./reaction-icons.js";
 import { notifyTechnicalError, sendReplyInParts, type ReplyTarget } from "./send-reply-in-parts.js";
@@ -30,18 +31,36 @@ function sendAutoReaction(config: AccountConfig, api: API, msg: ParsedMessage): 
       type: msg.threadType,
     })
     .catch((err) =>
-      log.debug({ accountId: config.id, threadId: msg.threadId, err }, "Auto-react thất bại"),
+      log.debug({ err }, "Auto-react thất bại"),
     );
 }
 
 /**
  * Xử lý 1 lượt: batch tin đã gộp -> agent -> trả lời xuống Zalo -> ghi history.
  * Được gọi từ message-batcher nên các lượt cùng thread luôn chạy tuần tự.
+ *
+ * Mở lượt TRƯỚC rồi mới chạy: có id ngay từ dòng log đầu tiên, và nhánh lỗi có
+ * chỗ mà gắn trace vào. Toàn bộ phần xử lý chạy trong ngữ cảnh lượt để mọi dòng
+ * log bên trong - kể cả log của các tool vốn tự tạo logger riêng - tự mang
+ * accountId/threadId/turnId.
  */
 export async function processBatch(
   config: AccountConfig,
   api: API,
   batch: ParsedMessage[],
+): Promise<void> {
+  const latest = batch[batch.length - 1]!;
+  const turnId = openAgentTurn(config.id, latest.threadId);
+  return runInTurnLogContext({ accountId: config.id, threadId: latest.threadId, turnId }, () =>
+    xuLyLuot(config, api, batch, turnId),
+  );
+}
+
+async function xuLyLuot(
+  config: AccountConfig,
+  api: API,
+  batch: ParsedMessage[],
+  turnId: number,
 ): Promise<void> {
   const latest = batch[batch.length - 1]!;
   const threadKey = `${config.id}:${latest.threadId}`;
@@ -52,8 +71,6 @@ export async function processBatch(
     threadType: latest.threadType,
   };
 
-  // Mở lượt TRƯỚC khi chạy agent để nhánh lỗi bên dưới có chỗ mà gắn trace vào.
-  const turnId = openAgentTurn(config.id, latest.threadId);
   // Mảng do CHỖ NÀY sở hữu: agent-loop chỉ push vào. Lượt ném lỗi vẫn còn đủ
   // những step đã chạy được - trước đây mảng nằm trong agent-loop nên throw là
   // mất sạch, lượt chạy tốt 5 step rồi step 6 gặp 500 không để lại dấu vết nào.
@@ -61,8 +78,6 @@ export async function processBatch(
 
   log.info(
     {
-      accountId: config.id,
-      threadId: latest.threadId,
       from: latest.senderName,
       batchSize: batch.length,
       images: batch.reduce((sum, m) => sum + m.images.length, 0),
@@ -118,7 +133,7 @@ export async function processBatch(
     writeBatchToHistory();
 
     if (!result.text) {
-      log.debug({ threadId: latest.threadId }, "Agent không trả text (có thể chỉ thả reaction)");
+      log.debug("Agent không trả text (có thể chỉ thả reaction)");
       return;
     }
 
@@ -153,10 +168,7 @@ export async function processBatch(
     // Chốt luôn số step đã chạy. Token thì KHÔNG biết - lỗi ném ra từ giữa lượt
     // không mang theo usage - nên để 0 và đọc số step trên trang Trace.
     finishAgentTurn(turnId, { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: trace.length });
-    log.error(
-      { accountId: config.id, threadId: latest.threadId, err, steps: trace.length },
-      "Lỗi xử lý lượt tin nhắn",
-    );
+    log.error({ err, steps: trace.length }, "Lỗi xử lý lượt tin nhắn");
     // Báo cho người nhắn thay vì im lặng bỏ treo. KHÔNG ghi câu này vào history:
     // nó là thông báo hệ thống, để lại chỉ khiến lượt sau model neo vào tiền lệ hỏng.
     await notifyTechnicalError(replyTarget);
