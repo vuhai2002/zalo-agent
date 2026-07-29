@@ -17,15 +17,15 @@ import { getTuning } from "../config/runtime-tuning-settings.js";
 
 const insertStmt = db.prepare(`
   INSERT INTO agent_steps
-    (turn_id, step_number, text, reasoning, tool_calls, tool_results, tool_errors,
+    (turn_id, step_number, attempt, text, reasoning, tool_calls, tool_results, tool_errors,
      finish_reason, warnings, input_tokens, output_tokens)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const selectStmt = db.prepare(`
-  SELECT step_number, text, reasoning, tool_calls, tool_results, tool_errors,
+  SELECT step_number, attempt, text, reasoning, tool_calls, tool_results, tool_errors,
          finish_reason, warnings, input_tokens, output_tokens
-  FROM agent_steps WHERE turn_id = ? ORDER BY step_number ASC, id ASC
+  FROM agent_steps WHERE turn_id = ? ORDER BY attempt ASC, step_number ASC, id ASC
 `);
 
 const recentTurnsStmt = db.prepare(`
@@ -58,6 +58,7 @@ const pruneStmt = db.prepare("DELETE FROM agent_steps WHERE created_at < ?");
 
 type StepRow = {
   step_number: number;
+  attempt: number;
   text: string;
   reasoning: string;
   tool_calls: string;
@@ -83,6 +84,7 @@ export function saveTurnTrace(turnId: number, steps: StepTrace[]): void {
     insertStmt.run(
       turnId,
       s.stepNumber,
+      s.attempt,
       s.text,
       s.reasoning,
       JSON.stringify(s.toolCalls),
@@ -100,6 +102,8 @@ export function getTurnTrace(turnId: number): StepTrace[] {
   const rows = selectStmt.all(turnId) as unknown as StepRow[];
   return rows.map((r) => ({
     stepNumber: r.step_number,
+    // Dòng ghi trước khi có cột này đọc ra 1 (DEFAULT của ALTER)
+    attempt: r.attempt,
     text: r.text,
     reasoning: r.reasoning,
     toolCalls: doJson<StepTrace["toolCalls"]>(r.tool_calls, []),

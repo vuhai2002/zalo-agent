@@ -57,6 +57,14 @@ export function TraceStepCard({ step }: { step: TraceStep }) {
         <span className="rounded bg-zalo-50 px-1.5 py-0.5 text-[11px] font-medium text-zalo-700">
           Step {step.stepNumber}
         </span>
+        {/* Chỉ hiện khi CÓ chạy lại: lượt bình thường mà dán "lần 1" lên mọi
+            step chỉ làm nhiễu. Thấy nhãn này tức là step đánh số lại từ đầu,
+            không phải model đang lặp. */}
+        {step.attempt > 1 && (
+          <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+            chạy lại lần {step.attempt}
+          </span>
+        )}
         {step.finishReason && (
           <span className="rounded bg-tile px-1.5 py-0.5 text-[11px] text-ink-soft">
             {step.finishReason}

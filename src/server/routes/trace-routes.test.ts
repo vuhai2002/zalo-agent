@@ -47,6 +47,7 @@ function taoLuotCoTrace(): number {
   traceStore.saveTurnTrace(turnId, [
     {
       stepNumber: 1,
+      attempt: 1,
       text: "",
       reasoning: "Cần tra web trước",
       toolCalls: [{ name: "web_search", input: '{"q":"giá vàng"}' }],
@@ -59,6 +60,7 @@ function taoLuotCoTrace(): number {
     },
     {
       stepNumber: 2,
+      attempt: 1,
       text: "Giá vàng hôm nay là...",
       reasoning: "",
       toolCalls: [],

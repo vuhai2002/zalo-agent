@@ -29,6 +29,7 @@ beforeEach(() => {
 function buoc(n: number, extra: Partial<StepTrace> = {}): StepTrace {
   return {
     stepNumber: n,
+    attempt: 1,
     text: `noi gi do ${n}`,
     reasoning: "",
     toolCalls: [],
@@ -190,6 +191,37 @@ describe("dọn trace cũ - trace phình nhanh hơn mọi bảng khác", () => {
  * Lỗi tool phải sống sót qua vòng ghi-đọc DB. Cột `tool_errors` thêm bằng ALTER
  * nên dòng ghi trước khi có cột đọc ra chuỗi mặc định '[]', không phải NULL.
  */
+describe("saveTurnTrace - lần chạy lại", () => {
+  it("giữ đúng attempt và xếp lần 1 trước lần 2, không trộn theo step_number", () => {
+    const turnId = ghiLuot("t-retry", 2);
+    // Lượt có retry: mỗi lần chạy đánh số step lại từ 1
+    store.saveTurnTrace(turnId, [
+      buoc(1, { attempt: 1 }),
+      buoc(2, { attempt: 1 }),
+      buoc(1, { attempt: 2 }),
+    ]);
+
+    const doc = store.getTurnTrace(turnId);
+    assert.deepEqual(
+      doc.map((s) => [s.attempt, s.stepNumber]),
+      [
+        [1, 1],
+        [1, 2],
+        [2, 1],
+      ],
+      "xếp theo step_number đơn thuần sẽ ra 1,1,2 - đọc như model lặp",
+    );
+  });
+
+  it("dòng ghi trước khi có cột attempt đọc ra 1, không phải undefined", () => {
+    const turnId = ghiLuot("t-cu", 1);
+    database.db
+      .prepare("INSERT INTO agent_steps (turn_id, step_number, text) VALUES (?, 1, 'cu')")
+      .run(turnId);
+    assert.equal(store.getTurnTrace(turnId)[0]!.attempt, 1);
+  });
+});
+
 describe("saveTurnTrace - lỗi tool", () => {
   it("ghi và đọc lại được lỗi tool", () => {
     const turnId = ghiLuot("thread-loi", 1);

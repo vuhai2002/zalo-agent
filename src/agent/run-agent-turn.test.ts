@@ -168,6 +168,19 @@ describe("runAgentTurn - router trả completion rỗng", () => {
     const { trace } = await chayLuot([rong, () => traLoi("ok")]);
     assert.equal(trace.length, 2);
   });
+
+  it("hai lần chạy đánh dấu attempt khác nhau, không trộn thành model-đang-lặp", async () => {
+    const { trace } = await chayLuot([rong, () => traLoi("ok")]);
+    // Cả hai đều là step 1 vì mỗi lần chạy đánh số lại từ đầu - attempt là thứ
+    // DUY NHẤT phân biệt được, không có nó thì đọc ra "step 1, step 1"
+    assert.deepEqual(
+      trace.map((t) => [t.attempt, t.stepNumber]),
+      [
+        [1, 1],
+        [2, 1],
+      ],
+    );
+  });
 });
 
 describe("runAgentTurn - chạm trần step", () => {
@@ -187,6 +200,15 @@ describe("runAgentTurn - chạm trần step", () => {
       "lượt chốt KHÔNG được cấp tool - còn tool thì model lại gọi tiếp và rơi vào đúng cái bẫy vừa thoát",
     );
     assert.equal(ket.text, "Chốt lại: hôm nay thứ tư.");
+  });
+
+  it("lượt chốt vào trace như một lần chạy riêng", async () => {
+    const { trace } = await chayLuot([goiTool, goiTool, () => traLoi("chốt")]);
+    assert.deepEqual(
+      trace.map((t) => t.attempt),
+      [1, 1, 2],
+      "hai step đầu là lần 1, lượt chốt là lần riêng",
+    );
   });
 
   it("lượt chốt cũng lỗi thì vẫn trả lời được, không ném ra ngoài", async () => {

@@ -153,6 +153,11 @@ function runMigrations(): void {
   // toolResults, nên trước cột này mọi lần tool hỏng đều mất tăm khỏi trace.
   addColumnIfMissing("agent_steps", "tool_errors", "TEXT NOT NULL DEFAULT '[]'");
 
+  // Lần chạy thứ mấy trong cùng lượt. Không có cột này thì trace của lượt có
+  // retry đọc ra 1,1,2,2,3,3 và trông y hệt model lặp vô hạn. Mặc định 1 để
+  // mọi dòng ghi trước đây vẫn hợp lệ.
+  addColumnIfMissing("agent_steps", "attempt", "INTEGER NOT NULL DEFAULT 1");
+
   // Mức suy nghĩ riêng cho từng agent (NULL = theo mức mặc định chung)
   addColumnIfMissing("agents", "reasoning_effort", "TEXT");
 

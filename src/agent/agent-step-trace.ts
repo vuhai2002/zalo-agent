@@ -41,6 +41,13 @@ export type RawStep = {
 
 export type StepTrace = {
   stepNumber: number;
+  /**
+   * Lần chạy thứ mấy TRONG CÙNG lượt. Lượt retry (router trả rỗng) hay lượt
+   * dựng lại không kèm pixel đều đánh số step lại từ 1, nên trace của một lượt
+   * có thể là 1,2,3 rồi 1,2,3 - xếp theo step_number đọc ra 1,1,2,2,3,3 và
+   * trông y hệt model đang lặp vô hạn. Cột này phân biệt hai lần chạy.
+   */
+  attempt: number;
   text: string;
   reasoning: string;
   toolCalls: { name: string; input: string }[];
@@ -96,8 +103,9 @@ function warningThanhChuoi(w: unknown): string {
   return thanhChuoi(w);
 }
 
-export function summarizeStep(step: RawStep, maxChars: number): StepTrace {
+export function summarizeStep(step: RawStep, maxChars: number, attempt = 1): StepTrace {
   return {
+    attempt,
     // AI SDK đánh số từ 0; đổi sang đếm-từ-1 NGAY TẠI ĐÂY để log, DB và giao
     // diện cùng một con số. Đổi ở riêng giao diện thì đọc log lại lệch một đơn vị.
     stepNumber: (step.stepNumber ?? 0) + 1,

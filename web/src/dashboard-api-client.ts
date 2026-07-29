@@ -379,6 +379,12 @@ export type TraceTurnAcrossThreads = TraceTurn & {
 /** Một step trong lượt agent: model nói gì, gọi tool nào với tham số gì */
 export type TraceStep = {
   stepNumber: number;
+  /**
+   * Lần chạy thứ mấy trong cùng lượt. > 1 nghĩa là bot đã phải chạy lại (router
+   * trả rỗng, hoặc dựng lại input không kèm ảnh) - step đánh số lại từ 1 nên
+   * không có trường này thì trace đọc ra 1,1,2,2,3,3 trông như model lặp.
+   */
+  attempt: number;
   text: string;
   /** Rỗng với model không phơi chuỗi suy nghĩ (OpenAI); có với DeepSeek */
   reasoning: string;

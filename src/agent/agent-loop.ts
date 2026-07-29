@@ -160,6 +160,10 @@ export async function runAgentTurn({
   // `trace` do caller truyền vào và dùng chung cho MỌI lần chạy trong lượt: lượt
   // retry (glitch router) và lượt dựng lại không kèm pixel đều nối tiếp vào đó -
   // đúng lúc hỏng mới cần nhìn đủ cả hai lần chạy.
+  //
+  // Mỗi lần chạy đánh số step lại từ 1, nên phải ghi kèm LẦN CHẠY: không có nó
+  // thì trace xếp ra 1,1,2,2,3,3 và đọc y hệt model đang lặp vô hạn.
+  let lanChay = 1;
   const runOnce = () =>
     generateText({
       model: resolveModel(agent, {
@@ -218,7 +222,7 @@ export async function runAgentTurn({
         }
 
         if (!getTuning("AGENT_TRACE_ENABLED")) return;
-        const t = summarizeStep(step, getTuning("AGENT_TRACE_MAX_CHARS"));
+        const t = summarizeStep(step, getTuning("AGENT_TRACE_MAX_CHARS"), lanChay);
         trace.push(t);
         // Mức DEBUG vì đây là dữ liệu chẩn đoán, bật khi cần chứ không đổ vào
         // log thường. Ghi cả TOOL CALL (model gửi gì) chứ không chỉ kết quả,
@@ -226,6 +230,7 @@ export async function runAgentTurn({
         log.debug(
           {
             step: t.stepNumber,
+            attempt: t.attempt,
             finishReason: t.finishReason,
             text: t.text,
             // Rỗng với model OpenAI (không phơi chuỗi suy nghĩ), có nội dung
@@ -264,7 +269,9 @@ export async function runAgentTurn({
       maxRetries: 1,
       timeout: { totalMs: getTuning("LLM_TURN_TIMEOUT_MS") },
     });
-    if (getTuning("AGENT_TRACE_ENABLED")) trace.push(summarizeStep(r.steps[0] ?? {}, getTuning("AGENT_TRACE_MAX_CHARS")));
+    if (getTuning("AGENT_TRACE_ENABLED")) {
+      trace.push(summarizeStep(r.steps[0] ?? {}, getTuning("AGENT_TRACE_MAX_CHARS"), lanChay + 1));
+    }
     return r.text;
   };
 
@@ -302,6 +309,7 @@ export async function runAgentTurn({
     });
     messages = rebuilt.messages;
     imageMode = rebuilt.imageMode;
+    lanChay++;
     result = await runOnce();
   }
 
@@ -309,6 +317,7 @@ export async function runAgentTurn({
   // SDK không retry vì response "thành công" - phải tự thử lại 1 lần.
   if (isGlitch(result)) {
     log.warn("Router trả completion rỗng (0 token) - thử lại 1 lần");
+    lanChay++;
     result = await runOnce();
   }
 
