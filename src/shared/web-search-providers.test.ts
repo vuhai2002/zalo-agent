@@ -53,17 +53,6 @@ describe("parseDdgHtml + unwrapDdgRedirect", () => {
   });
 });
 
-describe("stripHtmlTags", () => {
-  it("bỏ thẻ, giải entity số (giữ dấu tiếng Việt), gộp khoảng trắng", () => {
-    // &#225; = á, &#224; = à - entity số hay gặp trong kết quả DDG tiếng Việt
-    assert.equal(
-      providers.stripHtmlTags("<b>Gi&#225;\n  v&#224;ng</b> h&#244;m nay &amp; mai"),
-      "Giá vàng hôm nay & mai",
-    );
-    assert.equal(providers.stripHtmlTags("&quot;t&#7889;t&quot; &#39;ok&#39;"), "\"tốt\" 'ok'");
-  });
-});
-
 describe("searchWeb - chuỗi provider", () => {
   it("không có key Brave: đi thẳng DuckDuckGo bằng POST form (GET bị challenge)", async () => {
     const calls: { url: string; method?: string; body?: string }[] = [];

@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { extractHtmlTitle, htmlToReadableText } from "./html-to-text.js";
+import { extractHtmlTitle, htmlToReadableText, stripHtmlTags } from "./html-to-text.js";
+
+// Module thuần (chỉ kéo theo html-entities) nên import tĩnh được, không cần
+// setupTestEnv. Giữ được điều đó là lý do stripHtmlTags nằm ở đây chứ không ở
+// web-search-providers.ts.
+
+describe("stripHtmlTags", () => {
+  it("bỏ thẻ, giải entity số (giữ dấu tiếng Việt), gộp khoảng trắng", () => {
+    // &#225; = á, &#224; = à - entity số hay gặp trong kết quả DDG tiếng Việt
+    assert.equal(
+      stripHtmlTags("<b>Gi&#225;\n  v&#224;ng</b> h&#244;m nay &amp; mai"),
+      "Giá vàng hôm nay & mai",
+    );
+    assert.equal(stripHtmlTags("&quot;t&#7889;t&quot; &#39;ok&#39;"), "\"tốt\" 'ok'");
+  });
+});
 
 describe("htmlToReadableText", () => {
   it("bỏ script/style/nav, giữ nội dung chính theo dòng", () => {

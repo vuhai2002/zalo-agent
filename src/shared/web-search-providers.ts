@@ -1,4 +1,4 @@
-import { decodeHtmlEntities } from "./html-entities.js";
+import { stripHtmlTags } from "./html-to-text.js";
 import { createLogger } from "./logger.js";
 
 /**
@@ -26,13 +26,6 @@ export type SearchOptions = {
   braveApiKey?: string;
   fetchFn?: typeof fetch;
 };
-
-/** Bóc thẻ HTML + giải mã entity (số lẫn tên - xem html-entities.ts) */
-export function stripHtmlTags(html: string): string {
-  return decodeHtmlEntities(html.replace(/<[^>]+>/g, ""))
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 /**
  * DDG bọc link kết quả qua trang redirect: /l/?uddg=<url-encoded>&rut=...

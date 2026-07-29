@@ -1,4 +1,4 @@
-import { stripHtmlTags } from "./web-search-providers.js";
+import { decodeHtmlEntities } from "./html-entities.js";
 
 /**
  * Rút text đọc được từ HTML cho tool web_fetch - không thêm dependency
@@ -20,6 +20,20 @@ import { stripHtmlTags } from "./web-search-providers.js";
  */
 const NON_CONTENT_BLOCKS =
   /<(script|style|noscript|svg|header|head|nav|footer|aside|form|select|iframe|template)\b[\s\S]*?<\/\1\s*>/gi;
+
+/**
+ * Bóc thẻ HTML + giải mã entity (số lẫn tên - xem html-entities.ts).
+ *
+ * Ở đây chứ không ở `web-search-providers.ts` như trước: đây là module "HTML ->
+ * chữ", còn bên kia là module gọi mạng và có logger. Nhập ngược chiều khiến
+ * `html-to-text` (vốn thuần) kéo theo cả logger, và logger đọc `DATA_DIR` lúc
+ * nạp module - đủ để test của file thuần này đẻ ra file log trong `data/` thật.
+ */
+export function stripHtmlTags(html: string): string {
+  return decodeHtmlEntities(html.replace(/<[^>]+>/g, ""))
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 /** Tỉ lệ text-trong-link tối thiểu để coi 1 list là menu điều hướng */
 const MENU_LINK_DENSITY = 0.7;

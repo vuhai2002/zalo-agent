@@ -1,8 +1,29 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { after, before, describe, it } from "node:test";
 import { ThreadType, type API } from "zca-js";
-import { sendDeliveredReceipt, sendSeenReceipt } from "./message-receipts.js";
+import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import type { ParsedMessage } from "./zalo-message-parser.js";
+
+/**
+ * Import ĐỘNG sau setupTestEnv: module này tạo logger, mà logger đọc
+ * `DATA_DIR` lúc nạp module. Import tĩnh thì logger dựng trước khi env test kịp
+ * có hiệu lực, và pino-roll ghi thẳng vào `data/logs/` của bot đang chạy thật -
+ * đã đo được 946 byte log test lọt vào file production.
+ */
+let receipts: typeof import("./message-receipts.js");
+let dataDir: string;
+
+before(async () => {
+  dataDir = setupTestEnv();
+  receipts = await import("./message-receipts.js");
+});
+
+after(async () => {
+  // Module chạm cấu hình chỉnh-nóng nên mở SQLite; không đóng thì Windows
+  // chặn xóa thư mục tạm (EPERM)
+  (await import("../conversation/database.js")).closeDatabase();
+  cleanupTestEnv(dataDir);
+});
 
 /** Chờ microtask - hai hàm receipt là fire-and-forget, không await được */
 const flush = () => new Promise<void>((r) => setImmediate(r));
@@ -61,7 +82,7 @@ function message(overrides: Partial<ParsedMessage> = {}, raw: Record<string, unk
 describe("sendDeliveredReceipt", () => {
   it("dựng đủ 9 field từ payload gốc, isSeen=false", async () => {
     const { api, delivered } = stubApi();
-    sendDeliveredReceipt(api, message());
+    receipts.sendDeliveredReceipt(api, message());
     await flush();
 
     assert.equal(delivered.length, 1);
@@ -84,16 +105,16 @@ describe("sendDeliveredReceipt", () => {
 
   it("thiếu field bắt buộc thì bỏ qua, không gọi API", async () => {
     const { api, delivered } = stubApi();
-    sendDeliveredReceipt(api, message({}, { msgId: "" }));
-    sendDeliveredReceipt(api, message({}, { uidFrom: "" }));
-    sendDeliveredReceipt(api, message({}, { idTo: "" }));
+    receipts.sendDeliveredReceipt(api, message({}, { msgId: "" }));
+    receipts.sendDeliveredReceipt(api, message({}, { uidFrom: "" }));
+    receipts.sendDeliveredReceipt(api, message({}, { idTo: "" }));
     await flush();
     assert.equal(delivered.length, 0);
   });
 
   it("API lỗi không làm vỡ luồng trả lời", async () => {
     const { api } = stubApi(true);
-    sendDeliveredReceipt(api, message());
+    receipts.sendDeliveredReceipt(api, message());
     await flush();
     // Không có unhandled rejection là đạt
   });
@@ -108,7 +129,7 @@ describe("sendSeenReceipt", () => {
         { msgId, idTo: "group-7" },
       );
 
-    sendSeenReceipt(api, [groupMsg("m1"), groupMsg("m2")]);
+    receipts.sendSeenReceipt(api, [groupMsg("m1"), groupMsg("m2")]);
     await flush();
 
     assert.equal(seen.length, 1);
@@ -118,7 +139,7 @@ describe("sendSeenReceipt", () => {
 
   it("loại tin khác thread - zca-js bắt buộc cùng 1 thread mỗi lần gọi", async () => {
     const { api, seen } = stubApi();
-    sendSeenReceipt(api, [message(), message({ threadId: "thread-khac" })]);
+    receipts.sendSeenReceipt(api, [message(), message({ threadId: "thread-khac" })]);
     await flush();
 
     assert.equal(seen[0]!.messages.length, 1);
@@ -126,7 +147,7 @@ describe("sendSeenReceipt", () => {
 
   it("batch rỗng thì không gọi API", async () => {
     const { api, seen } = stubApi();
-    sendSeenReceipt(api, []);
+    receipts.sendSeenReceipt(api, []);
     await flush();
     assert.equal(seen.length, 0);
   });
