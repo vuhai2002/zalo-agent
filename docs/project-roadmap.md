@@ -1278,20 +1278,13 @@ Kết quả: 610/610 test xanh, typecheck sạch, migration kiểm trên bản s
 
 **Còn treo (đã báo, chưa làm):**
 
-- [ ] Lượt NÉM LỖI mất sạch trace: `saveTurnTrace` chỉ nằm trên đường thành công,
-  nên lượt chạy tốt 5 step rồi step 6 gặp 500 thì mất cả 5 step chẩn đoán được,
-  và lượt đó không tồn tại trên trang Trace lẫn thống kê token dù đã đốt token thật
-- [ ] Không có correlation id: log có `threadId` + `step` nhưng không có `turnId`
-  (id chỉ sinh ra SAU khi lượt xong), phải mò theo timestamp
+- [x] Lượt NÉM LỖI mất sạch trace -> làm ở mục dưới
+- [x] Không có correlation id -> làm ở mục dưới
 - [ ] Retry ghi chung `turn_id` nên số step trộn 1,1,2,2,3,3 - đọc ra tưởng model loop
-- [ ] `runAgentTurn` không có test nào: retry, fallback ảnh, tích lũy trace,
-  nhánh text rỗng đều không được test dòng nào
-- [ ] `pnpm test` ghi rác vào log production: 17/64 file test không gọi
-  `setupTestEnv`, file nào chạm logger sẽ ghi thẳng vào `data/logs/`
-- [ ] Persona nền vẫn dạy luật của tool ĐÃ TẮT (~1158 ký tự mỗi lượt), mâu thuẫn
-  với mục "Khả năng" vốn ẩn đúng tool bị tắt
-- [ ] `cachedTokens` luôn 0 KHÔNG chứng minh cache hỏng: executor `cx/` của
-  9Router không trích usage. Comment trong `agent-loop.ts` đang suy luận sai
+- [x] `runAgentTurn` không có test nào -> làm ở mục dưới
+- [x] `pnpm test` ghi rác vào log production -> làm ở mục dưới
+- [x] Persona nền vẫn dạy luật của tool ĐÃ TẮT -> làm ở mục dưới
+- [x] `cachedTokens` -> đã đọc lại source, chính ghi chép này SAI (xem mục dưới)
 
 ### Đưa cấu hình từ .env lên dashboard (2026-07-29)
 
@@ -1349,3 +1342,211 @@ Rà 29 tham số: tất cả đều đọc LẠI mỗi lần dùng (trong hàm h
 - Gửi tin hàng loạt / campaign CRM: tỉ lệ khóa nick cao nhất
 - Tool chuyển tiền/thanh toán nối vào agent: rủi ro prompt injection
 - Kênh Facebook (fbchat-v2): chờ Zalo ổn định đã
+
+### Dọn 5 mục treo về quan sát và test (2026-07-29)
+
+User yêu cầu kiểm chứng lại 5 mục treo bằng CODE thay vì tin ghi chép. Kiểm xong
+thì cả 5 đều đúng là chưa làm, nhưng **hai mục có số liệu sai** trong chính tài
+liệu này - đủ để thấy ghi chép không thay được lần đọc code:
+
+- Mục log rác ghi "17/64 file". Số thật: 19/68 file thiếu `setupTestEnv`, nhưng
+  chạy riêng từng file thì chỉ **2 file** thật sự chạm tới `data/logs/`. Bộ dò
+  tĩnh đếm nhầm vì không phân biệt `import type` (bị xóa lúc chạy) - chính tôi
+  cũng dính bẫy đó ở vòng đầu và phải đo lại bằng cách chạy thật.
+- Mục trace lượt lỗi thiếu một nửa hậu quả: `recordAgentTurn` cũng nằm trên
+  đường thành công, nên lượt hỏng mất CẢ dòng `agent_turns` lẫn số token.
+
+**1. Lượt agent mở trước, chốt sau (`openAgentTurn`/`finishAgentTurn`)**
+
+Đổi từ "ghi row sau khi lượt xong" sang "mở row trước khi lượt chạy". Một thay
+đổi gỡ luôn hai mục treo: có id từ trước thì nhánh lỗi có chỗ gắn trace, và mọi
+dòng log mang được `turnId`.
+
+Đo trên bản sao DB thật trước khi làm (chép cả `-wal`):
+- Schema nhận `INSERT` chỉ 2 cột - mọi cột số có `DEFAULT 0`
+- Lượt lỗi giờ hiện trên trang Trace: `turn 66 | 0 token | 2 step`
+- Row mồ côi (process bị kill giữa lượt) KHÔNG lên trang Trace - `recentAllStmt`
+  vốn đã `JOIN agent_steps` chứ không `LEFT JOIN`, hàng phòng thủ có sẵn từ trước
+- Giá: 2.1ms INSERT + 1.9ms UPDATE cho một lượt dài hàng chục giây
+- Chỗ lệch duy nhất: Overview đếm row mồ côi thành 1 lượt 0 token. Chấp nhận -
+  DB thật đang có sẵn 4 row 0-token không trace (lượt glitch cũ) và không ai vướng
+
+- [x] `trace` do CALLER sở hữu, truyền vào `runAgentTurn` thay vì trả về. Trước
+  đây nó là biến cục bộ nên throw là rơi theo stack; giờ nhánh `catch` còn đủ
+  những step đã chạy
+- [x] `log.child({ accountId, threadId, turnId })` ở cả `agent-loop` lẫn
+  `message-turn-processor` - gắn một lần thay vì chép tay vào từng lời gọi
+  (chép tay là sớm muộn cũng có dòng thiếu, mà dòng thiếu hay rơi đúng nhánh lỗi)
+
+**2. Test cho `runAgentTurn` (10 test mới)**
+
+Thêm seam `resolveModel` để tiêm model giả - đúng nếp đã có với
+`persistBatchImages` (tiêm downloader) và `web-search-providers` (tiêm fetch).
+
+Phủ: lượt thường, retry khi router trả rỗng, rỗng 2 lần, trace nối qua cả 2 lần
+chạy, chạm trần step (khẳng định lượt chốt KHÔNG được cấp tool), lượt chốt cũng
+lỗi, 4xx với lượt đính pixel thì dựng lại input không pixel, 401 KHÔNG kích hoạt
+bỏ pixel, và lượt ném lỗi vẫn giữ trace.
+
+Hai thứ chỉ lộ ra khi viết test:
+- `usage` của `LanguageModelV4` là cấu trúc LỒNG (`inputTokens.total`), không
+  phải ba số phẳng như `result.totalUsage`. Dựng sai tầng thì mọi số về 0 và lượt
+  hợp lệ bị chấm nhầm là glitch router
+- Không import được `@ai-sdk/provider` để lấy kiểu (pnpm layout chặt, nó không
+  phải dependency trực tiếp) - suy kiểu từ chính mock bằng `Parameters<...>`
+
+**3. Test không còn ghi vào `data/logs/` production**
+
+Bằng chứng trước khi sửa: chuỗi fixture `"mạng rớt"` của `message-receipts.test.ts`
+nằm 30 dòng trong log thật (19 dòng hôm 28/07, 11 dòng hôm 29/07).
+
+- [x] `message-receipts.test.ts`: import động sau `setupTestEnv`
+- [x] `html-to-text.test.ts`: sửa GỐC thay vì thêm `setupTestEnv`. Nó tạo file
+  log vì đi mượn `stripHtmlTags` từ `web-search-providers.ts` (module gọi mạng,
+  có logger) - cạnh phụ thuộc ngược chiều. Chuyển hàm về `html-to-text.ts` (đúng
+  nhà: đây LÀ module "HTML -> chữ"), giờ nó thuần và import tĩnh được
+- [x] Kiểm lại bằng cách chạy RIÊNG từng file trong 19 file thiếu `setupTestEnv`:
+  không file nào còn tạo file log
+
+**4. Luật tool chỉ vào prompt khi tool đang bật**
+
+Theo `hermes-agent/agent/system_prompt.py` ("Tool-aware behavioral guidance: only
+inject when the tools are loaded"): chữ luật để ở module prompt riêng
+(`persona-tool-rules.ts`), gate bằng tên tool lúc ghép. KHÔNG gắn vào
+`tool-registry.ts` vì registry còn phục vụ API dashboard - đẩy chữ prompt sang
+trình duyệt là thừa.
+
+Đo bằng chính `buildSystemPrompt`, trên BẢN SAO cấu hình thật (không phải env
+test - khác biệt quan trọng vì env test chưa cấu hình endpoint vẽ ảnh nên
+`create_image` bị `available()` loại, cho ra số đẹp hơn thực tế):
+
+**3186 ký tự** trong `BASE_PERSONA` chuyển từ luôn-có-mặt sang có-điều-kiện
+(4951 -> 1765). Phần đó vào prompt hay không giờ tùy tool nào đang bật:
+
+| Trạng thái tool | Prompt |
+|---|---|
+| Bật đủ 12/12 (trạng thái hiện tại của `acc-chinh`) | 6600 - KHÔNG đổi |
+| Tắt Vẽ ảnh AI | 5566 (bớt 1034 mỗi lượt) |
+| Tắt 2 tool tạo file | 6149 (bớt 451) |
+| Tắt hết tool | 2204 (bớt 3186 + phần "Khả năng") |
+
+Nói thẳng: máy đang bật đủ 12 tool nên hôm nay KHÔNG tiết kiệm được token nào -
+đây là sửa tính đúng đắn (prompt không còn dạy thứ model không nhận được) chứ
+chưa phải khoản lời. Lợi ích hiện ra ngay khi tắt bất kỳ tool nào, hoặc chạy
+account chưa cấu hình endpoint vẽ ảnh / sidecar đọc ảnh.
+
+- [x] Một lần lọc `listAvailableTools` dùng cho CẢ mục "Khả năng" lẫn khối luật -
+  hai nơi tự lọc riêng là sớm muộn cũng lệch
+- [x] Test đối chiếu mọi key trong luật với registry: đổi tên tool mà quên sửa
+  thì đỏ ngay, không âm thầm mất luật
+- [x] Đường gọi không có account giờ fail-closed (không dạy luật tool nào) -
+  không biết tool nào bật thì đừng đoán. Production luôn truyền account
+- [x] Luật KHÔNG phụ thuộc tool (cấm chuyển tiền, ranh giới `<noi_dung_ngoai>`,
+  nhãn `[chưa xác minh]`, không markdown) còn nguyên kể cả khi tắt sạch tool
+
+Kết quả: 656/656 test xanh (thêm 20), typecheck sạch.
+
+**Nghiệm thu trên Zalo thật (2026-07-29 22:38, lượt 65)**
+
+User nhắn một câu cần tra cứu. Lượt chạy 3 step, 61.123 token, 28 giây:
+
+- [x] `turnId=65` bám suốt từ dòng "Xử lý lượt tin nhắn" (scope `message-turn`)
+  qua cả 10 dòng của `agent-loop` tới "Hoàn thành lượt agent" - đúng thứ mục
+  correlation id cần
+- [x] `agent_turns` id=65 chốt đúng 61.123 token / 3 step, và 3 dòng `agent_steps`
+  khớp từng step (get_datetime+web_search x2 -> web_fetch x3 -> stop)
+- [x] Trang Trace hiện "29/07 22:38 - 3 step - 61.123 token" ngay đầu danh sách
+
+Hai thứ phát hiện khi nghiệm thu, chưa xử lý:
+
+- [ ] **Log của TOOL chưa mang `turnId`**: đo trong lượt 65 thì 11 dòng có
+  (`message-turn` 1, `agent-loop` 10) và 3 dòng KHÔNG (`web-fetch`). Các module
+  tool tự tạo logger riêng (`web-fetch-tool`, `create-image-tool`,
+  `create-document-tools`, `web-search-providers`, `jina-reader-fallback`) nên
+  không nhận child logger của lượt. Muốn phủ nốt phải luồn `turnId` qua
+  `ToolContext` xuống từng tool
+- [ ] **`created_at` đổi nghĩa**: giờ là lúc lượt BẮT ĐẦU (mở row) chứ không còn
+  là lúc lượt xong. Lượt 65 ghi 22:38:01 trong khi kết thúc 22:38:29. Không ảnh
+  hưởng trang Trace (vẫn cùng phút) nhưng lượt vắt qua nửa đêm sẽ được
+  `getDailyUsage` xếp vào ngày BẮT ĐẦU thay vì ngày kết thúc
+
+- [ ] Chưa nghiệm thu nhánh LƯỢT LỖI trên Zalo thật (cần provider chết giữa lượt
+  mới dựng được) - hiện chỉ có test bằng model giả
+
+### Dọn nốt ba mục treo còn lại (2026-07-29)
+
+**1. `turnId` bám cả log của TOOL, không chỉ agent-loop**
+
+Nghiệm thu lượt 65 lộ ra lỗ: 11 dòng có `turnId`, 3 dòng không - chúng đến từ
+`web-fetch-tool` vốn tự tạo logger riêng. Child logger chỉ phủ được module nào
+cầm đúng cái logger đó, mà còn 5 module như vậy và mỗi tool mới thêm sau lại là
+một chỗ nữa dễ quên.
+
+Cách còn lại là luồn `turnId` qua chữ ký hàm xuống từng module, nhưng
+`searchWeb(query, opts)` và `fetchViaJina(url)` không có việc gì với "lượt" -
+thêm tham số vào đó là bôi bẩn API để phục vụ chuyện log.
+
+- [x] `shared/turn-log-context.ts`: AsyncLocalStorage giữ
+  `{accountId, threadId, turnId}`, sống sót qua await
+- [x] `logger.ts` đọc nó trong `mixin` -> MỌI dòng log trong lượt tự có, không
+  module nào phải biết gì
+- [x] Bỏ luôn child logger vừa thêm ở `agent-loop` và `message-turn-processor` -
+  mixin làm rồi, giữ cả hai là hai cơ chế cho cùng một việc
+- [x] Bỏ `turnId` khỏi `AgentTurnParams`: agent-loop không còn cần nó
+- [x] Test: ngữ cảnh sống qua nhiều tầng await, hai lượt chạy xen kẽ KHÔNG lẫn
+  id của nhau (ca mà biến module sẽ sai), lỗi ném ra không để sót ngữ cảnh
+
+**Lỗi tự gây ra trong lúc làm mục này, lọt ra tận lượt thật (66)**
+
+Bản đầu để `mixin: () => currentTurnLogContext() ?? {}` - trả THẲNG object trong
+AsyncLocalStorage. Nghiệm thu lượt 66 thấy dòng `web-fetch` mang 28 trường, gồm
+cả `text`, `reasoning`, `toolResults` của những dòng trước đó trong lượt.
+
+Gốc: `defaultMixinMergeStrategy` của pino (`lib/proto.js:203`) làm
+`Object.assign(mixinObject, mergeObject)` - nó ghi đè vào chính object mixin trả
+về. Trả object dùng chung thì mỗi lần log lại nhét trường của nó vào đó vĩnh viễn,
+tích lũy suốt lượt.
+
+Hai tác hại, cái sau nặng hơn: log phình rác, và nội dung tin nhắn của người thật
+rò sang những dòng chẳng liên quan - trong khi `readRecentLogs` chỉ đọc 4MB cuối
+nên dòng phình ăn mất cửa sổ đọc của cả ngày (đúng lỗi đã trị ở mục
+`safe-error-serializer`, tái diễn theo đường khác).
+
+- [x] Vá bằng `mixin: () => ({ ...currentTurnLogContext() })`
+- [x] `logger-turn-fields.test.ts` - file test DUY NHẤT bật ghi log ra file, vì
+  chính dòng ghi ra file mới là thứ cần kiểm. Đã xác nhận test bắt được lỗi:
+  2/2 ĐỎ khi gỡ bản vá, 2/2 XANH khi có
+
+**2. Cột `attempt` - số step không còn trộn khi chạy lại**
+
+Lượt retry (router trả rỗng) hay lượt dựng lại không kèm pixel đều đánh số step
+lại từ 1, nên trace một lượt ra 1,2,3 rồi 1,2,3 - xếp theo `step_number` đọc
+thành 1,1,2,2,3,3, trông y hệt model đang lặp vô hạn.
+
+- [x] `agent_steps.attempt` (ALTER, mặc định 1 nên dòng cũ vẫn hợp lệ),
+  `summarizeStep(step, maxChars, attempt)`, sắp xếp theo `attempt` trước
+- [x] Lượt CHỐT (khi chạm trần step) tính là một lần chạy riêng
+- [x] Badge "chạy lại lần N" trên `trace-step-card`, chỉ hiện khi attempt > 1 -
+  dán "lần 1" lên mọi step chỉ làm nhiễu
+
+**3. Nhận định về `cachedTokens` trong ghi chép này SAI**
+
+Mục treo cũ viết: "executor `cx/` của 9Router không trích usage. Comment trong
+`agent-loop.ts` đang suy luận sai". Đọc lại source thì **ngược lại**:
+`translator/response/openai-responses.js:472` CÓ đọc
+`input_tokens_details.cached_tokens` rồi truyền vào `buildUsage`.
+
+Chỗ nhầm là lấy kết luận đúng về `reasoningTokens` (dòng 474 gọi `buildUsage`
+mà KHÔNG truyền `reasoningTokens` - vẫn đúng) rồi suy rộng sang cache.
+
+Sự thật nằm ở `translator/concerns/usage.js:5`: `buildUsage` chỉ thêm
+`prompt_tokens_details` khi giá trị **> 0**. Nên "upstream báo 0 lần trúng" và
+"upstream không báo trường này" về tới client giống hệt nhau.
+
+- [x] Comment trong `agent-loop.ts` viết lại cho đúng: `> 0` là bằng chứng chắc
+  chắn cache trúng; `= 0` KHÔNG kết luận được gì, phải soi dashboard 9Router
+
+Bài học: một kết luận đã kiểm chứng cho trường A không tự động đúng cho trường B
+ở cùng dòng code. Lượt 65 thật đo được `cachedTokens: 0` trên 60.340 token input -
+theo nhận định cũ thì "router không trích nên bỏ qua", theo sự thật thì đây là
+tín hiệu đáng đi kiểm tra prompt cache có trúng không.

@@ -164,6 +164,7 @@ export async function runAgentTurn({
   // Mỗi lần chạy đánh số step lại từ 1, nên phải ghi kèm LẦN CHẠY: không có nó
   // thì trace xếp ra 1,1,2,2,3,3 và đọc y hệt model đang lặp vô hạn.
   let lanChay = 1;
+
   const runOnce = () =>
     generateText({
       model: resolveModel(agent, {
@@ -335,9 +336,13 @@ export async function runAgentTurn({
       // Model THẬT đã trả lời (router có thể âm thầm route sang model khác)
       model: result.response.modelId,
       reasoningEffort: resolveReasoningEffort(agent),
-      // > 0 nghĩa là prompt cache đang trúng. Bằng 0 liên tục ở lượt nhiều
-      // step = router/upstream không cache - kiểm lại header phiên và
-      // CACHED TOKENS trên dashboard 9Router.
+      // > 0 là bằng chứng CHẮC CHẮN cache đang trúng. Bằng 0 thì KHÔNG kết luận
+      // được gì: đọc source 9Router (`translator/response/openai-responses.js`)
+      // thì nó CÓ đọc `input_tokens_details.cached_tokens` và truyền vào
+      // `buildUsage`, nhưng `buildUsage` (`translator/concerns/usage.js`) chỉ
+      // thêm `prompt_tokens_details` khi giá trị > 0 - nên "upstream báo 0 lần
+      // trúng" và "upstream không báo trường này" về tới client giống hệt nhau.
+      // Muốn biết thật thì soi CACHED TOKENS trên dashboard 9Router.
       cachedTokens: result.totalUsage.inputTokenDetails?.cacheReadTokens ?? 0,
       toolCalls: result.steps.flatMap((step) => step.toolCalls.map((call) => call.toolName)),
       usage: result.totalUsage,
