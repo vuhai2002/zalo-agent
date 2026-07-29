@@ -89,9 +89,17 @@ describe("buildSystemPrompt - danh sách tool đang bật", () => {
     // là gì). OpenAI không phơi chain-of-thought nên lời dẫn TỰ VIẾT này là
     // đường duy nhất - đã đo thật: gpt-5.6-sol chịu viết kèm tool call khi được
     // dặn, và không kể lể ở câu hỏi không cần tool.
-    const text = prompt.buildSystemPrompt(AGENT, MSG);
+    const text = prompt.buildSystemPrompt(AGENT, MSG, undefined, account([]));
     assert.match(text, /tiến trình/);
     assert.match(text, /TRƯỚC mỗi lần gọi tool/);
+  });
+
+  it("không truyền account thì KHÔNG dạy luật tool nào - không biết tool nào bật thì đừng đoán", () => {
+    // Đường gọi cũ (không có account) giờ fail-closed: thà thiếu luật còn hơn
+    // dạy luật của tool model không hề nhận được. Production luôn truyền account.
+    const text = prompt.buildSystemPrompt(AGENT, MSG);
+    assert.doesNotMatch(text, /tiến trình/);
+    assert.doesNotMatch(text, /web_search/);
   });
 
   it("không truyền account thì vẫn dựng được prompt (đường gọi cũ không vỡ)", () => {
