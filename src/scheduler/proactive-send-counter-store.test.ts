@@ -86,6 +86,44 @@ describe("addProactiveSendCount - dọn theo keepSinceDayKey", () => {
   });
 });
 
+describe("tryReserveProactiveSlot - giành 1 suất NGUYÊN TỬ (Mục 4)", () => {
+  it("chưa có dòng nào (max=1) vẫn giành được - nhánh INSERT không qua WHERE", () => {
+    assert.equal(store.tryReserveProactiveSlot(ACC, "t-reserve-moi", "2026-08-01", 1), true);
+    assert.equal(store.getProactiveCounter(ACC, "t-reserve-moi", "2026-08-01").count, 1);
+  });
+
+  it("còn dưới max thì giành được, cộng đúng 1", () => {
+    store.addProactiveSendCount(ACC, "t-reserve-con-cho", "2026-08-01", 2);
+    assert.equal(store.tryReserveProactiveSlot(ACC, "t-reserve-con-cho", "2026-08-01", 3), true);
+    assert.equal(store.getProactiveCounter(ACC, "t-reserve-con-cho", "2026-08-01").count, 3);
+  });
+
+  it("đã bằng max thì KHÔNG giành được, count không đổi", () => {
+    store.addProactiveSendCount(ACC, "t-reserve-day", "2026-08-01", 3);
+    assert.equal(store.tryReserveProactiveSlot(ACC, "t-reserve-day", "2026-08-01", 3), false);
+    assert.equal(store.getProactiveCounter(ACC, "t-reserve-day", "2026-08-01").count, 3, "giành hỏng thì KHÔNG được đụng count");
+  });
+
+  it("khác thread là độc lập - thread A đầy không chặn thread B", () => {
+    store.addProactiveSendCount(ACC, "t-reserve-day-a", "2026-08-01", 3);
+    assert.equal(store.tryReserveProactiveSlot(ACC, "t-reserve-day-a", "2026-08-01", 3), false);
+    assert.equal(store.tryReserveProactiveSlot(ACC, "t-reserve-trong-b", "2026-08-01", 3), true);
+  });
+});
+
+describe("refundProactiveSlot - hoàn 1 suất đã giữ (Mục 4)", () => {
+  it("trừ đúng 1", () => {
+    store.addProactiveSendCount(ACC, "t-refund-tru", "2026-08-01", 5);
+    store.refundProactiveSlot(ACC, "t-refund-tru", "2026-08-01");
+    assert.equal(store.getProactiveCounter(ACC, "t-refund-tru", "2026-08-01").count, 4);
+  });
+
+  it("kẹp sàn 0 - không xuống âm dù chưa có dòng nào", () => {
+    store.refundProactiveSlot(ACC, "t-refund-chua-co-dong", "2026-08-01");
+    assert.equal(store.getProactiveCounter(ACC, "t-refund-chua-co-dong", "2026-08-01").count, 0);
+  });
+});
+
 describe("resetAllProactiveCounters", () => {
   it("xoá sạch mọi dòng của mọi account/thread/ngày", () => {
     store.addProactiveSendCount(ACC, "t-reset-1", "2026-08-01", 3);

@@ -22,7 +22,13 @@ import { getRunningAccountApi } from "../zalo/account-manager.js";
 import type { ReplyTarget } from "../zalo/send-reply-in-parts.js";
 import { openRun } from "./job-run-log-store.js";
 import { ACCOUNT_NOT_RUNNING_REASON } from "./proactive-send-guard.js";
-import { blockedByGuard, concludeBlockedNotRun, conclude, sendAndConclude } from "./scheduled-job-conclude.js";
+import {
+  blockedByGuard,
+  concludeBlockedNotRun,
+  concludeDeliveryFailed,
+  conclude,
+  sendAndConclude,
+} from "./scheduled-job-conclude.js";
 import { buildSyntheticMessage, withLateLabel } from "./scheduled-job-prompt.js";
 import type { ScheduledJob } from "./scheduled-job-store.js";
 import { isSilentResponse } from "./silent-sentinel.js";
@@ -50,7 +56,10 @@ export async function runScheduledJob(job: ScheduledJob, options: RunScheduledJo
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.error({ jobId: job.id, err }, "Lỗi không lường trước khi chạy job lịch hẹn");
-    conclude(job, runId, { status: "error", detail: message });
+    // Lưới đỡ NGOÀI CÙNG - không biết chắc đã gửi được gì chưa lúc lỗi bắn ra
+    // tới đây, coi như "chưa gửi được" (Finding 1): đếm vào delivery_attempts
+    // thay vì markRun ngay, tránh giết job chỉ vì 1 lỗi bất ngờ thoáng qua.
+    concludeDeliveryFailed(job, runId, options.scheduledFor, message);
   }
 }
 
@@ -93,7 +102,7 @@ async function runMessageJob(
   if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor)) return;
 
   const text = options.late ? withLateLabel(job.payload, options.scheduledFor, timeZone) : job.payload;
-  await sendAndConclude(job, target, runId, timeZone, text);
+  await sendAndConclude(job, target, runId, timeZone, text, options.scheduledFor);
 }
 
 /** kind='agent': lượt agent CÔ LẬP (isolated:true) rồi mới xét gửi hay im */
@@ -136,15 +145,21 @@ async function runAgentJob(
       if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor, turnId)) return;
 
       const finalText = options.late ? withLateLabel(text, options.scheduledFor, timeZone) : text;
-      await sendAndConclude(job, target, runId, timeZone, finalText, turnId);
+      await sendAndConclude(job, target, runId, timeZone, finalText, options.scheduledFor, turnId);
     } catch (err) {
       // Lượt ném lỗi (provider chết, timeout...) vẫn phải chốt token đã tốn +
       // lưu trace các step ĐÃ chạy được - đúng nếp message-turn-processor.ts.
       // Khác duy nhất: KHÔNG nhắn "trục trặc kỹ thuật" - job lỗi thì im.
       finishAgentTurn(turnId, { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: trace.length });
       if (trace.length > 0) saveTurnTrace(turnId, trace);
+      // Ca thường gặp: agent-loop ném lỗi TRƯỚC khi kịp tính ra text (chưa hề
+      // chạm blockedByGuard/gửi) - chắc chắn "chưa gửi được" gì, đếm vào
+      // delivery_attempts (Finding 1) thay vì markRun ngay. Ca hiếm (throw từ
+      // chính blockedByGuard/sendAndConclude, vd appendMessage lỗi NGAY SAU
+      // khi gửi thật thành công): coi bảo thủ là "chưa gửi" - thà tính thiếu 1
+      // suất trần còn hơn để lọt 1 job chết oan vì rớt mạng.
       const message = err instanceof Error ? err.message : String(err);
-      conclude(job, runId, { status: "error", turnId, detail: message });
+      concludeDeliveryFailed(job, runId, options.scheduledFor, message, turnId);
     }
   });
 }

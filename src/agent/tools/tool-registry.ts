@@ -30,9 +30,11 @@ export function buildAgentTools(ctx: ToolContext): Record<string, Tool> {
  * để trả lời câu "bạn làm được gì" - hai nơi tự lọc riêng là sớm muộn cũng
  * lệch, và lệch nghĩa là bot hứa một tool mà model không hề nhận được.
  *
- * `context.isolated` mặc định false: `buildSystemPrompt` gọi hàm này KHÔNG
- * truyền cờ (persona giữ nguyên với lượt theo lịch, xem agent-loop.ts), chỉ
- * `buildAgentTools` mới truyền `isolated` thật xuống để lọc SCHEMA tool.
+ * `context.isolated` mặc định false: CẢ `buildAgentTools` LẪN `buildSystemPrompt`
+ * (persona-prompt.ts) đều truyền `isolated` THẬT xuống đây - lượt theo lịch
+ * (isolated:true) phải thấy ĐÚNG danh sách tool đã lọc ở CẢ 2 nơi, không chỉ
+ * ở schema gửi model. Lệch nhau nghĩa là persona hứa 1 tool mà model không hề
+ * nhận được (đúng lỗi persona-prompt.test.ts đang canh bằng bất biến riêng).
  */
 export function listAvailableTools(
   account: Pick<AccountConfig, "disabledTools">,

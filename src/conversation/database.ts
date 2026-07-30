@@ -253,6 +253,12 @@ function runMigrations(): void {
   // đang chat" với "job tự chạy lúc 3 giờ sáng". Mặc định 'message' để mọi
   // lượt ghi TRƯỚC khi có scheduler vẫn đúng nghĩa, không cần backfill.
   addColumnIfMissing("agent_turns", "source", "TEXT NOT NULL DEFAULT 'message'");
+
+  // Đếm số lần THỬ GỬI THẤT BẠI LIÊN TIẾP (delivery-attempt-store.ts) - job
+  // gửi hỏng chỉ bị tiêu suất chạy sau khi chạm MAX_DELIVERY_ATTEMPTS, không
+  // phải ngay lần đầu (bất biến "chưa từng gửi được thì không coi là đã
+  // chạy"). Mặc định 0 để mọi job cũ coi như chưa từng thử hỏng lần nào.
+  addColumnIfMissing("scheduled_jobs", "delivery_attempts", "INTEGER NOT NULL DEFAULT 0");
 }
 
 function addColumnIfMissing(table: string, column: string, definition: string): void {

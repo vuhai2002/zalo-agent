@@ -64,6 +64,45 @@ export function markProactiveCapNoticeSent(accountId: string, threadId: string, 
   markNoticeStmt.run(accountId, threadId, dayKey);
 }
 
+const tryReserveStmt = db.prepare(`
+  INSERT INTO proactive_send_counters (account_id, thread_id, day_key, count)
+  VALUES (?, ?, ?, 1)
+  ON CONFLICT (account_id, thread_id, day_key) DO UPDATE SET
+    count = count + 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE count < ?
+`);
+
+/**
+ * Giành ĐÚNG 1 suất một cách NGUYÊN TỬ - 1 câu UPDATE có điều kiện (`count <
+ * max`), không phải đọc-rồi-ghi 2 bước. Chặn đúng race giữa 2 job CÙNG thread
+ * cùng đến hạn: tách 2 bước thì cả 2 có thể cùng đọc `count` cũ trước khi bên
+ * kia kịp ghi, nhưng SQLite tự khoá đúng 1 câu UPDATE này nên chỉ 1 trong 2
+ * giành được suất cuối cùng.
+ *
+ * Hàng CHƯA TỪNG có (job đầu tiên trong ngày của thread này) luôn giành được
+ * an toàn dù `max` là bao nhiêu: nhánh INSERT chèn thẳng `count=1` (không qua
+ * WHERE - WHERE chỉ áp cho nhánh UPDATE của upsert), và `max >= 1` luôn đúng
+ * (ràng buộc Zod của `SCHEDULER_MAX_PROACTIVE_PER_DAY`).
+ *
+ * Trả `true` nếu giành được (đã CỘNG 1 vào count), `false` nếu đã đủ trần
+ * (KHÔNG đụng gì). Gọi `addProactiveSendCount` sau đó để cộng nốt phần CÒN
+ * LẠI khi biết `sentParts` thật > 1, hoặc `refundProactiveSlot` nếu cuối cùng
+ * không gửi được gì.
+ */
+export function tryReserveProactiveSlot(accountId: string, threadId: string, dayKey: string, max: number): boolean {
+  return tryReserveStmt.run(accountId, threadId, dayKey, max).changes > 0;
+}
+
+const refundStmt = db.prepare(`
+  UPDATE proactive_send_counters SET count = MAX(0, count - 1), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE account_id = ? AND thread_id = ? AND day_key = ?
+`);
+
+/** Hoàn lại ĐÚNG 1 suất đã `tryReserveProactiveSlot` giành nhưng cuối cùng không gửi được gì. Kẹp sàn 0 - không bao giờ âm. */
+export function refundProactiveSlot(accountId: string, threadId: string, dayKey: string): void {
+  refundStmt.run(accountId, threadId, dayKey);
+}
+
 /** Chỉ dùng cho test - xoá sạch bảng để mỗi ca test bắt đầu từ 0 */
 export function resetAllProactiveCounters(): void {
   db.exec("DELETE FROM proactive_send_counters");

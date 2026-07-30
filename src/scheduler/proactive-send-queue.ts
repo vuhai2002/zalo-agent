@@ -3,6 +3,18 @@
  * khác `middleware/rate-limiter.ts` hiện có vốn chỉ xếp hàng TRONG một
  * thread. Tách khỏi `proactive-send-guard.ts` (giữ phần kiểm điều kiện) để
  * file đó không vượt ngưỡng 200 dòng.
+ *
+ * KHÔNG có timeout ở tầng này (có ở bản trước, rồi bỏ hẳn): timeout bọc NGOÀI
+ * `runOnThreadChain` chặn đúng CHỖ SAI - nó bọc luôn cả lúc CHỜ khoá thread,
+ * mà khoá đó có thể bị 1 lượt agent CỦA NGƯỜI DÙNG giữ hàng phút
+ * (`LLM_TURN_TIMEOUT_MS` mặc định 900000ms) - hoàn toàn BÌNH THƯỜNG, không
+ * phải treo. Khi timeout bắn, việc BÊN TRONG vẫn tiếp tục chạy không ai huỷ
+ * được (Promise JS không cancel), nên tin vẫn ra Zalo nhưng: không tính vào
+ * trần (thiếu đếm - còn nguy hiểm hơn thừa đếm), sổ chạy ghi 'error' dù gửi
+ * thật thành công, và (kind='agent') usage thật bị đè bằng {0,0,0}. Chặn
+ * trên cho lượt gửi thật (nếu vẫn muốn) phải bọc SÁT bên trong
+ * `runOnThreadChain`, quanh ĐÚNG bước gửi - không bọc lúc chờ lượt. Undici
+ * (zca-js) đã có headersTimeout/bodyTimeout ~300s mỗi request là chặn trên đủ dùng.
  */
 
 import { getTuning } from "../config/runtime-tuning-settings.js";
@@ -12,40 +24,6 @@ let queueTail: Promise<unknown> = Promise.resolve();
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * Chặn TRÊN cho 1 phần tử trong hàng đợi - KHÔNG phải tham số chỉnh được từ
- * dashboard, chỉ để 1 lần gửi hỏng/treo không giữ hàng đợi TOÀN CỤC (mọi
- * account, mọi thread) mãi mãi. Rộng rãi hơn nhiều lần gửi bình thường
- * (SEND_DELAY_MAX_MS 2500ms x tối đa ZALO_MAX_MESSAGE_PARTS đoạn + thời gian
- * mạng thật). `let` (không phải `const`) chỉ để test đổi ngưỡng thấp xuống -
- * test thật không thể chờ 60 giây.
- */
-let queueElementTimeoutMs = 60_000;
-
-/** Chỉ dùng cho test - hạ ngưỡng timeout để không phải chờ 60 giây thật */
-export function setQueueElementTimeoutForTest(ms: number): void {
-  queueElementTimeoutMs = ms;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`Gửi chủ động quá ${ms}ms - bỏ qua để hàng đợi toàn cục không bị kẹt theo`)),
-      ms,
-    );
-    promise.then(
-      (v) => {
-        clearTimeout(timer);
-        resolve(v);
-      },
-      (e: unknown) => {
-        clearTimeout(timer);
-        reject(e as Error);
-      },
-    );
-  });
-}
-
-/**
  * Xếp 1 việc vào hàng đợi TOÀN CỤC, cách nhau `SCHEDULER_SEND_GAP_MS`. Chỉ lo
  * phần THỜI ĐIỂM - không tự vào xâu thread nào (xem `deliverProactively` bên
  * dưới, đó mới là chỗ THẬT SỰ dùng hàm này để gửi).
@@ -53,10 +31,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 export function enqueueProactiveSend<T>(task: () => Promise<T>): Promise<T> {
   const run = queueTail.then(async () => {
     await sleep(getTuning("SCHEDULER_SEND_GAP_MS"));
-    return withTimeout(task(), queueElementTimeoutMs);
+    return task();
   });
-  // Giữ hàng đợi sống dù task lỗi/treo hay thành công - lỗi của task này vẫn
-  // trả đúng ra cho caller qua `run`, chỉ riêng "đuôi hàng đợi" không vỡ theo.
+  // Giữ hàng đợi sống dù task lỗi hay thành công - lỗi của task này vẫn trả
+  // đúng ra cho caller qua `run`, chỉ riêng "đuôi hàng đợi" không vỡ theo.
   queueTail = run.then(
     () => undefined,
     () => undefined,
@@ -74,13 +52,12 @@ export function resetProactiveSendQueue(): void {
  * khoá thread trong lúc chờ), giành được lượt rồi mới vào xâu thread
  * (`runOnThreadChain`) để làm `fn` (gửi + ghi history).
  *
- * ĐẢO NGƯỢC thứ tự lồng so với thiết kế ban đầu (rà lại phát hiện: xâu thread
- * NGOÀI, hàng đợi toàn cục TRONG khiến 1 job đang chờ hàng đợi toàn cục giữ
- * luôn khoá thread của chính nó - tin nhắn THẬT của người dùng trên CHÍNH
- * thread đó phải xếp hàng chờ theo, có thể tới hàng phút nếu hàng đợi sâu).
- * Giờ hàng đợi toàn cục bọc NGOÀI: chờ ở đây không đụng gì tới thread nào cả,
- * chỉ khi TỚI LƯỢT mới xin vào xâu thread - cửa sổ giữ khoá co lại còn đúng
- * thời gian gửi thật.
+ * ĐẢO NGƯỢC thứ tự lồng so với thiết kế ban đầu: xâu thread NGOÀI, hàng đợi
+ * toàn cục TRONG khiến 1 job đang chờ hàng đợi toàn cục giữ luôn khoá thread
+ * của chính nó - tin nhắn THẬT của người dùng trên CHÍNH thread đó phải xếp
+ * hàng chờ theo, có thể tới hàng phút nếu hàng đợi sâu. Giờ hàng đợi toàn cục
+ * bọc NGOÀI: chờ ở đây không đụng gì tới thread nào cả, chỉ khi TỚI LƯỢT mới
+ * xin vào xâu thread - cửa sổ giữ khoá co lại còn đúng thời gian gửi thật.
  */
 export function deliverProactively<T>(threadKey: string, fn: () => Promise<T>): Promise<T> {
   return enqueueProactiveSend(() => runOnThreadChain(threadKey, fn));

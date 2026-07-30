@@ -50,6 +50,7 @@ before(async () => {
 afterEach(() => {
   schedulerLoop.stopScheduler();
   tuning.setTuning("SCHEDULER_ENABLED", null);
+  tuning.setTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY", null);
 });
 
 after(() => {
@@ -284,6 +285,11 @@ describe("preflight - account/thread chưa sẵn sàng (Finding 1)", () => {
     assert.equal(afterOffline.nextRunAt, originalNextRunAt, "next_run_at KHÔNG được đụng vào");
     assert.equal(afterOffline.runCount, 0, "run_count KHÔNG được tăng - job chưa từng chạy thật sự");
     assert.equal(runLogStore.listRuns(job.id).length, 0, "không ghi run nào - chưa hề dispatch");
+    // Mục 5: dù KHÔNG có run log nào, lý do chặn vẫn phải THẤY ĐƯỢC ngay trên
+    // chính row job - trước fix, account rớt phiên nhiều ngày liền làm job
+    // hiện y hệt job khoẻ mạnh trên dashboard (return trước cả openRun).
+    assert.equal(afterOffline.lastStatus, "blocked", "phải thấy được trên dashboard dù chưa có run log nào");
+    assert.match(afterOffline.lastError ?? "", /không chạy/);
 
     // Account online lại - tick SAU đó phải nhặt lại và gửi được bình thường
     const sent = attachOnline();
@@ -292,6 +298,8 @@ describe("preflight - account/thread chưa sẵn sàng (Finding 1)", () => {
 
     assert.equal(sent.length, 1, "job phải gửi được ở tick kế tiếp sau khi account online lại");
     assert.equal(lastRunOf(job.id)?.status, "ok");
+    // Dấu "blocked" tự lành khi job chạy thật lần kế - markRun ghi đè last_status vô điều kiện
+    assert.equal(jobStore.getJobUnscoped(job.id)!.lastStatus, "ok");
   });
 
   it("thread bot_enabled=0: job VẪN CÒN SỐNG sau tick, không markRun - đúng bất biến như ca account offline", async () => {
@@ -308,6 +316,92 @@ describe("preflight - account/thread chưa sẵn sàng (Finding 1)", () => {
     assert.equal(after.nextRunAt, job.nextRunAt);
     assert.equal(after.runCount, 0);
     assert.equal(runLogStore.listRuns(job.id).length, 0);
+  });
+});
+
+describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi agent chạy xong (Mục 1)", () => {
+  it("job 'once' bị trần chặn: next_run_at đẩy sang ĐẦU NGÀY VN KẾ TIẾP (không phải mốc cũ, không phải NULL), đúng 1 tin thông báo, KHÔNG markRun", async () => {
+    const zoneTime = await import("../shared/zone-time.js");
+    const guard = await import("./proactive-send-guard.js");
+    const sent = attachOnline();
+    const threadId = "t-tick-tran-once";
+    makeThread(threadId);
+    tuning.setTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY", 1);
+
+    const now = new Date("2026-08-01T03:00:00.000Z"); // 10:00 sáng giờ VN 01/08
+    guard.reserveProactiveSlot(ACC, threadId, "Asia/Ho_Chi_Minh", now); // chiếm hết suất TRƯỚC khi tick chạy
+
+    const job = makeJob({ threadId, schedule: { kind: "once", runAtUtc: now.toISOString() } });
+
+    await schedulerLoop.runSchedulerTick(now);
+    await sleep(40);
+
+    assert.equal(sent.length, 1, "chỉ có ĐÚNG 1 tin - câu thông báo chạm trần, không phải payload gốc");
+    assert.notEqual(sent[0]!.text, job.payload);
+
+    const after = jobStore.getJobUnscoped(job.id)!;
+    assert.equal(after.runCount, 0, "chưa markRun - job chưa 'chạy' thật sự");
+    assert.equal(after.enabled, true);
+    assert.equal(
+      after.nextRunAt,
+      zoneTime.startOfNextDayUtc("Asia/Ho_Chi_Minh", now),
+      "phải đẩy sang ĐÚNG đầu ngày VN kế tiếp - khớp câu bot vừa nhắn 'các lịch còn lại sẽ tiếp tục vào ngày mai'",
+    );
+
+    const run = lastRunOf(job.id);
+    assert.equal(run?.status, "skipped");
+    assert.match(run!.detail, /chạm trần/);
+  });
+
+  it("job 'every' bị trần chặn: next_run_at GIỮ mốc kế TỰ NHIÊN (đã tính sẵn bởi clear-before-dispatch) - KHÔNG bị đẩy qua ngày mai như 'once'", async () => {
+    const guard = await import("./proactive-send-guard.js");
+    attachOnline();
+    const threadId = "t-tick-tran-every";
+    makeThread(threadId);
+    tuning.setTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY", 1);
+
+    const now = new Date("2026-08-01T03:00:00.000Z");
+    guard.reserveProactiveSlot(ACC, threadId, "Asia/Ho_Chi_Minh", now);
+
+    const job = makeJob({ threadId, schedule: { kind: "every", minutes: 30 }, now });
+    jobStore.setNextRun(job.id, now.toISOString()); // ép due đúng lúc `now`
+
+    await schedulerLoop.runSchedulerTick(now);
+    await sleep(40);
+
+    const after = jobStore.getJobUnscoped(job.id)!;
+    assert.equal(
+      after.nextRunAt,
+      new Date(now.getTime() + 30 * 60_000).toISOString(),
+      "mốc kế every 30 phút TỰ NHIÊN - nhánh trần ngày không được đụng vào",
+    );
+    assert.equal(lastRunOf(job.id)?.status, "skipped");
+  });
+
+  it("job kind='agent' bị trần chặn: KHÔNG tạo agent_turns nào - lượt LLM chưa từng chạy, tránh đốt token cho job chắc chắn không gửi được", async () => {
+    const guard = await import("./proactive-send-guard.js");
+    attachOnline();
+    const threadId = "t-tick-tran-agent";
+    makeThread(threadId);
+    tuning.setTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY", 1);
+
+    const now = new Date("2026-08-01T03:00:00.000Z");
+    guard.reserveProactiveSlot(ACC, threadId, "Asia/Ho_Chi_Minh", now);
+
+    const job = makeJob({ threadId, kind: "agent", schedule: { kind: "every", minutes: 30 }, now });
+    jobStore.setNextRun(job.id, now.toISOString());
+    const before = (
+      database.db.prepare("SELECT COUNT(*) AS n FROM agent_turns WHERE thread_id = ?").get(threadId) as { n: number }
+    ).n;
+
+    await schedulerLoop.runSchedulerTick(now);
+    await sleep(40);
+
+    const after = (
+      database.db.prepare("SELECT COUNT(*) AS n FROM agent_turns WHERE thread_id = ?").get(threadId) as { n: number }
+    ).n;
+    assert.equal(after, before, "không được tạo agent_turns nào - lượt LLM chưa từng chạy");
+    assert.equal(lastRunOf(job.id)?.status, "skipped");
   });
 });
 

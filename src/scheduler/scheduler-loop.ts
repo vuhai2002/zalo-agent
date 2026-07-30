@@ -1,6 +1,6 @@
 /**
- * Vòng tick: quét job đến hạn -> kiểm PRE-FLIGHT (account/thread, rẻ, không
- * đụng DB job nào nếu chặn) -> quyết định run/run-late/skip-forward ->
+ * Vòng tick: quét job đến hạn -> kiểm PRE-FLIGHT (account/thread + trần ngày,
+ * rẻ, không đụng LLM nếu chặn) -> quyết định run/run-late/skip-forward ->
  * clear-before-dispatch -> dispatch KHÔNG AWAIT.
  *
  * "Không await trong tick" là luật cứng nhất ở đây (goclaw học bằng máu:
@@ -9,7 +9,7 @@
  *
  * KHÔNG bọc `runOnThreadChain` quanh cả `runScheduledJob` ở đây nữa (khác bản
  * trước): khoá thread giờ chỉ giữ ĐÚNG lúc gửi thật, bên trong
- * `deliverProactively` (proactive-send-guard.ts) - bọc ở tầng này sẽ lồng 2
+ * `deliverProactively` (proactive-send-queue.ts) - bọc ở tầng này sẽ lồng 2
  * lần `runOnThreadChain` cho CÙNG threadKey và tự deadlock (lượt ngoài chờ
  * `fn` xong, `fn` lại chờ lượt trong xin vào đúng hàng đợi mà lượt ngoài đang
  * giữ chỗ). Việc chuẩn bị (chạy agent cô lập, không đọc history) không cần
@@ -22,8 +22,9 @@ import { db } from "../conversation/database.js";
 import { createLogger } from "../shared/logger.js";
 import { finishRun, openRun } from "./job-run-log-store.js";
 import { computeNextRun, decideDueAction } from "./next-run.js";
-import { checkAccountAndThreadReady } from "./proactive-send-guard.js";
+import { checkAccountAndThreadReady, checkProactiveDailyCap } from "./proactive-send-guard.js";
 import { runScheduledJob } from "./run-scheduled-job.js";
+import { concludeCapBlockedAtTick } from "./scheduled-job-cap-guard.js";
 import { listDueJobs, scheduleOf, setNextRun, type ScheduledJob } from "./scheduled-job-store.js";
 
 const log = createLogger("scheduler-loop");
@@ -39,6 +40,20 @@ const interruptStaleRunsStmt = db.prepare(`
   UPDATE scheduled_job_runs
   SET status = 'interrupted', finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
   WHERE status = 'running'
+`);
+
+/**
+ * Ghi lý do chặn PRE-FLIGHT (account/thread) lên chính row job (Mục 5): trước
+ * đây job bị chặn ở đây không để lại dấu vết nào (return trước cả `openRun`),
+ * account rớt phiên 3 ngày liền thì job hiện y hệt job khoẻ mạnh trên
+ * dashboard. Trần ngày không cần cột này - `concludeCapBlockedAtTick` đã tự
+ * ghi 1 dòng run log 'skipped'. Dùng lại `last_status`/`last_error` (không có
+ * CHECK constraint) - tự "lành" ngay khi job chạy thật lần kế (markRun ghi đè
+ * vô điều kiện).
+ */
+const markBlockedStmt = db.prepare(`
+  UPDATE scheduled_jobs SET last_status = 'blocked', last_error = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE id = ?
 `);
 
 /** Gọi sau `startAllAccounts()` lúc boot. An toàn khi gọi lại (no-op nếu đã chạy). */
@@ -87,6 +102,7 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<void> {
   // được làm setInterval ngừng gọi tick kế tiếp.
   try {
     const due = listDueJobs(now.toISOString());
+    pruneStaleReasons(due);
     for (const job of due) {
       processDueJob(job, now);
     }
@@ -97,6 +113,20 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<void> {
 
 /** Lý do chặn LẦN GẦN NHẤT mỗi job - chỉ log lại khi lý do ĐỔI, tránh spam mỗi 30s khi account offline nhiều ngày liền */
 const lastPreflightReason = new Map<string, string>();
+
+/**
+ * Job KHÔNG CÒN due (bị xoá, hoặc `next_run_at` đã đổi) thì bỏ dấu vết chặn cũ
+ * - tránh rò rỉ bộ nhớ chậm, cùng lý do `threadChains` của `message-batcher.ts`
+ * phải tự dọn: Map này sống suốt đời process, job bị xoá ĐÚNG lúc đang bị chặn
+ * sẽ để lại entry vĩnh viễn nếu chỉ dọn ở nhánh "qua được preflight".
+ */
+function pruneStaleReasons(due: ScheduledJob[]): void {
+  if (lastPreflightReason.size === 0) return;
+  const dueIds = new Set(due.map((j) => j.id));
+  for (const id of lastPreflightReason.keys()) {
+    if (!dueIds.has(id)) lastPreflightReason.delete(id);
+  }
+}
 
 function processDueJob(job: ScheduledJob, now: Date): void {
   try {
@@ -110,6 +140,7 @@ function processDueJob(job: ScheduledJob, now: Date): void {
       if (lastPreflightReason.get(job.id) !== preflight.reason) {
         lastPreflightReason.set(job.id, preflight.reason);
         log.warn({ jobId: job.id, reason: preflight.reason }, "Job chưa dispatch được - tick sau thử lại");
+        markBlockedStmt.run(preflight.reason, job.id);
       }
       return;
     }
@@ -138,6 +169,21 @@ function processDueJob(job: ScheduledJob, now: Date): void {
       const runId = openRun(job.id);
       finishRun(runId, { status: "skipped", detail: "Bỏ lượt vì đã trễ quá cửa sổ grace - dời sang lần kế tiếp." });
       log.info({ jobId: job.id, nextRunAt }, "Job trễ quá grace - bỏ lượt, dời lịch");
+      return;
+    }
+
+    // Lọc SỚM trần ngày TRƯỚC dispatch (Mục 1) - THUẦN ĐỌC, không giữ chỗ
+    // (giành chỗ THẬT xảy ra sát lúc gửi, xem blockedByGuard - chặn race giữa
+    // nhiều job cùng thread cùng đến hạn). Thiếu bước này: job 'once' chạm
+    // trần bị phục hồi next_run_at về mốc cũ, tick sau (30s) nhặt lại NGAY -
+    // kind='agent' nghĩa là chạy lại NGUYÊN 1 lượt LLM mỗi 30 giây tới hết
+    // ngày, thuần đốt token cho job CHẮC CHẮN không gửi được gì.
+    const timeZone = job.timezone || env.BOT_TIMEZONE;
+    const cap = checkProactiveDailyCap(job.accountId, job.threadId, timeZone, now);
+    if (!cap.ok) {
+      // Không await (luật cứng của cả tick) - hàm này tự cam kết không bao
+      // giờ ném lỗi ra ngoài (try/catch nội bộ, xem scheduled-job-cap-guard.ts).
+      void concludeCapBlockedAtTick(job, cap.reason, cap.notifyCapHitOnce, timeZone, now);
       return;
     }
 

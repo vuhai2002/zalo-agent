@@ -132,6 +132,14 @@ function lastRunOf(jobId: string) {
   return runLogStore.listRuns(jobId, 1)[0]!;
 }
 
+function deliveryAttemptsOf(jobId: string): number {
+  return (
+    database.db.prepare("SELECT delivery_attempts AS n FROM scheduled_jobs WHERE id = ?").get(jobId) as {
+      n: number;
+    }
+  ).n;
+}
+
 describe("runScheduledJob - kind=message", () => {
   it("gửi được, 0 lượt agent, ghi history + run 'ok'", async () => {
     const sent = attachOnline();
@@ -167,22 +175,58 @@ describe("runScheduledJob - kind=message", () => {
     assert.match(run.detail, /không chạy/);
   });
 
-  it("gửi hỏng (zca-js ném lỗi) thì run 'error', last_error có nội dung, KHÔNG ghi history", async () => {
+  it("gửi hỏng (zca-js ném lỗi) thì thử lại tối đa 3 lần trước khi ghi 'error' thật (Mục 2) - KHÔNG ghi history bất kỳ lần nào", async () => {
     attachOnline(() => {
       throw new Error("mang rot giua chung");
     });
     const job = makeJob({ payload: "Tin se khong bao gio toi noi" });
     const historyBefore = historyStore.getRecentMessages(ACC, THREAD).length;
 
-    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
+    // Lần 1 và 2: gửi hỏng nhưng CHƯA chạm đủ 3 lần - job phải SỐNG (không markRun)
+    for (let lan = 1; lan <= 2; lan++) {
+      await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
+      const con = jobStore.getJobUnscoped(job.id)!;
+      assert.equal(con.runCount, 0, `lần thử ${lan}: run_count KHÔNG được tăng - job chưa "chạy xong" thật sự`);
+      assert.equal(con.lastError, null, `lần thử ${lan}: last_error KHÔNG được ghi - job còn cơ hội thử lại`);
+      assert.equal(con.enabled, true, `lần thử ${lan}: job KHÔNG được tự tắt`);
+      assert.match(lastRunOf(job.id).detail, /thử lại lần/);
+    }
 
+    // Lần 3: chạm đủ số lần thử tối đa - GIỜ MỚI tiêu suất chạy + ghi error thật
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
     const run = lastRunOf(job.id);
     assert.equal(run.status, "error");
     assert.match(run.detail, /mang rot giua chung/);
-    assert.equal(jobStore.getJobUnscoped(job.id)!.lastError, run.detail);
+    const chet = jobStore.getJobUnscoped(job.id)!;
+    assert.equal(chet.runCount, 1, "lần thứ 3 mới thật sự tính là 1 lần chạy");
+    assert.match(chet.lastError ?? "", /mang rot giua chung/);
 
     const historyAfter = historyStore.getRecentMessages(ACC, THREAD);
-    assert.equal(historyAfter.length, historyBefore, "gửi hỏng thì KHÔNG được ghi thêm gì vào history");
+    assert.equal(historyAfter.length, historyBefore, "gửi hỏng thì KHÔNG được ghi thêm gì vào history, kể cả sau 3 lần thử");
+  });
+
+  it("gửi hỏng lần đầu rồi THÀNH CÔNG lần sau: delivery_attempts phải reset - không cộng dồn qua các lượt chạy KHÁC NHAU", async () => {
+    let firstCallFails = true;
+    const sent = attachOnline(() => {
+      if (firstCallFails) {
+        firstCallFails = false;
+        throw new Error("loi mang thoang qua");
+      }
+      return { msgId: "ok" };
+    });
+    const job = makeJob({ payload: "Se gui duoc o lan thu 2" });
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
+    assert.equal(deliveryAttemptsOf(job.id), 1, "lần 1 hỏng phải tăng delivery_attempts lên 1");
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
+    // sendMessage giả ghi vào `sent` TRƯỚC KHI gọi sendMessageImpl (nên lần 1
+    // hỏng cũng để lại 1 dòng) - tín hiệu "lần 2 THẬT SỰ tới nơi" đáng tin hơn
+    // là run 'ok' + có ghi history (chỉ ghi khi deliveredText khác rỗng).
+    assert.equal(sent.length, 2, "cả 2 lần gọi API đều để lại dấu vết (lần 1 hỏng SAU KHI gọi, không phải KHÔNG gọi)");
+    assert.equal(lastRunOf(job.id).status, "ok");
+    assert.equal(historyStore.getRecentMessages(ACC, THREAD).at(-1)!.content, "Se gui duoc o lan thu 2", "lần 2 phải THẬT SỰ tới nơi (có ghi history)");
+    assert.equal(deliveryAttemptsOf(job.id), 0, "gửi được rồi thì bộ đếm phải reset về 0, không giữ lại từ lần hỏng trước");
   });
 
   it("late=true: nguyên văn payload được thêm tiền tố '(nhắc trễ, lịch gốc HH:MM)'", async () => {
@@ -242,12 +286,15 @@ describe("runScheduledJob - không giữ khoá thread khi đang chờ hàng đ�
     const job = makeJob({ payload: "cham vi hang doi toan cuc" });
 
     // Chiếm hàng đợi toàn cục bằng 1 việc "chậm" 200ms - job dispatch NGAY SAU
-    // đây sẽ phải XẾP HÀNG sau việc này trong enqueueProactiveSend.
-    void guard.enqueueProactiveSend(() => sleep(200));
+    // đây sẽ phải XẾP HÀNG sau việc này trong enqueueProactiveSend. Giữ lại
+    // reference (không `void`) để CHỜ nó xong ở cuối test - bản trước bắn đi
+    // không dọn, 2 promise còn dở tràn sang chạy giữa ca test KẾ TIẾP và vẫn
+    // ghi DB, một nguồn gây flaky (Mục 6).
+    const occupier = guard.enqueueProactiveSend(() => sleep(200));
 
-    // Dispatch job (KHÔNG await) - nó sẽ vào deliverProactively và phải CHỜ
-    // tới lượt ở hàng đợi toàn cục (~200ms) trước khi được vào xâu thread.
-    void runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
+    // Dispatch job (KHÔNG await NGAY) - nó sẽ vào deliverProactively và phải
+    // CHỜ tới lượt ở hàng đợi toàn cục (~200ms) trước khi được vào xâu thread.
+    const jobRun = runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
     await sleep(15); // đủ để job kịp tới bước enqueueProactiveSend (vài microtask), còn NGẮN hơn nhiều so với 200ms hàng đợi
 
     // Trong lúc job CÒN ĐANG CHỜ hàng đợi toàn cục, tin nhắn "thật" trên CHÍNH
@@ -263,6 +310,9 @@ describe("runScheduledJob - không giữ khoá thread khi đang chờ hàng đ�
 
     assert.equal(ranMessage, true);
     assert.ok(dt < 100, `tin thật phải chạy gần như ngay, không đợi job xong hàng đợi toàn cục (đo được ${dt}ms)`);
+
+    // Dọn sạch trước khi qua ca test kế: đợi cả 2 việc đã bắn ở trên hoàn tất.
+    await Promise.all([occupier, jobRun]);
   });
 });
 
@@ -370,7 +420,7 @@ describe("runScheduledJob - kind=agent", () => {
     assert.equal(lastRunOf(job.id).status, "silent");
   });
 
-  it("provider ném lỗi thì run 'error', last_error có nội dung, KHÔNG gửi gì", async () => {
+  it("provider ném lỗi (lượt agent chết giữa chừng) thì thử lại tối đa 3 lần trước khi ghi 'error' thật (Mục 2), KHÔNG gửi gì", async () => {
     const sent = attachOnline();
     const job = makeJob({ kind: "agent", payload: "Viec se khong bao gio xong" });
     const { model } = mockModel(
@@ -384,13 +434,21 @@ describe("runScheduledJob - kind=agent", () => {
         }),
     );
 
-    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model });
+    for (let lan = 1; lan <= 2; lan++) {
+      await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model });
+      const con = jobStore.getJobUnscoped(job.id)!;
+      assert.equal(con.runCount, 0, `lần thử ${lan}: job chưa "chạy xong" thật sự`);
+      assert.equal(con.lastError, null, `lần thử ${lan}: chưa được ghi last_error`);
+    }
 
-    assert.equal(sent.length, 0);
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model });
+    assert.equal(sent.length, 0, "không bao giờ gửi gì - lượt agent chết trước cả khi tính ra text");
     const run = lastRunOf(job.id);
     assert.equal(run.status, "error");
     assert.match(run.detail, /500 tu router/);
-    assert.match(jobStore.getJobUnscoped(job.id)!.lastError ?? "", /500 tu router/);
+    const chet = jobStore.getJobUnscoped(job.id)!;
+    assert.equal(chet.runCount, 1, "lần thứ 3 mới thật sự tính là 1 lần chạy");
+    assert.match(chet.lastError ?? "", /500 tu router/);
   });
 
   it("isolated:true xuyên suốt tới schema tool gửi model - loại add_reaction, save_memory", async () => {

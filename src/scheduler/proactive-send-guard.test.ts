@@ -242,25 +242,107 @@ describe("enqueueProactiveSend - rải đều toàn cục", () => {
 
     assert.equal(ranSecond, true, "hàng đợi phải sống tiếp sau 1 lần lỗi");
   });
+});
 
-  it("1 phần tử treo quá lâu bị bỏ qua (timeout) - không giữ hàng đợi mãi mãi", async () => {
-    guard.resetProactiveSendQueue();
-    guard.setQueueElementTimeoutForTest(50); // 60s mặc định production - hạ xuống để test không phải chờ thật
-    let ranSecond = false;
+describe("checkProactiveDailyCap - THUẦN ĐỌC, không giữ chỗ (Mục 1)", () => {
+  it("còn chỗ thì cho qua, KHÔNG cộng count (khác reserveProactiveSlot)", () => {
+    const threadId = "t-doc-thuan";
+    makeThread(threadId);
+    const now = new Date("2026-08-01T01:00:00Z");
+    const before = guard.checkProactiveDailyCap(ACC_RUNNING, threadId, TZ, now);
+    assert.equal(before.ok, true);
 
-    try {
-      // Task không bao giờ tự resolve - mô phỏng 1 lần gửi treo
-      await assert.rejects(
-        guard.enqueueProactiveSend(() => new Promise<void>(() => {})),
-        /quá.*ms/,
-      );
-      await guard.enqueueProactiveSend(async () => {
-        ranSecond = true;
-      });
+    // Gọi lại nhiều lần vẫn true - hàm này không tự ghi gì
+    assert.equal(guard.checkProactiveDailyCap(ACC_RUNNING, threadId, TZ, now).ok, true);
+  });
 
-      assert.equal(ranSecond, true, "phần tử treo bị bỏ qua sau timeout, hàng đợi vẫn sống tiếp");
-    } finally {
-      guard.setQueueElementTimeoutForTest(60_000); // trả lại mặc định cho test khác trong cùng file
+  it("đã chạm trần (do reserveProactiveSlot/recordProactiveSend ghi trước) thì báo false, kèm notifyCapHitOnce đúng", () => {
+    const threadId = "t-doc-cham-tran";
+    makeThread(threadId);
+    const now = new Date("2026-08-01T01:00:00Z");
+    guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, 3, now); // trần test = 3 (xem before())
+
+    const r = guard.checkProactiveDailyCap(ACC_RUNNING, threadId, TZ, now);
+    assert.equal(r.ok, false);
+    if (!r.ok) {
+      assert.match(r.reason, /chạm trần/);
+      assert.equal(r.notifyCapHitOnce, true);
     }
+  });
+});
+
+describe("reserveProactiveSlot - NGUYÊN TỬ, giữ chỗ thật (Mục 4)", () => {
+  it("còn chỗ thì giành được VÀ CỘNG NGAY 1 vào count (khác checkProactiveDailyCap)", async () => {
+    const counterStore = await import("./proactive-send-counter-store.js");
+    const zoneTime = await import("../shared/zone-time.js");
+    const threadId = "t-reserve-cong-ngay";
+    makeThread(threadId);
+    const now = new Date("2026-08-01T01:00:00Z");
+    const dayKey = zoneTime.todayKey(TZ, now);
+
+    const before = counterStore.getProactiveCounter(ACC_RUNNING, threadId, dayKey).count;
+    const r = guard.reserveProactiveSlot(ACC_RUNNING, threadId, TZ, now);
+    assert.equal(r.ok, true);
+    assert.equal(counterStore.getProactiveCounter(ACC_RUNNING, threadId, dayKey).count, before + 1, "giành chỗ phải cộng NGAY, không đợi caller tự ghi");
+  });
+
+  it("đủ trần (test=3) thì suất thứ 4 KHÔNG giành được, count không đổi", () => {
+    const threadId = "t-reserve-day-tran";
+    makeThread(threadId);
+    const now = new Date("2026-08-01T01:00:00Z");
+
+    for (let i = 0; i < 3; i++) {
+      assert.equal(guard.reserveProactiveSlot(ACC_RUNNING, threadId, TZ, now).ok, true, `suất thứ ${i + 1} phải giành được`);
+    }
+    const r = guard.reserveProactiveSlot(ACC_RUNNING, threadId, TZ, now);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.reason, /chạm trần/);
+  });
+
+  it("race giữa 2 lần gọi ĐỒNG THỜI khi CHỈ CÒN ĐÚNG 1 CHỖ: chỉ 1 bên giành được - đây là điểm chặn race Mục 4", async () => {
+    const threadId = "t-reserve-race";
+    makeThread(threadId);
+    const now = new Date("2026-08-01T01:00:00Z");
+    // Chiếm trước 2/3 suất (trần test = 3) - chỉ còn ĐÚNG 1 chỗ
+    guard.reserveProactiveSlot(ACC_RUNNING, threadId, TZ, now);
+    guard.reserveProactiveSlot(ACC_RUNNING, threadId, TZ, now);
+
+    // 2 job "cùng lúc" tranh nốt suất cuối - node:sqlite đồng bộ nên đây thực
+    // chất là 2 lệnh UPDATE nối tiếp nhau, nhưng đúng cái cần canh: KHÔNG được
+    // cả 2 cùng giành được (bug đọc-rồi-ghi tách rời sẽ cho cả 2 cùng "ok").
+    const [a, b] = [
+      guard.reserveProactiveSlot(ACC_RUNNING, threadId, TZ, now),
+      guard.reserveProactiveSlot(ACC_RUNNING, threadId, TZ, now),
+    ];
+    const wins = [a, b].filter((r) => r.ok).length;
+    assert.equal(wins, 1, "chỉ đúng 1 trong 2 lần gọi được giành suất cuối cùng");
+  });
+});
+
+describe("refundProactiveSlot - hoàn suất đã giữ nhưng cuối cùng không gửi được (Mục 4)", () => {
+  it("hoàn đúng 1 suất - reserve rồi refund thì count trở lại như trước", async () => {
+    const counterStore = await import("./proactive-send-counter-store.js");
+    const zoneTime = await import("../shared/zone-time.js");
+    const threadId = "t-refund";
+    makeThread(threadId);
+    const now = new Date("2026-08-01T01:00:00Z");
+    const dayKey = zoneTime.todayKey(TZ, now);
+
+    guard.reserveProactiveSlot(ACC_RUNNING, threadId, TZ, now);
+    const afterReserve = counterStore.getProactiveCounter(ACC_RUNNING, threadId, dayKey).count;
+    guard.refundProactiveSlot(ACC_RUNNING, threadId, TZ, now);
+    assert.equal(counterStore.getProactiveCounter(ACC_RUNNING, threadId, dayKey).count, afterReserve - 1);
+  });
+
+  it("refund khi count đang 0 thì kẹp sàn ở 0, không xuống âm", async () => {
+    const counterStore = await import("./proactive-send-counter-store.js");
+    const zoneTime = await import("../shared/zone-time.js");
+    const threadId = "t-refund-am";
+    makeThread(threadId);
+    const now = new Date("2026-08-01T01:00:00Z");
+    const dayKey = zoneTime.todayKey(TZ, now);
+
+    guard.refundProactiveSlot(ACC_RUNNING, threadId, TZ, now);
+    assert.equal(counterStore.getProactiveCounter(ACC_RUNNING, threadId, dayKey).count, 0);
   });
 });

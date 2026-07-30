@@ -56,6 +56,23 @@ export function startOfDayUtc(timeZone: string, now: Date = new Date()): string 
 }
 
 /**
+ * Mốc 00:00:00 của NGÀY MAI theo timeZone - dùng khi 1 job 'once' bị TRẦN
+ * NGÀY chặn: phải đẩy hẳn sang ngày kế tiếp (thử lại trong ngày vẫn chạm trần
+ * y hệt) thay vì đứng yên ở mốc quá khứ (kẹt vĩnh viễn - 'once' không có "lần
+ * kế" tự nhiên như every/cron). Dùng `.plus({days:1})` của luxon thay vì cộng
+ * cứng 24 tiếng - đúng NGÀY LỊCH trong zone dù zone đó có DST (giờ mùa hè
+ * nhảy 23/25 tiếng, không phải luôn luôn 24).
+ */
+export function startOfNextDayUtc(timeZone: string, now: Date = new Date()): string {
+  return DateTime.fromJSDate(now, { zone: safeZone(timeZone) })
+    .plus({ days: 1 })
+    .startOf("day")
+    .toUTC()
+    .toJSDate()
+    .toISOString();
+}
+
+/**
  * Khóa ngày (`YYYY-MM-DD`) của một mốc UTC, đọc theo timeZone - chiều ngược
  * lại của `startOfDayUtc`: đã biết mốc UTC, giờ hỏi nó thuộc ngày nào theo giờ
  * VN. Dùng để GOM trong JS (usage-store.getDailyUsage) thay vì cắt chuỗi UTC
