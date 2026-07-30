@@ -1,9 +1,9 @@
 /**
  * Guardrail trước MỌI lần gửi CHỦ ĐỘNG của scheduler (không phải trả lời tin
  * tới): account đang chạy -> thread còn hợp lệ (tồn tại trong bảng `threads`
- * VÀ `bot_enabled = 1` - tắt bot cho 1 thread trên dashboard tắt luôn mọi job
- * nhắm vào đó, một công tắc chứ không phải hai) -> chưa chạm trần ngày. Hỏng
- * bất kỳ điều nào thì trả lý do dạng chữ để ghi vào `scheduled_job_runs.detail`.
+ * VÀ `bot_enabled = 1`) -> chưa chạm trần ngày (đếm THEO TIN, bền qua restart
+ * - xem `proactive-send-counter-store.ts`). Hỏng bất kỳ điều nào thì trả lý
+ * do dạng chữ để ghi vào `scheduled_job_runs.detail`.
  *
  * Kèm hàng đợi rải đều TOÀN CỤC (`SCHEDULER_SEND_GAP_MS`) - khác
  * `middleware/rate-limiter.ts` hiện có vốn chỉ xếp hàng TRONG một thread.
@@ -13,33 +13,47 @@ import { getTuning } from "../config/runtime-tuning-settings.js";
 import { findThreadStatus } from "../conversation/thread-store.js";
 import { todayKey } from "../shared/zone-time.js";
 import { isAccountRunning } from "../zalo/account-manager.js";
+import {
+  addProactiveSendCount,
+  getProactiveCounter,
+  markProactiveCapNoticeSent,
+  resetAllProactiveCounters,
+} from "./proactive-send-counter-store.js";
 
-/** Chữ dùng chung với pre-flight của run-scheduled-job.ts - cùng 1 điều kiện, cùng 1 câu */
+// Hàng đợi rải đều toàn cục nằm ở file riêng (proactive-send-queue.ts) - re-export
+// để mọi nơi vẫn import qua "proactive-send-guard.js" như trước, không phải sửa call site.
+export {
+  deliverProactively,
+  enqueueProactiveSend,
+  resetProactiveSendQueue,
+  setQueueElementTimeoutForTest,
+} from "./proactive-send-queue.js";
+
+/** Chữ dùng chung với pre-flight của scheduler-loop.ts/run-scheduled-job.ts - cùng 1 điều kiện, cùng 1 câu */
 export const ACCOUNT_NOT_RUNNING_REASON = "Account hiện không chạy (chưa đăng nhập hoặc bị dừng).";
 
-/**
- * Đếm tin chủ động + đánh dấu đã báo trần, giữ TRONG BỘ NHỚ theo
- * (accountId, threadId, ngày VN). `messages` không có cột phân biệt "scheduler
- * tự bắn" hay "trả lời hội thoại thường" (thêm cột là sửa schema DB, ngoài
- * phạm vi phase này), nên không đếm đáng tin cậy bằng SQL được - giữ bộ nhớ là
- * lựa chọn còn lại.
- *
- * Nhược điểm CHẤP NHẬN ĐƯỢC: bot restart giữa ngày thì đếm lại từ 0 (thêm tối
- * đa `SCHEDULER_MAX_PROACTIVE_PER_DAY` tin trong đúng ngày đó). Đây là LƯỚI ĐỠ
- * CUỐI - lưới đỡ ĐẦU (chặn `every`/`cron` quá dày ngay lúc TẠO job, xem
- * `schedule-parser.ts`) độc lập với bộ đếm này và không hề bị ảnh hưởng bởi
- * restart.
- */
-type DayCounter = { dayKey: string; count: number; capNoticeSent: boolean };
-const countersByThread = new Map<string, DayCounter>();
+export type PreflightResult = { ok: true } | { ok: false; reason: string };
 
-function counterFor(key: string, dayKey: string): DayCounter {
-  const existing = countersByThread.get(key);
-  if (existing && existing.dayKey === dayKey) return existing;
-  // Ngày mới (hoặc thread lần đầu gặp) - bộ đếm reset về 0, tự nhiên đúng lịch
-  const fresh: DayCounter = { dayKey, count: 0, capNoticeSent: false };
-  countersByThread.set(key, fresh);
-  return fresh;
+/**
+ * Phần KHÔNG phụ thuộc nội dung của guard - account đang chạy + thread hợp
+ * lệ. Tách riêng để `scheduler-loop.ts` kiểm được NGAY TRONG TICK, TRƯỚC khi
+ * clear-before-dispatch: job chặn ở đây thì tick chưa hề đụng vào
+ * `next_run_at`/`run_count` của nó, tick sau tự thử lại - job không "chết"
+ * chỉ vì account rớt phiên đúng lúc đến hạn (ca hoàn toàn bình thường của
+ * zca-js, không phải sự cố hiếm).
+ */
+export function checkAccountAndThreadReady(accountId: string, threadId: string): PreflightResult {
+  if (!isAccountRunning(accountId)) {
+    return { ok: false, reason: ACCOUNT_NOT_RUNNING_REASON };
+  }
+  const thread = findThreadStatus(accountId, threadId);
+  if (!thread) {
+    return { ok: false, reason: "Cuộc trò chuyện chưa từng ghi nhận trong hệ thống - không nhắn chủ động được." };
+  }
+  if (!thread.botEnabled) {
+    return { ok: false, reason: "Bot đang tắt cho cuộc trò chuyện này." };
+  }
+  return { ok: true };
 }
 
 export type GuardResult =
@@ -48,13 +62,22 @@ export type GuardResult =
       ok: false;
       reason: string;
       /**
-       * true đúng 1 LẦN/ngày/thread khi job đầu tiên chạm trần - caller nên
-       * nhắn đúng MỘT câu cho biết vì sao job im, không thì user không hiểu
-       * vì sao lời nhắc "biến mất". Các lần chạm trần SAU trong CÙNG ngày trả
-       * false - im lặng bỏ lượt, tránh việc chính câu thông báo lại thành spam.
+       * true nghĩa là CHƯA báo trần hôm nay - caller (đã thật sự gửi được
+       * thông báo) phải tự gọi `markProactiveCapNotified` sau khi gửi xong.
+       * Hàm "check" này THUẦN ĐỌC, không tự ghi gì - trang "Chạy thử ngay"
+       * (phase 05) có thể gọi kiểm rồi không gửi, tự ghi ở đây sẽ làm mất
+       * thông báo thật của lần chạm trần kế tiếp trong cùng ngày.
        */
       notifyCapHitOnce: boolean;
     };
+
+/** Số ngày giữ lại bộ đếm - trần chỉ cần biết ĐÚNG HÔM NAY nên không cần giữ lâu */
+const COUNTER_RETENTION_DAYS = 3;
+
+function keepSinceDayKey(timeZone: string, now: Date): string {
+  const cutoff = new Date(now.getTime() - COUNTER_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  return todayKey(timeZone, cutoff);
+}
 
 export function checkProactiveSendGuard(
   accountId: string,
@@ -62,82 +85,50 @@ export function checkProactiveSendGuard(
   timeZone: string,
   now: Date = new Date(),
 ): GuardResult {
-  if (!isAccountRunning(accountId)) {
-    return { ok: false, reason: ACCOUNT_NOT_RUNNING_REASON, notifyCapHitOnce: false };
-  }
+  const preflight = checkAccountAndThreadReady(accountId, threadId);
+  if (!preflight.ok) return { ok: false, reason: preflight.reason, notifyCapHitOnce: false };
 
-  const thread = findThreadStatus(accountId, threadId);
-  if (!thread) {
-    return {
-      ok: false,
-      reason: "Cuộc trò chuyện chưa từng ghi nhận trong hệ thống - không nhắn chủ động được.",
-      notifyCapHitOnce: false,
-    };
-  }
-  if (!thread.botEnabled) {
-    return { ok: false, reason: "Bot đang tắt cho cuộc trò chuyện này.", notifyCapHitOnce: false };
-  }
-
-  const key = `${accountId}:${threadId}`;
   const dayKey = todayKey(timeZone, now);
-  const counter = counterFor(key, dayKey);
+  const counter = getProactiveCounter(accountId, threadId, dayKey);
   const max = getTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY");
 
   if (counter.count >= max) {
-    const notify = !counter.capNoticeSent;
-    counter.capNoticeSent = true;
     return {
       ok: false,
       reason: `Đã chạm trần ${max} tin chủ động/ngày cho cuộc trò chuyện này (tính theo ngày ${timeZone}).`,
-      notifyCapHitOnce: notify,
+      notifyCapHitOnce: !counter.noticeSent,
     };
   }
 
   return { ok: true };
 }
 
-/** Ghi nhận 1 tin chủ động ĐÃ GỬI THÀNH CÔNG - gọi SAU khi gửi xong, không phải lúc kiểm */
-export function recordProactiveSend(
+/** Đánh dấu ĐÃ báo trần hôm nay - chỉ gọi SAU KHI thông báo chạm trần thật sự gửi được */
+export function markProactiveCapNotified(
   accountId: string,
   threadId: string,
   timeZone: string,
   now: Date = new Date(),
 ): void {
-  counterFor(`${accountId}:${threadId}`, todayKey(timeZone, now)).count++;
+  markProactiveCapNoticeSent(accountId, threadId, todayKey(timeZone, now));
 }
-
-/** Chỉ dùng cho test - dọn sạch bộ đếm trong bộ nhớ để mỗi ca test bắt đầu từ 0 */
-export function resetProactiveSendCounters(): void {
-  countersByThread.clear();
-}
-
-// ===== Rải đều TOÀN CỤC giữa các tin chủ động =====
-
-let queueTail: Promise<unknown> = Promise.resolve();
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * Xếp 1 lần gửi chủ động vào hàng đợi TOÀN CỤC (khác `rate-limiter.ts` vốn chỉ
- * xếp hàng TRONG 1 thread): 2 job ở 2 thread khác nhau tới hạn CÙNG LÚC vẫn bị
- * cách nhau `SCHEDULER_SEND_GAP_MS`. Độ trễ đứng TRƯỚC task (cùng nếp
- * `rate-limiter.ts`) nên tin chủ động ĐẦU TIÊN của cả quá trình cũng bị delay -
- * không phải lỗi, cùng triết lý "không trông như máy" của `SEND_DELAY_MIN/MAX_MS`.
+ * Ghi nhận `count` TIN chủ động ĐÃ GỬI THÀNH CÔNG - gọi SAU khi gửi, với số
+ * tin THẬT SỰ đã ra (`reply.sentParts`, không phải cố định 1/lượt - 1 câu trả
+ * lời dài có thể bị `sendReplyInParts` cắt thành nhiều tin).
  */
-export function enqueueProactiveSend<T>(task: () => Promise<T>): Promise<T> {
-  const run = queueTail.then(async () => {
-    await sleep(getTuning("SCHEDULER_SEND_GAP_MS"));
-    return task();
-  });
-  // Giữ hàng đợi sống dù task lỗi hay thành công - lỗi của task này vẫn trả
-  // đúng ra cho caller qua `run`, chỉ riêng "đuôi hàng đợi" không được vỡ theo.
-  queueTail = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
+export function recordProactiveSend(
+  accountId: string,
+  threadId: string,
+  timeZone: string,
+  count: number,
+  now: Date = new Date(),
+): void {
+  addProactiveSendCount(accountId, threadId, todayKey(timeZone, now), count, keepSinceDayKey(timeZone, now));
 }
 
-/** Chỉ dùng cho test - đưa hàng đợi rải đều về trạng thái sạch giữa các ca test */
-export function resetProactiveSendQueue(): void {
-  queueTail = Promise.resolve();
+/** Chỉ dùng cho test - đưa bộ đếm trần về 0 để mỗi ca test bắt đầu sạch */
+export function resetProactiveSendCounters(): void {
+  resetAllProactiveCounters();
 }

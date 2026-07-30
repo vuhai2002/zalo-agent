@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { API } from "zca-js";
@@ -28,6 +28,7 @@ let jobStore: typeof import("./scheduled-job-store.js");
 let runLogStore: typeof import("./job-run-log-store.js");
 let historyStore: typeof import("../conversation/history-store.js");
 let database: typeof import("../conversation/database.js");
+let guard: typeof import("./proactive-send-guard.js");
 
 const ACC = "acc-run-job";
 const THREAD = "t-run-job";
@@ -44,6 +45,7 @@ before(async () => {
   runLogStore = await import("./job-run-log-store.js");
   historyStore = await import("../conversation/history-store.js");
   database = await import("../conversation/database.js");
+  guard = await import("./proactive-send-guard.js");
 
   accountStore.createAccount({ id: ACC, label: "Test" });
   threadStore.recordThreadActivity({
@@ -53,6 +55,14 @@ before(async () => {
     displayName: "",
     lastSenderName: "",
   });
+});
+
+// Bộ đếm trần ngày giờ bền qua DB (Finding 5), không còn tự "reset theo file
+// test" như bản Map trong bộ nhớ cũ - nhiều ca test dùng CHUNG threadId (vd
+// THREAD) sẽ cộng dồn vào NHAU nếu không dọn. Reset trước MỖI test để mỗi ca
+// tự đứng độc lập, không phụ thuộc thứ tự chạy hay số ca đứng trước nó.
+beforeEach(() => {
+  guard.resetProactiveSendCounters();
 });
 
 after(() => {
@@ -218,6 +228,74 @@ describe("runScheduledJob - kind=message", () => {
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
     assert.equal(lastRunOf(job.id).status, "skipped");
     assert.equal(sent.length, 11, "câu thông báo không được lặp lại trong cùng ngày");
+  });
+});
+
+describe("runScheduledJob - không giữ khoá thread khi đang chờ hàng đợi toàn cục (Finding 3)", () => {
+  it("tin THẬT trên CÙNG thread chạy được ngay dù job đang xếp hàng ở hàng đợi toàn cục", async () => {
+    const guard = await import("./proactive-send-guard.js");
+    const messageBatcher = await import("../middleware/message-batcher.js");
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+    attachOnline();
+    const threadKey = `${ACC}:${THREAD}`;
+    const job = makeJob({ payload: "cham vi hang doi toan cuc" });
+
+    // Chiếm hàng đợi toàn cục bằng 1 việc "chậm" 200ms - job dispatch NGAY SAU
+    // đây sẽ phải XẾP HÀNG sau việc này trong enqueueProactiveSend.
+    void guard.enqueueProactiveSend(() => sleep(200));
+
+    // Dispatch job (KHÔNG await) - nó sẽ vào deliverProactively và phải CHỜ
+    // tới lượt ở hàng đợi toàn cục (~200ms) trước khi được vào xâu thread.
+    void runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
+    await sleep(15); // đủ để job kịp tới bước enqueueProactiveSend (vài microtask), còn NGẮN hơn nhiều so với 200ms hàng đợi
+
+    // Trong lúc job CÒN ĐANG CHỜ hàng đợi toàn cục, tin nhắn "thật" trên CHÍNH
+    // thread đó phải chạy được NGAY - không bị job giữ khoá thread lại. Đây
+    // chính là điều đã sửa: trước fix, job giữ khoá thread SUỐT lúc chờ hàng
+    // đợi toàn cục (enqueueProactiveSend lồng BÊN NGOÀI runOnThreadChain).
+    const t0 = Date.now();
+    let ranMessage = false;
+    await messageBatcher.runOnThreadChain(threadKey, async () => {
+      ranMessage = true;
+    });
+    const dt = Date.now() - t0;
+
+    assert.equal(ranMessage, true);
+    assert.ok(dt < 100, `tin thật phải chạy gần như ngay, không đợi job xong hàng đợi toàn cục (đo được ${dt}ms)`);
+  });
+});
+
+describe("runScheduledJob - đếm trần THEO SỐ TIN, không phải theo lượt (Finding 4)", () => {
+  it("1 lượt bị cắt thành nhiều tin thì trần cộng đúng SỐ TIN thật sự gửi, không phải cố định 1", async () => {
+    const counterStore = await import("./proactive-send-counter-store.js");
+    const zoneTime = await import("../shared/zone-time.js");
+
+    attachOnline();
+    const threadDaiTin = "t-dai-tin-finding4";
+    threadStore.recordThreadActivity({
+      accountId: ACC,
+      threadId: threadDaiTin,
+      threadType: 0,
+      displayName: "",
+      lastSenderName: "",
+    });
+
+    // Dài hơn ZALO_MAX_MESSAGE_CHARS (2000, mặc định) để sendReplyInParts CHẮC
+    // CHẮN cắt thành >= 2 tin - trước fix, dù cắt bao nhiêu tin bộ đếm cũng
+    // chỉ +1, nghĩa là 1 job trả lời dài chạy đủ 10 lần/ngày có thể ra tới 50
+    // tin thật (5 = ZALO_MAX_MESSAGE_PARTS) mà trần tưởng mới dùng 10/10.
+    const doanDai = "Nội dung báo cáo hôm nay khá dài, cần trình bày đầy đủ từng mục. ".repeat(60);
+    const job = makeJob({ threadId: threadDaiTin, payload: doanDai });
+
+    const dayKey = zoneTime.todayKey("Asia/Ho_Chi_Minh");
+    const before = counterStore.getProactiveCounter(ACC, threadDaiTin, dayKey).count;
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
+
+    assert.equal(lastRunOf(job.id).status, "ok");
+    const after = counterStore.getProactiveCounter(ACC, threadDaiTin, dayKey).count;
+    assert.ok(after - before >= 2, `payload dài phải cắt thành >= 2 tin, bộ đếm phải tăng đúng bằng đó (đo được tăng ${after - before})`);
   });
 });
 

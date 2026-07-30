@@ -65,6 +65,29 @@ after(() => {
   cleanupTestEnv(dataDir);
 });
 
+function makeThread(threadId: string): void {
+  threadStore.recordThreadActivity({
+    accountId: ACC_RUNNING,
+    threadId,
+    threadType: 0,
+    displayName: "",
+    lastSenderName: "",
+  });
+}
+
+describe("checkAccountAndThreadReady", () => {
+  it("account không chạy thì chặn", () => {
+    const r = guard.checkAccountAndThreadReady(ACC_OFFLINE, "t-bat-ky");
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.reason, /không chạy/);
+  });
+
+  it("account chạy + thread hợp lệ (tồn tại + bot_enabled) thì qua", () => {
+    makeThread("t-preflight-ok");
+    assert.deepEqual(guard.checkAccountAndThreadReady(ACC_RUNNING, "t-preflight-ok"), { ok: true });
+  });
+});
+
 describe("checkProactiveSendGuard - thứ tự 3 điều kiện", () => {
   it("account chưa từng attach (không chạy) thì chặn ngay ở điều kiện đầu tiên", () => {
     const r = guard.checkProactiveSendGuard(ACC_OFFLINE, "t-bat-ky", TZ);
@@ -79,13 +102,7 @@ describe("checkProactiveSendGuard - thứ tự 3 điều kiện", () => {
   });
 
   it("thread tồn tại nhưng bot_enabled=0 (tắt trên dashboard) thì chặn", () => {
-    threadStore.recordThreadActivity({
-      accountId: ACC_RUNNING,
-      threadId: "t-tat-bot",
-      threadType: 0,
-      displayName: "",
-      lastSenderName: "",
-    });
+    makeThread("t-tat-bot");
     threadStore.setBotEnabled(ACC_RUNNING, "t-tat-bot", false);
 
     const r = guard.checkProactiveSendGuard(ACC_RUNNING, "t-tat-bot", TZ);
@@ -94,61 +111,66 @@ describe("checkProactiveSendGuard - thứ tự 3 điều kiện", () => {
   });
 
   it("account chạy + thread hợp lệ + chưa chạm trần thì cho qua", () => {
-    threadStore.recordThreadActivity({
-      accountId: ACC_RUNNING,
-      threadId: "t-hop-le",
-      threadType: 0,
-      displayName: "",
-      lastSenderName: "",
-    });
+    makeThread("t-hop-le");
     assert.deepEqual(guard.checkProactiveSendGuard(ACC_RUNNING, "t-hop-le", TZ), { ok: true });
   });
 });
 
 describe("checkProactiveSendGuard - trần ngày (SCHEDULER_MAX_PROACTIVE_PER_DAY=3 trong test)", () => {
-  it("tin thứ N+1 (N=trần) bị chặn; lần đầu chạm trần báo 1 câu, các lần sau trong CÙNG ngày im lặng", () => {
+  it("đếm THEO SỐ TIN (count truyền vào recordProactiveSend), không phải theo số lần gọi", () => {
+    const threadId = "t-dem-theo-tin";
+    makeThread(threadId);
+    const now = new Date("2026-08-01T01:00:00Z");
+
+    // 1 lần record nhưng 3 tin (mô phỏng 1 câu trả lời dài bị cắt thành 3 đoạn)
+    guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, 3, now);
+    assert.equal(
+      guard.checkProactiveSendGuard(ACC_RUNNING, threadId, TZ, now).ok,
+      false,
+      "3 tin trong 1 lần gọi phải tính đủ 3, chạm trần 3 ngay",
+    );
+  });
+
+  it("tin thứ N+1 (N=trần) bị chặn; check KHÔNG tự ghi 'đã báo' - phải gọi markProactiveCapNotified mới tính là đã báo", () => {
     const threadId = "t-cham-tran";
-    threadStore.recordThreadActivity({
-      accountId: ACC_RUNNING,
-      threadId,
-      threadType: 0,
-      displayName: "",
-      lastSenderName: "",
-    });
+    makeThread(threadId);
     const now = new Date("2026-08-01T01:00:00Z");
 
     for (let i = 0; i < 3; i++) {
       const r = guard.checkProactiveSendGuard(ACC_RUNNING, threadId, TZ, now);
       assert.equal(r.ok, true, `tin thứ ${i + 1} (trong trần) phải qua được`);
-      guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, now);
+      guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, 1, now);
     }
 
-    const lanDauChamTran = guard.checkProactiveSendGuard(ACC_RUNNING, threadId, TZ, now);
-    assert.equal(lanDauChamTran.ok, false);
-    if (!lanDauChamTran.ok) {
-      assert.match(lanDauChamTran.reason, /chạm trần/);
-      assert.equal(lanDauChamTran.notifyCapHitOnce, true, "lần ĐẦU chạm trần phải báo 1 câu cho biết vì sao job im");
+    // Gọi check NHIỀU LẦN mà KHÔNG mark - notifyCapHitOnce phải LUÔN true, vì
+    // check là hàm THUẦN ĐỌC (đúng fix: trang "Chạy thử ngay" gọi kiểm trước
+    // rồi có thể không gửi thật, tự ghi ngay trong check sẽ nuốt mất thông báo
+    // của lần chạm trần THẬT sự sau đó).
+    const kiemLan1 = guard.checkProactiveSendGuard(ACC_RUNNING, threadId, TZ, now);
+    const kiemLan2 = guard.checkProactiveSendGuard(ACC_RUNNING, threadId, TZ, now);
+    assert.equal(kiemLan1.ok, false);
+    assert.equal(kiemLan2.ok, false);
+    if (!kiemLan1.ok && !kiemLan2.ok) {
+      assert.match(kiemLan1.reason, /chạm trần/);
+      assert.equal(kiemLan1.notifyCapHitOnce, true, "check không mark thì vẫn phải báo true");
+      assert.equal(kiemLan2.notifyCapHitOnce, true, "gọi check nhiều lần không mark - vẫn true, không tự đổi");
     }
 
-    const lanSau = guard.checkProactiveSendGuard(ACC_RUNNING, threadId, TZ, now);
-    assert.equal(lanSau.ok, false);
-    if (!lanSau.ok) {
-      assert.equal(lanSau.notifyCapHitOnce, false, "lần chạm trần SAU trong cùng ngày không được báo lại (tránh spam)");
+    // Giờ mới ĐÁNH DẤU (như caller làm sau khi thật sự gửi được thông báo)
+    guard.markProactiveCapNotified(ACC_RUNNING, threadId, TZ, now);
+    const sauKhiMark = guard.checkProactiveSendGuard(ACC_RUNNING, threadId, TZ, now);
+    assert.equal(sauKhiMark.ok, false);
+    if (!sauKhiMark.ok) {
+      assert.equal(sauKhiMark.notifyCapHitOnce, false, "đã mark rồi thì không báo lại trong cùng ngày");
     }
   });
 
   it("qua NGÀY MỚI (theo giờ VN) thì trần được reset về 0", () => {
     const threadId = "t-qua-ngay";
-    threadStore.recordThreadActivity({
-      accountId: ACC_RUNNING,
-      threadId,
-      threadType: 0,
-      displayName: "",
-      lastSenderName: "",
-    });
+    makeThread(threadId);
 
     const ngay1 = new Date("2026-08-01T10:00:00Z");
-    for (let i = 0; i < 3; i++) guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, ngay1);
+    guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, 3, ngay1);
     assert.equal(guard.checkProactiveSendGuard(ACC_RUNNING, threadId, TZ, ngay1).ok, false, "đã chạm trần ngày 1");
 
     const ngay2 = new Date("2026-08-02T10:00:00Z");
@@ -157,17 +179,11 @@ describe("checkProactiveSendGuard - trần ngày (SCHEDULER_MAX_PROACTIVE_PER_DA
 
   it("mốc lật ngày là 00:00 GIỜ VN, không phải 00:00 UTC - đúng vá zone-time đã trị ở phase 01", () => {
     const threadId = "t-lech-mui-gio";
-    threadStore.recordThreadActivity({
-      accountId: ACC_RUNNING,
-      threadId,
-      threadType: 0,
-      displayName: "",
-      lastSenderName: "",
-    });
+    makeThread(threadId);
 
     // 16:00Z 31/07 = 23:00 VN 31/07 (UTC+7) - vẫn ngày VN 31/07
     const truocNuaDemVN = new Date("2026-07-31T16:00:00Z");
-    for (let i = 0; i < 3; i++) guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, truocNuaDemVN);
+    guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, 3, truocNuaDemVN);
     assert.equal(guard.checkProactiveSendGuard(ACC_RUNNING, threadId, TZ, truocNuaDemVN).ok, false);
 
     // 18:00Z 31/07 = 01:00 VN 01/08 - CÙNG ngày UTC (31/07) nhưng ĐÃ SANG ngày VN mới
@@ -183,15 +199,9 @@ describe("checkProactiveSendGuard - trần ngày (SCHEDULER_MAX_PROACTIVE_PER_DA
 describe("resetProactiveSendCounters", () => {
   it("đưa mọi bộ đếm về 0 - dùng để cô lập các ca test với nhau", () => {
     const threadId = "t-reset";
-    threadStore.recordThreadActivity({
-      accountId: ACC_RUNNING,
-      threadId,
-      threadType: 0,
-      displayName: "",
-      lastSenderName: "",
-    });
+    makeThread(threadId);
     const now = new Date();
-    for (let i = 0; i < 3; i++) guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, now);
+    guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, 3, now);
     assert.equal(guard.checkProactiveSendGuard(ACC_RUNNING, threadId, TZ, now).ok, false);
 
     guard.resetProactiveSendCounters();
@@ -231,5 +241,26 @@ describe("enqueueProactiveSend - rải đều toàn cục", () => {
     });
 
     assert.equal(ranSecond, true, "hàng đợi phải sống tiếp sau 1 lần lỗi");
+  });
+
+  it("1 phần tử treo quá lâu bị bỏ qua (timeout) - không giữ hàng đợi mãi mãi", async () => {
+    guard.resetProactiveSendQueue();
+    guard.setQueueElementTimeoutForTest(50); // 60s mặc định production - hạ xuống để test không phải chờ thật
+    let ranSecond = false;
+
+    try {
+      // Task không bao giờ tự resolve - mô phỏng 1 lần gửi treo
+      await assert.rejects(
+        guard.enqueueProactiveSend(() => new Promise<void>(() => {})),
+        /quá.*ms/,
+      );
+      await guard.enqueueProactiveSend(async () => {
+        ranSecond = true;
+      });
+
+      assert.equal(ranSecond, true, "phần tử treo bị bỏ qua sau timeout, hàng đợi vẫn sống tiếp");
+    } finally {
+      guard.setQueueElementTimeoutForTest(60_000); // trả lại mặc định cho test khác trong cùng file
+    }
   });
 });

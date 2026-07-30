@@ -51,6 +51,7 @@ export function buildSystemPrompt(
   msg: ParsedMessage,
   memory?: PromptMemory,
   account?: Pick<AccountConfig, "disabledTools">,
+  isolated?: boolean,
 ): string {
   // Chỉ ngày + thứ, không có giờ - giờ đổi mỗi phút sẽ vỡ prompt cache mỗi phút.
   // Không có dòng này model đoán ngày từ training data và trả lời sai.
@@ -59,8 +60,12 @@ export function buildSystemPrompt(
   if (account) {
     // Một lần lọc dùng cho CẢ mục "Khả năng" lẫn các khối luật: hai nơi tự lọc
     // riêng là sớm muộn cũng lệch, mà lệch nghĩa là prompt kể một tool rồi lại
-    // dạy luật của tool khác.
-    const available = listAvailableTools(account);
+    // dạy luật của tool khác. `isolated` PHẢI truyền xuống đây - thiếu nó thì
+    // lượt theo lịch (agent-loop.ts truyền isolated:true) vẫn được liệt kê cả
+    // 3 tool bị runsInScheduledTurn:false, trong khi buildAgentTools ĐÃ lọc
+    // chúng khỏi schema thật - model tự nhận "mình vừa ghi nhớ" mà chẳng lưu
+    // gì (đúng bug persona-prompt.test.ts đã dựng bất biến để canh).
+    const available = listAvailableTools(account, { isolated });
     sections.push(toolCapabilitySection(available));
     sections.push(...toolPersonaSections(available.map((t) => t.key)));
   }

@@ -58,12 +58,14 @@ function flush(threadKey: string, handler: BatchHandler): void {
  * chạy `fn`, các lượt cùng thread không bao giờ chồng lấn (race lượt sau đọc
  * history trước khi lượt trước ghi xong).
  *
- * Tách ra dùng CHUNG cho cả 2 nguồn gọi: `flush` ở trên (tin nhắn tới) và vòng
- * tick của scheduler (job lịch hẹn) - job và tin người dùng cùng thread cũng
- * không được chồng nhau, cùng một lý do. Dựng hàng đợi thứ hai song song cho
- * scheduler sẽ mất tác dụng chống race này.
+ * Tách ra dùng CHUNG cho cả 2 nguồn gọi: `flush` ở trên (tin nhắn tới) và
+ * `proactive-send-guard.ts` (`deliverProactively` - job lịch hẹn CHỈ giữ khoá
+ * này trong lúc gửi thật, không giữ suốt lúc chờ hàng đợi rải đều toàn cục) -
+ * job và tin người dùng cùng thread cũng không được chồng nhau, cùng một lý
+ * do. Dựng hàng đợi thứ hai song song cho scheduler sẽ mất tác dụng chống race
+ * này. Generic để caller lấy lại được kết quả thật của `fn` (vd `ReplyResult`).
  */
-export function runOnThreadChain(threadKey: string, fn: () => Promise<void>): Promise<void> {
+export function runOnThreadChain<T>(threadKey: string, fn: () => Promise<T>): Promise<T> {
   const previous = threadChains.get(threadKey) ?? Promise.resolve();
   const run = previous.then(fn);
 

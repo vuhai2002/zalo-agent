@@ -350,11 +350,23 @@ describe("runAgentTurn - isolated (lượt theo lịch của scheduler)", () => 
     );
   });
 
-  it("isolated:true vẫn giữ nguyên persona (system prompt không đổi theo cờ này)", async () => {
+  it("isolated:true giữ nguyên PERSONA GỐC (base persona, quy tắc an toàn) - chỉ mục 'Khả năng' đổi theo tool thật có", async () => {
+    // Sửa sau review (Finding 2): trước đây kỳ vọng 2 system prompt GIỐNG HỆT
+    // nhau - kỳ vọng đó SAI, vì buildSystemPrompt không truyền isolated xuống
+    // listAvailableTools nên mục "Khả năng" (và luật của add_reaction/save_memory)
+    // vẫn liệt kê tool mà schema thật KHÔNG hề cấp. Đúng hành vi bây giờ: phần
+    // PERSONA GỐC (câu mở đầu, quy tắc an toàn) giữ y nguyên; phần "Khả năng"
+    // ngắn đi đúng 2 tool bị loại (add_reaction, save_memory).
     const binhThuong = await chayLuot([() => traLoi("ok")]);
     const coLap = await chayLuot([() => traLoi("ok")], [tinNhan()], { isolated: true });
-    assert.equal(systemText(coLap.calls[0]!), systemText(binhThuong.calls[0]!), "system prompt phải giống hệt nhau");
-    assert.ok(systemText(coLap.calls[0]!), "phải thực sự có system prompt, không phải hai chuỗi rỗng khớp nhau");
+    const textBinhThuong = systemText(binhThuong.calls[0]!)!;
+    const textCoLap = systemText(coLap.calls[0]!)!;
+
+    assert.notEqual(textCoLap, textBinhThuong, "mục Khả năng PHẢI khác nhau - lượt cô lập thiếu 2 tool bị loại");
+    assert.match(textCoLap, /Bạn là trợ lý AI trả lời tin nhắn trên Zalo/, "persona gốc vẫn phải còn nguyên");
+    assert.doesNotMatch(textCoLap, /Thả cảm xúc/, "add_reaction không được kể trong mục Khả năng khi cô lập");
+    assert.doesNotMatch(textCoLap, /Ghi nhớ lâu dài/, "save_memory không được kể trong mục Khả năng khi cô lập");
+    assert.match(textBinhThuong, /Thả cảm xúc/, "lượt thường (đối chứng) vẫn phải kể add_reaction");
   });
 
   it("isolated:true loại add_reaction, save_memory khỏi schema tool gửi model", async () => {

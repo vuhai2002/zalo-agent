@@ -106,4 +106,25 @@ describe("buildSystemPrompt - danh sách tool đang bật", () => {
     const text = prompt.buildSystemPrompt(AGENT, MSG);
     assert.match(text, /trợ lý AI/i);
   });
+
+  it("isolated=true (lượt theo lịch): KHÔNG kể 3 tool bị runsInScheduledTurn:false - khớp CHÍNH XÁC với schema thật (Finding 2)", () => {
+    // Trước fix: buildSystemPrompt gọi listAvailableTools(account) không
+    // truyền cờ isolated, trong khi buildAgentTools (agent-loop.ts) CÓ lọc -
+    // prompt quảng cáo "Ghi nhớ lâu dài"/"Thả cảm xúc" trong khi schema gửi
+    // model không hề có 2 tool đó. Model tự nhận "mình đã ghi nhớ" mà chẳng
+    // lưu gì - đúng bug bất biến ở dòng test dưới đã canh cho lượt THƯỜNG.
+    const acc = account([]);
+    const textCoLap = prompt.buildSystemPrompt(AGENT, MSG, undefined, acc, true);
+    const textThuong = prompt.buildSystemPrompt(AGENT, MSG, undefined, acc, false);
+
+    assert.doesNotMatch(textCoLap, /Ghi nhớ lâu dài/, "save_memory không được kể khi isolated");
+    assert.doesNotMatch(textCoLap, /Thả cảm xúc/, "add_reaction không được kể khi isolated");
+    assert.match(textThuong, /Ghi nhớ lâu dài/, "lượt thường (isolated=false) vẫn phải kể - đối chứng cho ca trên");
+
+    const listedIsolated = registry.listAvailableTools(acc, { isolated: true }).map((t) => t.key).sort();
+    const builtIsolated = Object.keys(
+      registry.buildAgentTools({ api: {} as never, account: acc, message: MSG, batch: [], isolated: true }),
+    ).sort();
+    assert.deepEqual(listedIsolated, builtIsolated, "prompt (qua listAvailableTools) và schema (buildAgentTools) phải khớp cả khi isolated");
+  });
 });

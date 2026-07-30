@@ -266,6 +266,51 @@ describe("clear-before-dispatch", () => {
   });
 });
 
+describe("preflight - account/thread chưa sẵn sàng (Finding 1)", () => {
+  it("account KHÔNG chạy: job VẪN CÒN SỐNG sau tick (enabled=1, next_run_at KHÔNG bị xoá, KHÔNG có run log) - tick sau account online lại thì gửi được", async () => {
+    // Ca hoàn toàn bình thường của zca-js: account rớt phiên đúng lúc job đến
+    // hạn. Trước fix: clear-before-dispatch + markRun('skipped') vẫn chạy ->
+    // job once mất next_run_at + run_count chạm max -> chết vĩnh viễn.
+    accountManager.stopAccount(ACC); // đảm bảo THẬT SỰ offline, không phụ thuộc thứ tự test khác
+    const threadId = "t-account-offline";
+    makeThread(threadId);
+    const job = makeJob({ threadId, payload: "nho hop truc tuyen" });
+    const originalNextRunAt = job.nextRunAt;
+
+    await schedulerLoop.runSchedulerTick(new Date());
+
+    const afterOffline = jobStore.getJobUnscoped(job.id)!;
+    assert.equal(afterOffline.enabled, true, "job KHÔNG được tự tắt");
+    assert.equal(afterOffline.nextRunAt, originalNextRunAt, "next_run_at KHÔNG được đụng vào");
+    assert.equal(afterOffline.runCount, 0, "run_count KHÔNG được tăng - job chưa từng chạy thật sự");
+    assert.equal(runLogStore.listRuns(job.id).length, 0, "không ghi run nào - chưa hề dispatch");
+
+    // Account online lại - tick SAU đó phải nhặt lại và gửi được bình thường
+    const sent = attachOnline();
+    await schedulerLoop.runSchedulerTick(new Date());
+    await sleep(40);
+
+    assert.equal(sent.length, 1, "job phải gửi được ở tick kế tiếp sau khi account online lại");
+    assert.equal(lastRunOf(job.id)?.status, "ok");
+  });
+
+  it("thread bot_enabled=0: job VẪN CÒN SỐNG sau tick, không markRun - đúng bất biến như ca account offline", async () => {
+    attachOnline();
+    const threadId = "t-bot-tat-tick";
+    makeThread(threadId);
+    threadStore.setBotEnabled(ACC, threadId, false);
+    const job = makeJob({ threadId });
+
+    await schedulerLoop.runSchedulerTick(new Date());
+
+    const after = jobStore.getJobUnscoped(job.id)!;
+    assert.equal(after.enabled, true);
+    assert.equal(after.nextRunAt, job.nextRunAt);
+    assert.equal(after.runCount, 0);
+    assert.equal(runLogStore.listRuns(job.id).length, 0);
+  });
+});
+
 describe("skip-forward", () => {
   it("every trễ quá cửa sổ grace: bỏ lượt (không gửi gì), ghi run 'skipped', next_run_at nhảy tới TƯƠNG LAI", async () => {
     const sent = attachOnline();

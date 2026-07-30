@@ -19,10 +19,10 @@ import { finishAgentTurn, openAgentTurn } from "../conversation/usage-store.js";
 import { createLogger } from "../shared/logger.js";
 import { runInTurnLogContext } from "../shared/turn-log-context.js";
 import { getRunningAccountApi } from "../zalo/account-manager.js";
-import { sendReplyInParts, type ReplyTarget } from "../zalo/send-reply-in-parts.js";
+import type { ReplyTarget } from "../zalo/send-reply-in-parts.js";
 import { openRun } from "./job-run-log-store.js";
-import { ACCOUNT_NOT_RUNNING_REASON, enqueueProactiveSend } from "./proactive-send-guard.js";
-import { blockedByGuard, conclude, finishSend } from "./scheduled-job-conclude.js";
+import { ACCOUNT_NOT_RUNNING_REASON } from "./proactive-send-guard.js";
+import { blockedByGuard, concludeBlockedNotRun, conclude, sendAndConclude } from "./scheduled-job-conclude.js";
 import { buildSyntheticMessage, withLateLabel } from "./scheduled-job-prompt.js";
 import type { ScheduledJob } from "./scheduled-job-store.js";
 import { isSilentResponse } from "./silent-sentinel.js";
@@ -32,7 +32,7 @@ const log = createLogger("run-scheduled-job");
 export type RunScheduledJobOptions = {
   /** true khi `decideDueAction` trả 'run-late' (chỉ xảy ra với schedule_kind='once') */
   late: boolean;
-  /** `next_run_at` GỐC (mốc job LẼ RA phải chạy) - cho nhãn "(nhắc trễ, lịch gốc HH:MM)" */
+  /** `next_run_at` GỐC (mốc job LẼ RA phải chạy) - cho nhãn "(nhắc trễ, lịch gốc HH:MM)" VÀ để phục hồi khi bị chặn (xem concludeBlockedNotRun) */
   scheduledFor: string;
   /** Seam test - model giả cho lượt agent; mặc định `resolveLanguageModel` thật (agent-loop.ts) */
   resolveModel?: typeof resolveLanguageModel;
@@ -57,11 +57,14 @@ export async function runScheduledJob(job: ScheduledJob, options: RunScheduledJo
 async function dispatch(job: ScheduledJob, options: RunScheduledJobOptions, runId: number): Promise<void> {
   const timeZone = job.timezone || env.BOT_TIMEZONE;
   // Account KHÔNG CHẠY thì dừng NGAY - trước cả khi mở lượt agent, tránh tốn
-  // token cho một lượt chắc chắn không gửi được gì.
+  // token cho một lượt chắc chắn không gửi được gì. `scheduler-loop.ts` đã
+  // kiểm phần này TRƯỚC clear-before-dispatch nên nhánh này giờ chỉ còn là
+  // lưới đỡ cho ca hiếm (account rớt phiên giữa lúc job đang xếp hàng dispatch).
+  // Chặn ở đây thì KHÔNG markRun - job chưa từng chạy thật sự.
   const account = getAccount(job.accountId);
   const api = getRunningAccountApi(job.accountId);
   if (!account || !api) {
-    conclude(job, runId, { status: "skipped", detail: ACCOUNT_NOT_RUNNING_REASON });
+    concludeBlockedNotRun(job, runId, ACCOUNT_NOT_RUNNING_REASON, options.scheduledFor);
     return;
   }
 
@@ -87,11 +90,10 @@ async function runMessageJob(
   timeZone: string,
   options: RunScheduledJobOptions,
 ): Promise<void> {
-  if (await blockedByGuard(job, target, runId, timeZone)) return;
+  if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor)) return;
 
   const text = options.late ? withLateLabel(job.payload, options.scheduledFor, timeZone) : job.payload;
-  const reply = await enqueueProactiveSend(() => sendReplyInParts(target, text));
-  finishSend(job, runId, timeZone, reply);
+  await sendAndConclude(job, target, runId, timeZone, text);
 }
 
 /** kind='agent': lượt agent CÔ LẬP (isolated:true) rồi mới xét gửi hay im */
@@ -131,11 +133,10 @@ async function runAgentJob(
         return;
       }
 
-      if (await blockedByGuard(job, target, runId, timeZone, turnId)) return;
+      if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor, turnId)) return;
 
       const finalText = options.late ? withLateLabel(text, options.scheduledFor, timeZone) : text;
-      const reply = await enqueueProactiveSend(() => sendReplyInParts(target, finalText));
-      finishSend(job, runId, timeZone, reply, turnId);
+      await sendAndConclude(job, target, runId, timeZone, finalText, turnId);
     } catch (err) {
       // Lượt ném lỗi (provider chết, timeout...) vẫn phải chốt token đã tốn +
       // lưu trace các step ĐÃ chạy được - đúng nếp message-turn-processor.ts.

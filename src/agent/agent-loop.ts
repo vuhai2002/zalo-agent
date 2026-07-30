@@ -189,7 +189,7 @@ export async function runAgentTurn({
         accountId: account.id,
         threadId: latest.threadId,
       }),
-      system: buildSystemPrompt(agent, latest, memory, account),
+      system: buildSystemPrompt(agent, latest, memory, account, isolated),
       messages,
       // isolated lọc bớt tool không hợp với lượt theo lịch (add_reaction không
       // có msgId thật, read_image không có ảnh, save_memory chặn injection từ
@@ -277,7 +277,7 @@ export async function runAgentTurn({
   const runWrapUp = async (daLam: ModelMessage[]): Promise<string> => {
     const r = await generateText({
       model: resolveModel(agent, { accountId: account.id, threadId: latest.threadId }),
-      system: buildSystemPrompt(agent, latest, memory, account),
+      system: buildSystemPrompt(agent, latest, memory, account, isolated),
       messages: [
         ...messages,
         ...daLam,

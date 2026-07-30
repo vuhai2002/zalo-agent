@@ -202,6 +202,21 @@ function runMigrations(): void {
     );
     -- Lịch sử của 1 job, mới nhất trước; dọn quá SCHEDULER_RUN_LOG_KEEP theo job_id
     CREATE INDEX IF NOT EXISTS idx_scheduled_job_runs_job ON scheduled_job_runs (job_id, id DESC);
+
+    -- Đếm tin CHỦ ĐỘNG đã gửi mỗi (account, thread, ngày VN) cho trần
+    -- SCHEDULER_MAX_PROACTIVE_PER_DAY - bền qua restart. CỐ Ý không đếm từ
+    -- scheduled_job_runs: bảng đó bị prune xuống SCHEDULER_RUN_LOG_KEEP dòng
+    -- MỖI JOB ngay mỗi lần mở lượt, nên 1 job dày (vd every 5 phút) làm dòng
+    -- 'ok' buổi sáng bị xoá trong vài giờ - đếm lại tụt về 0 giữa ngày.
+    CREATE TABLE IF NOT EXISTS proactive_send_counters (
+      account_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL,
+      day_key TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      notice_sent INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      PRIMARY KEY (account_id, thread_id, day_key)
+    );
   `);
 
   // Tool CHẠY LỖI: AI SDK để chúng ở content dạng tool-error, không vào
