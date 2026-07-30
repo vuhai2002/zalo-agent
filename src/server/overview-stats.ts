@@ -11,9 +11,12 @@ const contactsCount = countStmt("contacts");
 const memoriesCount = countStmt("memories");
 const messagesCount = countStmt("messages");
 
+// Mốc đầu ngày trước là `strftime('%Y-%m-%dT00:00:00Z','now')` nhúng thẳng
+// trong SQL - tức 00:00 UTC = 07:00 sáng giờ VN, lệch cả hai chiều tùy giờ
+// xem. Giờ nhận mốc qua THAM SỐ ràng buộc: caller tự tính bằng
+// `startOfDayUtc(BOT_TIMEZONE)` (module này thuần, không tự biết timezone).
 const messagesTodayStmt = db.prepare(
-  `SELECT COUNT(*) AS n FROM messages
-   WHERE account_id = ? AND created_at >= strftime('%Y-%m-%dT00:00:00Z', 'now')`,
+  `SELECT COUNT(*) AS n FROM messages WHERE account_id = ? AND created_at >= ?`,
 );
 
 export type AccountStats = {
@@ -24,7 +27,8 @@ export type AccountStats = {
   messagesToday: number;
 };
 
-export function getAccountStats(accountId: string): AccountStats {
+/** `startOfTodayUtc`: mốc UTC ISO của đầu ngày hôm nay theo BOT_TIMEZONE - tính sẵn ở caller (route) rồi truyền xuống. */
+export function getAccountStats(accountId: string, startOfTodayUtc: string): AccountStats {
   const n = (stmt: ReturnType<typeof db.prepare>) =>
     (stmt.get(accountId) as { n: number }).n;
   return {
@@ -32,7 +36,7 @@ export function getAccountStats(accountId: string): AccountStats {
     contacts: n(contactsCount),
     memories: n(memoriesCount),
     messagesTotal: n(messagesCount),
-    messagesToday: (messagesTodayStmt.get(accountId) as { n: number }).n,
+    messagesToday: (messagesTodayStmt.get(accountId, startOfTodayUtc) as { n: number }).n,
   };
 }
 

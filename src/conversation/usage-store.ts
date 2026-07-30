@@ -1,3 +1,4 @@
+import { dayKeyOf } from "../shared/zone-time.js";
 import { db } from "./database.js";
 
 export type AgentTurnUsage = {
@@ -56,27 +57,45 @@ export function getThreadUsageTotals(
   return { turns: row.turns, totalTokens: row.total_tokens };
 }
 
-const dailyStmt = db.prepare(`
-  SELECT substr(created_at, 1, 10) AS day,
-         COUNT(*) AS turns,
-         COALESCE(SUM(input_tokens), 0) AS input_tokens,
-         COALESCE(SUM(output_tokens), 0) AS output_tokens
+// Trước đây gom bằng `substr(created_at, 1, 10)` ngay trong SQL - tức theo
+// NGÀY UTC, lệch 7 tiếng so với ngày VN mà dashboard muốn hiển thị. SQLite
+// không biết timezone nên không thể sửa bằng SQL thuần túy (offset cứng
+// `datetime(created_at, '+7 hours')` lại sai với zone có DST). Giải pháp: câu
+// SQL chỉ còn lo phần nó làm tốt - CHẶN PHẠM VI QUÉT bằng `created_at >= ?` -
+// còn việc gộp theo ngày chuyển hẳn sang JS bằng `dayKeyOf` (qua luxon).
+// Chi phí chấp nhận được: cửa sổ 7 ngày trên Overview chỉ vài chục dòng.
+const dailySinceStmt = db.prepare(`
+  SELECT created_at, input_tokens, output_tokens
   FROM agent_turns
   WHERE account_id = ? AND created_at >= ?
-  GROUP BY day ORDER BY day DESC
+  ORDER BY created_at ASC
 `);
 
-/** Thống kê theo ngày (UTC) từ mốc sinceIsoDate (vd '2026-07-18') - cho trang Overview */
+/**
+ * Thống kê theo ngày (theo `timeZone`, không phải UTC) từ mốc `sinceUtcIso` -
+ * cho trang Overview. `sinceUtcIso` nên tính bằng `startOfDayUtc` lùi N ngày
+ * để không lọt mất giờ đầu ngày VN (xem `overview-routes.ts`).
+ */
 export function getDailyUsage(
   accountId: string,
-  sinceIsoDate: string,
+  sinceUtcIso: string,
+  timeZone: string,
 ): { day: string; turns: number; inputTokens: number; outputTokens: number }[] {
-  type Row = { day: string; turns: number; input_tokens: number; output_tokens: number };
-  const rows = dailyStmt.all(accountId, sinceIsoDate) as unknown as Row[];
-  return rows.map((r) => ({
-    day: r.day,
-    turns: r.turns,
-    inputTokens: r.input_tokens,
-    outputTokens: r.output_tokens,
-  }));
+  type Row = { created_at: string; input_tokens: number; output_tokens: number };
+  const rows = dailySinceStmt.all(accountId, sinceUtcIso) as unknown as Row[];
+
+  const byDay = new Map<string, { turns: number; inputTokens: number; outputTokens: number }>();
+  for (const r of rows) {
+    const day = dayKeyOf(r.created_at, timeZone);
+    const agg = byDay.get(day) ?? { turns: 0, inputTokens: 0, outputTokens: 0 };
+    agg.turns += 1;
+    agg.inputTokens += r.input_tokens;
+    agg.outputTokens += r.output_tokens;
+    byDay.set(day, agg);
+  }
+
+  // Giữ nguyên thứ tự DESC (mới nhất trước) như hành vi cũ của câu SQL
+  return [...byDay.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([day, agg]) => ({ day, ...agg }));
 }

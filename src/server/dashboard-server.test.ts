@@ -71,6 +71,14 @@ describe("dashboard-server", () => {
     assert.equal(res.status, 200);
   });
 
+  it("GET /api/overview trả kèm todayKey + timezone (ngày VN, không phải ngày UTC trình duyệt)", async () => {
+    const res = await authed("/api/overview");
+    assert.equal(res.status, 200);
+    const data = (await res.json()) as { todayKey: string; timezone: string };
+    assert.equal(data.timezone, "Asia/Ho_Chi_Minh"); // BOT_TIMEZONE mặc định trong env test
+    assert.match(data.todayKey, /^\d{4}-\d{2}-\d{2}$/);
+  });
+
   it("GET /api/threads không có accountId trả dữ liệu mọi account", async () => {
     const threads = await import("../conversation/thread-store.js");
     threads.recordThreadActivity({

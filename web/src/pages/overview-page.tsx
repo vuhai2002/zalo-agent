@@ -53,8 +53,10 @@ export function OverviewPage() {
     }),
     { threads: 0, contacts: 0, memories: 0, messagesTotal: 0, messagesToday: 0 },
   );
-  const today = new Date().toISOString().slice(0, 10);
-  const todayUsage = dailyByDay.get(today);
+  // todayKey do server tính theo BOT_TIMEZONE (không phải new Date() của trình
+  // duyệt) - tự tính lại ở đây từng làm 2 ô "hôm nay" hiện 0 suốt 7 tiếng đầu
+  // ngày VN vì khóa ngày UTC của trình duyệt không khớp khóa ngày VN của server.
+  const todayUsage = dailyByDay.get(data.todayKey);
   // Sparkline chạy trái -> phải theo thời gian
   const series = [...dailyByDay.entries()]
     .sort(([a], [b]) => a.localeCompare(b))

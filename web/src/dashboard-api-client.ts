@@ -44,6 +44,11 @@ export type OverviewData = {
     nodeVersion: string;
     llm: { provider: string; model: string; hasOverride: boolean };
   };
+  /** Khóa ngày "hôm nay" theo BOT_TIMEZONE - server tính, frontend dùng nguyên
+   *  thay vì tự suy từ giờ trình duyệt (dễ lệch với giờ VN của bot). */
+  todayKey: string;
+  /** Tên timezone IANA của bot, vd Asia/Ho_Chi_Minh */
+  timezone: string;
 };
 
 export type ThreadItem = {

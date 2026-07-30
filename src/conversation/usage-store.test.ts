@@ -46,13 +46,31 @@ describe("usage-store", () => {
     ghiLuot("acc-daily", "t-1", { inputTokens: 10, outputTokens: 1, totalTokens: 11, steps: 1 });
     ghiLuot("acc-daily", "t-2", { inputTokens: 20, outputTokens: 2, totalTokens: 22, steps: 1 });
 
-    const days = usage.getDailyUsage("acc-daily", "2000-01-01");
+    const days = usage.getDailyUsage("acc-daily", "2000-01-01", "Asia/Ho_Chi_Minh");
     assert.equal(days.length, 1); // cùng ngày hôm nay
     assert.equal(days[0]!.turns, 2);
     assert.equal(days[0]!.inputTokens, 30);
     assert.equal(days[0]!.outputTokens, 3);
 
     // Mốc since ở tương lai -> không có gì
-    assert.equal(usage.getDailyUsage("acc-daily", "2999-01-01").length, 0);
+    assert.equal(usage.getDailyUsage("acc-daily", "2999-01-01", "Asia/Ho_Chi_Minh").length, 0);
+  });
+
+  it("gom theo ngày VN, không phải ngày UTC - đúng bug overview đang vá", () => {
+    // Chèn thẳng qua db (không qua openAgentTurn) để ép created_at về đúng mốc
+    // 20:00Z 30/07 = 03:00 sáng 31/07 giờ VN. substr(created_at,1,10) kiểu cũ
+    // sẽ gom vào '2026-07-30'; dayKeyOf phải gom đúng vào ngày VN '2026-07-31'.
+    const insertAt = database.db.prepare(`
+      INSERT INTO agent_turns (account_id, thread_id, input_tokens, output_tokens, total_tokens, steps, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertAt.run("acc-vn-boundary", "t-1", 5, 1, 6, 1, "2026-07-30T20:00:00.000Z");
+
+    const daysVn = usage.getDailyUsage("acc-vn-boundary", "2000-01-01", "Asia/Ho_Chi_Minh");
+    assert.equal(daysVn.length, 1);
+    assert.equal(daysVn[0]!.day, "2026-07-31");
+
+    const daysUtc = usage.getDailyUsage("acc-vn-boundary", "2000-01-01", "UTC");
+    assert.equal(daysUtc[0]!.day, "2026-07-30");
   });
 });
