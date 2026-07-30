@@ -51,6 +51,18 @@ export function isBotEnabled(accountId: string, threadId: string): boolean {
   return row === undefined || row.bot_enabled === 1;
 }
 
+/**
+ * Trạng thái thread cho scheduler (`proactive-send-guard.ts`) - CỐ Ý khác
+ * `isBotEnabled` ở trên: hàm đó mặc định permissive cho thread lạ (đúng cho
+ * TIN ĐẾN - chưa kịp ghi thread thì vẫn phải trả lời được), còn tin CHỦ ĐỘNG
+ * không được nhắm vào một thread chưa từng ghi nhận trong hệ thống - trả
+ * `undefined` để caller coi đó là điều kiện chặn, không phải mặc định cho qua.
+ */
+export function findThreadStatus(accountId: string, threadId: string): { botEnabled: boolean } | undefined {
+  const row = getStmt.get(accountId, threadId) as { bot_enabled: number } | undefined;
+  return row ? { botEnabled: row.bot_enabled === 1 } : undefined;
+}
+
 /** Thread group đã có tên hiển thị chưa - dùng để quyết định có gọi getGroupInfo không */
 export function hasDisplayName(accountId: string, threadId: string): boolean {
   const row = getStmt.get(accountId, threadId) as { display_name: string } | undefined;

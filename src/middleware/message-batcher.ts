@@ -50,18 +50,33 @@ function flush(threadKey: string, handler: BatchHandler): void {
   const batch = pending.get(threadKey);
   if (!batch) return;
   pending.delete(threadKey);
+  void runOnThreadChain(threadKey, () => handler(batch.messages));
+}
 
+/**
+ * Xâu 1 lần chạy vào ĐÚNG thread: chờ lượt trước của thread đó xong rồi mới
+ * chạy `fn`, các lượt cùng thread không bao giờ chồng lấn (race lượt sau đọc
+ * history trước khi lượt trước ghi xong).
+ *
+ * Tách ra dùng CHUNG cho cả 2 nguồn gọi: `flush` ở trên (tin nhắn tới) và vòng
+ * tick của scheduler (job lịch hẹn) - job và tin người dùng cùng thread cũng
+ * không được chồng nhau, cùng một lý do. Dựng hàng đợi thứ hai song song cho
+ * scheduler sẽ mất tác dụng chống race này.
+ */
+export function runOnThreadChain(threadKey: string, fn: () => Promise<void>): Promise<void> {
   const previous = threadChains.get(threadKey) ?? Promise.resolve();
-  const run = previous.then(() => handler(batch.messages));
+  const run = previous.then(fn);
 
   // Xóa entry khi thread chạy xong: Map này sống suốt đời process, giữ lại một
-  // promise đã settled cho mỗi thread từng nhắn là rò rỉ bộ nhớ chậm.
+  // promise đã settled cho mỗi thread từng nhắn/từng có job là rò rỉ bộ nhớ chậm.
   let tail: Promise<unknown>;
   const release = (): void => {
     if (threadChains.get(threadKey) === tail) threadChains.delete(threadKey);
   };
   tail = run.then(release, release);
   threadChains.set(threadKey, tail);
+
+  return run;
 }
 
 /** Số thread đang chờ/đang chạy lượt agent - dùng cho test rò rỉ bộ nhớ */

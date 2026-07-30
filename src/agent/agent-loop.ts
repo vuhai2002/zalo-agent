@@ -112,6 +112,17 @@ export type AgentTurnParams = {
    * vòng lặp - retry, bỏ pixel, lượt chốt - đều phải gọi provider thật để test.
    */
   resolveModel?: typeof resolveLanguageModel;
+  /**
+   * Lượt CHẠY THEO LỊCH (job scheduler), không phải người dùng vừa nhắn - bỏ
+   * qua history/memory/summary, coi như 1 phiên hoàn toàn cô lập. Mặc định
+   * false để lượt tin nhắn thường không đổi hành vi. Persona GIỮ NGUYÊN (không
+   * cô lập) - bot vẫn phải biết mình là ai và làm được gì.
+   *
+   * Vào input thì cô lập, ra output thì ghi history: hàm này chỉ lo phần
+   * INPUT; ghi câu trả lời vào history là việc của caller (run-scheduled-job.ts),
+   * đúng nếp message-turn-processor.ts đang làm cho lượt tin nhắn.
+   */
+  isolated?: boolean;
 };
 
 export type AgentTurnResult = {
@@ -132,6 +143,7 @@ export async function runAgentTurn({
   batch,
   trace,
   resolveModel = resolveLanguageModel,
+  isolated = false,
 }: AgentTurnParams): Promise<AgentTurnResult> {
   // Tin cuối đại diện cho lượt: tools (thả reaction, quote) tác động lên tin này
   const latest = batch[batch.length - 1]!;
@@ -139,7 +151,11 @@ export async function runAgentTurn({
   // Não của account: persona + model/maxSteps override (fallback cấu hình chung)
   const agent = getAgentForAccount(account.agentId);
 
-  const history = getRecentMessages(account.id, latest.threadId);
+  // Phiên cô lập: KHÔNG gọi getRecentMessages/getMemoriesForContext/getThreadSummary
+  // (không chỉ bỏ qua kết quả) - job lịch hẹn không được đọc hội thoại đang có
+  // của thread, tránh trộn ngữ cảnh giữa "user đang nói chuyện gì" với "job tự
+  // báo cáo lúc 3 giờ sáng".
+  const history = isolated ? [] : getRecentMessages(account.id, latest.threadId);
   // Ảnh xử lý theo chế độ: native (model tự đọc) / describe (sidecar mô tả) /
   // hybrid (combo: cả hai) / blind (bỏ ảnh, dặn bot nói thật)
   const built = await buildTurnMessages({ history, batch, override: agent, allowlist: account.allowlist });
@@ -147,15 +163,17 @@ export async function runAgentTurn({
   let imageMode = built.imageMode;
 
   // Memory: fact bền (lọc theo quy tắc privacy) + summary phần hội thoại cũ
-  const memory = {
-    facts: getMemoriesForContext({
-      accountId: account.id,
-      threadId: latest.threadId,
-      senderId: latest.senderId,
-      isGroup: latest.isGroup,
-    }),
-    threadSummary: getThreadSummary(account.id, latest.threadId).summary,
-  };
+  const memory = isolated
+    ? { facts: [], threadSummary: "" }
+    : {
+        facts: getMemoriesForContext({
+          accountId: account.id,
+          threadId: latest.threadId,
+          senderId: latest.senderId,
+          isGroup: latest.isGroup,
+        }),
+        threadSummary: getThreadSummary(account.id, latest.threadId).summary,
+      };
 
   // `trace` do caller truyền vào và dùng chung cho MỌI lần chạy trong lượt: lượt
   // retry (glitch router) và lượt dựng lại không kèm pixel đều nối tiếp vào đó -
@@ -173,7 +191,10 @@ export async function runAgentTurn({
       }),
       system: buildSystemPrompt(agent, latest, memory, account),
       messages,
-      tools: buildAgentTools({ api, account, message: latest, batch }),
+      // isolated lọc bớt tool không hợp với lượt theo lịch (add_reaction không
+      // có msgId thật, read_image không có ảnh, save_memory chặn injection từ
+      // job) - xem runsInScheduledTurn ở tool-registry.ts
+      tools: buildAgentTools({ api, account, message: latest, batch, isolated }),
       stopWhen: stepCountIs(agent.maxSteps ?? getTuning("LLM_MAX_STEPS")),
       maxOutputTokens: getTuning("LLM_MAX_OUTPUT_TOKENS"),
       // Bật thinking theo LLM_REASONING_EFFORT - kiểm chứng bằng

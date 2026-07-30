@@ -146,3 +146,67 @@ describe("message-batcher", () => {
     assert.equal(called, false);
   });
 });
+
+describe("runOnThreadChain", () => {
+  it("gọi trực tiếp (không qua enqueueMessage) vẫn xâu chuỗi đúng thread - scheduler dùng lại y hệt tin nhắn", async () => {
+    const events: string[] = [];
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const runA = batcher.runOnThreadChain("k-chain-tructiep", async () => {
+      events.push("start:A");
+      await firstBlocked;
+      events.push("end:A");
+    });
+
+    await sleep(20);
+    assert.deepEqual(events, ["start:A"], "A phải đã chạy và đang bị chặn");
+
+    const runB = batcher.runOnThreadChain("k-chain-tructiep", async () => {
+      events.push("start:B");
+    });
+    await sleep(20);
+    assert.deepEqual(events, ["start:A"], "B phải xếp hàng, chưa được chạy khi A còn dở");
+
+    releaseFirst();
+    await Promise.all([runA, runB]);
+    assert.deepEqual(events, ["start:A", "end:A", "start:B"]);
+  });
+
+  it("tin nhắn (enqueueMessage) và job gọi trực tiếp runOnThreadChain trên CÙNG threadKey không chồng lấn nhau", async () => {
+    const events: string[] = [];
+    let releaseJob!: () => void;
+    const jobBlocked = new Promise<void>((resolve) => {
+      releaseJob = resolve;
+    });
+
+    // Job "lịch hẹn" chiếm chỗ trước, y như scheduler dispatch qua runOnThreadChain
+    const jobRun = batcher.runOnThreadChain("k-tin-va-job", async () => {
+      events.push("start:job");
+      await jobBlocked;
+      events.push("end:job");
+    });
+
+    await sleep(20);
+    batcher.enqueueMessage("k-tin-va-job", makeMessage("tin-nguoi-dung"), async () => {
+      events.push("start:tin");
+    }, 10);
+
+    await sleep(40);
+    assert.deepEqual(events, ["start:job"], "tin nhắn phải chờ job lịch hẹn xong, không đọc history nửa chừng");
+
+    releaseJob();
+    await jobRun;
+    await sleep(30);
+    assert.deepEqual(events, ["start:job", "end:job", "start:tin"]);
+  });
+
+  it("trả về đúng promise của fn - lỗi bên trong fn không bị nuốt mất với caller đang await trực tiếp", async () => {
+    const run = batcher.runOnThreadChain("k-chain-loi", async () => {
+      throw new Error("job hỏng");
+    });
+    await assert.rejects(run, /job hỏng/);
+  });
+});

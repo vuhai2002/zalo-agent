@@ -124,6 +124,38 @@ describe("tool-registry", () => {
     assert.equal(Object.keys(tools).length, registry.TOOL_KEYS.length - GATED_TOOLS.length);
   });
 
+  it("isolated:true (lượt theo lịch) loại add_reaction, read_image, save_memory kể cả khi hạ tầng đã sẵn sàng", () => {
+    // Cấu hình sidecar TRƯỚC để chứng minh read_image bị loại vì runsInScheduledTurn,
+    // không phải vì thiếu cấu hình - nếu không cấu hình thì test này không phân
+    // biệt được 2 nguyên nhân (vắng mặt do isolated hay do chưa sẵn sàng).
+    configureSidecar();
+    const tools = registry.buildAgentTools({ ...makeContext([]), isolated: true });
+    for (const key of ["add_reaction", "read_image", "save_memory"]) {
+      assert.equal(tools[key], undefined, `lượt theo lịch không được có tool ${key}`);
+    }
+    // Tool KHÔNG bị loại (vd get_datetime, web_search, tag_member) vẫn phải còn nguyên
+    assert.ok(tools.get_datetime, "tool không liên quan tới isolated vẫn phải có mặt");
+    assert.ok(tools.tag_member, "tag_member không nằm trong danh sách loại");
+    unconfigureSidecar();
+  });
+
+  it("isolated không truyền (mặc định) hoặc false thì đủ cả 3 tool - hành vi lượt tin nhắn không đổi", () => {
+    configureSidecar();
+    const macDinh = registry.buildAgentTools(makeContext([]));
+    const roFalse = registry.buildAgentTools({ ...makeContext([]), isolated: false });
+    for (const tools of [macDinh, roFalse]) {
+      assert.ok(tools.add_reaction, "add_reaction phải còn khi không cô lập");
+      assert.ok(tools.read_image, "read_image phải còn khi không cô lập (đã cấu hình sidecar)");
+      assert.ok(tools.save_memory, "save_memory phải còn khi không cô lập");
+    }
+    unconfigureSidecar();
+  });
+
+  it("runsInScheduledTurn khai đúng false cho đúng 3 tool, còn lại mặc định undefined (coi như true)", () => {
+    const bịLoại = registry.TOOL_DEFINITIONS.filter((t) => t.runsInScheduledTurn === false).map((t) => t.key);
+    assert.deepEqual(bịLoại.sort(), ["add_reaction", "read_image", "save_memory"].sort());
+  });
+
   it("catalog: key duy nhất, đủ metadata cho UI, nhóm hợp lệ", () => {
     const keys = registry.TOOL_DEFINITIONS.map((t) => t.key);
     assert.equal(new Set(keys).size, keys.length, "key tool phải duy nhất");

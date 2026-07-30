@@ -42,6 +42,16 @@ export function isAccountRunning(accountId: string): boolean {
 }
 
 /**
+ * `api` của account đang chạy - scheduler cần để gọi zca-js đúng account khi
+ * gửi tin chủ động (không có tin đến để mà lấy `api` như đường tin nhắn
+ * thường). `undefined` khi account chưa login hoặc đã dừng - caller (guard
+ * lúc gửi) tự quyết định bỏ lượt.
+ */
+export function getRunningAccountApi(accountId: string): API | undefined {
+  return running.get(accountId)?.api;
+}
+
+/**
  * Gắn 1 account đã có API instance vào hệ thống (login QR web xong gọi thẳng
  * vào đây để không phải login lần 2). Account đang chạy thì thay thế.
  */

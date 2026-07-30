@@ -21,12 +21,14 @@ import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 
 let dataDir: string;
 let loop: typeof import("./agent-loop.js");
+let history: typeof import("../conversation/history-store.js");
 
 before(async () => {
   // Trần 2 step: đủ để dựng cả nhánh "chạm trần" lẫn nhánh "step sau ném lỗi"
   // mà không phải giả lập 8 vòng
   dataDir = setupTestEnv({ LLM_MAX_STEPS: "2" });
   loop = await import("./agent-loop.js");
+  history = await import("../conversation/history-store.js");
 });
 
 after(async () => {
@@ -108,7 +110,11 @@ const tinNhan = (): ParsedMessage => ({
  * Chạy 1 lượt với model giả trả lần lượt các kết quả đã dựng sẵn.
  * Trả về cả `calls` để soi request thứ N gửi đi những gì (lượt chốt có tool không).
  */
-async function chayLuot(ketQua: (() => unknown)[], batch = [tinNhan()]) {
+async function chayLuot(
+  ketQua: (() => unknown)[],
+  batch = [tinNhan()],
+  opts: { isolated?: boolean } = {},
+) {
   // Suy kiểu từ chính mock, không import @ai-sdk/provider - pnpm layout chặt
   // nên package đó không phải dependency trực tiếp, import vào là typecheck đỏ
   const calls: Parameters<MockLanguageModelV4["doGenerate"]>[0][] = [];
@@ -131,8 +137,22 @@ async function chayLuot(ketQua: (() => unknown)[], batch = [tinNhan()]) {
     batch,
     trace,
     resolveModel: () => model,
+    isolated: opts.isolated,
   });
   return { ket, trace, calls, soLanGoi: () => lan };
+}
+
+/** Gộp toàn bộ nội dung `prompt` gửi cho model thành 1 chuỗi để dò substring */
+function promptText(call: Parameters<MockLanguageModelV4["doGenerate"]>[0]): string {
+  return call.prompt
+    .map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content)))
+    .join("\n");
+}
+
+/** System prompt (role='system') nằm ở đầu `prompt`, không phải field riêng trên call options */
+function systemText(call: Parameters<MockLanguageModelV4["doGenerate"]>[0]): string | undefined {
+  const systemMsg = call.prompt.find((m) => m.role === "system");
+  return systemMsg?.content;
 }
 
 describe("runAgentTurn - lượt bình thường", () => {
@@ -309,5 +329,49 @@ describe("runAgentTurn - lượt ném lỗi", () => {
       /500 từ router/,
     );
     assert.equal(trace.length, 1, "step đã chạy phải còn lại để chẩn đoán, không rơi theo stack");
+  });
+});
+
+describe("runAgentTurn - isolated (lượt theo lịch của scheduler)", () => {
+  const DAU_VET_LICH_SU = "cau-chuyen-cu-rat-dac-trung-khong-the-nham-lan";
+
+  it("mặc định (không truyền isolated) vẫn đọc history - lượt tin nhắn thường không đổi hành vi", async () => {
+    history.appendMessage(account.id, "thread-1", { role: "user", content: DAU_VET_LICH_SU });
+    const { calls } = await chayLuot([() => traLoi("ok")]);
+    assert.ok(promptText(calls[0]!).includes(DAU_VET_LICH_SU), "history cũ phải có mặt trong prompt gửi model");
+  });
+
+  it("isolated:true bỏ qua history - lượt theo lịch không đọc hội thoại đang có của thread", async () => {
+    history.appendMessage(account.id, "thread-1", { role: "user", content: DAU_VET_LICH_SU });
+    const { calls } = await chayLuot([() => traLoi("ok")], [tinNhan()], { isolated: true });
+    assert.ok(
+      !promptText(calls[0]!).includes(DAU_VET_LICH_SU),
+      "history cũ KHÔNG được lọt vào prompt của lượt cô lập",
+    );
+  });
+
+  it("isolated:true vẫn giữ nguyên persona (system prompt không đổi theo cờ này)", async () => {
+    const binhThuong = await chayLuot([() => traLoi("ok")]);
+    const coLap = await chayLuot([() => traLoi("ok")], [tinNhan()], { isolated: true });
+    assert.equal(systemText(coLap.calls[0]!), systemText(binhThuong.calls[0]!), "system prompt phải giống hệt nhau");
+    assert.ok(systemText(coLap.calls[0]!), "phải thực sự có system prompt, không phải hai chuỗi rỗng khớp nhau");
+  });
+
+  it("isolated:true loại add_reaction, save_memory khỏi schema tool gửi model", async () => {
+    // read_image cũng bị loại (runsInScheduledTurn:false), nhưng test chi tiết
+    // hơn (cấu hình sidecar rồi mới kiểm) nằm ở tool-registry.test.ts - ở đây
+    // sidecar chưa cấu hình nên read_image vốn đã vắng mặt vì lý do khác, kiểm
+    // nó ở đây sẽ không phân biệt được 2 nguyên nhân.
+    const { calls } = await chayLuot([() => traLoi("ok")], [tinNhan()], { isolated: true });
+    const toolKeys = calls[0]!.tools?.map((t) => t.name) ?? [];
+    for (const key of ["add_reaction", "save_memory"]) {
+      assert.ok(!toolKeys.includes(key), `lượt cô lập không được có tool ${key}`);
+    }
+  });
+
+  it("lượt thường (isolated mặc định false) VẪN có add_reaction trong schema - đúng hành vi cũ", async () => {
+    const { calls } = await chayLuot([() => traLoi("ok")]);
+    const toolKeys = calls[0]!.tools?.map((t) => t.name) ?? [];
+    assert.ok(toolKeys.includes("add_reaction"), "lượt tin nhắn thường không bị ảnh hưởng bởi bộ lọc mới");
   });
 });
