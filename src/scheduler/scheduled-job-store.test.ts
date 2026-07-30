@@ -59,6 +59,15 @@ describe("createJob", () => {
     assert.equal(job.cronExpr, null);
   });
 
+  it("once: maxRuns tường minh > 1 bị ép về 1 - 'once' theo định nghĩa chỉ chạy đúng 1 lần", () => {
+    // Ca vỡ tìm thấy lúc review: computeNextRun('once') luôn trả nguyên
+    // runAtUtc bất kể `now`, nên nếu maxRuns=5 lọt qua thì sau lần chạy đầu
+    // (run_count=1 < 5, chưa hitMax) next_run_at vẫn đứng ở mốc đã qua ->
+    // tick sau nhặt lại NGAY -> bắn lại mỗi tick tới khi đủ 5 lần.
+    const job = taoJob({ threadId: "t-once-maxruns-clamp", schedule: ONCE, maxRuns: 5 });
+    assert.equal(job.maxRuns, 1, "phải ép về 1, bỏ qua giá trị 5 caller truyền vào");
+  });
+
   it("id là hex 12 ký tự", () => {
     const job = taoJob({ threadId: "t-id" });
     assert.match(job.id, /^[0-9a-f]{12}$/);
@@ -155,14 +164,44 @@ describe("updateJob", () => {
     assert.equal(sauMark.nextRunAt, null);
   });
 
-  it("đổi schedule NHƯNG có truyền maxRuns tường minh thì dùng đúng giá trị đó, không bị tính lại đè lên", () => {
+  it("đổi kind every -> cron CÓ truyền maxRuns tường minh thì dùng đúng giá trị đó, không bị tính lại đè lên", () => {
     const job = taoJob({ threadId: "t-update-explicit-maxruns" });
     store.updateJob(ACC, "t-update-explicit-maxruns", job.id, {
-      schedule: ONCE,
+      schedule: { kind: "cron", expr: "0 8 * * *", timeZone: "Asia/Ho_Chi_Minh" },
       maxRuns: 5,
       now: new Date("2026-08-01T00:00:00Z"),
     });
     assert.equal(store.getJob(ACC, "t-update-explicit-maxruns", job.id)!.maxRuns, 5);
+  });
+
+  it("đổi sang once CÓ truyền maxRuns tường minh > 1 vẫn bị ép về 1 - bất biến 'once' thắng cả override tường minh", () => {
+    const job = taoJob({ threadId: "t-update-once-maxruns-clamp" });
+    store.updateJob(ACC, "t-update-once-maxruns-clamp", job.id, {
+      schedule: ONCE,
+      maxRuns: 5,
+      now: new Date("2026-08-01T00:00:00Z"),
+    });
+    assert.equal(store.getJob(ACC, "t-update-once-maxruns-clamp", job.id)!.maxRuns, 1);
+  });
+
+  it("cùng kind (every -> every, chỉ đổi tần suất), maxRuns đặt tường minh KHÁC NULL từ lúc tạo: KHÔNG bị trigger tính lại xoá mất", () => {
+    // Ca vỡ tìm thấy ở vòng review thứ 2: điều kiện tính lại maxRuns trước đó
+    // chỉ dựa vào "patch.schedule có mặt", không kiểm kind có thật sự đổi.
+    // Test cũ dùng job mặc định maxRuns=null nên "tính lại thành null" trông
+    // y hệt "không đổi gì" - phải xuất phát từ giá trị KHÁC null mới lộ bug:
+    // job every với trần "nhắc 5 lần rồi thôi", chỉ đổi tần suất (kind vẫn
+    // every, không đổi ý định số lần) mà trần biến mất thành vô hạn.
+    const job = taoJob({ threadId: "t-update-keep-maxruns", maxRuns: 5 });
+    assert.equal(job.maxRuns, 5);
+
+    store.updateJob(ACC, "t-update-keep-maxruns", job.id, {
+      schedule: { kind: "every", minutes: 45 },
+      now: new Date("2026-08-01T00:00:00Z"),
+    });
+
+    const sau = store.getJob(ACC, "t-update-keep-maxruns", job.id)!;
+    assert.equal(sau.everyMinutes, 45, "tần suất vẫn phải đổi đúng yêu cầu");
+    assert.equal(sau.maxRuns, 5, "maxRuns phải còn nguyên vì kind KHÔNG đổi");
   });
 });
 

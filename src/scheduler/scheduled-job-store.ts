@@ -48,7 +48,12 @@ export function createJob(input: CreateScheduledJobInput): ScheduledJob {
   const id = randomBytes(6).toString("hex");
   const cols = scheduleColumns(input.schedule);
   const nextRunAt = computeNextRun(input.schedule, input.now ?? new Date());
-  const maxRuns = input.maxRuns !== undefined ? input.maxRuns : input.schedule.kind === "once" ? 1 : null;
+  // Bất biến: 'once' LUÔN đúng 1 lần - kiểm kind TRƯỚC, bỏ qua mọi maxRuns
+  // caller truyền vào (kể cả tường minh > 1). Lỗ hổng đo được: maxRuns=5 lọt
+  // qua trên job once thì computeNextRun('once') vẫn trả nguyên runAtUtc bất
+  // kể `now`, nên sau lần chạy đầu (chưa chạm trần 5) next_run_at đứng yên ở
+  // mốc đã qua -> tick sau nhặt lại NGAY -> bắn lại mỗi tick tới khi đủ 5 lần.
+  const maxRuns = input.schedule.kind === "once" ? 1 : (input.maxRuns !== undefined ? input.maxRuns : null);
 
   insertStmt.run(
     id,
@@ -148,21 +153,31 @@ export function updateJob(
     ? scheduleColumns(patch.schedule)
     : { runAt: job.runAt, everyMinutes: job.everyMinutes, cronExpr: job.cronExpr };
   const nextRunAt = patch.schedule ? computeNextRun(patch.schedule, patch.now ?? new Date()) : job.nextRunAt;
-  // Đổi `schedule` mà không nói rõ `maxRuns` thì tính lại theo KIND MỚI (mirror
-  // đúng ternary của createJob) thay vì giữ maxRuns cũ. Không mirror sẽ vỡ
-  // đúng ca: job every/cron (maxRuns=null) đổi sang once mà quên kèm
-  // maxRuns:1 -> markRun không bao giờ thấy hitMax (null nghĩa là vô hạn) nên
-  // job "chạy 1 lần" không tự tắt, next_run_at đứng yên ở mốc đã qua, tick
-  // sau nhặt lại NGAY -> bắn lại mỗi tick vô hạn. Đúng loại spam cả phase
-  // này dựng ra để chặn.
-  const maxRuns =
-    patch.maxRuns !== undefined
-      ? patch.maxRuns
-      : patch.schedule
-        ? patch.schedule.kind === "once"
-          ? 1
-          : null
-        : job.maxRuns;
+  const effectiveKind = patch.schedule?.kind ?? job.scheduleKind;
+  // Kind THỰC SỰ đổi - không phải chỉ "có patch.schedule". Trigger rộng hơn
+  // (cứ có patch.schedule là tính lại) từng làm mất maxRuns=5 đặt tường minh
+  // lúc tạo khi chỉ đổi tần suất every 30m -> every 45m (kind vẫn "every"):
+  // trần "nhắc 5 lần rồi thôi" biến mất, job hoá vô hạn - đúng loại rủi ro
+  // phase này sinh ra để chặn, chỉ khác chiều với ca dưới.
+  const kindChanged = patch.schedule !== undefined && patch.schedule.kind !== job.scheduleKind;
+
+  let maxRuns: number | null;
+  if (effectiveKind === "once") {
+    // Bất biến: 'once' LUÔN đúng 1 lần, kể cả khi patch truyền maxRuns khác -
+    // computeNextRun('once') trả nguyên runAtUtc bất kể `now` nên maxRuns > 1
+    // làm next_run_at đứng yên sau lần chạy đầu và bị nhặt lại mỗi tick tới
+    // khi đủ số lần.
+    maxRuns = 1;
+  } else if (patch.maxRuns !== undefined) {
+    maxRuns = patch.maxRuns;
+  } else if (kindChanged) {
+    // Đổi hẳn sang kind khác (every<->cron) mà không nói rõ maxRuns -> mặc
+    // định vô hạn, mirror đúng ternary của createJob cho kind mới.
+    maxRuns = null;
+  } else {
+    // Không đổi kind (kể cả không đổi schedule gì) -> giữ nguyên giá trị cũ.
+    maxRuns = job.maxRuns;
+  }
 
   updateStmt.run(
     patch.name ?? job.name,
