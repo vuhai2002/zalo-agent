@@ -24,11 +24,11 @@ Học từ `hermes-agent/cron/` (phiên cô lập, `[SILENT]`, grace window, c�
 | # | Phase | Trạng thái |
 |---|---|---|
 | 01 | [Nền tảng giờ + vá ngày VN](phase-01-nen-tang-gio-va-va-ngay-vn.md) | Chưa bắt đầu |
-| 02 | [Lưu trữ và ngữ nghĩa lịch](phase-02-luu-tru-va-ngu-nghia-lich.md) | Chưa bắt đầu |
+| 02 | [Lưu trữ, ngữ nghĩa lịch, 8 tham số](phase-02-luu-tru-va-ngu-nghia-lich.md) | Chưa bắt đầu |
 | 03 | [Vòng chạy và gửi tin](phase-03-vong-chay-va-gui-tin.md) | Chưa bắt đầu |
 | 04 | [Tool schedule_task](phase-04-tool-schedule-task.md) | Chưa bắt đầu |
 | 05 | [Dashboard trang Lịch hẹn](phase-05-dashboard-trang-lich-hen.md) | Chưa bắt đầu |
-| 06 | [Tham số, tài liệu, nghiệm thu](phase-06-tham-so-tai-lieu-nghiem-thu.md) | Chưa bắt đầu |
+| 06 | [Tài liệu và nghiệm thu](phase-06-tham-so-tai-lieu-nghiem-thu.md) | Chưa bắt đầu |
 
 ## Phụ thuộc giữa các phase
 

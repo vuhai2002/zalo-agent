@@ -61,7 +61,34 @@ job-run-log-store.ts     mở/chốt run, đọc lịch sử, dọn theo KEEP
 `src/scheduler/scheduled-job-store.ts` (+test), `src/scheduler/job-run-log-store.ts` (+test)
 
 **Sửa**: `package.json` (thêm `cron-parser`), `src/conversation/database.ts` (2 bảng mới +
-cột `agent_turns.source`), `src/conversation/usage-store.ts` (`openAgentTurn` nhận `source`)
+cột `agent_turns.source`), `src/conversation/usage-store.ts` (`openAgentTurn` nhận `source`),
+`src/config/env.ts` + `.env.example` + `.env.production.example` +
+`src/config/tuning-definitions.ts` (8 tham số)
+
+## Khai báo 8 tham số ngay ở phase này
+
+`TuningKey` là `keyof typeof TUNING_BY_KEY`, nên `getTuning("SCHEDULER_TICK_MS")` ở phase 03
+sẽ không qua được typecheck nếu key chưa tồn tại. Khai đủ 8 tham số ở đây, các phase sau chỉ
+việc dùng. Phase 06 giữ phần tài liệu, kiểm trang Cấu hình và nghiệm thu thật.
+
+Mỗi tham số đủ 4 nơi: Zod trong `env.ts` (kèm `min`/`max`), `.env.example`,
+`.env.production.example`, `tuning-definitions.ts` (tên key TRÙNG tên env var, `min`/`max`
+khớp Zod). Nhóm mới `lich-hen` trong `TUNING_GROUPS`.
+
+| Key | Mặc định | Khoảng |
+|---|---|---|
+| `SCHEDULER_ENABLED` | true | boolean |
+| `SCHEDULER_TICK_MS` | 30000 | 5000 - 300000 |
+| `SCHEDULER_MIN_INTERVAL_MINUTES` | 5 | 1 - 1440 |
+| `SCHEDULER_MAX_JOBS_PER_THREAD` | 20 | 1 - 200 |
+| `SCHEDULER_MAX_PROACTIVE_PER_DAY` | 10 | 1 - 100 |
+| `SCHEDULER_SEND_GAP_MS` | 20000 | 0 - 300000 |
+| `SCHEDULER_ONCE_GRACE_MINUTES` | 10 | 1 - 1440 |
+| `SCHEDULER_RUN_LOG_KEEP` | 50 | 5 - 1000 |
+
+Cẩn thận ràng buộc chéo: đợt trước đã dính một luật chéo áp cho MỌI lần lưu khiến một cấu
+hình sẵn có đã lệch **khóa cứng cả trang Cấu hình**. 8 tham số này không có ràng buộc chéo
+nào với nhau - đừng tự thêm.
 
 ## Các bước
 
@@ -94,6 +121,7 @@ cột `agent_turns.source`), `src/conversation/usage-store.ts` (`openAgentTurn` 
 ## Todo
 
 - [ ] Thêm `cron-parser`
+- [ ] 8 tham số đủ 4 nơi (Zod, 2 file `.env*.example`, tuning-definitions) + nhóm `lich-hen`
 - [ ] 2 bảng mới + cột `agent_turns.source`
 - [ ] `schedule-parser.ts` + test (gồm ca chặn `every 1m` và `* * * * *`)
 - [ ] `next-run.ts` + test (gồm 4 nhánh của `decideDueAction`)

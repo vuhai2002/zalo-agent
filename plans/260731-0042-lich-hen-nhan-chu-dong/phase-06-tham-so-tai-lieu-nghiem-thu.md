@@ -1,4 +1,9 @@
-# Phase 06 - Tham số, tài liệu, nghiệm thu
+# Phase 06 - Tài liệu và nghiệm thu
+
+> Đổi so với bản đầu: 8 tham số đã chuyển sang **phase 02** vì `TuningKey` là
+> `keyof typeof TUNING_BY_KEY` - phase 03 gọi `getTuning("SCHEDULER_TICK_MS")` sẽ không
+> qua typecheck nếu key chưa tồn tại. Phase này còn tài liệu, kiểm trang Cấu hình, và
+> nghiệm thu thật. Bảng tham số giữ lại bên dưới để đối chiếu khi kiểm.
 
 Liên kết: [plan.md](plan.md) - [Thiết kế mục 10](reports/thiet-ke-scheduler.md) -
 [Phase 05](phase-05-dashboard-trang-lich-hen.md)
@@ -51,13 +56,11 @@ cao nhất dự án từng làm; không bật `every` cho tới khi thấy log s
 
 ## Các bước
 
-1. Thêm 8 biến vào schema Zod với `min`/`max` như bảng trên. Tham số tuỳ chọn dùng
-   `emptyToUndefined` nếu cần - `KEY=` trong `.env` cho ra chuỗi RỖNG chứ không phải
-   undefined, lỗi đã dính một lần với `DASHBOARD_PASSWORD`.
-2. Thêm nhóm `lich-hen` + 8 định nghĩa vào `tuning-definitions.ts`. Câu `hint` nói điều
-   người dùng KHÔNG suy ra được từ nhãn, không nhắc lại nhãn.
-3. Điền `.env.example` và `.env.production.example`, giữ nguyên dấu tiếng Việt trong comment.
-4. `docs/system-architecture.md`: thêm các dòng quyết định kỹ thuật vào bảng - mỗi dòng
+1. Đối chiếu 8 tham số đã khai ở phase 02 với bảng trên: `min`/`max` giữa Zod và
+   `tuning-definitions.ts` phải khớp từng cặp, và có mặt đủ ở cả hai file `.env*.example`.
+2. Mở trang Cấu hình kiểm nhóm `lich-hen` hiện đủ 8 ô, sửa được, lưu được, và ô đang lấy
+   từ `.env` có nhãn riêng + nút trả về mặc định.
+3. `docs/system-architecture.md`: thêm các dòng quyết định kỹ thuật vào bảng - mỗi dòng
    phải có LÝ DO và số đo, đúng văn phong file đó. Ít nhất:
    - Vì sao tool không nhận chuỗi datetime (lệch 7 tiếng, ca của Hermes)
    - Vì sao dùng luxon thay vì tự tính offset (pnpm layout chặt buộc khai trực tiếp)
@@ -89,9 +92,8 @@ cao nhất dự án từng làm; không bật `every` cho tới khi thấy log s
 
 ## Todo
 
-- [ ] 8 biến vào `env.ts` (Zod)
-- [ ] Nhóm `lich-hen` + 8 định nghĩa tuning
-- [ ] `.env.example` + `.env.production.example`
+- [ ] Đối chiếu `min`/`max` giữa Zod và tuning cho cả 8 tham số
+- [ ] Kiểm trang Cấu hình hiện nhóm `lich-hen` đủ 8 ô
 - [ ] `docs/system-architecture.md` - 6 dòng quyết định
 - [ ] `docs/project-roadmap.md` - mục mới + gạch mục cũ
 - [ ] README
