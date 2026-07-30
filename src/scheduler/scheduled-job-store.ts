@@ -67,13 +67,37 @@ export function createJob(input: CreateScheduledJobInput): ScheduledJob {
     maxRuns,
     input.createdBy,
   );
-  return getJob(id)!;
+  // Vừa tự ghi xong với đúng (accountId, threadId) nên đọc lại KHÔNG cần qua
+  // kiểm phạm vi - đọc unscoped tránh double-check thừa trên dữ liệu tự tin.
+  return getJobUnscoped(id)!;
 }
 
-const getStmt = db.prepare(`SELECT * FROM scheduled_jobs WHERE id = ?`);
+const getUnscopedStmt = db.prepare(`SELECT * FROM scheduled_jobs WHERE id = ?`);
 
-export function getJob(id: string): ScheduledJob | undefined {
-  const row = getStmt.get(id) as ScheduledJobRow | undefined;
+/**
+ * Đọc job KHÔNG kiểm phạm vi - CHỈ dùng nội bộ cho vòng tick (`listDueJobs`
+ * quét mọi account rồi tự nó cần tra lại 1 job bằng id nó vừa tìm ra) và cho
+ * `markRun`/`createJob` là những chỗ đã tự tin về nguồn gốc id. TUYỆT ĐỐI
+ * không gọi hàm này với id do người dùng/LLM cung cấp - đó là đường IDOR
+ * (id chỉ là 12 ký tự hex, đoán hoặc dò được).
+ */
+export function getJobUnscoped(id: string): ScheduledJob | undefined {
+  const row = getUnscopedStmt.get(id) as ScheduledJobRow | undefined;
+  return row ? mapRow(row) : undefined;
+}
+
+const getScopedStmt = db.prepare(
+  `SELECT * FROM scheduled_jobs WHERE id = ? AND account_id = ? AND thread_id = ?`,
+);
+
+/**
+ * Đọc job CÓ kiểm phạm vi - đường dùng cho tool/API dashboard. Kiểm ở đây
+ * (tầng store) chứ không chỉ ở tool: đúng nếp "chọn Brave mà chưa có key bị
+ * chặn ngay ở tầng store" - mọi caller sau này (tool phase 04, route dashboard
+ * phase 05) đều tự động dính cùng luật, không ai có thể quên kiểm.
+ */
+export function getJob(accountId: string, threadId: string, id: string): ScheduledJob | undefined {
+  const row = getScopedStmt.get(id, accountId, threadId) as ScheduledJobRow | undefined;
   return row ? mapRow(row) : undefined;
 }
 
@@ -100,22 +124,45 @@ const updateStmt = db.prepare(`
   UPDATE scheduled_jobs
   SET name = ?, payload = ?, schedule_kind = ?, run_at = ?, every_minutes = ?, cron_expr = ?,
       timezone = ?, next_run_at = ?, max_runs = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-  WHERE id = ?
+  WHERE id = ? AND account_id = ? AND thread_id = ?
 `);
 
 /**
  * Cập nhật một phần; ô không truyền giữ nguyên giá trị cũ. Chỉ tính lại
  * `next_run_at` khi `schedule` thực sự đổi - đổi mỗi tên/payload mà tính lại
  * lịch là vô lý và có thể nhảy mốc ngoài ý muốn.
+ *
+ * `(accountId, threadId)` bắt buộc và đưa thẳng vào WHERE - job của thread
+ * khác thì coi như không tồn tại (trả `false`), không lộ cả sự tồn tại của nó.
  */
-export function updateJob(id: string, patch: UpdateScheduledJobInput): boolean {
-  const job = getJob(id);
+export function updateJob(
+  accountId: string,
+  threadId: string,
+  id: string,
+  patch: UpdateScheduledJobInput,
+): boolean {
+  const job = getJob(accountId, threadId, id);
   if (!job) return false;
 
   const cols = patch.schedule
     ? scheduleColumns(patch.schedule)
     : { runAt: job.runAt, everyMinutes: job.everyMinutes, cronExpr: job.cronExpr };
   const nextRunAt = patch.schedule ? computeNextRun(patch.schedule, patch.now ?? new Date()) : job.nextRunAt;
+  // Đổi `schedule` mà không nói rõ `maxRuns` thì tính lại theo KIND MỚI (mirror
+  // đúng ternary của createJob) thay vì giữ maxRuns cũ. Không mirror sẽ vỡ
+  // đúng ca: job every/cron (maxRuns=null) đổi sang once mà quên kèm
+  // maxRuns:1 -> markRun không bao giờ thấy hitMax (null nghĩa là vô hạn) nên
+  // job "chạy 1 lần" không tự tắt, next_run_at đứng yên ở mốc đã qua, tick
+  // sau nhặt lại NGAY -> bắn lại mỗi tick vô hạn. Đúng loại spam cả phase
+  // này dựng ra để chặn.
+  const maxRuns =
+    patch.maxRuns !== undefined
+      ? patch.maxRuns
+      : patch.schedule
+        ? patch.schedule.kind === "once"
+          ? 1
+          : null
+        : job.maxRuns;
 
   updateStmt.run(
     patch.name ?? job.name,
@@ -126,24 +173,27 @@ export function updateJob(id: string, patch: UpdateScheduledJobInput): boolean {
     cols.cronExpr,
     patch.timezone ?? job.timezone,
     nextRunAt,
-    patch.maxRuns !== undefined ? patch.maxRuns : job.maxRuns,
+    maxRuns,
     id,
+    accountId,
+    threadId,
   );
   return true;
 }
 
 const setEnabledStmt = db.prepare(
-  `UPDATE scheduled_jobs SET enabled = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`,
+  `UPDATE scheduled_jobs SET enabled = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+   WHERE id = ? AND account_id = ? AND thread_id = ?`,
 );
 
-export function setEnabled(id: string, enabled: boolean): boolean {
-  return setEnabledStmt.run(enabled ? 1 : 0, id).changes > 0;
+export function setEnabled(accountId: string, threadId: string, id: string, enabled: boolean): boolean {
+  return setEnabledStmt.run(enabled ? 1 : 0, id, accountId, threadId).changes > 0;
 }
 
-const deleteStmt = db.prepare(`DELETE FROM scheduled_jobs WHERE id = ?`);
+const deleteStmt = db.prepare(`DELETE FROM scheduled_jobs WHERE id = ? AND account_id = ? AND thread_id = ?`);
 
-export function deleteJob(id: string): boolean {
-  return deleteStmt.run(id).changes > 0;
+export function deleteJob(accountId: string, threadId: string, id: string): boolean {
+  return deleteStmt.run(id, accountId, threadId).changes > 0;
 }
 
 const listDueStmt = db.prepare(`
@@ -152,7 +202,11 @@ const listDueStmt = db.prepare(`
   ORDER BY next_run_at ASC
 `);
 
-/** Job đến hạn tính tới `nowUtc` (ISO) - nguồn cho vòng tick ở phase sau */
+/**
+ * Job đến hạn tính tới `nowUtc` (ISO) - nguồn cho vòng tick ở phase sau. CỐ Ý
+ * không nhận `(accountId, threadId)`: vòng tick quét TOÀN CỤC mọi account, nó
+ * không có "thread đang gọi" để mà giới hạn theo.
+ */
 export function listDueJobs(nowUtc: string): ScheduledJob[] {
   const rows = listDueStmt.all(nowUtc) as unknown as ScheduledJobRow[];
   return rows.map(mapRow);
@@ -162,7 +216,11 @@ const setNextRunStmt = db.prepare(
   `UPDATE scheduled_jobs SET next_run_at = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`,
 );
 
-/** Ghi mốc chạy kế tiếp - vòng tick gọi hàm này TRƯỚC khi dispatch (clear-before-dispatch) */
+/**
+ * Ghi mốc chạy kế tiếp - vòng tick gọi hàm này TRƯỚC khi dispatch
+ * (clear-before-dispatch). Không kiểm phạm vi: id ở đây luôn đến từ
+ * `listDueJobs` (vòng tick tự tìm ra, không phải id người dùng cung cấp).
+ */
 export function setNextRun(id: string, nextRunAtUtc: string | null): void {
   setNextRunStmt.run(nextRunAtUtc, id);
 }
@@ -178,9 +236,11 @@ const markRunStmt = db.prepare(`
  * Ghi nhận 1 lần job đã chạy xong (tăng run_count + cập nhật tóm tắt). Chạm
  * `max_runs` thì tự `enabled = 0` và `next_run_at = NULL` nhưng GIỮ NGUYÊN
  * row - xoá hẳn (như Hermes/goclaw) làm lời nhắc đã hẹn biến mất không dấu vết.
+ *
+ * Không kiểm phạm vi, cùng lý do `setNextRun`: id đến từ vòng tick nội bộ.
  */
 export function markRun(id: string, status: Exclude<JobRunStatus, "running">, error: string | null = null): void {
-  const job = getJob(id);
+  const job = getJobUnscoped(id);
   if (!job) return;
 
   const runCount = job.runCount + 1;
