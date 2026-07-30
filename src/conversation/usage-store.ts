@@ -8,8 +8,11 @@ export type AgentTurnUsage = {
   steps: number;
 };
 
+/** 'message' = trả lời tin nhắn tới; 'schedule' = job lịch hẹn tự chạy (không ai đang chờ) */
+export type AgentTurnSource = "message" | "schedule";
+
 const openStmt = db.prepare(`
-  INSERT INTO agent_turns (account_id, thread_id) VALUES (?, ?)
+  INSERT INTO agent_turns (account_id, thread_id, source) VALUES (?, ?, ?)
 `);
 
 const finishStmt = db.prepare(`
@@ -31,9 +34,16 @@ const finishStmt = db.prepare(`
  * lượt để lại row 0 token không trace: trang Trace tự lọc (INNER JOIN sang
  * agent_steps), Overview đếm thừa 1 lượt - chấp nhận được, đổi lấy việc lượt
  * hỏng không còn vô hình.
+ *
+ * `source` mặc định 'message' để MỌI lời gọi hiện có (trước khi có scheduler)
+ * không phải sửa gì cả - chỉ lượt do job lịch hẹn tự bắn mới cần truyền 'schedule'.
  */
-export function openAgentTurn(accountId: string, threadId: string): number {
-  return Number(openStmt.run(accountId, threadId).lastInsertRowid);
+export function openAgentTurn(
+  accountId: string,
+  threadId: string,
+  source: AgentTurnSource = "message",
+): number {
+  return Number(openStmt.run(accountId, threadId, source).lastInsertRowid);
 }
 
 /**

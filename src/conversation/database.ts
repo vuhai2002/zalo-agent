@@ -147,6 +147,61 @@ function runMigrations(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_agent_steps_turn ON agent_steps (turn_id, step_number);
     CREATE INDEX IF NOT EXISTS idx_agent_steps_created ON agent_steps (created_at);
+
+    -- Lịch hẹn: trạng thái HIỆN TẠI của từng job (bot tự nhắn theo lịch).
+    -- Tách khỏi scheduled_job_runs (bảng NGAY DƯỚI) vì last_status ở đây chỉ
+    -- nói lần chạy CUỐI - job hỏng 5 lần rồi lần 6 chạy được sẽ trông khoẻ
+    -- mạnh hoàn hảo nếu không có log riêng kể lại từng lần.
+    CREATE TABLE IF NOT EXISTS scheduled_jobs (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL,
+      thread_type INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('message', 'agent')),
+      payload TEXT NOT NULL,
+      schedule_kind TEXT NOT NULL CHECK (schedule_kind IN ('once', 'every', 'cron')),
+      run_at TEXT,
+      every_minutes INTEGER,
+      cron_expr TEXT,
+      -- Rỗng = hiểu theo BOT_TIMEZONE tại thời điểm CHẠY (đổi cấu hình là job
+      -- đổi theo ngay); có giá trị = job pin cứng đúng zone này bất kể sau
+      -- này BOT_TIMEZONE đổi ra sao.
+      timezone TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      next_run_at TEXT,
+      last_run_at TEXT,
+      last_status TEXT,
+      last_error TEXT,
+      run_count INTEGER NOT NULL DEFAULT 0,
+      -- NULL = vô hạn; 'once' mặc định 1. Chạm mức này thì enabled=0 và
+      -- next_run_at=NULL nhưng GIỮ NGUYÊN row - xoá hẳn (như Hermes/goclaw)
+      -- làm lời nhắc đã hẹn biến mất không dấu vết.
+      max_runs INTEGER,
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+    -- Vòng tick quét job đến hạn: WHERE enabled = 1 AND next_run_at <= now
+    CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_due ON scheduled_jobs (enabled, next_run_at);
+    -- Tool list/cancel/update chỉ được thấy job của đúng (account, thread) đang chat
+    CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_thread ON scheduled_jobs (account_id, thread_id);
+
+    -- Sổ ghi ĐÃ XẢY RA GÌ ở từng lần job chạy - khác scheduled_jobs.last_status
+    -- vốn chỉ nói lần cuối. turn_id nối sang agent_turns cho job kind='agent',
+    -- bấm thẳng sang trang Trace khi cần biết vì sao job trả lời sai.
+    CREATE TABLE IF NOT EXISTS scheduled_job_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT NOT NULL,
+      turn_id INTEGER,
+      status TEXT NOT NULL CHECK (status IN ('running', 'ok', 'silent', 'skipped', 'error', 'interrupted')),
+      detail TEXT NOT NULL DEFAULT '',
+      delivered_chars INTEGER NOT NULL DEFAULT 0,
+      started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      finished_at TEXT
+    );
+    -- Lịch sử của 1 job, mới nhất trước; dọn quá SCHEDULER_RUN_LOG_KEEP theo job_id
+    CREATE INDEX IF NOT EXISTS idx_scheduled_job_runs_job ON scheduled_job_runs (job_id, id DESC);
   `);
 
   // Tool CHẠY LỖI: AI SDK để chúng ở content dạng tool-error, không vào
@@ -177,6 +232,12 @@ function runMigrations(): void {
   // Trang Tools: JSON array key tool bị tắt per account (rỗng = bật hết).
   // Lưu danh sách TẮT thay vì BẬT để tool mới thêm vào code tự bật cho account cũ.
   addColumnIfMissing("accounts", "disabled_tools", "TEXT NOT NULL DEFAULT '[]'");
+
+  // Lượt do lịch hẹn tự bắn (source='schedule') khác lượt trả lời tin nhắn
+  // (source='message') - Overview và trang Trace cần phân biệt được "có người
+  // đang chat" với "job tự chạy lúc 3 giờ sáng". Mặc định 'message' để mọi
+  // lượt ghi TRƯỚC khi có scheduler vẫn đúng nghĩa, không cần backfill.
+  addColumnIfMissing("agent_turns", "source", "TEXT NOT NULL DEFAULT 'message'");
 }
 
 function addColumnIfMissing(table: string, column: string, definition: string): void {

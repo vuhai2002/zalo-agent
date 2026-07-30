@@ -44,6 +44,7 @@ export const TUNING_GROUPS: TuningGroup[] = [
   { id: "anh", title: "Vẽ ảnh", hint: "Số ảnh mỗi giờ và thời gian chờ nhà cung cấp" },
   { id: "gui-tin", title: "Gửi tin trên Zalo", hint: "Cách bot chia tin và giãn nhịp gửi cho tự nhiên" },
   { id: "don-dep", title: "Trace và dọn dẹp", hint: "Ghi lại bao nhiêu, giữ trong bao lâu" },
+  { id: "lich-hen", title: "Lịch hẹn", hint: "Bot tự nhắn theo lịch: tần suất quét, trần chống spam, giữ log bao lâu" },
 ];
 
 const TUNING_BY_KEY = {
@@ -315,6 +316,77 @@ const TUNING_BY_KEY = {
     min: 1,
     max: 365,
     unit: "ngày",
+  },
+
+  // --- Lịch hẹn ---
+  SCHEDULER_ENABLED: {
+    kind: "boolean",
+    group: "lich-hen",
+    label: "Bật lịch hẹn",
+    hint: "Tắt thì vòng quét job đến hạn dừng hẳn - job vẫn còn nguyên trong DB, chỉ đơn giản không job nào được gửi. Bật lại là chạy tiếp, không mất job.",
+  },
+  SCHEDULER_TICK_MS: {
+    kind: "number",
+    group: "lich-hen",
+    label: "Chu kỳ quét job đến hạn",
+    hint: "Bảng job rất nhỏ nên quét dày không tốn gì đáng kể, chỉ ảnh hưởng độ trễ tối đa trước khi một job đến hạn được nhặt lên.",
+    min: 5000,
+    max: 300_000,
+    unit: "ms",
+  },
+  SCHEDULER_MIN_INTERVAL_MINUTES: {
+    kind: "number",
+    group: "lich-hen",
+    label: "Khoảng lặp tối thiểu",
+    hint: "Chặn lịch every/cron dày hơn mức này NGAY LÚC TẠO job - lưới đỡ đầu chống bot nhắn quá dày. every 1 phút là 1440 tin/ngày vào một nick cá nhân, đúng chữ ký để Zalo khoá nick.",
+    min: 1,
+    max: 1440,
+    unit: "phút",
+  },
+  SCHEDULER_MAX_JOBS_PER_THREAD: {
+    kind: "number",
+    group: "lich-hen",
+    label: "Số job tối đa mỗi cuộc trò chuyện",
+    hint: "Trần số job ĐANG BẬT trong 1 thread, chặn một cuộc trò chuyện tạo vô số lời nhắc.",
+    min: 1,
+    max: 200,
+    unit: "job",
+  },
+  SCHEDULER_MAX_PROACTIVE_PER_DAY: {
+    kind: "number",
+    group: "lich-hen",
+    label: "Trần tin chủ động mỗi ngày",
+    hint: "Chỉ đếm tin do scheduler TỰ BẮN (không phải trả lời tin tới), theo ngày múi giờ của bot. Lưới đỡ cuối, độc lập với khoảng lặp tối thiểu ở trên.",
+    min: 1,
+    max: 100,
+    unit: "tin",
+  },
+  SCHEDULER_SEND_GAP_MS: {
+    kind: "number",
+    group: "lich-hen",
+    label: "Giãn cách gửi chủ động",
+    hint: "Hàng đợi TOÀN CỤC cho mọi tin chủ động (khác hàng đợi trong 1 thread đang có sẵn) - 2 job ở 2 thread khác nhau tới hạn cùng lúc vẫn cách nhau chừng này.",
+    min: 0,
+    max: 300_000,
+    unit: "ms",
+  },
+  SCHEDULER_ONCE_GRACE_MINUTES: {
+    kind: "number",
+    group: "lich-hen",
+    label: "Grace cho lịch một lần",
+    hint: "Job 'nhắc 1 lần' trễ trong khoảng này vẫn gửi như bình thường. Trễ hơn vẫn gửi (không im lặng bỏ qua một lời đã hẹn) nhưng kèm nhãn báo trễ.",
+    min: 1,
+    max: 1440,
+    unit: "phút",
+  },
+  SCHEDULER_RUN_LOG_KEEP: {
+    kind: "number",
+    group: "lich-hen",
+    label: "Số lượt chạy giữ lại mỗi job",
+    hint: "Lịch sử chạy (thành công/lỗi/bỏ qua) của từng job, cũ hơn mức này bị dọn tự động.",
+    min: 5,
+    max: 1000,
+    unit: "lượt",
   },
 } as const satisfies Record<string, TuningDef>;
 

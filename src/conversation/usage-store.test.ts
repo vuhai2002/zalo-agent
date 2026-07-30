@@ -27,6 +27,22 @@ function ghiLuot(accountId: string, threadId: string, u: AgentTurnUsage): number
 }
 
 describe("usage-store", () => {
+  it("openAgentTurn không truyền source thì cột source ghi 'message' - lời gọi cũ không phải sửa", () => {
+    const turnId = usage.openAgentTurn("acc-source", "t-1");
+    const row = database.db.prepare("SELECT source FROM agent_turns WHERE id = ?").get(turnId) as {
+      source: string;
+    };
+    assert.equal(row.source, "message");
+  });
+
+  it("openAgentTurn truyền source='schedule' thì ghi đúng giá trị đó", () => {
+    const turnId = usage.openAgentTurn("acc-source", "t-1", "schedule");
+    const row = database.db.prepare("SELECT source FROM agent_turns WHERE id = ?").get(turnId) as {
+      source: string;
+    };
+    assert.equal(row.source, "schedule");
+  });
+
   it("ghi và tổng hợp usage theo thread", () => {
     ghiLuot("acc-1", "t-1", { inputTokens: 100, outputTokens: 20, totalTokens: 120, steps: 1 });
     ghiLuot("acc-1", "t-1", { inputTokens: 200, outputTokens: 30, totalTokens: 230, steps: 3 });

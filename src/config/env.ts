@@ -185,6 +185,32 @@ const envSchema = z.object({
   // lặp lại theo chu kỳ này cho tới khi gửi xong câu trả lời
   TYPING_REFRESH_MS: z.coerce.number().int().min(1000).max(10000).default(3000),
 
+  // ===== Lịch hẹn (scheduler): bot tự nhắn theo lịch =====
+  // Tắt thì vòng tick không chạy - job vẫn nằm nguyên trong DB, chỉ đơn giản
+  // không job nào được gửi. Bật lại chạy tiếp ngay, không mất job.
+  SCHEDULER_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
+  // Chu kỳ quét job đến hạn. Bảng scheduled_jobs rất nhỏ (mỗi thread bị chặn ở
+  // SCHEDULER_MAX_JOBS_PER_THREAD) nên 30s quét 1 lần dư sức, không cần thấp hơn.
+  SCHEDULER_TICK_MS: z.coerce.number().int().min(5000).max(300_000).default(30_000),
+  // Chặn `every`/`cron` dày hơn mức này NGAY LÚC TẠO job - lưới đỡ ĐẦU chống
+  // spam. `every 1m` = 1440 tin/ngày vào một nick cá nhân, đúng chữ ký khoá nick.
+  SCHEDULER_MIN_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(5),
+  // Trần số job ĐANG BẬT mỗi cuộc trò chuyện - chặn 1 thread tạo vô số lời nhắc.
+  SCHEDULER_MAX_JOBS_PER_THREAD: z.coerce.number().int().min(1).max(200).default(20),
+  // Trần tin CHỦ ĐỘNG (do scheduler tự bắn, không phải trả lời tin tới) mỗi
+  // thread mỗi ngày - đếm theo ngày BOT_TIMEZONE. Lưới đỡ CUỐI, độc lập với
+  // chặn lúc tạo job ở trên.
+  SCHEDULER_MAX_PROACTIVE_PER_DAY: z.coerce.number().int().min(1).max(100).default(10),
+  // Rải đều tin chủ động: hàng đợi TOÀN CỤC (khác rate-limiter hiện có vốn chỉ
+  // xếp hàng trong 1 thread), cách nhau chừng này giữa 2 tin chủ động bất kỳ thread nào.
+  SCHEDULER_SEND_GAP_MS: z.coerce.number().int().min(0).max(300_000).default(20_000),
+  // Job `once` trễ trong khoảng này vẫn gửi bình thường; trễ hơn VẪN GỬI (không
+  // nuốt im lặng một lời NHẮC HẸN) nhưng kèm nhãn "nhắc trễ, lịch gốc ...".
+  SCHEDULER_ONCE_GRACE_MINUTES: z.coerce.number().int().min(1).max(1440).default(10),
+  // Giữ tối đa bấy nhiêu lượt chạy gần nhất mỗi job trong scheduled_job_runs;
+  // cũ hơn bị dọn ngay sau khi ghi lượt mới (cùng pattern prune của history-store).
+  SCHEDULER_RUN_LOG_KEEP: z.coerce.number().int().min(5).max(1000).default(50),
+
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),
   DASHBOARD_PASSWORD: z.preprocess(
