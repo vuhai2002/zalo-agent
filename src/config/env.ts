@@ -207,6 +207,10 @@ const envSchema = z.object({
   // Job `once` trễ trong khoảng này vẫn gửi bình thường; trễ hơn VẪN GỬI (không
   // nuốt im lặng một lời NHẮC HẸN) nhưng kèm nhãn "nhắc trễ, lịch gốc ...".
   SCHEDULER_ONCE_GRACE_MINUTES: z.coerce.number().int().min(1).max(1440).default(10),
+  // Job `once` bị TRẦN NGÀY chặn thì đẩy sang giờ này của NGÀY MAI (không phải
+  // 00:00 - dồn về đúng nửa đêm làm mất nhãn "nhắc trễ" + dồn cả loạt job hoãn
+  // thành 1 chùm tin lúc trần vừa reset).
+  SCHEDULER_DEFERRED_RUN_HOUR: z.coerce.number().int().min(0).max(23).default(8),
   // Giữ tối đa bấy nhiêu lượt chạy gần nhất mỗi job trong scheduled_job_runs;
   // cũ hơn bị dọn ngay sau khi ghi lượt mới (cùng pattern prune của history-store).
   SCHEDULER_RUN_LOG_KEEP: z.coerce.number().int().min(5).max(1000).default(50),

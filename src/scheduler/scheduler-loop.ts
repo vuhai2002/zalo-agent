@@ -44,12 +44,11 @@ const interruptStaleRunsStmt = db.prepare(`
 
 /**
  * Ghi lý do chặn PRE-FLIGHT (account/thread) lên chính row job (Mục 5): trước
- * đây job bị chặn ở đây không để lại dấu vết nào (return trước cả `openRun`),
- * account rớt phiên 3 ngày liền thì job hiện y hệt job khoẻ mạnh trên
- * dashboard. Trần ngày không cần cột này - `concludeCapBlockedAtTick` đã tự
- * ghi 1 dòng run log 'skipped'. Dùng lại `last_status`/`last_error` (không có
- * CHECK constraint) - tự "lành" ngay khi job chạy thật lần kế (markRun ghi đè
- * vô điều kiện).
+ * đây job bị chặn ở đây không để lại dấu vết nào, account rớt phiên 3 ngày
+ * liền thì job hiện y hệt job khoẻ mạnh trên dashboard. Trần ngày không cần
+ * cột này - `concludeCapBlockedAtTick` đã tự ghi 1 dòng run log 'skipped'.
+ * Dùng lại `last_status`/`last_error` (không CHECK constraint) - tự "lành"
+ * khi job chạy thật lần kế (markRun ghi đè vô điều kiện).
  */
 const markBlockedStmt = db.prepare(`
   UPDATE scheduled_jobs SET last_status = 'blocked', last_error = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -116,9 +115,9 @@ const lastPreflightReason = new Map<string, string>();
 
 /**
  * Job KHÔNG CÒN due (bị xoá, hoặc `next_run_at` đã đổi) thì bỏ dấu vết chặn cũ
- * - tránh rò rỉ bộ nhớ chậm, cùng lý do `threadChains` của `message-batcher.ts`
- * phải tự dọn: Map này sống suốt đời process, job bị xoá ĐÚNG lúc đang bị chặn
- * sẽ để lại entry vĩnh viễn nếu chỉ dọn ở nhánh "qua được preflight".
+ * - tránh rò rỉ bộ nhớ, cùng lý do `threadChains` của `message-batcher.ts` phải
+ * tự dọn: job bị xoá ĐÚNG lúc đang bị chặn sẽ để lại entry vĩnh viễn nếu chỉ
+ * dọn ở nhánh "qua được preflight".
  */
 function pruneStaleReasons(due: ScheduledJob[]): void {
   if (lastPreflightReason.size === 0) return;
@@ -147,25 +146,27 @@ function processDueJob(job: ScheduledJob, now: Date): void {
     lastPreflightReason.delete(job.id); // qua được rồi - xoá dấu vết lần chặn trước (nếu có)
 
     const schedule = scheduleOf(job, env.BOT_TIMEZONE);
-    const scheduledFor = job.nextRunAt!; // listDueJobs đã lọc next_run_at NOT NULL
+    // 'once' dùng `run_at` (mốc GỐC, không bao giờ bị ghi đè) để tính độ trễ +
+    // nhãn "nhắc trễ" - `next_run_at` có thể đã bị trần ngày đẩy sang giờ khác
+    // hoặc gửi-hỏng phục hồi, dùng nó sẽ MẤT nhãn cho job vừa bị hoãn cả đêm.
+    // every/cron không có run_at (NULL) nên vẫn dùng next_run_at.
+    const scheduledFor = schedule.kind === "once" ? job.runAt! : job.nextRunAt!;
     const action = decideDueAction(
       { schedule, nextRunAt: new Date(scheduledFor), onceGraceMinutes: getTuning("SCHEDULER_ONCE_GRACE_MINUTES") },
       now,
     );
 
     // Clear-before-dispatch: ghi next_run_at MỚI trước khi dispatch, để tick
-    // kế (SCHEDULER_TICK_MS sau) không nhặt lại ĐÚNG job này trong lúc nó còn
-    // chạy dở. 'once' không có "mốc kế" thật - computeNextRun trả nguyên
-    // runAtUtc CŨ (đã ở quá khứ) bất kể `now`, nên phải clear thẳng về NULL;
-    // dùng computeNextRun ở đây sẽ để lại mốc cũ và tick kế nhặt lại NGAY,
-    // dispatch lần 2 trước khi conclude (scheduled-job-conclude.ts) kịp tắt job.
+    // kế không nhặt lại ĐÚNG job này trong lúc nó còn chạy dở. 'once' không có
+    // "mốc kế" thật - computeNextRun trả nguyên runAtUtc CŨ (đã ở quá khứ) bất
+    // kể `now`, nên phải clear thẳng về NULL; để nguyên mốc cũ sẽ bị tick kế
+    // nhặt lại NGAY, dispatch lần 2 trước khi conclude kịp tắt job.
     const nextRunAt = schedule.kind === "once" ? null : computeNextRun(schedule, new Date(scheduledFor), now);
     setNextRun(job.id, nextRunAt);
 
     if (action === "skip-forward") {
       // Bỏ lượt HẲN, không dispatch: every/cron trễ quá grace, "chạy bù" sẽ
-      // dồn backlog. Ghi run 'skipped' NGAY (không qua run-scheduled-job.ts,
-      // không có gì thật sự chạy) để dashboard vẫn thấy vì sao mốc kế nhảy xa.
+      // dồn backlog. Ghi run 'skipped' NGAY để dashboard thấy vì sao mốc kế nhảy xa.
       const runId = openRun(job.id);
       finishRun(runId, { status: "skipped", detail: "Bỏ lượt vì đã trễ quá cửa sổ grace - dời sang lần kế tiếp." });
       log.info({ jobId: job.id, nextRunAt }, "Job trễ quá grace - bỏ lượt, dời lịch");
@@ -173,11 +174,10 @@ function processDueJob(job: ScheduledJob, now: Date): void {
     }
 
     // Lọc SỚM trần ngày TRƯỚC dispatch (Mục 1) - THUẦN ĐỌC, không giữ chỗ
-    // (giành chỗ THẬT xảy ra sát lúc gửi, xem blockedByGuard - chặn race giữa
-    // nhiều job cùng thread cùng đến hạn). Thiếu bước này: job 'once' chạm
-    // trần bị phục hồi next_run_at về mốc cũ, tick sau (30s) nhặt lại NGAY -
-    // kind='agent' nghĩa là chạy lại NGUYÊN 1 lượt LLM mỗi 30 giây tới hết
-    // ngày, thuần đốt token cho job CHẮC CHẮN không gửi được gì.
+    // (giành chỗ THẬT xảy ra sát lúc gửi, xem blockedByGuard). Thiếu bước này:
+    // job 'once' chạm trần bị phục hồi next_run_at về mốc cũ, tick sau nhặt
+    // lại NGAY - kind='agent' nghĩa là chạy lại nguyên 1 lượt LLM mỗi 30 giây
+    // tới hết ngày, đốt token cho job CHẮC CHẮN không gửi được gì.
     const timeZone = job.timezone || env.BOT_TIMEZONE;
     const cap = checkProactiveDailyCap(job.accountId, job.threadId, timeZone, now);
     if (!cap.ok) {

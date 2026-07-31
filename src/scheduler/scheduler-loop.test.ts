@@ -320,7 +320,7 @@ describe("preflight - account/thread chưa sẵn sàng (Finding 1)", () => {
 });
 
 describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi agent chạy xong (Mục 1)", () => {
-  it("job 'once' bị trần chặn: next_run_at đẩy sang ĐẦU NGÀY VN KẾ TIẾP (không phải mốc cũ, không phải NULL), đúng 1 tin thông báo, KHÔNG markRun", async () => {
+  it("job 'once' bị trần chặn: next_run_at đẩy sang GIỜ CẤU HÌNH (mặc định 8h) của NGÀY MAI (không phải 00:00, không phải mốc cũ, không phải NULL), đúng 1 tin thông báo, KHÔNG markRun", async () => {
     const zoneTime = await import("../shared/zone-time.js");
     const guard = await import("./proactive-send-guard.js");
     const sent = attachOnline();
@@ -344,13 +344,20 @@ describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi a
     assert.equal(after.enabled, true);
     assert.equal(
       after.nextRunAt,
-      zoneTime.startOfNextDayUtc("Asia/Ho_Chi_Minh", now),
-      "phải đẩy sang ĐÚNG đầu ngày VN kế tiếp - khớp câu bot vừa nhắn 'các lịch còn lại sẽ tiếp tục vào ngày mai'",
+      zoneTime.deferredRunAtUtc("Asia/Ho_Chi_Minh", tuning.getTuning("SCHEDULER_DEFERRED_RUN_HOUR"), now),
+      "phải đẩy sang ĐÚNG giờ cấu hình của ngày mai - khớp câu bot vừa nhắn 'các lịch còn lại sẽ tiếp tục vào ngày mai'",
     );
+    // 8h sáng giờ VN 02/08 = 01:00Z 02/08 (UTC+7) - KHÔNG PHẢI 17:00Z 01/08 (00:00 giờ VN 02/08, mốc nửa đêm bản trước dùng)
+    assert.equal(after.nextRunAt, "2026-08-02T01:00:00.000Z", "phải là 8h sáng giờ VN ngày mai, KHÔNG dồn về nửa đêm");
 
     const run = lastRunOf(job.id);
     assert.equal(run?.status, "skipped");
     assert.match(run!.detail, /chạm trần/);
+
+    // Job 'once' bị trần chặn vẫn SỐNG (enabled=true), next_run_at trỏ tới
+    // tương lai (ngày mai) - dọn hẳn để không bị các test SAU trong file này
+    // (dùng `now` giả lập cũng ở tương lai) quét trúng nhầm là "due".
+    jobStore.deleteJob(ACC, threadId, job.id);
   });
 
   it("job 'every' bị trần chặn: next_run_at GIỮ mốc kế TỰ NHIÊN (đã tính sẵn bởi clear-before-dispatch) - KHÔNG bị đẩy qua ngày mai như 'once'", async () => {
@@ -376,6 +383,11 @@ describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi a
       "mốc kế every 30 phút TỰ NHIÊN - nhánh trần ngày không được đụng vào",
     );
     assert.equal(lastRunOf(job.id)?.status, "skipped");
+
+    // 'every' KHÔNG tự tắt (maxRuns=null, vô hạn) - dọn hẳn, nếu không job này
+    // "due mãi mãi" và các test SAU (dùng `now` giả lập ở tương lai xa) sẽ
+    // quét trúng, gửi nhầm 1 tin không liên quan vào `sent` của test đó.
+    jobStore.deleteJob(ACC, threadId, job.id);
   });
 
   it("job kind='agent' bị trần chặn: KHÔNG tạo agent_turns nào - lượt LLM chưa từng chạy, tránh đốt token cho job chắc chắn không gửi được", async () => {
@@ -402,6 +414,87 @@ describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi a
     ).n;
     assert.equal(after, before, "không được tạo agent_turns nào - lượt LLM chưa từng chạy");
     assert.equal(lastRunOf(job.id)?.status, "skipped");
+
+    jobStore.deleteJob(ACC, threadId, job.id); // cùng lý do dọn ở test 'every' bên trên
+  });
+
+  it("job 'once' bị trần chặn rồi được gửi lại: nhãn '(nhắc trễ, lịch gốc HH:MM)' phải giữ ĐÚNG GIỜ GỐC, không phải giờ hoãn (Mục 3, vòng 3)", async () => {
+    const guard = await import("./proactive-send-guard.js");
+    const sent = attachOnline();
+    const threadId = "t-tick-tran-once-nhac-tre";
+    makeThread(threadId);
+    tuning.setTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY", 1);
+
+    const runAt = new Date("2026-08-01T16:50:00.000Z"); // 23:50 giờ VN 01/08
+    guard.reserveProactiveSlot(ACC, threadId, "Asia/Ho_Chi_Minh", runAt); // chiếm hết suất trước, cùng ngày VN với runAt
+
+    const job = makeJob({ threadId, payload: "Nho hop", schedule: { kind: "once", runAtUtc: runAt.toISOString() } });
+
+    // Tick lúc job đến hạn (23:50 VN) - bị trần chặn, đẩy sang 8h sáng VN ngày mai
+    await schedulerLoop.runSchedulerTick(runAt);
+    await sleep(40);
+    assert.equal(sent.length, 1, "chỉ có tin thông báo chạm trần ở lượt này");
+
+    const deferred = jobStore.getJobUnscoped(job.id)!;
+    assert.equal(deferred.runAt, runAt.toISOString(), "run_at (mốc GỐC) KHÔNG được đụng vào dù next_run_at đã bị đẩy");
+
+    // `reserveProactiveSlot`/`recordProactiveSend` bên trong `blockedByGuard`
+    // (lúc GỬI THẬT, khác lần lọc sớm ở tick) mặc định dùng `now` THẬT (không
+    // nhận `now` giả lập của tick) - tin thông báo chạm trần vừa gửi ở tick 1
+    // đã vô tình chiếm mất suất của "hôm nay thật" (ngày chạy test), nên nếu
+    // không dọn thì tick 2 (dù đã sang "ngày mai" theo mốc GIẢ LẬP) vẫn bị
+    // chặn ở TẦNG GỬI vì suất "hôm nay thật" đã hết. Reset để cô lập đúng thứ
+    // test này đang canh (nhãn nhắc trễ), không lẫn quirk thời gian thật/giả
+    // lập của tầng guard.
+    guard.resetProactiveSendCounters();
+
+    // Tick NGÀY MAI đúng lúc job đến hạn lại (đã hết trần chặn - ngày mới).
+    // LƯU Ý: `now` nhảy xa tới tương lai (so với giờ THẬT lúc chạy test) nên
+    // tick NÀY quét ra CẢ job "due" còn sót của các ca test KHÁC trong CÙNG
+    // file (DB dùng chung) - lọc đúng `threadId` của CHÍNH job đang test thay
+    // vì tin vào tổng độ dài `sent`.
+    await schedulerLoop.runSchedulerTick(new Date(deferred.nextRunAt!));
+    await sleep(40);
+
+    const sentThisThread = sent.filter((s) => s.threadId === threadId);
+    assert.equal(sentThisThread.length, 2, "phải có đúng 2 tin trên thread này: thông báo chạm trần + tin nhắc trễ vừa gửi lại");
+    assert.equal(
+      sentThisThread[1]!.text,
+      "(nhắc trễ, lịch gốc 23:50) Nho hop",
+      "nhãn nhắc trễ phải giữ ĐÚNG giờ gốc 23:50 (run_at) - dùng next_run_at đã bị đẩy sẽ tính lateSeconds gần 0 và MẤT nhãn",
+    );
+  });
+
+  it("N job CÙNG thread cùng bị chặn trong 1 tick (gap khác 0): chỉ ĐÚNG 1 tin thông báo, KHÔNG nhân bản theo số job (Mục 1, vòng 3)", async () => {
+    const guard = await import("./proactive-send-guard.js");
+    const sent = attachOnline();
+    const threadId = "t-tick-nhieu-job-cham-tran";
+    makeThread(threadId);
+    tuning.setTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY", 1);
+    // Bắt buộc gap KHÁC 0 - đúng ca đã sinh bug: đường gửi (kể cả thông báo
+    // chạm trần) phải CHỜ gap trước khi commit "đã báo" ở bản cũ, mở ra cửa sổ
+    // đủ dài để N job khác đọc nhầm mình cũng là "lần đầu chạm trần".
+    tuning.setTuning("SCHEDULER_SEND_GAP_MS", 50);
+
+    const now = new Date("2026-08-01T03:00:00.000Z");
+    guard.reserveProactiveSlot(ACC, threadId, "Asia/Ho_Chi_Minh", now); // chiếm hết suất trước
+
+    // 3 job CÙNG thread, cùng đến hạn trong CÙNG 1 tick
+    const jobs = [1, 2, 3].map((n) =>
+      makeJob({ threadId, name: `job-${n}`, schedule: { kind: "once", runAtUtc: now.toISOString() } }),
+    );
+
+    await schedulerLoop.runSchedulerTick(now);
+    // Đợi đủ dài hơn 3 lần gap cộng dồn - nếu bug nhân bản còn đó, đây là đủ
+    // thời gian để CẢ 3 tin thông báo (nếu có) kịp ra hàng đợi rải đều.
+    await sleep(400);
+
+    assert.equal(sent.length, 1, `chỉ được ĐÚNG 1 tin thông báo dù có 3 job cùng bị chặn (đo được ${sent.length})`);
+
+    tuning.setTuning("SCHEDULER_SEND_GAP_MS", null); // dọn lại cho test khác trong file (base env đặt 0)
+    // Cả 3 vẫn SỐNG (bị chặn trần, không markRun) với next_run_at ở tương lai
+    // (ngày mai) - dọn hẳn, cùng lý do các test 'once'/'every'/'agent' phía trên.
+    for (const job of jobs) jobStore.deleteJob(ACC, threadId, job.id);
   });
 });
 

@@ -56,17 +56,32 @@ export function startOfDayUtc(timeZone: string, now: Date = new Date()): string 
 }
 
 /**
- * Mốc 00:00:00 của NGÀY MAI theo timeZone - dùng khi 1 job 'once' bị TRẦN
- * NGÀY chặn: phải đẩy hẳn sang ngày kế tiếp (thử lại trong ngày vẫn chạm trần
- * y hệt) thay vì đứng yên ở mốc quá khứ (kẹt vĩnh viễn - 'once' không có "lần
- * kế" tự nhiên như every/cron). Dùng `.plus({days:1})` của luxon thay vì cộng
- * cứng 24 tiếng - đúng NGÀY LỊCH trong zone dù zone đó có DST (giờ mùa hè
- * nhảy 23/25 tiếng, không phải luôn luôn 24).
+ * Mốc HH:00:00 của NGÀY MAI theo timeZone - dùng khi 1 job 'once' bị TRẦN
+ * NGÀY chặn: phải đẩy sang ngày kế tiếp (thử lại trong ngày vẫn chạm trần y
+ * hệt) thay vì đứng yên ở mốc quá khứ (kẹt vĩnh viễn - 'once' không có "lần
+ * kế" tự nhiên như every/cron).
+ *
+ * CỐ Ý không phải 00:00:00 (bản trước đúng vậy, rồi sửa lại - vòng 3): dồn về
+ * ĐÚNG nửa đêm làm 1 lời nhắc 23:50 bị hoãn chỉ 10 phút (mất luôn cảm giác
+ * "hoãn"), và mọi job 'once' bị hoãn trong ngày cùng dồn về đúng 1 mốc - trần
+ * vừa reset lúc nửa đêm nên tới hàng chục tin bắn thành chùm cách nhau
+ * `SCHEDULER_SEND_GAP_MS` ngay 00:00, đúng nhịp trông như bot trên 1 nick cá
+ * nhân. `hour` (tham số `SCHEDULER_DEFERRED_RUN_HOUR`, mặc định 8) giãn việc
+ * này ra xa nửa đêm.
+ *
+ * LUÔN LÀ NGÀY MAI dù `now` đã qua giờ `hour` của hôm nay hay chưa - `.plus({
+ * days: 1 })` cộng TRƯỚC khi `.set({hour...})`, không phải "lần kế tiếp của
+ * giờ đó" (có thể là hôm nay). Job bị chặn buổi sáng phải đợi hết ngày mai
+ * mới thử lại, không phải trong vài giờ tới - đúng ý "ngày mai" của câu thông
+ * báo chạm trần bot đã gửi.
+ *
+ * Dùng luxon `.plus({days:1})` thay vì cộng cứng 24 tiếng - đúng NGÀY LỊCH
+ * trong zone dù zone đó có DST (giờ mùa hè nhảy 23/25 tiếng).
  */
-export function startOfNextDayUtc(timeZone: string, now: Date = new Date()): string {
+export function deferredRunAtUtc(timeZone: string, hour: number, now: Date = new Date()): string {
   return DateTime.fromJSDate(now, { zone: safeZone(timeZone) })
     .plus({ days: 1 })
-    .startOf("day")
+    .set({ hour, minute: 0, second: 0, millisecond: 0 })
     .toUTC()
     .toJSDate()
     .toISOString();

@@ -22,14 +22,9 @@ import { getRunningAccountApi } from "../zalo/account-manager.js";
 import type { ReplyTarget } from "../zalo/send-reply-in-parts.js";
 import { openRun } from "./job-run-log-store.js";
 import { ACCOUNT_NOT_RUNNING_REASON } from "./proactive-send-guard.js";
-import {
-  blockedByGuard,
-  concludeBlockedNotRun,
-  concludeDeliveryFailed,
-  conclude,
-  sendAndConclude,
-} from "./scheduled-job-conclude.js";
+import { concludeBlockedNotRun, concludeDeliveryFailed, conclude } from "./scheduled-job-conclude.js";
 import { buildSyntheticMessage, withLateLabel } from "./scheduled-job-prompt.js";
+import { blockedByGuard, sendAndConclude } from "./scheduled-job-send.js";
 import type { ScheduledJob } from "./scheduled-job-store.js";
 import { isSilentResponse } from "./silent-sentinel.js";
 
@@ -118,6 +113,12 @@ async function runAgentJob(
   const message = buildSyntheticMessage(job);
   const trace: StepTrace[] = [];
   const turnId = openAgentTurn(job.accountId, job.threadId, "schedule");
+  // Đánh dấu ĐÃ chốt usage THẬT (result.usage) - nếu catch bên dưới bắt được
+  // lỗi ném ra SAU điểm đó (vd blockedByGuard/sendAndConclude ném lỗi hiếm),
+  // KHÔNG được gọi lại finishAgentTurn/saveTurnTrace lần 2: lần 2 dùng usage
+  // {0,0,0} giả, ĐÈ MẤT số token thật vừa ghi đúng, và saveTurnTrace lần 2
+  // chèn TRÙNG y hệt các dòng agent_steps đã lưu ở lần đầu (Mục 4, vòng 3).
+  let turnFinished = false;
 
   await runInTurnLogContext({ accountId: job.accountId, threadId: job.threadId, turnId }, async () => {
     try {
@@ -131,6 +132,7 @@ async function runAgentJob(
       });
       finishAgentTurn(turnId, result.usage);
       if (trace.length > 0) saveTurnTrace(turnId, trace);
+      turnFinished = true;
 
       const text = result.text.trim();
       if (!text || isSilentResponse(text)) {
@@ -150,14 +152,16 @@ async function runAgentJob(
       // Lượt ném lỗi (provider chết, timeout...) vẫn phải chốt token đã tốn +
       // lưu trace các step ĐÃ chạy được - đúng nếp message-turn-processor.ts.
       // Khác duy nhất: KHÔNG nhắn "trục trặc kỹ thuật" - job lỗi thì im.
-      finishAgentTurn(turnId, { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: trace.length });
-      if (trace.length > 0) saveTurnTrace(turnId, trace);
-      // Ca thường gặp: agent-loop ném lỗi TRƯỚC khi kịp tính ra text (chưa hề
-      // chạm blockedByGuard/gửi) - chắc chắn "chưa gửi được" gì, đếm vào
-      // delivery_attempts (Finding 1) thay vì markRun ngay. Ca hiếm (throw từ
-      // chính blockedByGuard/sendAndConclude, vd appendMessage lỗi NGAY SAU
-      // khi gửi thật thành công): coi bảo thủ là "chưa gửi" - thà tính thiếu 1
-      // suất trần còn hơn để lọt 1 job chết oan vì rớt mạng.
+      // CHỈ chốt bằng usage {0,0,0} khi CHƯA từng chốt thật (turnFinished
+      // false) - agent-loop ném lỗi TRƯỚC khi kịp trả về result là ca DUY
+      // NHẤT còn lại sau khi sendAndConclude tự lo hết bookkeeping của nó
+      // (Mục 2, vòng 3: sendAndConclude không còn ném lỗi sau khi đã gửi).
+      if (!turnFinished) {
+        finishAgentTurn(turnId, { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: trace.length });
+        if (trace.length > 0) saveTurnTrace(turnId, trace);
+      }
+      // Chắc chắn "chưa gửi được" gì - đếm vào delivery_attempts (Finding 1)
+      // thay vì markRun ngay.
       const message = err instanceof Error ? err.message : String(err);
       concludeDeliveryFailed(job, runId, options.scheduledFor, message, turnId);
     }

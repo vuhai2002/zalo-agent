@@ -379,6 +379,15 @@ const TUNING_BY_KEY = {
     max: 1440,
     unit: "phút",
   },
+  SCHEDULER_DEFERRED_RUN_HOUR: {
+    kind: "number",
+    group: "lich-hen",
+    label: "Giờ chạy lại sau khi hoãn vì trần",
+    hint: "Job 'nhắc 1 lần' bị trần ngày chặn thì đẩy sang giờ này của ngày mai, không phải 00:00 - tránh dồn cả loạt job hoãn thành 1 chùm tin đúng lúc trần vừa reset.",
+    min: 0,
+    max: 23,
+    unit: "giờ",
+  },
   SCHEDULER_RUN_LOG_KEEP: {
     kind: "number",
     group: "lich-hen",

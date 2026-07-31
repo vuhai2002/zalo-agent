@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { dayKeyOf, startOfDayUtc, todayKey, zonedWallClockToUtc } from "./zone-time.js";
+import { dayKeyOf, deferredRunAtUtc, startOfDayUtc, todayKey, zonedWallClockToUtc } from "./zone-time.js";
 
 // Module thuần, không cần setupTestEnv. Mọi mốc đặt tường minh - không dựa vào
 // giờ máy chạy test, đúng bài học "test xanh vô nghĩa" đã dính ở read-zip-entry.
@@ -92,6 +92,46 @@ describe("dayKeyOf", () => {
 
   it("mốc UTC không hợp lệ ném lỗi rõ ràng - utcIso luôn do hệ thống sinh, hỏng là lỗi lập trình", () => {
     assert.throws(() => dayKeyOf("khong-phai-iso", "Asia/Ho_Chi_Minh"));
+  });
+});
+
+describe("deferredRunAtUtc", () => {
+  it("đúng giờ cấu hình của NGÀY MAI, KHÔNG PHẢI 00:00 - mốc trưa giờ VN", () => {
+    // 10:00 sáng giờ VN 01/08 -> đẩy sang 8h sáng giờ VN NGÀY MAI 02/08 = 01:00Z 02/08
+    const now = new Date("2026-08-01T03:00:00.000Z");
+    assert.equal(deferredRunAtUtc("Asia/Ho_Chi_Minh", 8, now), "2026-08-02T01:00:00.000Z");
+  });
+
+  it("LUÔN là ngày mai dù `now` đã qua giờ cấu hình của HÔM NAY hay chưa - không phải 'lần kế tiếp của giờ đó'", () => {
+    // 23:50 giờ VN 01/08 (đã qua xa giờ 8h sáng CỦA HÔM NAY) - vẫn phải đẩy
+    // sang 8h sáng giờ VN NGÀY MAI 02/08, không phải "8h sáng gần nhất" mà có
+    // thể hiểu nhầm là VẪN CÒN HÔM NAY nếu tính sai kiểu "giờ kế tiếp".
+    const lucKhuya = new Date("2026-08-01T16:50:00.000Z"); // 23:50 giờ VN 01/08
+    assert.equal(deferredRunAtUtc("Asia/Ho_Chi_Minh", 8, lucKhuya), "2026-08-02T01:00:00.000Z");
+
+    // Ngay cả khi `now` mới là 01:00 sáng giờ VN (TRƯỚC giờ 8h của CHÍNH hôm
+    // nay) - vẫn phải nhảy sang ngày mai, không phải "8h sáng nay còn kịp".
+    const lucSomSang = new Date("2026-08-01T18:00:00.000Z"); // 01:00 giờ VN 02/08
+    assert.equal(deferredRunAtUtc("Asia/Ho_Chi_Minh", 8, lucSomSang), "2026-08-03T01:00:00.000Z");
+  });
+
+  it("khác giờ cấu hình cho ra khác mốc - tham số hour có tác dụng thật, không hard-code 8", () => {
+    const now = new Date("2026-08-01T03:00:00.000Z");
+    assert.equal(deferredRunAtUtc("Asia/Ho_Chi_Minh", 0, now), "2026-08-01T17:00:00.000Z", "0h = đúng nửa đêm giờ VN");
+    assert.equal(deferredRunAtUtc("Asia/Ho_Chi_Minh", 23, now), "2026-08-02T16:00:00.000Z");
+  });
+
+  it("timezone hỏng rơi về UTC thay vì throw", () => {
+    const now = new Date("2026-08-01T03:00:00.000Z");
+    assert.equal(deferredRunAtUtc("Khong/Ton_Tai", 8, now), "2026-08-02T08:00:00.000Z");
+  });
+
+  it("zone có DST (Europe/Paris) vẫn cộng ĐÚNG 1 NGÀY LỊCH qua mốc chuyển giờ, không phải cộng cứng 24 tiếng", () => {
+    // 28/03/2026 12:00 Paris (CET, +1) -> ngày mai 29/03 (CEST, +2, đúng ngày
+    // chuyển giờ mùa xuân) lúc 8h sáng = 06:00Z, KHÔNG PHẢI 07:00Z (nếu cộng
+    // cứng 24h từ mốc UTC gốc sẽ lệch 1 tiếng do offset đổi giữa chừng).
+    const now = new Date("2026-03-28T11:00:00.000Z"); // 12:00 Paris (CET +1)
+    assert.equal(deferredRunAtUtc("Europe/Paris", 8, now), "2026-03-29T06:00:00.000Z");
   });
 });
 

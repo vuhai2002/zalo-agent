@@ -5,17 +5,15 @@
  * - xem `proactive-send-counter-store.ts`). Hỏng bất kỳ điều nào thì trả lý
  * do dạng chữ để ghi vào `scheduled_job_runs.detail`.
  *
- * Trần ngày có 2 điểm kiểm KHÁC NHAU vì 2 mục đích khác nhau:
- * - `checkProactiveDailyCap`: THUẦN ĐỌC, dùng lọc SỚM ở tick (trước khi chạy
- *   agent) - tránh đốt LLM khi chắc chắn chạm trần, nhưng KHÔNG giữ chỗ nên
- *   không chặn được race giữa nhiều job cùng thread cùng đến hạn.
- * - `reserveProactiveSlot`: NGUYÊN TỬ, dùng ngay SÁT lúc gửi thật
- *   (`scheduled-job-conclude.ts`) - giành đúng 1 suất bằng 1 câu UPDATE có
- *   điều kiện, chặn đúng race đó.
+ * Trần ngày có 2 điểm kiểm KHÁC NHAU: `checkProactiveDailyCap` (THUẦN ĐỌC,
+ * lọc SỚM ở tick trước khi chạy agent - tránh đốt LLM, nhưng không giữ chỗ
+ * nên không chặn được race) và `reserveProactiveSlot` (NGUYÊN TỬ, dùng ngay
+ * sát lúc gửi thật ở `scheduled-job-send.ts` - giành 1 suất bằng 1 câu UPDATE
+ * có điều kiện, chặn đúng race đó).
  *
  * Kèm hàng đợi rải đều TOÀN CỤC (`SCHEDULER_SEND_GAP_MS`, xem
- * `proactive-send-queue.ts`) - khác `middleware/rate-limiter.ts` hiện có vốn
- * chỉ xếp hàng TRONG một thread.
+ * `proactive-send-queue.ts`) - khác `middleware/rate-limiter.ts` chỉ xếp
+ * hàng TRONG một thread.
  */
 
 import { getTuning } from "../config/runtime-tuning-settings.js";
@@ -28,6 +26,8 @@ import {
   markProactiveCapNoticeSent,
   refundProactiveSlot as refundProactiveSlotRow,
   resetAllProactiveCounters,
+  revertCapNotice as revertCapNoticeRow,
+  tryReserveCapNotice,
   tryReserveProactiveSlot,
 } from "./proactive-send-counter-store.js";
 
@@ -43,10 +43,9 @@ export type PreflightResult = { ok: true } | { ok: false; reason: string };
 /**
  * Phần KHÔNG phụ thuộc nội dung của guard - account đang chạy + thread hợp
  * lệ. Tách riêng để `scheduler-loop.ts` kiểm được NGAY TRONG TICK, TRƯỚC khi
- * clear-before-dispatch: job chặn ở đây thì tick chưa hề đụng vào
- * `next_run_at`/`run_count` của nó, tick sau tự thử lại - job không "chết"
- * chỉ vì account rớt phiên đúng lúc đến hạn (ca hoàn toàn bình thường của
- * zca-js, không phải sự cố hiếm).
+ * clear-before-dispatch: job chặn ở đây thì tick chưa hề đụng
+ * `next_run_at`/`run_count`, tick sau tự thử lại - job không "chết" chỉ vì
+ * account rớt phiên đúng lúc đến hạn (ca bình thường của zca-js).
  */
 export function checkAccountAndThreadReady(accountId: string, threadId: string): PreflightResult {
   if (!isAccountRunning(accountId)) {
@@ -68,11 +67,9 @@ export type GuardResult =
       ok: false;
       reason: string;
       /**
-       * true nghĩa là CHƯA báo trần hôm nay - caller (đã thật sự gửi được
-       * thông báo) phải tự gọi `markProactiveCapNotified` sau khi gửi xong.
-       * Các hàm kiểm trần ở file này THUẦN ĐỌC hoặc chỉ GIỮ CHỖ, không tự gửi
-       * gì - trang "Chạy thử ngay" (phase 05) có thể gọi kiểm rồi không gửi,
-       * tự ghi ở đây sẽ làm mất thông báo thật của lần chạm trần kế tiếp.
+       * true nghĩa là CHƯA báo trần hôm nay - caller phải tự giành quyền báo
+       * (`reserveCapNotice`) rồi mới gửi. Các hàm kiểm trần ở file này THUẦN
+       * ĐỌC hoặc chỉ GIỮ CHỖ, không tự gửi gì.
        */
       notifyCapHitOnce: boolean;
     };
@@ -112,13 +109,11 @@ export function checkProactiveDailyCap(
 
 /**
  * NGUYÊN TỬ - giành ĐÚNG 1 suất nếu còn chỗ (1 câu UPDATE có điều kiện, xem
- * `tryReserveProactiveSlot`). Dùng NGAY SÁT lúc gửi thật: đây mới là điểm
- * CHẶN RACE giữa nhiều job cùng thread cùng đến hạn - `checkProactiveDailyCap`
- * ở trên chỉ lọc sớm, không giữ chỗ nên 2 job có thể cùng "thấy còn chỗ".
- *
- * Gọi `recordProactiveSend` sau đó để cộng nốt phần CÒN LẠI khi biết
- * `sentParts` thật > 1, hoặc `refundProactiveSlot` nếu cuối cùng không gửi
- * được gì (xem `scheduled-job-conclude.ts`).
+ * `tryReserveProactiveSlot`). Dùng NGAY SÁT lúc gửi thật - điểm CHẶN RACE
+ * giữa nhiều job cùng thread cùng đến hạn (`checkProactiveDailyCap` ở trên
+ * chỉ lọc sớm, không giữ chỗ). Gọi `recordProactiveSend` sau đó để cộng nốt
+ * phần CÒN LẠI khi `sentParts` > 1, hoặc `refundProactiveSlot` nếu cuối cùng
+ * không gửi được gì.
  */
 export function reserveProactiveSlot(
   accountId: string,
@@ -152,7 +147,12 @@ export function checkProactiveSendGuard(
   return checkProactiveDailyCap(accountId, threadId, timeZone, now);
 }
 
-/** Đánh dấu ĐÃ báo trần hôm nay - chỉ gọi SAU KHI thông báo chạm trần thật sự gửi được */
+/**
+ * Đánh dấu ĐÃ báo trần hôm nay - hàm GHI ĐÈ vô điều kiện, giữ lại cho chỗ đã
+ * tự chắc chắn (vd trang "Chạy thử ngay" phase 05, không có race nhiều job).
+ * Đường gửi thông báo THẬT của scheduler dùng
+ * `reserveCapNotice`/`revertCapNotice` NGUYÊN TỬ bên dưới thay vì hàm này.
+ */
 export function markProactiveCapNotified(
   accountId: string,
   threadId: string,
@@ -160,6 +160,21 @@ export function markProactiveCapNotified(
   now: Date = new Date(),
 ): void {
   markProactiveCapNoticeSent(accountId, threadId, todayKey(timeZone, now));
+}
+
+/**
+ * NGUYÊN TỬ - giành QUYỀN gửi thông báo chạm trần (xem `tryReserveCapNotice`).
+ * Gọi NGAY TRƯỚC khi thật sự gửi - điểm CHẶN RACE khi N job cùng thread cùng
+ * bị chặn trong 1 tick, khác `markProactiveCapNotified` (ghi SAU khi gửi
+ * xong, quá muộn để chặn race).
+ */
+export function reserveCapNotice(accountId: string, threadId: string, timeZone: string, now: Date = new Date()): boolean {
+  return tryReserveCapNotice(accountId, threadId, todayKey(timeZone, now));
+}
+
+/** Trả lại quyền đã giành ở `reserveCapNotice` nhưng cuối cùng gửi hỏng - job/tick sau còn cơ hội thử lại */
+export function revertCapNotice(accountId: string, threadId: string, timeZone: string, now: Date = new Date()): void {
+  revertCapNoticeRow(accountId, threadId, todayKey(timeZone, now));
 }
 
 /**

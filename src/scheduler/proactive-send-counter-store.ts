@@ -103,6 +103,41 @@ export function refundProactiveSlot(accountId: string, threadId: string, dayKey:
   refundStmt.run(accountId, threadId, dayKey);
 }
 
+const tryReserveNoticeStmt = db.prepare(`
+  INSERT INTO proactive_send_counters (account_id, thread_id, day_key, notice_sent)
+  VALUES (?, ?, ?, 1)
+  ON CONFLICT (account_id, thread_id, day_key) DO UPDATE SET
+    notice_sent = 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE notice_sent = 0
+`);
+
+/**
+ * Giành QUYỀN gửi thông báo chạm trần một cách NGUYÊN TỬ - 1 câu UPDATE có
+ * điều kiện (`notice_sent = 0`), không phải đọc-rồi-ghi 2 bước. Chặn đúng
+ * race giữa N job CÙNG thread cùng bị chặn trong CÙNG 1 tick: mỗi job đọc
+ * `noticeSent=false` TRƯỚC khi job khác kịp gửi xong (đường gửi phải chờ
+ * `SCHEDULER_SEND_GAP_MS`, thường 20s) sẽ tưởng mình là lần đầu chạm trần - N
+ * job thành N tin thông báo giống hệt nhau, cách nhau 20 giây, đúng lúc bot
+ * đang cố nói "mình sẽ im đi".
+ *
+ * Trả `true` nếu giành được (đã ghi `notice_sent=1` NGAY, TRƯỚC khi gửi thật),
+ * `false` nếu đã có ai giành trước (hoặc đã gửi thật từ trước). Gửi hỏng thì
+ * gọi `revertCapNotice` để trả quyền lại cho job/tick sau.
+ */
+export function tryReserveCapNotice(accountId: string, threadId: string, dayKey: string): boolean {
+  return tryReserveNoticeStmt.run(accountId, threadId, dayKey).changes > 0;
+}
+
+const revertNoticeStmt = db.prepare(`
+  UPDATE proactive_send_counters SET notice_sent = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE account_id = ? AND thread_id = ? AND day_key = ?
+`);
+
+/** Trả lại quyền gửi thông báo chạm trần đã giành ở `tryReserveCapNotice` nhưng cuối cùng gửi hỏng - job/tick sau còn cơ hội thử lại */
+export function revertCapNotice(accountId: string, threadId: string, dayKey: string): void {
+  revertNoticeStmt.run(accountId, threadId, dayKey);
+}
+
 /** Chỉ dùng cho test - xoá sạch bảng để mỗi ca test bắt đầu từ 0 */
 export function resetAllProactiveCounters(): void {
   db.exec("DELETE FROM proactive_send_counters");

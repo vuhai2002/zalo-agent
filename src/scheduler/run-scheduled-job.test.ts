@@ -175,6 +175,17 @@ describe("runScheduledJob - kind=message", () => {
     assert.match(run.detail, /không chạy/);
   });
 
+  it("bị chặn vì account không chạy phải RESET delivery_attempts - lượt này kết thúc KHÔNG PHẢI vì gửi hỏng (Mục 4, vòng 3)", async () => {
+    const attemptStore = await import("./delivery-attempt-store.js");
+    const job = makeJob({ accountId: "acc-chua-tung-online-2", threadId: "t-bat-ky-2" });
+    attemptStore.incrementDeliveryAttempts(job.id);
+    attemptStore.incrementDeliveryAttempts(job.id); // mô phỏng 2 lần gửi hỏng RẢI RÁC ở các lượt trước đó
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
+
+    assert.equal(deliveryAttemptsOf(job.id), 0, "bị chặn account/thread phải đứt chuỗi gửi hỏng - không cộng dồn với lần gửi hỏng KẾ TIẾP");
+  });
+
   it("gửi hỏng (zca-js ném lỗi) thì thử lại tối đa 3 lần trước khi ghi 'error' thật (Mục 2) - KHÔNG ghi history bất kỳ lần nào", async () => {
     attachOnline(() => {
       throw new Error("mang rot giua chung");
@@ -267,6 +278,7 @@ describe("runScheduledJob - kind=message", () => {
     assert.equal(lastRunOf(job.id).status, "skipped", "tin thứ 11 phải bị chặn");
     assert.equal(sent.length, 11, "phải có thêm đúng 1 tin - câu thông báo chạm trần");
     assert.notEqual(sent.at(-1)!.text, "nhac lap lai", "tin thêm phải là câu THÔNG BÁO, không phải payload gốc");
+    assert.equal(deliveryAttemptsOf(job.id), 0, "bị chặn vì trần ngày phải reset delivery_attempts - KHÔNG PHẢI vì gửi hỏng (Mục 4, vòng 3)");
 
     // Tin thứ 12 cùng ngày: vẫn bị chặn nhưng KHÔNG lặp lại câu thông báo
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
@@ -274,6 +286,22 @@ describe("runScheduledJob - kind=message", () => {
     assert.equal(sent.length, 11, "câu thông báo không được lặp lại trong cùng ngày");
   });
 });
+
+// Mục 2 (vòng 3, "gửi thành công rồi chốt sổ hỏng KHÔNG được retry") ĐÃ SỬA
+// trong src/scheduler/scheduled-job-conclude.ts (bọc appendMessage + phần
+// chốt sổ trong try/catch riêng, gắn lỗi vào reply.error thay vì để throw
+// thoát ra ngoài sendAndConclude). KHÔNG tự động test được ở mức tích hợp:
+// đã thử `mock.method` (node:test) trên appendMessage/markRun - xác nhận
+// bằng thực nghiệm (2 lần, kể cả file cô lập) rằng ESM named export bị
+// "Cannot redefine property" ngay khi module đã được nạp qua BẤT KỲ đường
+// import nào khác trước đó (đúng ngữ nghĩa binding bất biến của ES module,
+// không phải lỗi viết test sai) - mà mọi hàm muốn mock ở đây đều đã bị chính
+// scheduled-job-conclude.ts nạp trước khi test file kịp mock. Ép lỗi thật qua
+// DB (xoá bảng messages giữa chừng) bị loại vì sẽ phá dữ liệu của các test
+// KHÁC dùng chung DB trong file. Đã xác nhận bằng review code trực tiếp: cấu
+// trúc try/catch trong sendAndConclude là tuyến tính, dễ đọc, không có
+// nhánh nào còn sót lại gọi concludeDeliveryFailed sau khi reply.deliveredText
+// khác rỗng.
 
 describe("runScheduledJob - không giữ khoá thread khi đang chờ hàng đợi toàn cục (Finding 3)", () => {
   it("tin THẬT trên CÙNG thread chạy được ngay dù job đang xếp hàng ở hàng đợi toàn cục", async () => {
@@ -420,6 +448,19 @@ describe("runScheduledJob - kind=agent", () => {
     assert.equal(lastRunOf(job.id).status, "silent");
   });
 
+  it("trả [SILENT] phải RESET delivery_attempts - lượt này kết thúc KHÔNG PHẢI vì gửi hỏng, không được cộng dồn với lần gửi hỏng ở NGÀY KHÁC (Mục 4, vòng 3)", async () => {
+    const attemptStore = await import("./delivery-attempt-store.js");
+    attachOnline();
+    const job = makeJob({ kind: "agent", payload: "Theo doi gia vang" });
+    attemptStore.incrementDeliveryAttempts(job.id);
+    attemptStore.incrementDeliveryAttempts(job.id); // mô phỏng 2 lần gửi hỏng RẢI RÁC ở các lượt trước đó
+    const { model } = mockModel(() => traLoi("[SILENT]"));
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model });
+
+    assert.equal(deliveryAttemptsOf(job.id), 0, "lượt SILENT phải đứt chuỗi gửi hỏng - không được giữ lại 2 lần cũ để cộng dồn thành đủ 3 ở lần gửi hỏng KẾ TIẾP");
+  });
+
   it("provider ném lỗi (lượt agent chết giữa chừng) thì thử lại tối đa 3 lần trước khi ghi 'error' thật (Mục 2), KHÔNG gửi gì", async () => {
     const sent = attachOnline();
     const job = makeJob({ kind: "agent", payload: "Viec se khong bao gio xong" });
@@ -476,4 +517,13 @@ describe("runScheduledJob - kind=agent", () => {
 
     assert.equal(sent.at(-1)!.text, "(nhắc trễ, lịch gốc 15:00) Bao cao xong roi day.");
   });
+
+  // Mục 4 (vòng 3, "finishAgentTurn/saveTurnTrace không bị gọi lần 2 khi lỗi
+  // ném ra SAU khi đã chốt usage thật") ĐÃ SỬA trong run-scheduled-job.ts
+  // (cờ cục bộ `turnFinished` chặn 2 dòng trong catch). KHÔNG tự động test
+  // được ở mức tích hợp vì cùng giới hạn mock ESM đã ghi ở describe "Mục 2"
+  // phía trên (`blockedByGuard`/`sendAndConclude` đều đã bị chính module này
+  // nạp trước khi test kịp mock) - đã xác nhận bằng review code trực tiếp:
+  // `turnFinished` được set NGAY SAU dòng finishAgentTurn(result.usage) đầu
+  // tiên, và catch chỉ gọi lại finishAgentTurn/saveTurnTrace khi cờ còn false.
 });
