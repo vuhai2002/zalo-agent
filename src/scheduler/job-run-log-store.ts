@@ -98,3 +98,16 @@ export function listRuns(jobId: string, limit = 50): JobRun[] {
   const rows = listStmt.all(jobId, limit) as unknown as Row[];
   return rows.map(mapRow);
 }
+
+const hasRunningStmt = db.prepare(`SELECT 1 FROM scheduled_job_runs WHERE job_id = ? AND status = 'running' LIMIT 1`);
+
+/**
+ * Job còn 1 lượt CHƯA CHỐT SỔ (status='running') - dùng để chặn "Chạy thử
+ * ngay" (`schedule-routes.ts`) đụng độ với lượt DISPATCH THẬT đang chạy dở
+ * (job `kind='agent'` có thể chạy lâu hơn `SCHEDULER_TICK_MS`). Đúng bài
+ * "job hỏng 5 lần rồi lần 6..." đã ghi ở đầu file - `scheduled_jobs.last_status`
+ * không đủ, phải hỏi bảng run log mới biết CÓ đang chạy hay không.
+ */
+export function hasRunningRun(jobId: string): boolean {
+  return hasRunningStmt.get(jobId) !== undefined;
+}

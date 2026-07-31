@@ -1576,11 +1576,15 @@ concurrency) qua 4 vòng review liên tiếp trước khi sạch.
 - [x] **Vòng tick + gửi tin chủ động thật**: `scheduler-loop.ts` tick KHÔNG await
   dispatch (job chạy lâu không chặn tick kế), lượt agent theo lịch chạy
   `isolated: true` (không đọc history/memory/summary - phiên cô lập, persona giữ
-  nguyên), loại 3 tool khỏi lượt này (`add_reaction` không có msgId thật,
-  `read_image` không có ảnh, `save_memory` - đường web vào trí nhớ vĩnh viễn là
-  injection), sentinel `[SILENT]` để job im khi không có gì mới, guard gửi
-  (account đang chạy + thread còn bật bot + chưa chạm trần ngày) chạy trước MỌI
-  lần gửi chủ động, hàng đợi rải đều TOÀN CỤC cách nhau `SCHEDULER_SEND_GAP_MS`
+  nguyên), loại 9 tool khỏi lượt này: 4 tool thiếu hạ tầng cho lượt cô lập
+  (`add_reaction` không có msgId thật, `read_image` không có ảnh, `save_memory` -
+  đường web vào trí nhớ vĩnh viễn là injection, `schedule_task` - job không được
+  đẻ job) + 5 tool phát hiện ở vòng review toàn nhánh gọi thẳng `enqueueSend`
+  (rate-limiter THEO THREAD) khi gửi nên né hoàn toàn trần ngày (`send_file`,
+  `create_word_document`, `create_excel_file`, `create_image`, `tag_member`),
+  sentinel `[SILENT]` để job im khi không có gì mới, guard gửi (account đang
+  chạy + thread còn bật bot + chưa chạm trần ngày) chạy trước MỌI lần gửi chủ
+  động, hàng đợi rải đều TOÀN CỤC cách nhau `SCHEDULER_SEND_GAP_MS`
 - [x] **Trần chống spam 2 lớp độc lập**: lưới đỡ ĐẦU chặn `every`/`cron` dày hơn
   `SCHEDULER_MIN_INTERVAL_MINUTES` ngay lúc TẠO job; lưới đỡ CUỐI đếm trần
   `SCHEDULER_MAX_PROACTIVE_PER_DAY` theo TIN ZALO thật (không phải lượt job - 1
@@ -1607,8 +1611,19 @@ concurrency) qua 4 vòng review liên tiếp trước khi sạch.
   Zod (`env.ts`) và `tuning-definitions.ts`, đủ mặt ở cả `.env.example` lẫn
   `.env.production.example` - không lệch chỗ nào
 - [x] Test: 849 pass lúc chốt vòng chạy/gửi tin (đỉnh điểm rủi ro spam), 895 pass
-  sau xong dashboard - `pnpm test` chạy 2-3 lượt liên tiếp mỗi vòng review để loại
-  trừ flaky trước khi báo xanh
+  sau xong dashboard, 903 pass sau vòng review toàn nhánh (cuối cùng trước merge) -
+  `pnpm test` chạy 2-3 lượt liên tiếp mỗi vòng review để loại trừ flaky trước khi
+  báo xanh
+- [x] **Vòng review TOÀN NHÁNH** (sau khi 6 phase đều đã qua review riêng): 1
+  Critical (5 tool gửi file/ảnh/tag thẳng qua `enqueueSend` né trần ngày - xem
+  bullet vòng tick ở trên), 3 Important (restart giữa lúc dispatch làm mất lời
+  nhắc `once` chưa từng chạy - vá bằng phục hồi `next_run_at` từ `run_at` TRƯỚC
+  tick đầu tiên lúc boot; "Chạy thử ngay" còn hở với lượt ĐÃ dispatch trước đó -
+  vá bằng route từ chối 409 khi job còn `status='running'`; sửa tên job `every`
+  trên dashboard vô tình dời cả giờ chạy - vá bằng chỉ gửi `schedule` trong PATCH
+  khi thật sự đổi), cộng 4 mục nhỏ (xoá job mồ côi `scheduled_job_runs`, `inMinutes`
+  không trần gây 500, PATCH bật lại job không kiểm trần thread, chuỗi test fixture
+  mất dấu)
 
 Ba quyết định cố ý khác cả Hermes lẫn goclaw (rủi ro chính của tính năng là SPAM,
 nên mỗi lần khác đều vì lý do chống mất tin hoặc chống spam, không phải sở thích):

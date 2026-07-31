@@ -31,7 +31,7 @@ function taoJob(overrides: Partial<CreateScheduledJobInput> = {}) {
     threadType: 1,
     name: "nhắc test",
     kind: "message",
-    payload: "noi dung nhac",
+    payload: "nội dung nhắc",
     schedule: EVERY_30,
     createdBy: "user-1",
     now: new Date("2026-08-01T00:00:00Z"),
@@ -230,6 +230,29 @@ describe("setEnabled / deleteJob", () => {
     const job = taoJob({ threadId: "t-scope-delete" });
     assert.equal(store.deleteJob("acc-khac", "t-scope-delete", job.id), false);
     assert.notEqual(store.getJobUnscoped(job.id), undefined, "job phải còn nguyên");
+  });
+
+  it("deleteJob xoá LUÔN scheduled_job_runs của job đó - không để lại lịch sử mồ côi (Mục M2)", async () => {
+    const runLogStore = await import("./job-run-log-store.js");
+    const job = taoJob({ threadId: "t-delete-runs" });
+    const runId = runLogStore.openRun(job.id);
+    runLogStore.finishRun(runId, { status: "ok", detail: "gửi xong" });
+    assert.equal(runLogStore.listRuns(job.id).length, 1, "phải có 1 dòng lịch sử trước khi xoá job");
+
+    assert.equal(store.deleteJob(ACC, "t-delete-runs", job.id), true);
+
+    assert.equal(runLogStore.listRuns(job.id).length, 0, "lịch sử chạy phải bị xoá theo job, không mồ côi vĩnh viễn");
+  });
+
+  it("deleteJob sai phạm vi (bị chặn IDOR) thì KHÔNG được đụng vào scheduled_job_runs của job đó", async () => {
+    const runLogStore = await import("./job-run-log-store.js");
+    const job = taoJob({ threadId: "t-delete-runs-idor" });
+    const runId = runLogStore.openRun(job.id);
+    runLogStore.finishRun(runId, { status: "ok" });
+
+    assert.equal(store.deleteJob("acc-khac", "t-delete-runs-idor", job.id), false, "sai accountId phải bị chặn");
+
+    assert.equal(runLogStore.listRuns(job.id).length, 1, "job chưa xoá được thì lịch sử của nó cũng không được đụng");
   });
 });
 

@@ -199,6 +199,22 @@ describe("POST /api/schedule", () => {
     assert.equal(res.status, 400);
     assert.match((await res.json() as { error: string }).error, /spam/);
   });
+
+  it("inMinutes vượt trần -> 400 có lý do rõ ràng, KHÔNG phải 500 (Mục M3: schema chặn trước khi chạm new Date() gây RangeError)", async () => {
+    const res = await authed("/api/schedule", {
+      method: "POST",
+      body: JSON.stringify({
+        accountId: ACC,
+        threadId: THREAD,
+        threadType: 0,
+        name: "x",
+        kind: "message",
+        payload: "x",
+        schedule: { kind: "once", inMinutes: 999_999_999 },
+      }),
+    });
+    assert.equal(res.status, 400);
+  });
 });
 
 describe("PATCH /api/schedule/:id", () => {
@@ -230,6 +246,42 @@ describe("PATCH /api/schedule/:id", () => {
     assert.equal(body.job.enabled, false);
   });
 
+  it("bật LẠI job đang tắt phải qua đúng trần SCHEDULER_MAX_JOBS_PER_THREAD - tạo đủ trần, tắt bớt, tạo thêm rồi bật lại hết phải bị chặn (Mục M4)", async () => {
+    const tuning = await import("../../config/runtime-tuning-settings.js");
+    tuning.setTuning("SCHEDULER_MAX_JOBS_PER_THREAD", 2);
+    try {
+      const threadId = "t-m4-cap-enable";
+      threadStore.recordThreadActivity({ accountId: ACC, threadId, threadType: 0, displayName: "", lastSenderName: "" });
+
+      const job1 = await taoJob({ threadId, name: "job 1" });
+      await taoJob({ threadId, name: "job 2" }); // đủ 2 job bật - chạm trần
+
+      // Tắt job1 để "có chỗ trống" (1 job đang bật), rồi lấp lại đủ trần bằng job3
+      await authed(`/api/schedule/${job1.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ accountId: ACC, threadId, enabled: false }),
+      });
+      await taoJob({ threadId, name: "job 3" }); // lại đủ 2 job bật (job2 + job3)
+
+      // Bật lại job1 -> sẽ thành 3 job bật cùng lúc, vượt trần 2 - PHẢI bị chặn
+      const res = await authed(`/api/schedule/${job1.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ accountId: ACC, threadId, enabled: true }),
+      });
+      assert.equal(res.status, 400);
+      assert.match((await res.json() as { error: string }).error, /trần/);
+
+      const check = (await (await authed(`/api/schedule?accountId=${ACC}`)).json()) as { items: ScheduledJob[] };
+      assert.equal(
+        check.items.find((j) => j.id === job1.id)?.enabled,
+        false,
+        "job1 phải VẪN còn tắt - PATCH bị chặn không được lén bật lên",
+      );
+    } finally {
+      tuning.setTuning("SCHEDULER_MAX_JOBS_PER_THREAD", null);
+    }
+  });
+
   it("job không tồn tại -> 404", async () => {
     const res = await authed("/api/schedule/khong-ton-tai", {
       method: "PATCH",
@@ -239,16 +291,16 @@ describe("PATCH /api/schedule/:id", () => {
   });
 
   it("job của THREAD KHÁC -> 404, không sửa được (IDOR)", async () => {
-    const job = await taoJob({ name: "Cua thread A" });
+    const job = await taoJob({ name: "Của thread A" });
     const res = await authed(`/api/schedule/${job.id}`, {
       method: "PATCH",
-      body: JSON.stringify({ accountId: ACC, threadId: THREAD_KHAC, name: "Bi doi trom" }),
+      body: JSON.stringify({ accountId: ACC, threadId: THREAD_KHAC, name: "Bị đổi trộm" }),
     });
     assert.equal(res.status, 404, "sai threadId phải coi như không tồn tại");
 
     const check = await authed(`/api/schedule?accountId=${ACC}`);
     const found = ((await check.json()) as { items: ScheduledJob[] }).items.find((j) => j.id === job.id);
-    assert.equal(found?.name, "Cua thread A", "tên KHÔNG được đổi qua đường IDOR");
+    assert.equal(found?.name, "Của thread A", "tên KHÔNG được đổi qua đường IDOR");
   });
 });
 
@@ -331,6 +383,22 @@ describe("POST /api/schedule/:id/run - Chạy thử ngay", () => {
     assert.equal(after2.nextRunAt, job.nextRunAt);
     assert.equal(after2.enabled, true);
     assert.equal(after2.runCount, 0);
+  });
+
+  it("job còn 1 lượt 'running' (tick thật đang dispatch dở, chưa chốt sổ) -> 409, không được chạy thử chồng lên (I3)", async () => {
+    const runLogStore = await import("../../scheduler/job-run-log-store.js");
+    attachOnline();
+    const job = await taoJob({ name: "Job đang chạy dở" });
+    const runId = runLogStore.openRun(job.id); // mô phỏng tick thật đã dispatch, chưa finishRun
+
+    const res = await authed(`/api/schedule/${job.id}/run`, {
+      method: "POST",
+      body: JSON.stringify({ accountId: ACC, threadId: THREAD }),
+    });
+    assert.equal(res.status, 409);
+    assert.match((await res.json() as { error: string }).error, /đang chạy/);
+
+    runLogStore.finishRun(runId, { status: "ok" }); // chốt sổ để không để lại dòng 'running' mồ côi
   });
 });
 

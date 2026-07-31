@@ -21,7 +21,7 @@ after(() => {
 function insertMessageAt(accountId: string, createdAt: string): void {
   database.db
     .prepare(
-      `INSERT INTO messages (account_id, thread_id, role, content, created_at) VALUES (?, ?, 'user', 'noi dung', ?)`,
+      `INSERT INTO messages (account_id, thread_id, role, content, created_at) VALUES (?, ?, 'user', 'nội dung', ?)`,
     )
     .run(accountId, "t-1", createdAt);
 }

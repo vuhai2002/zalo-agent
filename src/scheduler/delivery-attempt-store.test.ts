@@ -28,7 +28,7 @@ function taoJob(overrides: Partial<CreateScheduledJobInput> = {}) {
     threadType: 1,
     name: "job test",
     kind: "message",
-    payload: "noi dung",
+    payload: "nội dung",
     schedule: { kind: "once", runAtUtc: "2026-08-01T08:00:00.000Z" },
     createdBy: "user-1",
     now: new Date("2026-08-01T00:00:00Z"),

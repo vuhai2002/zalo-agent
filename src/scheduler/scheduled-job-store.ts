@@ -206,9 +206,17 @@ export function setEnabled(accountId: string, threadId: string, id: string, enab
 }
 
 const deleteStmt = db.prepare(`DELETE FROM scheduled_jobs WHERE id = ? AND account_id = ? AND thread_id = ?`);
+// Không có FK/cascade tới scheduled_job_runs (job_id chỉ là TEXT thường) và
+// bảng đó chỉ được prune xuống SCHEDULER_RUN_LOG_KEEP khi job đó MỞ LƯỢT MỚI -
+// job đã xoá thì không bao giờ mở lượt nữa, nên lịch sử của nó mồ côi VĨNH
+// VIỄN nếu thiếu dòng dưới. Dashboard (schedule-page.tsx) đã nói với người
+// dùng "Lịch sử chạy của lịch hẹn này cũng sẽ bị xóa theo" - câu đó phải ĐÚNG.
+const deleteRunsStmt = db.prepare(`DELETE FROM scheduled_job_runs WHERE job_id = ?`);
 
 export function deleteJob(accountId: string, threadId: string, id: string): boolean {
-  return deleteStmt.run(id, accountId, threadId).changes > 0;
+  const deleted = deleteStmt.run(id, accountId, threadId).changes > 0;
+  if (deleted) deleteRunsStmt.run(id);
+  return deleted;
 }
 
 const listDueStmt = db.prepare(`

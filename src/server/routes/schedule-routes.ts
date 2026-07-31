@@ -5,7 +5,7 @@ import { getAccount } from "../../config/account-store.js";
 import { env } from "../../config/env.js";
 import { getTuning } from "../../config/runtime-tuning-settings.js";
 import { findThreadStatus } from "../../conversation/thread-store.js";
-import { listRuns } from "../../scheduler/job-run-log-store.js";
+import { hasRunningRun, listRuns } from "../../scheduler/job-run-log-store.js";
 import { runScheduledJobTrial } from "../../scheduler/run-scheduled-job-trial.js";
 import { parseSchedule, type ParsedSchedule } from "../../scheduler/schedule-parser.js";
 import { listJobsForAccount } from "../../scheduler/scheduled-job-list-store.js";
@@ -100,7 +100,16 @@ export const scheduleRoutes = new Hono()
     if (!parsed.success) return c.json({ error: "Dữ liệu không hợp lệ", issues: parsed.error.issues }, 400);
     const { accountId, threadId, enabled, schedule: scheduleInput, name, payload } = parsed.data;
 
-    if (!getJob(accountId, threadId, id)) return c.json({ error: "Không tìm thấy lịch hẹn" }, 404);
+    const job = getJob(accountId, threadId, id);
+    if (!job) return c.json({ error: "Không tìm thấy lịch hẹn" }, 404);
+
+    // Bật LẠI job đang tắt phải qua đúng trần như lúc tạo mới - thiếu bước này:
+    // tạo đủ 20 job, tắt 10, tạo thêm 10, bật lại hết = 30 job đang bật, vượt
+    // trần (route tạo job có kiểm, route bật/tắt trước đây thì không).
+    if (enabled === true && !job.enabled) {
+      const cap = checkThreadJobCap(accountId, threadId);
+      if (!cap.ok) return c.json({ error: cap.reason }, 400);
+    }
 
     let schedule: ParsedSchedule | undefined;
     if (scheduleInput) {
@@ -138,6 +147,14 @@ export const scheduleRoutes = new Hono()
 
     const job = getJob(accountId, threadId, id);
     if (!job) return c.json({ error: "Không tìm thấy lịch hẹn" }, 404);
+
+    // Chặn TỪ TRƯỚC khi trial kịp snapshot/giành job: nếu job này còn 1 lượt
+    // 'running' (tick THẬT đang dispatch dở, hoặc 1 lần "Chạy thử" khác đang
+    // chạy), claim của trial không đóng được cửa sổ với lượt ĐÃ bắt đầu trước
+    // đó - xem doc đầu file run-scheduled-job-trial.ts.
+    if (hasRunningRun(id)) {
+      return c.json({ error: "Lịch hẹn đang chạy, thử lại sau ít phút." }, 409);
+    }
 
     const run = await runScheduledJobTrial(job);
     log.info({ jobId: id, status: run?.status }, "Chạy thử lịch hẹn từ dashboard");

@@ -397,4 +397,17 @@ describe("schedule_task - schema đầu vào (đi qua inputSchema thật)", () =
   it("cancel thiếu id bị chặn ngay ở schema", () => {
     assert.equal(parse({ action: "cancel" }).success, false);
   });
+
+  it("inMinutes vượt trần 525600 (1 năm) bị chặn ngay ở schema, không lọt xuống tới new Date() gây RangeError (Mục M3)", () => {
+    assert.equal(
+      parse({
+        action: "create",
+        name: "x",
+        kind: "message",
+        payload: "y",
+        schedule: { kind: "once", inMinutes: 999_999_999 },
+      }).success,
+      false,
+    );
+  });
 });

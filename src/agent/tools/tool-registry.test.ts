@@ -133,37 +133,57 @@ describe("tool-registry", () => {
     assert.equal(Object.keys(tools).length, registry.TOOL_KEYS.length - GATED_TOOLS.length);
   });
 
-  it("isolated:true (lượt theo lịch) loại add_reaction, read_image, save_memory, schedule_task kể cả khi hạ tầng đã sẵn sàng", () => {
-    // Cấu hình sidecar TRƯỚC để chứng minh read_image bị loại vì runsInScheduledTurn,
-    // không phải vì thiếu cấu hình - nếu không cấu hình thì test này không phân
-    // biệt được 2 nguyên nhân (vắng mặt do isolated hay do chưa sẵn sàng).
+  // 9 tool bị loại khỏi lượt theo lịch, 2 nhóm lý do (xem tool-catalog-types.ts):
+  // thiếu hạ tầng cho lượt cô lập (add_reaction, read_image, save_memory,
+  // schedule_task) và gửi thẳng qua enqueueSend nên né được trần ngày
+  // (send_file, create_word_document, create_excel_file, create_image, tag_member).
+  const TOOL_LOAI_KHOI_LICH = [
+    "add_reaction",
+    "read_image",
+    "save_memory",
+    "schedule_task",
+    "send_file",
+    "create_word_document",
+    "create_excel_file",
+    "create_image",
+    "tag_member",
+  ];
+
+  it("isolated:true (lượt theo lịch) loại đủ 9 tool kể cả khi hạ tầng/cấu hình đã sẵn sàng", () => {
+    // Cấu hình sidecar + endpoint vẽ ảnh TRƯỚC để chứng minh read_image/create_image
+    // bị loại vì runsInScheduledTurn, không phải vì thiếu cấu hình - nếu không
+    // cấu hình thì test này không phân biệt được 2 nguyên nhân (vắng mặt do
+    // isolated hay do chưa sẵn sàng).
     configureSidecar();
+    configureImageGen();
     const tools = registry.buildAgentTools({ ...makeContext([]), isolated: true });
-    for (const key of ["add_reaction", "read_image", "save_memory", "schedule_task"]) {
+    for (const key of TOOL_LOAI_KHOI_LICH) {
       assert.equal(tools[key], undefined, `lượt theo lịch không được có tool ${key}`);
     }
-    // Tool KHÔNG bị loại (vd get_datetime, web_search, tag_member) vẫn phải còn nguyên
+    // Tool KHÔNG bị loại (vd get_datetime, web_search) vẫn phải còn nguyên
     assert.ok(tools.get_datetime, "tool không liên quan tới isolated vẫn phải có mặt");
-    assert.ok(tools.tag_member, "tag_member không nằm trong danh sách loại");
+    assert.ok(tools.web_search, "web_search không nằm trong danh sách loại");
     unconfigureSidecar();
+    imageStore.clearImageSettings();
   });
 
-  it("isolated không truyền (mặc định) hoặc false thì đủ cả 4 tool - hành vi lượt tin nhắn không đổi", () => {
+  it("isolated không truyền (mặc định) hoặc false thì đủ cả 9 tool - hành vi lượt tin nhắn không đổi", () => {
     configureSidecar();
+    configureImageGen();
     const macDinh = registry.buildAgentTools(makeContext([]));
     const roFalse = registry.buildAgentTools({ ...makeContext([]), isolated: false });
     for (const tools of [macDinh, roFalse]) {
-      assert.ok(tools.add_reaction, "add_reaction phải còn khi không cô lập");
-      assert.ok(tools.read_image, "read_image phải còn khi không cô lập (đã cấu hình sidecar)");
-      assert.ok(tools.save_memory, "save_memory phải còn khi không cô lập");
-      assert.ok(tools.schedule_task, "schedule_task phải còn khi không cô lập");
+      for (const key of TOOL_LOAI_KHOI_LICH) {
+        assert.ok(tools[key], `${key} phải còn khi không cô lập (đã cấu hình đủ hạ tầng)`);
+      }
     }
     unconfigureSidecar();
+    imageStore.clearImageSettings();
   });
 
-  it("runsInScheduledTurn khai đúng false cho đúng 4 tool, còn lại mặc định undefined (coi như true)", () => {
+  it("runsInScheduledTurn khai đúng false cho đúng 9 tool, còn lại mặc định undefined (coi như true)", () => {
     const bịLoại = registry.TOOL_DEFINITIONS.filter((t) => t.runsInScheduledTurn === false).map((t) => t.key);
-    assert.deepEqual(bịLoại.sort(), ["add_reaction", "read_image", "save_memory", "schedule_task"].sort());
+    assert.deepEqual(bịLoại.sort(), [...TOOL_LOAI_KHOI_LICH].sort());
   });
 
   it("catalog: key duy nhất, đủ metadata cho UI, nhóm hợp lệ", () => {

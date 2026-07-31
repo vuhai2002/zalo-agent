@@ -114,7 +114,7 @@ function makeJob(overrides: Partial<CreateScheduledJobInput> = {}) {
     threadType: 0,
     name: "job test",
     kind: "message",
-    payload: "noi dung mac dinh",
+    payload: "nội dung mặc định",
     schedule: { kind: "once", runAtUtc: "2026-08-01T08:00:00.000Z" },
     createdBy: "user-1",
     now: new Date("2026-08-01T00:00:00Z"),
@@ -143,19 +143,19 @@ function deliveryAttemptsOf(jobId: string): number {
 describe("runScheduledJob - kind=message", () => {
   it("gửi được, 0 lượt agent, ghi history + run 'ok'", async () => {
     const sent = attachOnline();
-    const job = makeJob({ payload: "Nhac hop luc 3h chieu nay" });
+    const job = makeJob({ payload: "Nhắc họp lúc 3h chiều nay" });
     const before = agentTurnCount(THREAD);
 
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
 
     assert.equal(sent.length, 1);
-    assert.equal(sent[0]!.text, "Nhac hop luc 3h chieu nay");
+    assert.equal(sent[0]!.text, "Nhắc họp lúc 3h chiều nay");
     assert.equal(sent[0]!.threadId, THREAD);
     assert.equal(agentTurnCount(THREAD), before, "job kind=message không được tạo agent_turns nào");
 
     const history = historyStore.getRecentMessages(ACC, THREAD);
     assert.equal(history.at(-1)!.role, "assistant");
-    assert.equal(history.at(-1)!.content, "Nhac hop luc 3h chieu nay");
+    assert.equal(history.at(-1)!.content, "Nhắc họp lúc 3h chiều nay");
 
     const run = lastRunOf(job.id);
     assert.equal(run.status, "ok");
@@ -188,9 +188,9 @@ describe("runScheduledJob - kind=message", () => {
 
   it("gửi hỏng (zca-js ném lỗi) thì thử lại tối đa 3 lần trước khi ghi 'error' thật (Mục 2) - KHÔNG ghi history bất kỳ lần nào", async () => {
     attachOnline(() => {
-      throw new Error("mang rot giua chung");
+      throw new Error("mạng rớt giữa chừng");
     });
-    const job = makeJob({ payload: "Tin se khong bao gio toi noi" });
+    const job = makeJob({ payload: "Tin sẽ không bao giờ tới nơi" });
     const historyBefore = historyStore.getRecentMessages(ACC, THREAD).length;
 
     // Lần 1 và 2: gửi hỏng nhưng CHƯA chạm đủ 3 lần - job phải SỐNG (không markRun)
@@ -207,10 +207,10 @@ describe("runScheduledJob - kind=message", () => {
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
     const run = lastRunOf(job.id);
     assert.equal(run.status, "error");
-    assert.match(run.detail, /mang rot giua chung/);
+    assert.match(run.detail, /mạng rớt giữa chừng/);
     const chet = jobStore.getJobUnscoped(job.id)!;
     assert.equal(chet.runCount, 1, "lần thứ 3 mới thật sự tính là 1 lần chạy");
-    assert.match(chet.lastError ?? "", /mang rot giua chung/);
+    assert.match(chet.lastError ?? "", /mạng rớt giữa chừng/);
 
     const historyAfter = historyStore.getRecentMessages(ACC, THREAD);
     assert.equal(historyAfter.length, historyBefore, "gửi hỏng thì KHÔNG được ghi thêm gì vào history, kể cả sau 3 lần thử");
@@ -221,11 +221,11 @@ describe("runScheduledJob - kind=message", () => {
     const sent = attachOnline(() => {
       if (firstCallFails) {
         firstCallFails = false;
-        throw new Error("loi mang thoang qua");
+        throw new Error("lỗi mạng thoáng qua");
       }
       return { msgId: "ok" };
     });
-    const job = makeJob({ payload: "Se gui duoc o lan thu 2" });
+    const job = makeJob({ payload: "Sẽ gửi được ở lần thứ 2" });
 
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
     assert.equal(deliveryAttemptsOf(job.id), 1, "lần 1 hỏng phải tăng delivery_attempts lên 1");
@@ -236,18 +236,18 @@ describe("runScheduledJob - kind=message", () => {
     // là run 'ok' + có ghi history (chỉ ghi khi deliveredText khác rỗng).
     assert.equal(sent.length, 2, "cả 2 lần gọi API đều để lại dấu vết (lần 1 hỏng SAU KHI gọi, không phải KHÔNG gọi)");
     assert.equal(lastRunOf(job.id).status, "ok");
-    assert.equal(historyStore.getRecentMessages(ACC, THREAD).at(-1)!.content, "Se gui duoc o lan thu 2", "lần 2 phải THẬT SỰ tới nơi (có ghi history)");
+    assert.equal(historyStore.getRecentMessages(ACC, THREAD).at(-1)!.content, "Sẽ gửi được ở lần thứ 2", "lần 2 phải THẬT SỰ tới nơi (có ghi history)");
     assert.equal(deliveryAttemptsOf(job.id), 0, "gửi được rồi thì bộ đếm phải reset về 0, không giữ lại từ lần hỏng trước");
   });
 
   it("late=true: nguyên văn payload được thêm tiền tố '(nhắc trễ, lịch gốc HH:MM)'", async () => {
     const sent = attachOnline();
-    const job = makeJob({ payload: "Nho hop" });
+    const job = makeJob({ payload: "Nhớ họp" });
 
     // 08:00Z = 15:00 giờ VN (BOT_TIMEZONE mặc định, job không pin timezone riêng)
     await runJob.runScheduledJob(job, { late: true, scheduledFor: "2026-08-01T08:00:00.000Z" });
 
-    assert.equal(sent[0]!.text, "(nhắc trễ, lịch gốc 15:00) Nho hop");
+    assert.equal(sent[0]!.text, "(nhắc trễ, lịch gốc 15:00) Nhớ họp");
   });
 
   it("trần ngày (mặc định 10/ngày): tin thứ 11 bị chặn kèm ĐÚNG 1 câu thông báo, tin thứ 12 im lặng", async () => {
@@ -263,7 +263,7 @@ describe("runScheduledJob - kind=message", () => {
     const job = makeJob({
       threadId: threadTran,
       kind: "message",
-      payload: "nhac lap lai",
+      payload: "nhắc lặp lại",
       schedule: { kind: "every", minutes: 30 },
     });
 
@@ -277,7 +277,7 @@ describe("runScheduledJob - kind=message", () => {
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
     assert.equal(lastRunOf(job.id).status, "skipped", "tin thứ 11 phải bị chặn");
     assert.equal(sent.length, 11, "phải có thêm đúng 1 tin - câu thông báo chạm trần");
-    assert.notEqual(sent.at(-1)!.text, "nhac lap lai", "tin thêm phải là câu THÔNG BÁO, không phải payload gốc");
+    assert.notEqual(sent.at(-1)!.text, "nhắc lặp lại", "tin thêm phải là câu THÔNG BÁO, không phải payload gốc");
     assert.equal(deliveryAttemptsOf(job.id), 0, "bị chặn vì trần ngày phải reset delivery_attempts - KHÔNG PHẢI vì gửi hỏng (Mục 4, vòng 3)");
 
     // Tin thứ 12 cùng ngày: vẫn bị chặn nhưng KHÔNG lặp lại câu thông báo
@@ -306,7 +306,7 @@ describe("runScheduledJob - không giữ khoá thread khi đang chờ hàng đ�
 
     attachOnline();
     const threadKey = `${ACC}:${THREAD}`;
-    const job = makeJob({ payload: "cham vi hang doi toan cuc" });
+    const job = makeJob({ payload: "chậm vì hàng đợi toàn cục" });
 
     // Chiếm hàng đợi toàn cục bằng 1 việc "chậm" 200ms - job dispatch NGAY SAU
     // đây sẽ phải XẾP HÀNG sau việc này trong enqueueProactiveSend. Giữ lại
@@ -403,13 +403,13 @@ describe("runScheduledJob - kind=agent", () => {
 
   it("chạy được (có nội dung) -> gửi + agent_turns.source='schedule' + có trace + run 'ok'", async () => {
     const sent = attachOnline();
-    const job = makeJob({ kind: "agent", payload: "Tom tat tin cong nghe hom nay" });
-    const { model } = mockModel(() => traLoi("Hom nay co 3 tin dang chu y ve AI."));
+    const job = makeJob({ kind: "agent", payload: "Tóm tắt tin công nghệ hôm nay" });
+    const { model } = mockModel(() => traLoi("Hôm nay có 3 tin đáng chú ý về AI."));
     const before = agentTurnCount(THREAD);
 
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model });
 
-    assert.equal(sent.at(-1)!.text, "Hom nay co 3 tin dang chu y ve AI.");
+    assert.equal(sent.at(-1)!.text, "Hôm nay có 3 tin đáng chú ý về AI.");
     assert.equal(agentTurnCount(THREAD), before + 1, "phải có đúng 1 dòng agent_turns mới");
 
     const run = lastRunOf(job.id);
@@ -427,12 +427,12 @@ describe("runScheduledJob - kind=agent", () => {
     assert.ok(stepCount > 0, "phải có trace (agent_steps) cho lượt vừa chạy");
 
     const history = historyStore.getRecentMessages(ACC, THREAD);
-    assert.equal(history.at(-1)!.content, "Hom nay co 3 tin dang chu y ve AI.");
+    assert.equal(history.at(-1)!.content, "Hôm nay có 3 tin đáng chú ý về AI.");
   });
 
   it("trả [SILENT] thì KHÔNG gửi gì, run ghi 'silent' - nhưng agent_turns vẫn có (đã chạy, chỉ chọn im)", async () => {
     const sent = attachOnline();
-    const job = makeJob({ kind: "agent", payload: "Theo doi gia vang, co gi moi thi bao" });
+    const job = makeJob({ kind: "agent", payload: "Theo dõi giá vàng, có gì mới thì báo" });
     const { model } = mockModel(() => traLoi("[SILENT]"));
     const before = agentTurnCount(THREAD);
 
@@ -446,7 +446,7 @@ describe("runScheduledJob - kind=agent", () => {
   it("trả [SILENT] phải RESET delivery_attempts - lượt này kết thúc KHÔNG PHẢI vì gửi hỏng, không được cộng dồn với lần gửi hỏng ở NGÀY KHÁC (Mục 4, vòng 3)", async () => {
     const attemptStore = await import("./delivery-attempt-store.js");
     attachOnline();
-    const job = makeJob({ kind: "agent", payload: "Theo doi gia vang" });
+    const job = makeJob({ kind: "agent", payload: "Theo dõi giá vàng" });
     attemptStore.incrementDeliveryAttempts(job.id);
     attemptStore.incrementDeliveryAttempts(job.id); // mô phỏng 2 lần gửi hỏng RẢI RÁC ở các lượt trước đó
     const { model } = mockModel(() => traLoi("[SILENT]"));
@@ -458,11 +458,11 @@ describe("runScheduledJob - kind=agent", () => {
 
   it("provider ném lỗi (lượt agent chết giữa chừng) thì thử lại tối đa 3 lần trước khi ghi 'error' thật (Mục 2), KHÔNG gửi gì", async () => {
     const sent = attachOnline();
-    const job = makeJob({ kind: "agent", payload: "Viec se khong bao gio xong" });
+    const job = makeJob({ kind: "agent", payload: "Việc sẽ không bao giờ xong" });
     const { model } = mockModel(
       () =>
         new APICallError({
-          message: "500 tu router",
+          message: "500 từ router",
           url: "https://router/v1/chat",
           requestBodyValues: {},
           statusCode: 500,
@@ -481,15 +481,15 @@ describe("runScheduledJob - kind=agent", () => {
     assert.equal(sent.length, 0, "không bao giờ gửi gì - lượt agent chết trước cả khi tính ra text");
     const run = lastRunOf(job.id);
     assert.equal(run.status, "error");
-    assert.match(run.detail, /500 tu router/);
+    assert.match(run.detail, /500 từ router/);
     const chet = jobStore.getJobUnscoped(job.id)!;
     assert.equal(chet.runCount, 1, "lần thứ 3 mới thật sự tính là 1 lần chạy");
-    assert.match(chet.lastError ?? "", /500 tu router/);
+    assert.match(chet.lastError ?? "", /500 từ router/);
   });
 
   it("isolated:true xuyên suốt tới schema tool gửi model - loại add_reaction, save_memory", async () => {
     attachOnline();
-    const job = makeJob({ kind: "agent", payload: "Bao cao gi do" });
+    const job = makeJob({ kind: "agent", payload: "Báo cáo gì đó" });
     const { model, calls } = mockModel(() => traLoi("ok"));
 
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model });
@@ -501,8 +501,8 @@ describe("runScheduledJob - kind=agent", () => {
 
   it("late=true: câu trả lời của agent được thêm tiền tố '(nhắc trễ, lịch gốc HH:MM)' trước khi gửi", async () => {
     const sent = attachOnline();
-    const job = makeJob({ kind: "agent", payload: "Bao cao dinh ky" });
-    const { model } = mockModel(() => traLoi("Bao cao xong roi day."));
+    const job = makeJob({ kind: "agent", payload: "Báo cáo định kỳ" });
+    const { model } = mockModel(() => traLoi("Báo cáo xong rồi đấy."));
 
     await runJob.runScheduledJob(job, {
       late: true,
@@ -510,7 +510,7 @@ describe("runScheduledJob - kind=agent", () => {
       resolveModel: () => model,
     });
 
-    assert.equal(sent.at(-1)!.text, "(nhắc trễ, lịch gốc 15:00) Bao cao xong roi day.");
+    assert.equal(sent.at(-1)!.text, "(nhắc trễ, lịch gốc 15:00) Báo cáo xong rồi đấy.");
   });
 
   // Mục 4 (vòng 3, "finishAgentTurn/saveTurnTrace không bị gọi lần 2 khi lỗi

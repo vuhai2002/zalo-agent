@@ -111,7 +111,7 @@ function makeJob(overrides: Partial<CreateScheduledJobInput> = {}) {
     threadType: 0,
     name: "job test",
     kind: "message",
-    payload: "noi dung mac dinh",
+    payload: "nội dung mặc định",
     schedule: { kind: "once", runAtUtc: "2026-08-01T08:00:00.000Z" },
     createdBy: "user-1",
     now: new Date("2026-08-01T00:00:00Z"),
@@ -122,7 +122,7 @@ function makeJob(overrides: Partial<CreateScheduledJobInput> = {}) {
 describe("sendAndConclude - lỗi ném ra SAU KHI đã gửi thành công KHÔNG được coi là chưa gửi (Mục 2, vòng 4)", () => {
   it("tin ĐÃ ra Zalo (mock api ghi nhận đúng 1 lần), run ghi 'error', next_run_at KHÔNG bị đặt lại để retry", async () => {
     const sent = attachOnline();
-    const job = makeJob({ payload: "Tin nay phai ra dung 1 lan, khong duoc lap lai" });
+    const job = makeJob({ payload: "Tin này phải ra đúng 1 lần, không được lặp lại" });
     const scheduledForGoc = job.nextRunAt!;
 
     await runJob.runScheduledJob(job, { late: false, scheduledFor: scheduledForGoc });
@@ -130,7 +130,7 @@ describe("sendAndConclude - lỗi ném ra SAU KHI đã gửi thành công KHÔNG
     // 1. Tin ĐÃ RA THẬT - mock api ghi nhận đúng 1 lần, đúng nội dung.
     assert.equal(sent.length, 1, "tin phải ra Zalo đúng 1 lần - đây là bằng chứng gửi THẬT, không phải giả định");
     assert.equal(sent[0]!.threadId, THREAD);
-    assert.equal(sent[0]!.text, "Tin nay phai ra dung 1 lan, khong duoc lap lai");
+    assert.equal(sent[0]!.text, "Tin này phải ra đúng 1 lần, không được lặp lại");
 
     // 2. Run phải ghi 'error' để dashboard thấy có chuyện (ghi sổ hỏng thật).
     const run = runLogStore.listRuns(job.id, 1)[0]!;

@@ -29,6 +29,12 @@ export const ACTION_TOOL_DEFINITIONS: ToolDefinition[] = [
     label: "Gửi file",
     description: "Gửi file từ kho shared-files hoặc tải từ URL công khai rồi gửi",
     group: "action",
+    // Gọi thẳng `enqueueSend` (rate-limiter THEO THREAD, không phải trần ngày)
+    // để gửi - vào lượt theo lịch sẽ né hoàn toàn `SCHEDULER_MAX_PROACTIVE_PER_DAY`,
+    // vì bộ đếm trần chỉ tăng ở đường `deliverProactively`/`reserveProactiveSlot`
+    // của scheduler. Loại khỏi lượt theo lịch cho tới khi tool này đi qua đúng
+    // đường đếm trần (đợt sau).
+    runsInScheduledTurn: false,
     build: (ctx) => createSendFileTool(ctx),
   },
   {
@@ -36,6 +42,9 @@ export const ACTION_TOOL_DEFINITIONS: ToolDefinition[] = [
     label: "Tạo file Word",
     description: "Soạn nội dung thành file .docx (tiêu đề, đoạn văn, gạch đầu dòng, bảng) rồi gửi luôn",
     group: "action",
+    // Cùng lý do runsInScheduledTurn:false của send_file - gửi thẳng qua
+    // enqueueSend, né trần ngày.
+    runsInScheduledTurn: false,
     build: (ctx) => createWordDocumentTool(ctx),
   },
   {
@@ -43,6 +52,9 @@ export const ACTION_TOOL_DEFINITIONS: ToolDefinition[] = [
     label: "Tạo file Excel",
     description: "Soạn bảng số liệu thành file .xlsx có công thức tính sẵn rồi gửi luôn",
     group: "action",
+    // Cùng lý do runsInScheduledTurn:false của send_file - gửi thẳng qua
+    // enqueueSend, né trần ngày.
+    runsInScheduledTurn: false,
     build: (ctx) => createExcelFileTool(ctx),
   },
   {
@@ -53,6 +65,11 @@ export const ACTION_TOOL_DEFINITIONS: ToolDefinition[] = [
     hasSettings: true,
     available: () => isImageGenConfigured(),
     unavailableHint: "Bấm Settings để cấu hình endpoint + model vẽ ảnh",
+    // Cùng lý do runsInScheduledTurn:false của send_file - gửi 2 tin ("đang
+    // vẽ..." rồi ảnh) thẳng qua enqueueSend, né trần ngày. Nặng nhất trong
+    // nhóm 5 tool này: job every 5 phút + prompt "vẽ ảnh rồi [SILENT]" ra
+    // hàng trăm tin chủ động/ngày mà trần không bao giờ chặn được.
+    runsInScheduledTurn: false,
     build: (ctx) => createImageTool(ctx),
   },
   {
@@ -60,6 +77,9 @@ export const ACTION_TOOL_DEFINITIONS: ToolDefinition[] = [
     label: "Tag thành viên",
     description: "Nhắc tên (@mention) thành viên trong nhóm khi trả lời",
     group: "action",
+    // Cùng lý do runsInScheduledTurn:false của send_file - gửi thẳng qua
+    // enqueueSend, né trần ngày.
+    runsInScheduledTurn: false,
     build: (ctx) => createTagMemberTool(ctx),
   },
   {

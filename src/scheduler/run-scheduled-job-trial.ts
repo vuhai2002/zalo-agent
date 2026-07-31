@@ -26,12 +26,30 @@
  *
  * Sửa: GIÀNH job trước khi dispatch, đúng bài clear-before-dispatch của
  * `scheduler-loop.ts` - đặt `next_run_at = NULL` NGAY trước khi gọi
- * `runScheduledJob`. `listDueJobs()` lọc `next_run_at IS NOT NULL` nên trong
- * suốt lúc trial chạy, tick KHÔNG THỂ thấy job này nữa - cửa sổ đụng độ đóng
- * hoàn toàn (không phải "khả năng thấp", mà thật sự không còn đường nhìn
- * thấy). Restore sau đó an toàn vì chứng minh được: không ai khác có thể đã
- * viết vào các cột này trong lúc job bị giành (tick bị chặn ở nguồn; PATCH đổi
- * lịch vẫn ghi được nhưng chỉ ghi cột nó SỞ HỮU, xem dưới).
+ * `runScheduledJob`. `listDueJobs()` lọc `next_run_at IS NOT NULL` nên claim
+ * này đóng HOÀN TOÀN cửa sổ đụng độ với TICK TƯƠNG LAI: trong suốt lúc trial
+ * chạy, không tick nào SAU ĐÓ còn thấy job "due" để dispatch thêm lần nữa.
+ *
+ * NHƯNG claim KHÔNG đóng được cửa sổ với lượt ĐÃ dispatch TRƯỚC lúc bấm thử
+ * (phát hiện ở vòng review toàn nhánh, sau khi đoạn trên từng viết nhầm là
+ * "đóng hoàn toàn"): job đang QUÁ HẠN + `kind='agent'` chạy lâu hơn
+ * `SCHEDULER_TICK_MS` là ca thật - tick thật đã dispatch, đang chạy dở (row
+ * `scheduled_job_runs` còn `status='running'`), rồi user mới bấm thử. Snapshot
+ * của trial chụp TRÚNG lúc lượt thật còn dở, claim/restore của trial không hề
+ * biết tới lượt đó. Ba kết cục xấu tuỳ thời điểm 2 lượt hoàn tất trước/sau
+ * nhau: (1) job 'once' bị `markRun` 2 lần - nhắn trùng RỒI kẹt xác sống
+ * (`restoreStmt` ghi đè `run_count`/`enabled` của lượt thật về giá trị snapshot
+ * cũ); (2) kết quả `last_status`/`last_error` của lượt THẬT biến mất khỏi row
+ * job vì bị restore ghi đè sau; (3) 2 tab cùng bấm thử trúng đúng lúc nhau làm
+ * job chết im lặng (`next_run_at` cuối cùng là NULL của tab restore sau).
+ *
+ * Vá THÊM (không thay claim, mà đứng TRƯỚC claim): route
+ * `POST /api/schedule/:id/run` (`schedule-routes.ts`) từ chối với 409 ngay khi
+ * `scheduled_job_runs` còn dòng `status='running'` của đúng job - chặn được cả
+ * 2 nguồn "lượt đang chạy dở": tick thật đang dispatch, VÀ một lần "Chạy thử"
+ * khác đang chạy (2 tab). Vẫn còn 1 khe TOCTOU cực hẹp giữa lúc route kiểm
+ * xong và lúc `claimStmt` chạy (một câu SQL) - không phải "đóng tuyệt đối",
+ * nhưng đủ hẹp để loại ca thật đã nêu (lượt agent dài phút, không phải mili-giây).
  *
  * Không chọn "chặn trial khi job đang due": vẫn hở với job SẮP due trong lúc
  * trial chạy, và chặn đúng lúc người dùng cần thử nhất (job hỏng, đang quá

@@ -40,6 +40,28 @@ const interruptStaleRunsStmt = db.prepare(`
 `);
 
 /**
+ * Phục hồi lời nhắc 'once' bị GIÀNH (`next_run_at = NULL` bởi
+ * clear-before-dispatch, xem `processDueJob`) nhưng process bị giết TRƯỚC khi
+ * kịp `markRun` - deploy/restart BÌNH THƯỜNG, không phải sự cố hiếm. Thiếu
+ * bước này: row còn `enabled = 1, next_run_at = NULL, run_count = 0`, mà
+ * `listDueJobs` lọc `next_run_at IS NOT NULL` nên KHÔNG TICK NÀO còn thấy job
+ * này nữa - lời nhắc biến mất VĨNH VIỄN, đúng bất biến đã chốt của nhánh này
+ * bị vi phạm ("một lời nhắc chưa từng gửi được thì không bao giờ được coi là
+ * đã chạy").
+ *
+ * `enabled = 1` + `run_count < max_runs` (hoặc `max_runs IS NULL`) phân biệt
+ * "đang dở" với "đã chạy xong rồi tự tắt" - job 'once' đã hoàn thành đã bị
+ * `markRun` đặt `enabled = 0` nên không khớp điều kiện đầu, nhưng vẫn giữ cả
+ * điều kiện `run_count < max_runs` cho rõ ràng: thiếu nó là hồi sinh nhầm cả
+ * job đã hoàn thành nếu bất biến `enabled` ở nơi khác đổi trong tương lai.
+ */
+const reviveClaimedOnceStmt = db.prepare(`
+  UPDATE scheduled_jobs SET next_run_at = run_at
+  WHERE enabled = 1 AND next_run_at IS NULL AND schedule_kind = 'once'
+    AND run_at IS NOT NULL AND (max_runs IS NULL OR run_count < max_runs)
+`);
+
+/**
  * Ghi lý do chặn PRE-FLIGHT (account/thread) lên chính row job (Mục 5): trước
  * đây job bị chặn ở đây không để lại dấu vết nào, account rớt phiên 3 ngày
  * liền thì job hiện y hệt job khoẻ mạnh trên dashboard. Trần ngày không cần
@@ -62,6 +84,15 @@ export function startScheduler(): void {
   const interrupted = interruptStaleRunsStmt.run().changes;
   if (interrupted > 0) {
     log.warn({ interrupted }, "Đánh dấu các lượt job dở dang từ lần chạy trước là 'interrupted'");
+  }
+
+  // Chạy TRƯỚC tick đầu tiên: nhặt lại lời nhắc 'once' bị giành dở lúc restart.
+  const revived = reviveClaimedOnceStmt.run().changes;
+  if (revived > 0) {
+    log.warn(
+      { revived },
+      "Phục hồi next_run_at cho lời nhắc 'once' bị giành (clear-before-dispatch) nhưng process bị giết trước khi kịp chạy xong",
+    );
   }
 
   // Chạy NGAY, không đợi hết SCHEDULER_TICK_MS đầu tiên - job quá hạn (bot vừa

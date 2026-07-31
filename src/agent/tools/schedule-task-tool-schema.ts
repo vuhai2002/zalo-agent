@@ -18,7 +18,11 @@ export const scheduleInputSchema = z
     }),
     z.object({
       kind: z.literal("once"),
-      inMinutes: z.number().int().positive().describe("Số phút kể từ bây giờ, vd 30 = 30 phút nữa"),
+      // Trần 525600 (1 năm) - thiếu trần này thì `new Date(now + inMinutes *
+      // 60000)` ở schedule-parser.ts ném RangeError khi vượt biên Date; tool
+      // có try/catch nhưng route POST /api/schedule (dùng chung schema này)
+      // thì không, lỗi lọt thành 500 thay vì 400 có lý do rõ ràng.
+      inMinutes: z.number().int().positive().max(525600).describe("Số phút kể từ bây giờ, vd 30 = 30 phút nữa"),
     }),
     z.object({
       kind: z.literal("every"),

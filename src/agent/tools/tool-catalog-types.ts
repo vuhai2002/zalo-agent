@@ -64,12 +64,22 @@ export type ToolDefinition = {
   unavailableHint?: string;
   /**
    * Tool này có được cấp trong lượt CHẠY THEO LỊCH (job scheduler) không.
-   * Mặc định true - phải khai TƯỜNG MINH false mới bị loại. Bốn tool loại:
-   * `add_reaction` (lượt này không có `msgId` thật để thả vào), `read_image`
-   * (không có ảnh nào trong lượt), `save_memory` (đường nội dung web đi vào
-   * trí nhớ vĩnh viễn là prompt injection thật, và lượt theo lịch vốn không có
-   * phát ngôn nào của user để mà học), `schedule_task` (luật số 1 của Hermes:
-   * job không được đẻ job).
+   * Mặc định true - phải khai TƯỜNG MINH false mới bị loại. Chín tool loại,
+   * hai nhóm lý do khác nhau:
+   *
+   * - Không có hạ tầng cho lượt cô lập: `add_reaction` (không có `msgId` thật
+   *   để thả vào), `read_image` (không có ảnh nào trong lượt), `save_memory`
+   *   (đường nội dung web đi vào trí nhớ vĩnh viễn là prompt injection thật,
+   *   và lượt theo lịch vốn không có phát ngôn nào của user để mà học),
+   *   `schedule_task` (luật số 1 của Hermes: job không được đẻ job).
+   * - Gửi tin THẲNG qua `enqueueSend` (rate-limiter THEO THREAD của
+   *   `middleware/rate-limiter.ts`), KHÔNG đi qua `deliverProactively`/
+   *   `reserveProactiveSlot` của scheduler - vào lượt theo lịch sẽ né hoàn
+   *   toàn trần `SCHEDULER_MAX_PROACTIVE_PER_DAY` vì bộ đếm trần chỉ tăng ở
+   *   đường đó: `send_file`, `create_word_document`, `create_excel_file`,
+   *   `create_image`, `tag_member`. Loại tới khi nhóm này có đường đếm trần
+   *   đúng đắn (đợt sau) - báo cáo dạng CHỮ (kind='message'/'agent' trả text)
+   *   vẫn là use case chính, không bị ảnh hưởng.
    */
   runsInScheduledTurn?: boolean;
   build: (ctx: ToolContext) => Tool;

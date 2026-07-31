@@ -1,34 +1,9 @@
 import { useState } from "react";
-import type { AccountInfo, ScheduleInputPayload, ScheduleKind, ScheduledJobItem } from "../dashboard-api-client";
+import type { AccountInfo, ScheduleKind, ScheduledJobItem } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
-import { splitBotDateTime } from "../shared/format-bot-time";
 import { ScheduleDestinationFields } from "./schedule-destination-fields";
 import { ScheduleFieldsSection } from "./schedule-fields-section";
-
-function initialOnce(job: ScheduledJobItem | null, timezone: string): { date: string; time: string } {
-  if (job?.scheduleKind === "once" && job.runAt) return splitBotDateTime(job.runAt, timezone);
-  return { date: "", time: "" };
-}
-
-function buildSchedule(form: {
-  scheduleKind: ScheduleKind;
-  onceDate: string;
-  onceTime: string;
-  everyMinutes: string;
-  cronExpr: string;
-}): ScheduleInputPayload | null {
-  if (form.scheduleKind === "once") {
-    if (!form.onceDate || !form.onceTime) return null;
-    return { kind: "once", date: form.onceDate, time: form.onceTime };
-  }
-  if (form.scheduleKind === "every") {
-    const minutes = Number(form.everyMinutes);
-    if (!Number.isInteger(minutes) || minutes <= 0) return null;
-    return { kind: "every", minutes };
-  }
-  if (!form.cronExpr.trim()) return null;
-  return { kind: "cron", expr: form.cronExpr.trim() };
-}
+import { buildSchedule, initialOnce, scheduleChanged } from "./schedule-form-helpers";
 
 /**
  * Drawer tạo/sửa 1 lịch hẹn. `job=null` nghĩa là tạo mới - lúc đó mới cho
@@ -83,7 +58,7 @@ export function ScheduleEditDrawer({
         await api.schedule.update(job.id, job.accountId, job.threadId, {
           name: form.name,
           payload: form.payload,
-          schedule,
+          schedule: scheduleChanged(job, once, form) ? schedule : undefined,
         });
       } else {
         await api.schedule.create({

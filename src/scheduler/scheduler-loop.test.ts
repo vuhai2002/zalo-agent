@@ -113,7 +113,7 @@ function makeJob(overrides: Partial<CreateScheduledJobInput> & { threadId: strin
     threadType: 0,
     name: "job test",
     kind: "message",
-    payload: "noi dung",
+    payload: "nội dung",
     schedule: { kind: "once", runAtUtc: new Date(Date.now() - 5000).toISOString() },
     createdBy: "user-1",
     ...overrides,
@@ -180,6 +180,48 @@ describe("startScheduler - phục hồi lúc boot", () => {
 
     const run = lastRunOf(job.id)!;
     assert.equal(run.status, "interrupted");
+
+    jobStore.deleteJob(ACC, threadId, job.id);
+  });
+
+  it("lời nhắc 'once' bị GIÀNH (next_run_at=NULL bởi clear-before-dispatch) nhưng process bị giết trước khi markRun: next_run_at được phục hồi về run_at (I2)", () => {
+    const threadId = "t-boot-revive-claimed-once";
+    makeThread(threadId);
+    // Mốc gốc ở tương lai xa để job KHÔNG bị tick "chạy ngay lúc boot" nhặt lại
+    // trong chính test này - chỉ cần kiểm việc phục hồi next_run_at, không cần
+    // chờ nó gửi.
+    const runAt = new Date(Date.now() + 3_600_000).toISOString();
+    const job = makeJob({ threadId, schedule: { kind: "once", runAtUtc: runAt } });
+    // Mô phỏng đúng cửa sổ vỡ: tick THẬT đã clear-before-dispatch (next_run_at
+    // = NULL) rồi process bị kill TRƯỚC khi kịp markRun - job chưa hề chạy
+    // (run_count vẫn 0, enabled vẫn 1).
+    jobStore.setNextRun(job.id, null);
+
+    schedulerLoop.startScheduler();
+
+    const after = jobStore.getJobUnscoped(job.id)!;
+    assert.equal(after.nextRunAt, runAt, "next_run_at phải được phục hồi về run_at (mốc gốc) - không thì lời nhắc mất vĩnh viễn");
+    assert.equal(after.runCount, 0, "job chưa hề chạy - phục hồi không được đụng run_count");
+
+    jobStore.deleteJob(ACC, threadId, job.id);
+  });
+
+  it("job 'once' ĐÃ chạy xong (hitMax -> enabled=0) thì KHÔNG bị hồi sinh dù next_run_at đang NULL (I2)", () => {
+    const threadId = "t-boot-no-revive-done";
+    makeThread(threadId);
+    const runAt = new Date(Date.now() + 3_600_000).toISOString();
+    const job = makeJob({ threadId, schedule: { kind: "once", runAtUtc: runAt } });
+    // Job ĐÃ chạy thật xong (không phải bị giành dở) - markRun tự đặt
+    // enabled=0, next_run_at=null vì 'once' luôn maxRuns=1.
+    jobStore.markRun(job.id, "ok");
+
+    schedulerLoop.startScheduler();
+
+    const after = jobStore.getJobUnscoped(job.id)!;
+    assert.equal(after.nextRunAt, null, "job đã chạy xong thì next_run_at phải VẪN là null - không được hồi sinh job đã hoàn thành");
+    assert.equal(after.enabled, false);
+
+    jobStore.deleteJob(ACC, threadId, job.id);
   });
 });
 
@@ -228,7 +270,7 @@ describe("runSchedulerTick - không bị chặn bởi job chạy lâu", () => {
     const threadCham = "t-cham";
     makeThread(threadCham);
     attachOnline((_msg) => sleep(250).then(() => ({ msgId: "cham" })));
-    const jobCham = makeJob({ threadId: threadCham, payload: "viec cham" });
+    const jobCham = makeJob({ threadId: threadCham, payload: "việc chậm" });
 
     const t0 = Date.now();
     await schedulerLoop.runSchedulerTick(new Date());
@@ -279,7 +321,7 @@ describe("preflight - account/thread chưa sẵn sàng (Finding 1)", () => {
     accountManager.stopAccount(ACC); // đảm bảo THẬT SỰ offline, không phụ thuộc thứ tự test khác
     const threadId = "t-account-offline";
     makeThread(threadId);
-    const job = makeJob({ threadId, payload: "nho hop truc tuyen" });
+    const job = makeJob({ threadId, payload: "nhớ họp trực tuyến" });
     const originalNextRunAt = job.nextRunAt;
 
     await schedulerLoop.runSchedulerTick(new Date());
@@ -598,14 +640,14 @@ describe("run-late", () => {
     const threadId = "t-run-late";
     makeThread(threadId);
     // 08:00Z = 15:00 giờ VN; trễ 5 phút so với "now" giả định 08:05Z, vượt grace 1 phút (test override)
-    const job = makeJob({ threadId, payload: "Nho hop", schedule: { kind: "once", runAtUtc: "2026-08-01T08:00:00.000Z" } });
+    const job = makeJob({ threadId, payload: "Nhớ họp", schedule: { kind: "once", runAtUtc: "2026-08-01T08:00:00.000Z" } });
     const now = new Date("2026-08-01T08:05:00.000Z");
 
     await schedulerLoop.runSchedulerTick(now);
     await sleep(40);
 
     assert.equal(sent.length, 1);
-    assert.equal(sent[0]!.text, "(nhắc trễ, lịch gốc 15:00) Nho hop");
+    assert.equal(sent[0]!.text, "(nhắc trễ, lịch gốc 15:00) Nhớ họp");
     assert.equal(lastRunOf(job.id)?.status, "ok");
   });
 });
