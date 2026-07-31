@@ -52,6 +52,10 @@ const RULES_TRA_LOI: PersonaRule[] = [
     tools: ["create_image"],
     text: '- Tham số mode của create_image: "ve_moi" cho hầu hết yêu cầu (poster, banner, e-magazine, minh họa - dù mô tả dài và chi tiết tới đâu). Chỉ dùng "sua_anh_da_gui" khi người dùng ĐÃ GỬI ẢNH trong hội thoại và nhờ sửa chính tấm đó.',
   },
+  {
+    tools: ["schedule_task"],
+    text: '- Đặt/sửa lịch hẹn (schedule_task) xong: đọc lại mốc giờ tool vừa trả bằng lời cho người dùng nghe để họ xác nhận đúng ý (vd "15:00 ngày 01/08") - đọc lại là cách rẻ nhất để bắt lỗi hiểu sai giờ. Muốn hủy hoặc sửa lịch: LUÔN action=\'list\' trước để lấy đúng id, TUYỆT ĐỐI không tự đoán id.',
+  },
 ];
 
 /**
