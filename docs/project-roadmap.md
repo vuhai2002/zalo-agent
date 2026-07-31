@@ -1330,7 +1330,8 @@ Rà 29 tham số: tất cả đều đọc LẠI mỗi lần dùng (trong hàm h
 
 ## V2 còn lại - Khi cần
 
-- [ ] `src/scheduler/` - nhắn chủ động theo lịch (nhắc hẹn, báo cáo)
+- [x] ~~`src/scheduler/` - nhắn chủ động theo lịch (nhắc hẹn, báo cáo)~~ - xem
+  mục V3.3: code + test xong, CHƯA nghiệm thu trên Zalo thật
 - [ ] `src/knowledge/` - RAG/knowledge base trả lời theo tài liệu riêng
 - [ ] Lệnh điều khiển trong chat (/bot off, /clear) - thêm file trong middleware/
 - [ ] Voice message STT - thêm bước trong zalo-message-parser
@@ -1550,3 +1551,108 @@ Bài học: một kết luận đã kiểm chứng cho trường A không tự �
 ở cùng dòng code. Lượt 65 thật đo được `cachedTokens: 0` trên 60.340 token input -
 theo nhận định cũ thì "router không trích nên bỏ qua", theo sự thật thì đây là
 tín hiệu đáng đi kiểm tra prompt cache có trúng không.
+
+## V3.3 - Lịch hẹn: bot tự nhắn theo lịch, once/every/cron (2026-07-31, plan: plans/260731-0042-lich-hen-nhan-chu-dong/)
+
+Tính năng rủi ro khóa nick cao nhất dự án từng làm: bot tự nhắn tin mà không có ai
+chủ động hỏi trước. Research trước khi làm: đọc source `hermes-agent/cron/`
+(scheduler.py, jobs.py, executions.py, lifecycle_guard.py, tools/cronjob_tools.py)
+và `goclaw/internal/cron/` (service.go, service_execution.go, retry.go). Thiết kế
+đầy đủ ở `plans/260731-0042-lich-hen-nhan-chu-dong/reports/thiet-ke-scheduler.md`,
+triển khai qua 5 phase - phase vòng chạy/gửi tin (chạm thẳng đường gửi tin thật +
+concurrency) qua 4 vòng review liên tiếp trước khi sạch.
+
+- [x] **Nền tảng giờ** (`src/shared/zone-time.ts`, luxon): quy đổi giờ tường VN
+  <-> UTC. Vá kèm 3 chỗ tính "hôm nay" theo ngày UTC phát hiện lúc rà timezone
+  (`overview-stats.ts`, `usage-store.ts::getDailyUsage`, frontend
+  `overview-page.tsx`) - đo trên DB thật: xem dashboard 09:00 sáng giờ VN, công
+  thức cũ đếm 0 tin "hôm nay", công thức mới đếm đúng 2 tin
+- [x] **Lưu trữ + ngữ nghĩa lịch**: 2 bảng `scheduled_jobs`/`scheduled_job_runs`,
+  `schedule-parser.ts` chuẩn hoá `once`/`every`/`cron` (KHÔNG nhận chuỗi datetime -
+  chặn tận gốc lỗi Hermes từng dính), `next-run.ts` chống trôi lịch (neo mốc
+  `next = scheduled + (elapsed/interval + 1) * interval`) + grace + fast-forward
+  khi bot tắt rồi bật lại. IDOR vá ở TẦNG STORE - đọc/sửa/xóa/bật-tắt 1 job đều
+  bắt buộc `accountId`+`threadId` khớp
+- [x] **Vòng tick + gửi tin chủ động thật**: `scheduler-loop.ts` tick KHÔNG await
+  dispatch (job chạy lâu không chặn tick kế), lượt agent theo lịch chạy
+  `isolated: true` (không đọc history/memory/summary - phiên cô lập, persona giữ
+  nguyên), loại 3 tool khỏi lượt này (`add_reaction` không có msgId thật,
+  `read_image` không có ảnh, `save_memory` - đường web vào trí nhớ vĩnh viễn là
+  injection), sentinel `[SILENT]` để job im khi không có gì mới, guard gửi
+  (account đang chạy + thread còn bật bot + chưa chạm trần ngày) chạy trước MỌI
+  lần gửi chủ động, hàng đợi rải đều TOÀN CỤC cách nhau `SCHEDULER_SEND_GAP_MS`
+- [x] **Trần chống spam 2 lớp độc lập**: lưới đỡ ĐẦU chặn `every`/`cron` dày hơn
+  `SCHEDULER_MIN_INTERVAL_MINUTES` ngay lúc TẠO job; lưới đỡ CUỐI đếm trần
+  `SCHEDULER_MAX_PROACTIVE_PER_DAY` theo TIN ZALO thật (không phải lượt job - 1
+  job trả lời dài có thể ra tới 5 tin) bằng bảng bền `proactive_send_counters`
+  (không phải bộ nhớ - restart không làm mất trần), giành chỗ NGUYÊN TỬ qua SQL
+  (`INSERT ... ON CONFLICT DO UPDATE ... WHERE count < ?`) để N job cùng thread
+  cùng đến hạn không cùng vượt trần
+- [x] **Job bị chặn không tiêu suất chạy**: account rớt phiên (ca bình thường của
+  zca-js) đúng lúc job đến hạn không còn làm lời nhắc `once` chết vĩnh viễn - bất
+  biến "chưa từng gửi được thì không tính là đã chạy". Gửi hỏng (mất mạng thoáng
+  qua) thử lại tối đa 3 lần qua cột bền `delivery_attempts`, phân biệt rõ "chưa
+  gửi" (retry) với "gửi được một phần rồi hỏng" (không retry - người dùng đã nhận
+  chữ, gửi lại là nhắn trùng)
+- [x] **Tool `schedule_task`** (create/list/cancel/update) cho LLM tự đặt lịch
+  qua chat - dùng lại đúng luật allowlist + trần job/thread đã có (không viết lại
+  luật ở nơi thứ ba), mô tả tool dạy hủy phải `list` trước để lấy id (cấm đoán id)
+- [x] **Dashboard trang Lịch hẹn**: danh sách theo account, sửa/xóa/bật-tắt,
+  "Chạy thử ngay" (giành job bằng `next_run_at = NULL` trước khi chạy - không thì
+  tick thật có thể nhặt trùng job đang thử và gửi 2 lần), drawer lịch sử chạy
+  link thẳng sang trang Trace cho job `agent`
+- [x] 9 tham số `SCHEDULER_*` (gồm `SCHEDULER_DEFERRED_RUN_HOUR` thêm giữa chừng
+  khi controller tự sửa lại 1 quyết định thiết kế sai - xem dưới) chỉnh được từ
+  dashboard (nhóm `lich-hen`), đối chiếu tay: `min`/`max` khớp đúng từng cặp giữa
+  Zod (`env.ts`) và `tuning-definitions.ts`, đủ mặt ở cả `.env.example` lẫn
+  `.env.production.example` - không lệch chỗ nào
+- [x] Test: 849 pass lúc chốt vòng chạy/gửi tin (đỉnh điểm rủi ro spam), 895 pass
+  sau xong dashboard - `pnpm test` chạy 2-3 lượt liên tiếp mỗi vòng review để loại
+  trừ flaky trước khi báo xanh
+
+Ba quyết định cố ý khác cả Hermes lẫn goclaw (rủi ro chính của tính năng là SPAM,
+nên mỗi lần khác đều vì lý do chống mất tin hoặc chống spam, không phải sở thích):
+- `once` trễ quá grace vẫn GỬI kèm nhãn "(nhắc trễ, lịch gốc HH:MM)" - Hermes vứt
+  hẳn one-shot quá hạn, goclaw tắt job im lặng; với bot cá nhân, nuốt im lặng một
+  lời đã hẹn là kết cục tệ nhất
+- Không retry ở tầng scheduler - `agent-loop` đã có 2 tầng (glitch router +
+  `maxRetries` của SDK), thêm nữa là 3 tầng chồng nhau, 1 job hỏng có thể nhân
+  lên tới 6 lần gọi provider
+- Loại `save_memory` khỏi lượt theo lịch - không repo nào làm, nhưng đường web ->
+  trí nhớ vĩnh viễn là injection thật mà lượt này không có phát ngôn nào của user
+  để mà "học"
+
+4 lỗi Important tự phát hiện/bị review chỉ ra đáng nhớ nhất trong 4 vòng review
+của phase vòng chạy/gửi tin (chi tiết đủ ở `.superpowers/sdd/plan/progress.md`):
+- job `once` bị guard chặn từng tự tắt vĩnh viễn (`markRun` cộng `run_count` cho
+  cả status `skipped`, chạm `maxRuns=1` ngay lần bị chặn đầu tiên)
+- persona quảng cáo tool mà schema lượt theo lịch không cấp (thiếu truyền cờ
+  `isolated` xuống `listAvailableTools`)
+- hàng đợi rải đều toàn cục từng bị `await` BÊN TRONG khoá thread, khiến tin
+  thật của người dùng phải xếp hàng theo tin chủ động của job khác trên CHÍNH
+  thread đó
+- "Chạy thử ngay" gọi thẳng `runScheduledJob` làm job `once` tự tắt hẳn sau 1
+  lần thử (`markRun` cộng `run_count` chạm `maxRuns=1`) - nặng hơn câu chữ brief
+  gốc "không đổi `next_run_at`"; vá xong lại lộ tiếp 1 race gửi trùng tin thật
+  khi job đang quá hạn lúc bấm thử và 1 tick thật xen vào giữa - sửa bằng giành
+  job (`next_run_at = NULL`) trước khi chạy, đúng bài clear-before-dispatch của
+  vòng tick
+
+**Chưa nghiệm thu thật trên Zalo** - toàn bộ mục trên chỉ chạy qua `pnpm test` và
+gọi thẳng hàm/route, chưa có lượt nào chạy qua tài khoản Zalo thật. Thứ tự nghiệm
+thu đã định (không nhảy bước, `once` trước `every` sau cùng vì đây là bước rủi ro
+khóa nick cao nhất):
+- [ ] Job `message` kiểu `once` -> đúng giờ nhận tin, `agent_turns` không tăng
+  (0 token)
+- [ ] Hủy job bằng chat ("hủy cái nhắc đó đi") -> bot `list` rồi `cancel`
+- [ ] Job `agent` kiểu `once` -> trang Trace có lượt `source='schedule'`, phiên
+  cô lập (hỏi lại tin nhắn trước đó phải nhận được câu "không có ngữ cảnh"),
+  sentinel `[SILENT]` không gửi gì và run ghi `silent`
+- [ ] Cron `"0 7 * * *"` ra đúng 07:00 giờ VN hôm sau trên dashboard, đối chiếu
+  `next_run_at` thô trong DB phải là `...T00:00:00.000Z`
+- [ ] Tắt bot qua mốc 1 job `once` rồi bật lại - trong grace gửi bình thường,
+  quá grace gửi kèm nhãn "(nhắc trễ...)"
+- [ ] Chỉ bật job `every` đầu tiên SAU KHI 5 bước trên sạch một vòng - đây là
+  bước rủi ro khóa nick cao nhất (lịch lặp lại liên tục)
+- [ ] Chưa kiểm trang Cấu hình bằng trình duyệt thật: nhóm `lich-hen` hiện đủ
+  9 ô, sửa được, lưu được, ô đang lấy từ `.env` có nhãn riêng + nút trả về mặc định

@@ -17,6 +17,12 @@ Bot AI thường trú trên Zalo (tài khoản cá nhân, multi-account): nhận
   (Gemini free tier) mô tả ảnh thành chữ - cấu hình ở nút Settings trên dòng "Nhìn kỹ ảnh"
   của trang Tools. Có sidecar thì agent còn dùng được tool `read_image` để "nhìn kỹ lại"
   ảnh với câu hỏi cụ thể (đếm số lượng, đọc chữ nhỏ) khi mô tả sẵn có không đủ
+- Lịch hẹn: bot tự nhắn theo lịch (`once`/`every`/`cron`) - đặt qua chat (tool `schedule_task`)
+  hoặc trên trang Lịch hẹn của dashboard. Nhắc hẹn đơn thuần dùng loại `message` (0 token,
+  gửi nguyên văn); việc cần tra cứu/tổng hợp dùng loại `agent` (chạy 1 lượt AI riêng, cô lập
+  khỏi lịch sử chat). Có 2 lớp chống spam (chặn lịch lặp quá dày lúc tạo + trần tin chủ động
+  mỗi ngày) vì đây là tính năng rủi ro khóa nick cao nhất dự án từng làm - xem
+  `docs/project-roadmap.md` (mục V3.3) để biết phần nào đã nghiệm thu thật trên Zalo
 
 ## Cài đặt
 
