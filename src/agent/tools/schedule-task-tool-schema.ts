@@ -53,7 +53,7 @@ export const scheduleTaskInputSchema = z.discriminatedUnion("action", [
       .string()
       .min(1)
       .max(MAX_NAME_CHARS)
-      .describe('Nhãn ngắn để nhận ra lịch này trong action=\'list\', vd "Nhắc họp anh Nam"'),
+      .describe("Nhãn ngắn để nhận ra lịch này trong action='list'"),
     kind: z
       .enum(["message", "agent"])
       .describe(

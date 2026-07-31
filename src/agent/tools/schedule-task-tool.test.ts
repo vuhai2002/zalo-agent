@@ -297,9 +297,9 @@ describe("schedule_task - action update", () => {
     const ctx = makeCtx({ message: msg({ threadId: "t-update-ok" }) });
     await run(ctx, {
       action: "create",
-      name: "cu",
+      name: "cũ",
       kind: "message",
-      payload: "noi dung cu",
+      payload: "nội dung cũ",
       schedule: { kind: "every", minutes: 30 },
     });
     const [job] = store.listJobsForThread("acc-1", "t-update-ok");
@@ -307,13 +307,13 @@ describe("schedule_task - action update", () => {
     const result = await run(ctx, {
       action: "update",
       id: job!.id,
-      payload: "noi dung moi",
+      payload: "nội dung mới",
       schedule: { kind: "every", minutes: 60 },
     });
 
     assert.match(result, /Đã cập nhật/);
     const sau = store.getJob("acc-1", "t-update-ok", job!.id)!;
-    assert.equal(sau.payload, "noi dung moi");
+    assert.equal(sau.payload, "nội dung mới");
     assert.equal(sau.everyMinutes, 60);
   });
 
@@ -321,9 +321,9 @@ describe("schedule_task - action update", () => {
     const ctxOwner = makeCtx({ message: msg({ threadId: "t-update-chu" }) });
     await run(ctxOwner, {
       action: "create",
-      name: "cu",
+      name: "cũ",
       kind: "message",
-      payload: "noi dung cu",
+      payload: "nội dung cũ",
       schedule: { kind: "every", minutes: 30 },
     });
     const [job] = store.listJobsForThread("acc-1", "t-update-chu");
@@ -332,16 +332,16 @@ describe("schedule_task - action update", () => {
     const result = await run(ctxKhac, { action: "update", id: job!.id, payload: "bị đổi trái phép" });
 
     assert.match(result, /Không tìm thấy/);
-    assert.equal(store.getJob("acc-1", "t-update-chu", job!.id)?.payload, "noi dung cu");
+    assert.equal(store.getJob("acc-1", "t-update-chu", job!.id)?.payload, "nội dung cũ");
   });
 
   it("đổi sang lịch không hợp lệ thì báo lỗi, KHÔNG áp phần thay đổi khác (all-or-nothing)", async () => {
     const ctx = makeCtx({ message: msg({ threadId: "t-update-invalid" }) });
     await run(ctx, {
       action: "create",
-      name: "cu",
+      name: "cũ",
       kind: "message",
-      payload: "noi dung cu",
+      payload: "nội dung cũ",
       schedule: { kind: "every", minutes: 30 },
     });
     const [job] = store.listJobsForThread("acc-1", "t-update-invalid");
@@ -349,13 +349,13 @@ describe("schedule_task - action update", () => {
     const result = await run(ctx, {
       action: "update",
       id: job!.id,
-      payload: "noi dung moi lo se khong duoc ap dung",
+      payload: "nội dung mới lẽ ra không được áp dụng",
       schedule: { kind: "every", minutes: 1 },
     });
 
     assert.match(result, /tối thiểu|spam/i);
     const sau = store.getJob("acc-1", "t-update-invalid", job!.id)!;
-    assert.equal(sau.payload, "noi dung cu", "lịch hỏng thì payload cũng không được đổi");
+    assert.equal(sau.payload, "nội dung cũ", "lịch hỏng thì payload cũng không được đổi");
     assert.equal(sau.everyMinutes, 30);
   });
 });
