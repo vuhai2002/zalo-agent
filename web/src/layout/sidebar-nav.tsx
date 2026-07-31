@@ -2,6 +2,7 @@ import type { ReactNode, SVGProps } from "react";
 import { NavLink } from "react-router-dom";
 import {
   IconBolt,
+  IconClock,
   IconCpu,
   IconDatabase,
   IconBot,
@@ -29,6 +30,7 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
     items: [
       { to: "/sessions", label: "Sessions", icon: IconChat },
       { to: "/contacts", label: "Contacts", icon: IconUsers },
+      { to: "/schedule", label: "Lịch hẹn", icon: IconClock },
     ],
   },
   { title: "Dữ liệu", items: [{ to: "/memory", label: "Memory", icon: IconBrain }] },

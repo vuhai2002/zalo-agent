@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { TraceStep, TraceTurnAcrossThreads } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
@@ -12,13 +13,24 @@ import { TraceRong, TraceStepCard } from "./trace-step-card";
  * trong drawer, user đi tìm và không thấy - tính năng chẩn đoán mà chôn sâu ba
  * lớp thì coi như không có. Ở đây bấm một cái là thấy hết, không phải nhớ lỗi
  * xảy ra ở hội thoại nào.
+ *
+ * Hỗ trợ mở thẳng 1 lượt qua `?turnId=` (drawer lịch sử chạy của trang Lịch
+ * hẹn dùng link này để nhảy tới đúng lượt agent của 1 lần job chạy) - tách
+ * hẳn khỏi state của danh sách `turns` vì lượt đó có thể đã rơi khỏi 50 lượt
+ * gần nhất, không tìm cách "highlight trong list" mà tự fetch riêng.
  */
 export function TracePage() {
+  const [searchParams] = useSearchParams();
+  const openTurnId = Number(searchParams.get("turnId"));
+
   const [turns, setTurns] = useState<TraceTurnAcrossThreads[]>([]);
   const [dangMo, setDangMo] = useState<number | null>(null);
   const [steps, setSteps] = useState<TraceStep[]>([]);
   const [dangTai, setDangTai] = useState(false);
   const [loi, setLoi] = useState("");
+
+  const [openSteps, setOpenSteps] = useState<TraceStep[]>([]);
+  const [openLoading, setOpenLoading] = useState(false);
 
   useEffect(() => {
     api
@@ -26,6 +38,16 @@ export function TracePage() {
       .then((r) => setTurns(r.turns))
       .catch((e: Error) => setLoi(e.message));
   }, []);
+
+  useEffect(() => {
+    if (!Number.isInteger(openTurnId) || openTurnId <= 0) return;
+    setOpenLoading(true);
+    api
+      .traceSteps(openTurnId)
+      .then((r) => setOpenSteps(r.steps))
+      .catch(() => setOpenSteps([]))
+      .finally(() => setOpenLoading(false));
+  }, [openTurnId]);
 
   async function moLuot(turnId: number) {
     if (dangMo === turnId) {
@@ -49,6 +71,17 @@ export function TracePage() {
       {loi && (
         <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-[13px] text-red-700">
           {loi}
+        </div>
+      )}
+
+      {Number.isInteger(openTurnId) && openTurnId > 0 && (
+        <div className="mb-5 rounded-xl border border-zalo-100 bg-zalo-50/40 p-4">
+          <div className="mb-2 text-[13px] font-semibold text-zalo-700">Lượt #{openTurnId} (mở từ Lịch hẹn)</div>
+          {openLoading && <p className="text-[12px] text-ink-soft">Đang tải...</p>}
+          {!openLoading && openSteps.map((s, i) => <TraceStepCard key={i} step={s} />)}
+          {!openLoading && openSteps.length === 0 && (
+            <p className="text-[12px] text-ink-soft">Lượt này không có step nào được ghi.</p>
+          )}
         </div>
       )}
 

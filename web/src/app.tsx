@@ -10,6 +10,7 @@ import { LoginPage } from "./pages/login-page";
 import { MemoryPage } from "./pages/memory-page";
 import { OverviewPage } from "./pages/overview-page";
 import { ProvidersPage } from "./pages/providers-page";
+import { SchedulePage } from "./pages/schedule-page";
 import { SessionsPage } from "./pages/sessions-page";
 import { LogsPage } from "./pages/logs-page";
 import { TracePage } from "./pages/trace-page";
@@ -80,6 +81,7 @@ function DashboardShell() {
           <Routes>
             <Route path="/" element={<OverviewPage />} />
             <Route path="/sessions" element={<SessionsPage accounts={accounts} />} />
+            <Route path="/schedule" element={<SchedulePage accounts={accounts} />} />
             <Route path="/contacts" element={<ContactsPage accounts={accounts} />} />
             <Route path="/memory" element={<MemoryPage accounts={accounts} />} />
             <Route path="/accounts" element={<AccountsPage />} />

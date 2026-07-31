@@ -224,6 +224,50 @@ export const api = {
     }),
   clearImageGen: () => request<ImageGenSettings & { ok: true }>("/api/image-gen", { method: "DELETE" }),
 
+  schedule: {
+    list: (accountId: string) =>
+      request<{ items: ScheduledJobItem[]; timezone: string }>(
+        `/api/schedule?accountId=${encodeURIComponent(accountId)}`,
+      ),
+    create: (input: {
+      accountId: string;
+      threadId: string;
+      threadType: number;
+      name: string;
+      kind: ScheduledJobKind;
+      payload: string;
+      schedule: ScheduleInputPayload;
+    }) =>
+      request<{ job: ScheduledJobItem; timezone: string }>("/api/schedule", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    update: (
+      id: string,
+      accountId: string,
+      threadId: string,
+      patch: { name?: string; payload?: string; schedule?: ScheduleInputPayload; enabled?: boolean },
+    ) =>
+      request<{ job: ScheduledJobItem; timezone: string }>(`/api/schedule/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ accountId, threadId, ...patch }),
+      }),
+    remove: (id: string, accountId: string, threadId: string) =>
+      request<{ ok: true }>(
+        `/api/schedule/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}&threadId=${encodeURIComponent(threadId)}`,
+        { method: "DELETE" },
+      ),
+    run: (id: string, accountId: string, threadId: string) =>
+      request<{ run: ScheduledJobRunItem | null }>(`/api/schedule/${encodeURIComponent(id)}/run`, {
+        method: "POST",
+        body: JSON.stringify({ accountId, threadId }),
+      }),
+    runs: (id: string, accountId: string, threadId: string) =>
+      request<{ runs: ScheduledJobRunItem[] }>(
+        `/api/schedule/${encodeURIComponent(id)}/runs?accountId=${encodeURIComponent(accountId)}&threadId=${encodeURIComponent(threadId)}`,
+      ),
+  },
+
   provider: () => request<ProviderSettings>("/api/provider"),
   updateProvider: (update: Partial<ProviderSettings> & { apiKey?: string }) =>
     request<ProviderSettings & { ok: true }>("/api/provider", {
@@ -416,4 +460,55 @@ export type ImageGenSettings = {
   /** apiKeyMasked trống vẫn ra chuỗi "chưa cấu hình" nên phải có cờ riêng */
   hasApiKey: boolean;
   configured: boolean;
+};
+
+// ===== Lịch hẹn (scheduler) =====
+
+export type ScheduledJobKind = "message" | "agent";
+export type ScheduleKind = "once" | "every" | "cron";
+export type JobRunStatus = "running" | "ok" | "silent" | "skipped" | "error" | "interrupted";
+
+/** Khớp 1-1 với `ScheduleInput` phía server (`schedule-parser.ts`) - gửi thẳng, không chuyển đổi */
+export type ScheduleInputPayload =
+  | { kind: "once"; date: string; time: string }
+  | { kind: "once"; inMinutes: number }
+  | { kind: "every"; minutes: number }
+  | { kind: "cron"; expr: string };
+
+export type ScheduledJobItem = {
+  id: string;
+  accountId: string;
+  threadId: string;
+  threadType: number;
+  name: string;
+  kind: ScheduledJobKind;
+  payload: string;
+  scheduleKind: ScheduleKind;
+  runAt: string | null;
+  everyMinutes: number | null;
+  cronExpr: string | null;
+  timezone: string;
+  enabled: boolean;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  /** Gồm cả 'blocked' (chặn ở preflight: account rớt phiên, bot tắt cho thread) - không nằm trong JobRunStatus */
+  lastStatus: string | null;
+  lastError: string | null;
+  runCount: number;
+  maxRuns: number | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ScheduledJobRunItem = {
+  id: number;
+  jobId: string;
+  /** Link sang trang Trace khi có giá trị (chỉ job kind='agent' mới có) */
+  turnId: number | null;
+  status: JobRunStatus;
+  detail: string;
+  deliveredChars: number;
+  startedAt: string;
+  finishedAt: string | null;
 };

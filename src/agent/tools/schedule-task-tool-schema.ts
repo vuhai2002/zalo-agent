@@ -37,14 +37,18 @@ export const scheduleInputSchema = z
       "every lặp theo phút, hoặc cron theo biểu thức cron - cả 4 đều hiểu theo giờ Việt Nam.",
   );
 
-/** Nhãn hiển thị trên dashboard/action list - không phải nội dung gửi đi */
-const MAX_NAME_CHARS = 100;
+/**
+ * Nhãn hiển thị trên dashboard/action list - không phải nội dung gửi đi.
+ * Export để `schedule-routes.ts` (API dashboard, phase 05) dùng lại đúng
+ * ngưỡng này thay vì khai một con số thứ hai dễ lệch.
+ */
+export const MAX_NAME_CHARS = 100;
 /**
  * Trần ký tự payload - CHÍNH SÁCH tự đặt (không phải giới hạn của Zalo), đủ
  * rộng cho nhắc hẹn dài lẫn prompt agent chi tiết. Cùng độ lớn với
  * `MAX_PROMPT_CHARS` của `create-image-tool.ts` cho nhất quán trong catalog.
  */
-const MAX_PAYLOAD_CHARS = 4000;
+export const MAX_PAYLOAD_CHARS = 4000;
 
 export const scheduleTaskInputSchema = z.discriminatedUnion("action", [
   z.object({
