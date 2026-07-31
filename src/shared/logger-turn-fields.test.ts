@@ -33,11 +33,28 @@ after(async () => {
   cleanupTestEnv(dataDir);
 });
 
-/** Chờ worker pino-roll xả xuống đĩa rồi đọc lại các dòng JSON */
-async function docLog(soDongCho: number): Promise<Record<string, unknown>[]> {
+/**
+ * Chờ worker pino-roll xả xuống đĩa rồi đọc lại các dòng JSON.
+ *
+ * Poll ngắn (50ms/lần) nhưng TRẦN chờ rộng - máy rảnh thoát sớm ngay khi đủ
+ * dòng (không chờ hết trần), máy tải nặng (chạy CHUNG cả bộ test, không phải
+ * chạy riêng file này) vẫn có đủ thời gian cho worker ghi đĩa kịp xả. Bản
+ * trước trần cứng 2 giây (40 x 50ms) - đúng lúc bộ test phình từ 837 lên 846
+ * ca (thêm nhiều ca scheduler có chờ/hẹn giờ) thì trần đó bị vượt MỘT CÁCH ỔN
+ * ĐỊNH khi chạy `pnpm test` đầy đủ (đỏ tất định, không phải thỉnh thoảng) -
+ * nới trần thay vì đổi bất biến test đang canh (mixin của pino không được trả
+ * object dùng chung, lỗi đã lọt ra lượt thật số 66).
+ */
+const CHO_LOG_TOI_DA_MS = 20_000;
+const CHO_LOG_MOI_LAN_MS = 50;
+
+async function docLog(soDongCho: number, choToiDaMs = CHO_LOG_TOI_DA_MS): Promise<Record<string, unknown>[]> {
   const thuMuc = path.join(dataDir, "logs");
-  for (let i = 0; i < 40; i++) {
-    await new Promise((r) => setTimeout(r, 50));
+  const batDau = Date.now();
+  let soDongDocDuocGanNhat = 0;
+
+  while (Date.now() - batDau < choToiDaMs) {
+    await new Promise((r) => setTimeout(r, CHO_LOG_MOI_LAN_MS));
     const files = fs.existsSync(thuMuc) ? fs.readdirSync(thuMuc) : [];
     if (files.length === 0) continue;
     const dong = fs
@@ -45,9 +62,16 @@ async function docLog(soDongCho: number): Promise<Record<string, unknown>[]> {
       .split("\n")
       .filter(Boolean)
       .map((l) => JSON.parse(l) as Record<string, unknown>);
+    soDongDocDuocGanNhat = dong.length;
     if (dong.length >= soDongCho) return dong;
   }
-  throw new Error(`không thấy đủ ${soDongCho} dòng log sau 2 giây`);
+
+  // In ra ngưỡng THẬT (không hardcode chữ) + số dòng đọc được lần cuối - lần
+  // sau ai đọc lỗi này còn biết đã chờ bao lâu và thấy được gì, không phải
+  // đoán lại từ đầu như lần này.
+  throw new Error(
+    `không thấy đủ ${soDongCho} dòng log sau ${choToiDaMs}ms chờ (đã đọc được ${soDongDocDuocGanNhat} dòng ở lần thử cuối)`,
+  );
 }
 
 describe("logger - trường của lượt bám vào log", () => {
