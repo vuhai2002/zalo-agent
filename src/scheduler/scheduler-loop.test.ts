@@ -531,7 +531,7 @@ describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi a
     const runAt = new Date("2026-08-01T16:50:00.000Z"); // 23:50 giờ VN 01/08
     guard.reserveProactiveSlot(ACC, threadId, "Asia/Ho_Chi_Minh", runAt); // chiếm hết suất trước, cùng ngày VN với runAt
 
-    const job = makeJob({ threadId, payload: "Nho hop", schedule: { kind: "once", runAtUtc: runAt.toISOString() } });
+    const job = makeJob({ threadId, payload: "Nhớ họp", schedule: { kind: "once", runAtUtc: runAt.toISOString() } });
 
     // Tick lúc job đến hạn (23:50 VN) - bị trần chặn, đẩy sang 8h sáng VN ngày mai
     await schedulerLoop.runSchedulerTick(runAt);
@@ -563,7 +563,7 @@ describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi a
     assert.equal(sentThisThread.length, 2, "phải có đúng 2 tin trên thread này: thông báo chạm trần + tin nhắc trễ vừa gửi lại");
     assert.equal(
       sentThisThread[1]!.text,
-      "(nhắc trễ, lịch gốc 23:50) Nho hop",
+      "(nhắc trễ, lịch gốc 23:50) Nhớ họp",
       "nhãn nhắc trễ phải giữ ĐÚNG giờ gốc 23:50 (run_at) - dùng next_run_at đã bị đẩy sẽ tính lateSeconds gần 0 và MẤT nhãn",
     );
   });

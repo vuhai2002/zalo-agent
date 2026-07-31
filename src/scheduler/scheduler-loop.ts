@@ -54,6 +54,13 @@ const interruptStaleRunsStmt = db.prepare(`
  * `markRun` đặt `enabled = 0` nên không khớp điều kiện đầu, nhưng vẫn giữ cả
  * điều kiện `run_count < max_runs` cho rõ ràng: thiếu nó là hồi sinh nhầm cả
  * job đã hoàn thành nếu bất biến `enabled` ở nơi khác đổi trong tương lai.
+ *
+ * Mặt trái CÓ CHỦ ĐÍCH, chấp nhận được: ca "tin đã ra Zalo thật nhưng process
+ * chết TRƯỚC khi kịp `markRun`" cũng khớp đúng điều kiện trên nên bị hồi sinh
+ * y hệt, khiến boot lại gửi trùng lần 2. Cửa sổ đó chỉ cỡ mili-giây (vài thao
+ * tác SQLite đồng bộ giữa lúc gửi xong và lúc `markRun` chạy), đổi lại là xoá
+ * được cửa sổ MẤT lời nhắc trước đây phủ cả lượt dispatch (lượt agent có thể
+ * chạy vài phút) - đúng chiều bất biến đã chốt của nhánh này.
  */
 const reviveClaimedOnceStmt = db.prepare(`
   UPDATE scheduled_jobs SET next_run_at = run_at

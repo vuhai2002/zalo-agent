@@ -107,7 +107,7 @@ describe("buildSystemPrompt - danh sách tool đang bật", () => {
     assert.match(text, /trợ lý AI/i);
   });
 
-  it("isolated=true (lượt theo lịch): KHÔNG kể 3 tool bị runsInScheduledTurn:false - khớp CHÍNH XÁC với schema thật (Finding 2)", () => {
+  it("isolated=true (lượt theo lịch): KHÔNG kể 9 tool bị runsInScheduledTurn:false - khớp CHÍNH XÁC với schema thật (Finding 2)", () => {
     // Trước fix: buildSystemPrompt gọi listAvailableTools(account) không
     // truyền cờ isolated, trong khi buildAgentTools (agent-loop.ts) CÓ lọc -
     // prompt quảng cáo "Ghi nhớ lâu dài"/"Thả cảm xúc" trong khi schema gửi

@@ -26,7 +26,12 @@ export const scheduleInputSchema = z
     }),
     z.object({
       kind: z.literal("every"),
-      minutes: z.number().int().positive().describe("Lặp lại mỗi bấy nhiêu phút"),
+      // Cùng trần 525600 (1 năm) với `inMinutes` ở trên - cùng đường vỡ:
+      // `computeNextRun`/`computeEveryNext` (next-run.ts) cộng `steps * intervalMs`
+      // vào `new Date(...)`, vượt biên Date ném RangeError. Route POST /api/schedule
+      // dùng chung schema này, không có try/catch quanh createJob nên lỗi lọt
+      // thành 500 thay vì 400 có lý do rõ ràng.
+      minutes: z.number().int().positive().max(525600).describe("Lặp lại mỗi bấy nhiêu phút"),
     }),
     z.object({
       kind: z.literal("cron"),

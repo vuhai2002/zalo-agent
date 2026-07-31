@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ApiError } from "../dashboard-api-client";
 import type { ScheduledJobItem, ScheduledJobRunItem } from "../dashboard-api-client";
 import { formatBotTime } from "../shared/format-bot-time";
 import { Badge } from "../shared/ui-bits";
@@ -66,8 +67,8 @@ export function ScheduleJobRow({
     try {
       const run = await onRun();
       setRunResult(run ? `Kết quả chạy thử: ${run.status} - ${run.detail || "(không có mô tả)"}` : "Không ghi nhận được kết quả");
-    } catch {
-      setRunResult("Chạy thử thất bại - xem log để biết chi tiết");
+    } catch (err) {
+      setRunResult(err instanceof ApiError ? err.message : "Chạy thử thất bại - xem log để biết chi tiết");
     } finally {
       setRunning(false);
     }

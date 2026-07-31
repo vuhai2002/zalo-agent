@@ -62,7 +62,7 @@ export function buildSystemPrompt(
     // riêng là sớm muộn cũng lệch, mà lệch nghĩa là prompt kể một tool rồi lại
     // dạy luật của tool khác. `isolated` PHẢI truyền xuống đây - thiếu nó thì
     // lượt theo lịch (agent-loop.ts truyền isolated:true) vẫn được liệt kê cả
-    // 3 tool bị runsInScheduledTurn:false, trong khi buildAgentTools ĐÃ lọc
+    // 9 tool bị runsInScheduledTurn:false, trong khi buildAgentTools ĐÃ lọc
     // chúng khỏi schema thật - model tự nhận "mình vừa ghi nhớ" mà chẳng lưu
     // gì (đúng bug persona-prompt.test.ts đã dựng bất biến để canh).
     const available = listAvailableTools(account, { isolated });

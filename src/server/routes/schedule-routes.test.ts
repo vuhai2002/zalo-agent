@@ -215,6 +215,24 @@ describe("POST /api/schedule", () => {
     });
     assert.equal(res.status, 400);
   });
+
+  it("every.minutes vượt trần 525600 -> 400 kèm lý do đọc được, KHÔNG phải 500 (cùng lỗ RangeError đã vá cho inMinutes)", async () => {
+    const res = await authed("/api/schedule", {
+      method: "POST",
+      body: JSON.stringify({
+        accountId: ACC,
+        threadId: THREAD,
+        threadType: 0,
+        name: "x",
+        kind: "message",
+        payload: "x",
+        schedule: { kind: "every", minutes: 999_999_999 },
+      }),
+    });
+    assert.equal(res.status, 400);
+    const body = (await res.json()) as { error: string };
+    assert.ok(body.error.length > 0, "phải kèm câu lỗi đọc được, không phải thân rỗng của lỗi 500");
+  });
 });
 
 describe("PATCH /api/schedule/:id", () => {

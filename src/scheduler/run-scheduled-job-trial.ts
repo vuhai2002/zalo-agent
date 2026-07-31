@@ -94,7 +94,7 @@ const snapshotStmt = db.prepare(`
   FROM scheduled_jobs WHERE id = ?
 `);
 
-/** Giành job TRƯỚC dispatch - clear-before-dispatch của riêng trial, đóng cửa sổ đụng độ với tick thật */
+/** Giành job TRƯỚC dispatch - clear-before-dispatch của riêng trial, đóng cửa sổ đụng độ với tick thật tương lai */
 const claimStmt = db.prepare(`UPDATE scheduled_jobs SET next_run_at = NULL WHERE id = ?`);
 
 const restoreStmt = db.prepare(`
