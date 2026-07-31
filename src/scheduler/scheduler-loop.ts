@@ -7,19 +7,16 @@
  * `wg.Wait()` trong vòng lặp làm đứng cả scheduler) - một job agent có thể
  * chạy vài phút, chặn tick kế là chặn MỌI thread khác, không riêng gì job đó.
  *
- * KHÔNG bọc `runOnThreadChain` quanh cả `runScheduledJob` ở đây nữa (khác bản
- * trước): khoá thread giờ chỉ giữ ĐÚNG lúc gửi thật, bên trong
- * `deliverProactively` (proactive-send-queue.ts) - bọc ở tầng này sẽ lồng 2
- * lần `runOnThreadChain` cho CÙNG threadKey và tự deadlock (lượt ngoài chờ
- * `fn` xong, `fn` lại chờ lượt trong xin vào đúng hàng đợi mà lượt ngoài đang
- * giữ chỗ). Việc chuẩn bị (chạy agent cô lập, không đọc history) không cần
- * khoá thread; chỉ bước GỬI + GHI HISTORY mới cần, và đã có khoá riêng ở đó.
+ * KHÔNG bọc `runOnThreadChain` quanh cả `runScheduledJob` ở đây (khoá thread
+ * chỉ giữ ĐÚNG lúc gửi thật, trong `deliverProactively` - bọc ở tầng này sẽ
+ * lồng 2 lần `runOnThreadChain` cho CÙNG threadKey và tự deadlock).
  */
 
 import { env } from "../config/env.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { db } from "../conversation/database.js";
 import { createLogger } from "../shared/logger.js";
+import { resetDeliveryAttempts } from "./delivery-attempt-store.js";
 import { finishRun, openRun } from "./job-run-log-store.js";
 import { computeNextRun, decideDueAction } from "./next-run.js";
 import { checkAccountAndThreadReady, checkProactiveDailyCap } from "./proactive-send-guard.js";
@@ -47,8 +44,7 @@ const interruptStaleRunsStmt = db.prepare(`
  * đây job bị chặn ở đây không để lại dấu vết nào, account rớt phiên 3 ngày
  * liền thì job hiện y hệt job khoẻ mạnh trên dashboard. Trần ngày không cần
  * cột này - `concludeCapBlockedAtTick` đã tự ghi 1 dòng run log 'skipped'.
- * Dùng lại `last_status`/`last_error` (không CHECK constraint) - tự "lành"
- * khi job chạy thật lần kế (markRun ghi đè vô điều kiện).
+ * Dùng lại `last_status`/`last_error` - tự "lành" khi job chạy thật lần kế.
  */
 const markBlockedStmt = db.prepare(`
   UPDATE scheduled_jobs SET last_status = 'blocked', last_error = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -140,6 +136,11 @@ function processDueJob(job: ScheduledJob, now: Date): void {
         lastPreflightReason.set(job.id, preflight.reason);
         log.warn({ jobId: job.id, reason: preflight.reason }, "Job chưa dispatch được - tick sau thử lại");
         markBlockedStmt.run(preflight.reason, job.id);
+        // KHÔNG PHẢI vì gửi hỏng - đây là đường chặn PHỔ BIẾN nhất trong sản
+        // xuất (account/thread chặn ngay ở tick). Thiếu dòng này: 3 lần gửi
+        // hỏng CÁCH NHAU HÀNG TUẦN vẫn cộng dồn đủ 3, job 'once' bị tắt hẳn -
+        // mất 1 lời nhắc dù chưa từng hỏng LIÊN TIẾP thật sự.
+        resetDeliveryAttempts(job.id);
       }
       return;
     }
@@ -158,26 +159,24 @@ function processDueJob(job: ScheduledJob, now: Date): void {
 
     // Clear-before-dispatch: ghi next_run_at MỚI trước khi dispatch, để tick
     // kế không nhặt lại ĐÚNG job này trong lúc nó còn chạy dở. 'once' không có
-    // "mốc kế" thật - computeNextRun trả nguyên runAtUtc CŨ (đã ở quá khứ) bất
-    // kể `now`, nên phải clear thẳng về NULL; để nguyên mốc cũ sẽ bị tick kế
-    // nhặt lại NGAY, dispatch lần 2 trước khi conclude kịp tắt job.
+    // "mốc kế" thật (computeNextRun trả nguyên runAtUtc CŨ bất kể `now`) nên
+    // phải clear thẳng về NULL - để nguyên mốc cũ sẽ bị tick kế nhặt lại NGAY.
     const nextRunAt = schedule.kind === "once" ? null : computeNextRun(schedule, new Date(scheduledFor), now);
     setNextRun(job.id, nextRunAt);
 
     if (action === "skip-forward") {
-      // Bỏ lượt HẲN, không dispatch: every/cron trễ quá grace, "chạy bù" sẽ
-      // dồn backlog. Ghi run 'skipped' NGAY để dashboard thấy vì sao mốc kế nhảy xa.
+      // Bỏ lượt HẲN: every/cron trễ quá grace, "chạy bù" sẽ dồn backlog. Ghi
+      // 'skipped' NGAY để dashboard thấy vì sao mốc kế nhảy xa.
       const runId = openRun(job.id);
       finishRun(runId, { status: "skipped", detail: "Bỏ lượt vì đã trễ quá cửa sổ grace - dời sang lần kế tiếp." });
       log.info({ jobId: job.id, nextRunAt }, "Job trễ quá grace - bỏ lượt, dời lịch");
+      resetDeliveryAttempts(job.id); // KHÔNG PHẢI vì gửi hỏng - chỉ every/cron chạm nhánh này
       return;
     }
 
     // Lọc SỚM trần ngày TRƯỚC dispatch (Mục 1) - THUẦN ĐỌC, không giữ chỗ
-    // (giành chỗ THẬT xảy ra sát lúc gửi, xem blockedByGuard). Thiếu bước này:
-    // job 'once' chạm trần bị phục hồi next_run_at về mốc cũ, tick sau nhặt
-    // lại NGAY - kind='agent' nghĩa là chạy lại nguyên 1 lượt LLM mỗi 30 giây
-    // tới hết ngày, đốt token cho job CHẮC CHẮN không gửi được gì.
+    // (giành chỗ THẬT xảy ra sát lúc gửi, xem blockedByGuard). Thiếu bước này
+    // job chạm trần bị đốt lại nguyên 1 lượt LLM mỗi 30 giây tới hết ngày.
     const timeZone = job.timezone || env.BOT_TIMEZONE;
     const cap = checkProactiveDailyCap(job.accountId, job.threadId, timeZone, now);
     if (!cap.ok) {

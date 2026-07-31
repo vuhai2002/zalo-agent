@@ -288,20 +288,15 @@ describe("runScheduledJob - kind=message", () => {
 });
 
 // Mục 2 (vòng 3, "gửi thành công rồi chốt sổ hỏng KHÔNG được retry") ĐÃ SỬA
-// trong src/scheduler/scheduled-job-conclude.ts (bọc appendMessage + phần
-// chốt sổ trong try/catch riêng, gắn lỗi vào reply.error thay vì để throw
-// thoát ra ngoài sendAndConclude). KHÔNG tự động test được ở mức tích hợp:
-// đã thử `mock.method` (node:test) trên appendMessage/markRun - xác nhận
-// bằng thực nghiệm (2 lần, kể cả file cô lập) rằng ESM named export bị
-// "Cannot redefine property" ngay khi module đã được nạp qua BẤT KỲ đường
-// import nào khác trước đó (đúng ngữ nghĩa binding bất biến của ES module,
-// không phải lỗi viết test sai) - mà mọi hàm muốn mock ở đây đều đã bị chính
-// scheduled-job-conclude.ts nạp trước khi test file kịp mock. Ép lỗi thật qua
-// DB (xoá bảng messages giữa chừng) bị loại vì sẽ phá dữ liệu của các test
-// KHÁC dùng chung DB trong file. Đã xác nhận bằng review code trực tiếp: cấu
-// trúc try/catch trong sendAndConclude là tuyến tính, dễ đọc, không có
-// nhánh nào còn sót lại gọi concludeDeliveryFailed sau khi reply.deliveredText
-// khác rỗng.
+// trong src/scheduler/scheduled-job-send.ts (bọc appendMessage + phần chốt sổ
+// trong try/catch riêng, gắn lỗi vào reply.error thay vì để throw thoát ra
+// ngoài sendAndConclude). CÓ test tích hợp ép lỗi THẬT (không phải mock) ở
+// file riêng src/scheduler/scheduled-job-send.test.ts - `mock.method` không
+// dùng được ở ĐÂY (cùng thread, cùng process với các test khác của file này
+// đã import transitively sẵn appendMessage/markRun), nhưng 1 file test CÔ
+// LẬP với DB riêng (`setupTestEnv()` tạo `mkdtemp` riêng mỗi lần gọi) thì DROP
+// hẳn bảng `messages` ép lỗi SQL thật, an toàn vì không đụng DB của file nào
+// khác - xem doc đầu file đó.
 
 describe("runScheduledJob - không giữ khoá thread khi đang chờ hàng đợi toàn cục (Finding 3)", () => {
   it("tin THẬT trên CÙNG thread chạy được ngay dù job đang xếp hàng ở hàng đợi toàn cục", async () => {

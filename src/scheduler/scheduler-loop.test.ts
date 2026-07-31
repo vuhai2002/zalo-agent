@@ -46,11 +46,15 @@ before(async () => {
   accountStore.createAccount({ id: ACC, label: "Test" });
 });
 
-// Mỗi test tự start/stop - dọn sạch giữa các ca để không rò rỉ timer/cấu hình sang test sau
+// Mỗi test tự start/stop - dọn sạch giữa các ca để không rò rỉ timer/cấu hình sang test sau.
+// Đặt ở afterEach (không phải cuối thân test) để dọn CHẮC CHẮN chạy dù assert
+// phía trên có ném lỗi giữa chừng hay không - để trong thân test thì 1 lần
+// assert đỏ sẽ làm dòng dọn KHÔNG BAO GIỜ chạy, rò cấu hình sang mọi test sau.
 afterEach(() => {
   schedulerLoop.stopScheduler();
   tuning.setTuning("SCHEDULER_ENABLED", null);
   tuning.setTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY", null);
+  tuning.setTuning("SCHEDULER_SEND_GAP_MS", null);
 });
 
 after(() => {
@@ -317,6 +321,32 @@ describe("preflight - account/thread chưa sẵn sàng (Finding 1)", () => {
     assert.equal(after.runCount, 0);
     assert.equal(runLogStore.listRuns(job.id).length, 0);
   });
+
+  it("job bị chặn NGAY Ở TICK (account offline) phải RESET delivery_attempts - đây là đường PHỔ BIẾN nhất trong sản xuất (Mục 1, vòng 4)", async () => {
+    const attemptStore = await import("./delivery-attempt-store.js");
+    accountManager.stopAccount(ACC);
+    const threadId = "t-tick-block-reset-delivery-attempts";
+    makeThread(threadId);
+    const job = makeJob({ threadId });
+
+    // Mô phỏng 2 lần gửi hỏng RẢI RÁC ở các lượt TRƯỚC (vd tuần trước) - việc
+    // bị chặn ở TICK lần này (account offline, không hề chạm sendAndConclude)
+    // không được cộng dồn với chúng. Thiếu reset này: gửi hỏng 1 lần -> account
+    // offline vài ngày (chặn ở đúng nhánh này) -> gửi hỏng lần 2, lần 3 cách
+    // nhau HÀNG TUẦN vẫn đủ 3 -> job 'once' bị markRun('error') và tắt hẳn -
+    // mất một lời nhắc dù chưa từng có 3 lần hỏng LIÊN TIẾP thật sự.
+    attemptStore.incrementDeliveryAttempts(job.id);
+    attemptStore.incrementDeliveryAttempts(job.id);
+
+    await schedulerLoop.runSchedulerTick(new Date());
+
+    const row = database.db.prepare("SELECT delivery_attempts AS n FROM scheduled_jobs WHERE id = ?").get(job.id) as {
+      n: number;
+    };
+    assert.equal(row.n, 0, "delivery_attempts phải về 0 ngay khi bị chặn ở tick - lượt này KHÔNG PHẢI vì gửi hỏng");
+
+    jobStore.deleteJob(ACC, threadId, job.id); // account vẫn offline nên job "due mãi" - dọn để không lọt sang test sau
+  });
 });
 
 describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi agent chạy xong (Mục 1)", () => {
@@ -357,6 +387,37 @@ describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi a
     // Job 'once' bị trần chặn vẫn SỐNG (enabled=true), next_run_at trỏ tới
     // tương lai (ngày mai) - dọn hẳn để không bị các test SAU trong file này
     // (dùng `now` giả lập cũng ở tương lai) quét trúng nhầm là "due".
+    jobStore.deleteJob(ACC, threadId, job.id);
+  });
+
+  it("giành quyền báo trần dùng ĐÚNG day-key của `now` giả lập, không lệch sang ngày THẬT lúc chạy test (Mục 3, vòng 4)", async () => {
+    const zoneTime = await import("../shared/zone-time.js");
+    const guard = await import("./proactive-send-guard.js");
+    const counterStore = await import("./proactive-send-counter-store.js");
+    attachOnline();
+    const threadId = "t-tick-tran-day-key-dung";
+    makeThread(threadId);
+    tuning.setTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY", 1);
+
+    // `now` XA ngày THẬT lúc chạy test (2026-07-31 theo currentDate hệ thống) -
+    // nếu reserveCapNotice/revertCapNotice tự lấy `new Date()` thay vì nhận
+    // `now` này, quyền "đã báo" sẽ bị ghi nhầm vào day-key CỦA NGÀY THẬT, và
+    // day-key giả lập bên dưới (đúng ngày job đang xử lý) sẽ KHÔNG có gì.
+    const now = new Date("2026-08-01T03:00:00.000Z");
+    guard.reserveProactiveSlot(ACC, threadId, "Asia/Ho_Chi_Minh", now);
+    const job = makeJob({ threadId, schedule: { kind: "once", runAtUtc: now.toISOString() } });
+
+    await schedulerLoop.runSchedulerTick(now);
+    await sleep(40);
+
+    const dayKeyGiaLap = zoneTime.todayKey("Asia/Ho_Chi_Minh", now);
+    const counter = counterStore.getProactiveCounter(ACC, threadId, dayKeyGiaLap);
+    assert.equal(
+      counter.noticeSent,
+      true,
+      "quyền báo phải ghi ĐÚNG day-key của `now` giả lập đang xử lý, không phải ngày thật lúc chạy test",
+    );
+
     jobStore.deleteJob(ACC, threadId, job.id);
   });
 
@@ -489,9 +550,13 @@ describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi a
     // thời gian để CẢ 3 tin thông báo (nếu có) kịp ra hàng đợi rải đều.
     await sleep(400);
 
-    assert.equal(sent.length, 1, `chỉ được ĐÚNG 1 tin thông báo dù có 3 job cùng bị chặn (đo được ${sent.length})`);
+    // Lọc đúng threadId của CHÍNH test này (nhất quán với test "nhắc trễ" ngay
+    // phía trên) - `now` giả lập ở tương lai nên tick này CÓ THỂ quét trúng
+    // job "due" còn sót của test khác trong cùng file, đếm toàn cục `sent.length`
+    // sẽ sai dương tính nếu có bất kỳ job lạ nào cũng lọt qua.
+    const sentThisThread = sent.filter((s) => s.threadId === threadId);
+    assert.equal(sentThisThread.length, 1, `chỉ được ĐÚNG 1 tin thông báo dù có 3 job cùng bị chặn (đo được ${sentThisThread.length})`);
 
-    tuning.setTuning("SCHEDULER_SEND_GAP_MS", null); // dọn lại cho test khác trong file (base env đặt 0)
     // Cả 3 vẫn SỐNG (bị chặn trần, không markRun) với next_run_at ở tương lai
     // (ngày mai) - dọn hẳn, cùng lý do các test 'once'/'every'/'agent' phía trên.
     for (const job of jobs) jobStore.deleteJob(ACC, threadId, job.id);

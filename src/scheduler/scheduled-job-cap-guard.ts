@@ -53,7 +53,7 @@ export async function concludeCapBlocked(
   resetDeliveryAttempts(job.id);
 
   if (opts.notifyCapHitOnce && opts.target) {
-    await notifyCapHit(job, opts.target, timeZone);
+    await notifyCapHit(job, opts.target, timeZone, now);
   }
 }
 
@@ -96,11 +96,16 @@ function toTarget(job: ScheduledJob, api: API | undefined): ReplyTarget | undefi
  * tick (trước fix: quyết định "có phải lần đầu chạm trần" đọc TỪ TRƯỚC lúc
  * gửi, mà đường gửi phải chờ `SCHEDULER_SEND_GAP_MS`, nên N job đều tưởng
  * mình là lần đầu). Gửi hỏng thì `revertCapNotice` trả quyền lại.
+ *
+ * Nhận `now` từ `concludeCapBlocked` (không tự `new Date()`): reserve/revert
+ * phải cùng `day_key` với chính lượt đang xử lý - sát nửa đêm, tự lấy giờ
+ * thật ở đây có thể lệch sang ngày MAI so với `now` caller đang cầm, ghi "đã
+ * báo" nhầm ngày khiến hôm sau chạm trần thật lại không có thông báo nào.
  */
-async function notifyCapHit(job: ScheduledJob, target: ReplyTarget, timeZone: string): Promise<void> {
-  if (!reserveCapNotice(job.accountId, job.threadId, timeZone)) return; // job/tick khác đã giành hoặc đã gửi rồi
+async function notifyCapHit(job: ScheduledJob, target: ReplyTarget, timeZone: string, now: Date): Promise<void> {
+  if (!reserveCapNotice(job.accountId, job.threadId, timeZone, now)) return; // job/tick khác đã giành hoặc đã gửi rồi
   const notified = await sendCapNotice(job, target, timeZone);
-  if (!notified) revertCapNotice(job.accountId, job.threadId, timeZone);
+  if (!notified) revertCapNotice(job.accountId, job.threadId, timeZone, now);
 }
 
 /** Nhắn ĐÚNG 1 câu khi lần đầu chạm trần ngày. Trả `true` khi thật sự gửi được - caller chỉ giữ quyền "đã báo" khi đó */
@@ -128,7 +133,13 @@ async function sendCapNotice(job: ScheduledJob, target: ReplyTarget, timeZone: s
     if (reply.deliveredText) {
       recordProactiveSend(job.accountId, job.threadId, timeZone, reply.sentParts);
     }
-    return Boolean(reply.deliveredText) && !reply.error;
+    // CHỈ xét đã ra được hay chưa (`deliveredText`) - KHÔNG xét `reply.error`
+    // nữa (Mục 3, vòng 4): thông báo có thể đã RA THẬT rồi mới hỏng ở bước
+    // ghi history (gắn vào reply.error, xem nhánh catch của appendMessage ở
+    // trên) - trả `false` ở ca đó sẽ làm caller `revertCapNotice`, và tick sau
+    // GỬI LẶP LẠI đúng câu thông báo dù lần này đã tới nơi. Cùng lớp lỗi vừa
+    // đóng ở `scheduled-job-send.ts` (Mục 2).
+    return Boolean(reply.deliveredText);
   } catch (err) {
     log.error({ err }, "Gửi thông báo chạm trần thất bại - bỏ qua, không chặn việc ghi run skipped");
     return false;
