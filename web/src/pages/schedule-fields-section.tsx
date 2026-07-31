@@ -46,8 +46,11 @@ export function ScheduleFieldsSection({
   return (
     <div className="space-y-3 rounded-xl border border-line p-4">
       <div>
-        <label className="mb-1.5 block text-[13px] font-medium text-ink">Kiểu lịch</label>
+        <label htmlFor="sch-schedule-kind" className="mb-1.5 block text-[13px] font-medium text-ink">
+          Kiểu lịch
+        </label>
         <SelectMenu
+          id="sch-schedule-kind"
           value={scheduleKind}
           options={KIND_OPTIONS}
           onChange={(v) => onChange({ scheduleKind: v as ScheduleKind })}

@@ -9,14 +9,8 @@ import { listRuns } from "../../scheduler/job-run-log-store.js";
 import { runScheduledJobTrial } from "../../scheduler/run-scheduled-job-trial.js";
 import { parseSchedule, type ParsedSchedule } from "../../scheduler/schedule-parser.js";
 import { listJobsForAccount } from "../../scheduler/scheduled-job-list-store.js";
-import {
-  createJob,
-  deleteJob,
-  getJob,
-  listJobsForThread,
-  setEnabled,
-  updateJob,
-} from "../../scheduler/scheduled-job-store.js";
+import { createJob, deleteJob, getJob, setEnabled, updateJob } from "../../scheduler/scheduled-job-store.js";
+import { checkThreadJobCap } from "../../scheduler/scheduled-job-thread-cap.js";
 import { createLogger } from "../../shared/logger.js";
 
 const log = createLogger("schedule-routes");
@@ -80,11 +74,8 @@ export const scheduleRoutes = new Hono()
       return c.json({ error: "Cuộc trò chuyện chưa từng ghi nhận trong hệ thống - không tạo lịch được." }, 400);
     }
 
-    const maxJobs = getTuning("SCHEDULER_MAX_JOBS_PER_THREAD");
-    const activeCount = listJobsForThread(input.accountId, input.threadId).filter((j) => j.enabled).length;
-    if (activeCount >= maxJobs) {
-      return c.json({ error: `Cuộc trò chuyện này đã có đủ ${maxJobs} lịch hẹn đang bật - đã chạm trần.` }, 400);
-    }
+    const cap = checkThreadJobCap(input.accountId, input.threadId);
+    if (!cap.ok) return c.json({ error: cap.reason }, 400);
 
     const result = parseSchedule(input.schedule, scheduleParseParams());
     if (!result.ok) return c.json({ error: result.error }, 400);
@@ -160,6 +151,9 @@ export const scheduleRoutes = new Hono()
     if (!accountId || !threadId) return c.json({ error: "Thiếu accountId/threadId" }, 400);
     if (!getJob(accountId, threadId, id)) return c.json({ error: "Không tìm thấy lịch hẹn" }, 404);
 
-    const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? 50)));
+    // `Number("abc")` ra NaN, `Math.min/max` với NaN vẫn ra NaN rồi bind param
+    // SQLite ném lỗi - dùng `|| MAC_DINH` (đúng pattern trace-routes.ts) để
+    // giá trị hỏng/rỗng rơi thẳng về mặc định thay vì trôi xuống NaN.
+    const limit = Math.min(200, Math.max(1, Number(c.req.query("limit")) || 50));
     return c.json({ runs: listRuns(id, limit) });
   });

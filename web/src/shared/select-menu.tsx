@@ -21,11 +21,14 @@ export function SelectMenu({
   options,
   onChange,
   ariaLabel,
+  id,
 }: {
   value: string;
   options: SelectOption[];
   onChange: (value: string) => void;
   ariaLabel?: string;
+  /** Gắn với `<label htmlFor>` - `button` là phần tử labelable, click label focus/mở được menu */
+  id?: string;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -51,6 +54,7 @@ export function SelectMenu({
   return (
     <div ref={rootRef} className="relative">
       <button
+        id={id}
         type="button"
         aria-label={ariaLabel}
         aria-haspopup="listbox"

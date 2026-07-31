@@ -42,15 +42,18 @@ export function ScheduleDestinationFields({
   return (
     <>
       <div>
-        <label className="mb-1.5 block text-[13px] font-medium text-ink">Account</label>
+        <label htmlFor="sch-account" className="mb-1.5 block text-[13px] font-medium text-ink">
+          Account
+        </label>
         <SelectMenu
+          id="sch-account"
           value={accountId}
           options={accounts.map((a) => ({ value: a.id, label: a.label }))}
           onChange={(v) => onChange({ accountId: v, threadId: "" })}
         />
       </div>
       <div>
-        <label className="mb-1.5 block text-[13px] font-medium text-ink">
+        <label htmlFor="sch-thread" className="mb-1.5 block text-[13px] font-medium text-ink">
           Cuộc trò chuyện <span className="font-normal text-ink-soft">(đích gửi, không đổi được sau khi tạo)</span>
         </label>
         {threadOptions.length === 0 ? (
@@ -59,6 +62,7 @@ export function ScheduleDestinationFields({
           </p>
         ) : (
           <SelectMenu
+            id="sch-thread"
             value={threadId}
             options={threadOptions}
             onChange={(v) =>
@@ -68,8 +72,11 @@ export function ScheduleDestinationFields({
         )}
       </div>
       <div>
-        <label className="mb-1.5 block text-[13px] font-medium text-ink">Loại job</label>
+        <label htmlFor="sch-kind" className="mb-1.5 block text-[13px] font-medium text-ink">
+          Loại job
+        </label>
         <SelectMenu
+          id="sch-kind"
           value={kind}
           options={KIND_JOB_OPTIONS}
           onChange={(v) => onChange({ kind: v as "message" | "agent" })}

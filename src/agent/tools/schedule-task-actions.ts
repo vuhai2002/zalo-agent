@@ -9,6 +9,7 @@ import {
   updateJob,
   type ScheduledJob,
 } from "../../scheduler/scheduled-job-store.js";
+import { checkThreadJobCap } from "../../scheduler/scheduled-job-thread-cap.js";
 import { getDateTimeParts } from "../../shared/current-datetime.js";
 import { senderTrustFrom } from "../history-to-model-messages.js";
 import type { ToolContext } from "./index.js";
@@ -54,10 +55,9 @@ export function doCreate(ctx: ToolContext, input: CreateScheduleTaskInput): stri
     return "Chỉ người trong danh sách được phép (allowlist) mới đặt được lịch hẹn. Nói thật với người dùng là bạn không tạo được lịch này.";
   }
 
-  const maxJobs = getTuning("SCHEDULER_MAX_JOBS_PER_THREAD");
-  const activeCount = listJobsForThread(ctx.account.id, ctx.message.threadId).filter((j) => j.enabled).length;
-  if (activeCount >= maxJobs) {
-    return `Cuộc trò chuyện này đã có đủ ${maxJobs} lịch hẹn đang bật - đã chạm trần. Gọi action='list' rồi hủy bớt lịch cũ (action='cancel') trước khi đặt lịch mới.`;
+  const cap = checkThreadJobCap(ctx.account.id, ctx.message.threadId);
+  if (!cap.ok) {
+    return `${cap.reason} Gọi action='list' rồi hủy bớt lịch cũ (action='cancel') trước khi đặt lịch mới.`;
   }
 
   const parsed = parseSchedule(input.schedule, {

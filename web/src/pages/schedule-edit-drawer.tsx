@@ -129,8 +129,11 @@ export function ScheduleEditDrawer({
           )}
 
           <div>
-            <label className="mb-1.5 block text-[13px] font-medium text-ink">Tên</label>
+            <label htmlFor="sch-name" className="mb-1.5 block text-[13px] font-medium text-ink">
+              Tên
+            </label>
             <input
+              id="sch-name"
               className="gc-input w-full"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -139,10 +142,11 @@ export function ScheduleEditDrawer({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[13px] font-medium text-ink">
+            <label htmlFor="sch-payload" className="mb-1.5 block text-[13px] font-medium text-ink">
               {form.kind === "agent" ? "Prompt cho agent" : "Nội dung gửi"}
             </label>
             <textarea
+              id="sch-payload"
               className="gc-input min-h-28 w-full resize-y leading-relaxed"
               value={form.payload}
               onChange={(e) => setForm({ ...form, payload: e.target.value })}
