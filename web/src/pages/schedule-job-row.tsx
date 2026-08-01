@@ -61,6 +61,16 @@ export function ScheduleJobRow({
   const status = statusBadge(job.lastStatus);
   const canShowError = (job.lastStatus === "error" || job.lastStatus === "blocked") && job.lastError;
 
+  // Job chạy đủ suất thì `markRun` TỰ đặt enabled=0 + next_run_at=NULL
+  // (scheduled-job-store.ts) - không phải người dùng tắt. Trước đây cả hai ca
+  // cùng hiện "Đã tắt", đọc lên như thể ai đó vừa tắt một lịch còn hiệu lực.
+  const finished = !job.enabled && job.nextRunAt === null && job.maxRuns !== null && job.runCount >= job.maxRuns;
+
+  // Bật lại job không còn mốc chạy kế là một công tắc RỖNG: `listDueJobs` lọc
+  // `next_run_at IS NOT NULL` nên không tick nào thấy job đó nữa. Chặn ngay ở
+  // nút thay vì để người dùng bật rồi ngồi đợi một lượt không bao giờ tới.
+  const toggleDisabled = !job.enabled && job.nextRunAt === null;
+
   async function handleRun() {
     setRunning(true);
     setRunResult(null);
@@ -85,16 +95,22 @@ export function ScheduleJobRow({
           {scheduleLabel(job)}
         </Badge>
         <Badge tone={status.tone}>{status.text}</Badge>
-        {!job.enabled && (
-          <Badge tone="gray" dot={false}>
-            Đã tắt
-          </Badge>
-        )}
+        {!job.enabled &&
+          (finished ? (
+            <Badge tone="gray" dot={false}>
+              Đã xong (chạy đủ {job.maxRuns} lần)
+            </Badge>
+          ) : (
+            <Badge tone="gray" dot={false}>
+              Đã tắt
+            </Badge>
+          ))}
       </div>
 
       <div className="text-[12px] leading-[1.6] text-ink-soft">
         {accountName && <>{accountName} · </>}
-        {threadName} · Lần kế tiếp: {job.enabled ? formatBotTime(job.nextRunAt, timezone) : "-"}
+        {threadName} · Lần kế tiếp:{" "}
+        {job.enabled ? formatBotTime(job.nextRunAt, timezone) : finished ? "không còn lần nào" : "-"}
         {job.lastRunAt && <> · Chạy gần nhất: {formatBotTime(job.lastRunAt, timezone)}</>}
       </div>
 
@@ -113,8 +129,15 @@ export function ScheduleJobRow({
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <button
           onClick={onToggle}
-          className={`relative h-5 w-9 rounded-full transition-colors ${job.enabled ? "bg-zalo-500" : "bg-slate-300"}`}
-          title={job.enabled ? "Đang bật - bấm để tắt" : "Đang tắt - bấm để bật"}
+          disabled={toggleDisabled}
+          className={`relative h-5 w-9 rounded-full transition-colors ${job.enabled ? "bg-zalo-500" : "bg-slate-300"} ${toggleDisabled ? "cursor-not-allowed opacity-50" : ""}`}
+          title={
+            toggleDisabled
+              ? "Lịch này không còn mốc chạy nào - bật lại cũng không chạy nữa. Bấm Sửa để đặt lịch mới."
+              : job.enabled
+                ? "Đang bật - bấm để tắt"
+                : "Đang tắt - bấm để bật"
+          }
         >
           <span
             className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${job.enabled ? "left-[18px]" : "left-0.5"}`}
