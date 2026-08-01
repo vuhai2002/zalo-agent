@@ -40,6 +40,10 @@ Nằm ngoài project tại `D:\source-code\zalo-agent-references\`:
 - Tạo file Office bằng `docx` + `exceljs` (npm), **không** dùng `write-excel-file` dù nhẹ hơn 12 lần: nó không ghi được giá trị cache `<v>` cho công thức nên mọi công cụ xem trước hiện ô trống, và ghi thừa dấu bằng trong `<f>` (sai ECMA-376). Cũng **không** cài LibreOffice để recalc - bot tự tính kết quả rồi ghi kèm.
 - Tool tạo file chỉ nhận **dữ liệu** (tiêu đề, đoạn văn, bảng), tuyệt đối không chạy code do model sinh ra: bot đọc tin người lạ nên đó là đường prompt injection thành RCE.
 - Vẽ ảnh gọi `/v1/images/generations` với **`?response_format=binary` + JPEG** (157 KB so với 2.4 MB của JSON base64 PNG). Ảnh gốc để sửa nằm ở trường **`image`** dạng data URI, KHÔNG phải `ref_image` - sai tên thì provider bỏ qua âm thầm và ra ảnh vẽ mới. **Không gửi `size`**: model bỏ qua tham số này (đo: xin 1024x1024 nhận 1536x1024). Lỗi có 2 hình dạng - `400` trả `error.message`, `401` trả `error` là chuỗi.
+- Lịch hẹn (`src/scheduler/`, tool `schedule_task`): KHÔNG nhận chuỗi datetime, chỉ `{date,time}` rời hoặc `{inMinutes}` - chuỗi naive qua `new Date()` bị hiểu theo giờ hệ điều hành, đúng lỗi Hermes từng dính (`jobs.py`, issue #51021). Quy đổi giờ CHỈ đi qua `zonedWallClockToUtc` (luxon, dependency trực tiếp trong `package.json` dù `cron-parser` đã kéo gián tiếp - pnpm layout chặn import gián tiếp).
+- Job `once` trễ quá `SCHEDULER_ONCE_GRACE_MINUTES` vẫn GỬI kèm nhãn "(nhắc trễ, lịch gốc HH:MM)", không im lặng nuốt như Hermes/goclaw - bot cá nhân thì mất tích một lời đã hẹn là kết cục tệ nhất. Không retry ở tầng scheduler (agent-loop đã có 2 tầng chống chịu, thêm nữa là chồng 3 tầng); riêng lỗi ĐƯỜNG GỬI thử lại tối đa 3 lần qua cột bền `delivery_attempts`.
+- Lượt agent theo lịch chạy `isolated: true`, loại 9 tool khỏi lượt này (`runsInScheduledTurn: false` trong `tool-registry.ts`): 4 tool thiếu hạ tầng cho lượt cô lập + 5 tool (`send_file`, `create_word_document`, `create_excel_file`, `create_image`, `tag_member`) gọi thẳng `enqueueSend` né hoàn toàn trần `SCHEDULER_MAX_PROACTIVE_PER_DAY`. Trần đó đếm theo TIN ZALO thật (không phải lượt job) ở bảng bền `proactive_send_counters` (không đếm bộ nhớ - mất khi restart; không đếm từ `scheduled_job_runs` - bị prune).
+- "Chạy thử ngay" trên dashboard phải GIÀNH job (`next_run_at = NULL`) trước khi dispatch, giống clear-before-dispatch của vòng tick thật - không thì tick thật xen vào giữa gây gửi trùng.
 
 ## Lệnh hay dùng
 
@@ -55,3 +59,7 @@ pnpm typecheck                 # bắt buộc chạy trước khi báo hoàn th�
 - Env var mới phải có đủ ở 3 nơi: `.env.example`, `.env.production.example`, schema Zod trong `src/config/env.ts`.
 - Tin nhắn bị lọc (allowlist, thiếu @mention) phải bị chặn **trước** khi gọi LLM để không tốn token.
 - Chuỗi tiếng Việt giữ nguyên dấu; chỉ dùng dấu câu ASCII.
+
+## Bẫy khi viết test
+
+- `database.ts` mở SQLite và chạy migration ở MODULE SCOPE. Test nào import (trực tiếp hay bắc cầu) module đó TRƯỚC khi gọi `setupTestEnv()` (trong `src/shared/test-env-setup.ts`) sẽ mở nhầm `data/zalo-agent.db` THẬT thay vì DB tạm - migration hiện tại đều idempotent nên vô hại, nhưng một migration có backfill/ALTER sau này sẽ chạy lên dữ liệu thật mỗi lần ai đó chạy `pnpm test`. Luôn gọi `setupTestEnv()` xong rồi mới `await import()` động các module chạm DB - không import tĩnh ở đầu file test.

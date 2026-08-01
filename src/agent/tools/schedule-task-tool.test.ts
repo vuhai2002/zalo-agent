@@ -1,8 +1,22 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
+import { DateTime } from "luxon";
 import type { API } from "zca-js";
 import { cleanupTestEnv, setupTestEnv } from "../../shared/test-env-setup.js";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
+
+// Mốc "once" phải luôn ở TƯƠNG LAI so với giờ chạy test thật (parseSchedule từ
+// chối mốc quá khứ) - +7 ngày cách xa hiện tại đủ để không tự "hết hạn" theo
+// thời gian, khác bản cũ hardcode "2026-08-01" từng tự rơi vào quá khứ đúng
+// ngày đó và làm test đỏ vĩnh viễn từ hôm sau.
+const ONCE_TEST_MOMENT = DateTime.now()
+  .setZone("Asia/Ho_Chi_Minh")
+  .plus({ days: 7 })
+  .set({ minute: 0, second: 0, millisecond: 0 });
+const ONCE_TEST_DATE = ONCE_TEST_MOMENT.toFormat("yyyy-LL-dd");
+const ONCE_TEST_TIME = ONCE_TEST_MOMENT.toFormat("HH:mm");
+const ONCE_TEST_DATE_VN = ONCE_TEST_MOMENT.toFormat("dd/LL/yyyy");
+const ONCE_TEST_RUN_AT_UTC = ONCE_TEST_MOMENT.toUTC().toJSDate().toISOString();
 
 // Kéo theo env + DB nên phải setupTestEnv trước, import động sau
 let dataDir: string;
@@ -83,12 +97,16 @@ describe("schedule_task - action create", () => {
           name: "Nhắc họp",
           kind: "message",
           payload: "Họp với anh Nam",
-          schedule: { kind: "once", date: "2026-08-01", time: "15:00" },
+          schedule: { kind: "once", date: ONCE_TEST_DATE, time: ONCE_TEST_TIME },
         });
 
         const [job] = store.listJobsForThread("acc-1", `t-once-${tz}`);
-        assert.equal(job?.runAt, "2026-08-01T08:00:00.000Z", `TZ=${tz} phải ra đúng cùng 1 mốc UTC`);
-        assert.match(result, /15:00 ngày 01\/08\/2026/, "phải đọc lại đúng mốc giờ cho người dùng xác nhận");
+        assert.equal(job?.runAt, ONCE_TEST_RUN_AT_UTC, `TZ=${tz} phải ra đúng cùng 1 mốc UTC`);
+        assert.match(
+          result,
+          new RegExp(`${ONCE_TEST_TIME} ngày ${ONCE_TEST_DATE_VN.replace(/\//g, "\\/")}`),
+          "phải đọc lại đúng mốc giờ cho người dùng xác nhận",
+        );
       }
     } finally {
       if (originalTz === undefined) delete process.env.TZ;
