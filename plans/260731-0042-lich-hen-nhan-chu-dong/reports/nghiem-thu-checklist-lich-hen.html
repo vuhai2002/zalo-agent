@@ -1,0 +1,863 @@
+<title>Nghiệm thu Lịch hẹn - zalo-agent</title>
+<style>
+  @font-face {
+    font-family: "Iosevka Web";
+    src: local("Iosevka"), local("Cascadia Code"), local("Consolas");
+  }
+
+  :root {
+    --bg: #f5f7fa;
+    --bg-raised: #ffffff;
+    --bg-sunken: #eef1f6;
+    --border: #dbe2ea;
+    --border-strong: #b9c4d1;
+    --text: #16202c;
+    --text-dim: #56626f;
+    --text-faint: #8895a3;
+    --accent: #0068ff;
+    --accent-dim: #e8f0ff;
+    --accent-text: #0052cc;
+    --ok: #0a8a5f;
+    --ok-bg: #e4f7ef;
+    --warn: #b5730a;
+    --warn-bg: #fdf1de;
+    --danger: #c22a3e;
+    --danger-bg: #fdeaed;
+    --code-bg: #101820;
+    --code-text: #d6e2ea;
+    --code-accent: #63b3ff;
+    --shadow: 0 1px 2px rgba(22, 32, 44, 0.04), 0 4px 16px rgba(22, 32, 44, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171f;
+      --bg-raised: #1a212b;
+      --bg-sunken: #0e1319;
+      --border: #2a333f;
+      --border-strong: #3c4757;
+      --text: #e7ecf2;
+      --text-dim: #a5b1bf;
+      --text-faint: #6c7887;
+      --accent: #4d94ff;
+      --accent-dim: #1c2a3f;
+      --accent-text: #7cb2ff;
+      --ok: #3ecb95;
+      --ok-bg: #103326;
+      --warn: #e0a94a;
+      --warn-bg: #362a12;
+      --danger: #f2697d;
+      --danger-bg: #3a1620;
+      --code-bg: #0a0e13;
+      --code-text: #cfe0eb;
+      --code-accent: #7cc4ff;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12171f;
+    --bg-raised: #1a212b;
+    --bg-sunken: #0e1319;
+    --border: #2a333f;
+    --border-strong: #3c4757;
+    --text: #e7ecf2;
+    --text-dim: #a5b1bf;
+    --text-faint: #6c7887;
+    --accent: #4d94ff;
+    --accent-dim: #1c2a3f;
+    --accent-text: #7cb2ff;
+    --ok: #3ecb95;
+    --ok-bg: #103326;
+    --warn: #e0a94a;
+    --warn-bg: #362a12;
+    --danger: #f2697d;
+    --danger-bg: #3a1620;
+    --code-bg: #0a0e13;
+    --code-text: #cfe0eb;
+    --code-accent: #7cc4ff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f7fa;
+    --bg-raised: #ffffff;
+    --bg-sunken: #eef1f6;
+    --border: #dbe2ea;
+    --border-strong: #b9c4d1;
+    --text: #16202c;
+    --text-dim: #56626f;
+    --text-faint: #8895a3;
+    --accent: #0068ff;
+    --accent-dim: #e8f0ff;
+    --accent-text: #0052cc;
+    --ok: #0a8a5f;
+    --ok-bg: #e4f7ef;
+    --warn: #b5730a;
+    --warn-bg: #fdf1de;
+    --danger: #c22a3e;
+    --danger-bg: #fdeaed;
+    --code-bg: #101820;
+    --code-text: #d6e2ea;
+    --code-accent: #63b3ff;
+    --shadow: 0 1px 2px rgba(22, 32, 44, 0.04), 0 4px 16px rgba(22, 32, 44, 0.06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { padding: 0 0 6rem; }
+
+  code, .mono, .kbd, .cellcode {
+    font-family: "Iosevka Web", ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a { color: var(--accent-text); }
+
+  /* ---------- Header ---------- */
+  .masthead {
+    background: var(--bg-raised);
+    border-bottom: 1px solid var(--border);
+    padding: 2.75rem clamp(1.25rem, 5vw, 4rem) 2.25rem;
+  }
+  .masthead-inner { max-width: 62rem; margin: 0 auto; }
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--accent-text);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .eyebrow .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  h1 {
+    font-size: clamp(1.7rem, 3.4vw, 2.35rem);
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    margin: 0.6rem 0 0.65rem;
+    text-wrap: balance;
+    font-weight: 700;
+  }
+  .lede {
+    color: var(--text-dim);
+    font-size: 1rem;
+    line-height: 1.6;
+    max-width: 46rem;
+    margin: 0 0 1.5rem;
+  }
+  .lede b { color: var(--text); font-weight: 600; }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+  .meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.32rem 0.75rem 0.32rem 0.6rem;
+    font-size: 0.79rem;
+    color: var(--text-dim);
+  }
+  .meta-chip b { color: var(--text); font-weight: 600; }
+  .meta-chip.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); background: var(--warn-bg); color: var(--warn); }
+  .meta-chip.warn b { color: var(--warn); }
+
+  /* ---------- Layout ---------- */
+  .wrap { max-width: 62rem; margin: 0 auto; padding: 0 clamp(1.25rem, 5vw, 4rem); }
+
+  .toc {
+    margin-top: 2.25rem;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem 1.15rem;
+  }
+  .toc-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 0 0 0.65rem;
+  }
+  .toc ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 0.35rem 1.5rem;
+  }
+  .toc a {
+    display: flex;
+    gap: 0.55rem;
+    text-decoration: none;
+    color: var(--text-dim);
+    font-size: 0.87rem;
+    padding: 0.2rem 0;
+    border-bottom: 1px dashed transparent;
+  }
+  .toc a:hover { color: var(--accent-text); border-color: var(--accent-dim); }
+  .toc a .n { color: var(--text-faint); font-weight: 600; min-width: 1.1rem; }
+
+  section.phase { padding: 2.75rem 0; border-top: 1px solid var(--border); scroll-margin-top: 1.5rem; }
+  section.phase:first-of-type { border-top: none; }
+
+  .phase-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.85rem;
+    margin-bottom: 0.4rem;
+  }
+  .phase-num {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--accent-text);
+    background: var(--accent-dim);
+    border-radius: 6px;
+    padding: 0.12rem 0.5rem;
+    letter-spacing: 0.02em;
+  }
+  .phase-head h2 { font-size: 1.32rem; margin: 0; letter-spacing: -0.01em; }
+  .phase-sub { color: var(--text-dim); font-size: 0.93rem; margin: 0 0 1.5rem; max-width: 44rem; line-height: 1.55; }
+  .risk-tag {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+    padding: 0.15rem 0.55rem; border-radius: 999px;
+    background: var(--danger-bg); color: var(--danger);
+    text-transform: uppercase;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+  }
+
+  /* ---------- Prep box ---------- */
+  .prep {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 1.1rem 1.3rem;
+    margin-bottom: 1.75rem;
+  }
+  .prep-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 0.6rem; }
+  .prep ul { margin: 0; padding-left: 1.15rem; color: var(--text-dim); font-size: 0.9rem; line-height: 1.65; }
+  .prep li { margin-bottom: 0.15rem; }
+
+  /* ---------- Test case cards ---------- */
+  .case {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    margin-bottom: 1.1rem;
+    overflow: hidden;
+  }
+  .case-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.95rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-sunken);
+  }
+  .case-check {
+    width: 1.15rem; height: 1.15rem;
+    border: 2px solid var(--border-strong);
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+  .case-id { font-size: 0.78rem; font-weight: 700; color: var(--text-faint); }
+  .case-title { font-size: 1rem; font-weight: 600; flex: 1; letter-spacing: -0.005em; }
+
+  .case-body { padding: 1.15rem 1.25rem 1.3rem; }
+  .step-list { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+  .step-list li {
+    counter-increment: step;
+    position: relative;
+    padding: 0.3rem 0 0.3rem 2.35rem;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .step-list li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0.32rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--accent-text);
+    background: var(--accent-dim);
+    border-radius: 50%;
+    width: 1.35rem; height: 1.35rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .say-bubble {
+    display: inline-block;
+    background: var(--accent-dim);
+    color: var(--accent-text);
+    border-radius: 10px 10px 10px 2px;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.87rem;
+    margin: 0.15rem 0;
+  }
+
+  .expect {
+    margin-top: 0.9rem;
+    border-radius: 10px;
+    background: var(--ok-bg);
+    border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--border));
+    padding: 0.75rem 1rem;
+  }
+  .expect-label {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--ok); margin: 0 0 0.35rem;
+    display: flex; align-items: center; gap: 0.35rem;
+  }
+  .expect ul { margin: 0; padding-left: 1.1rem; font-size: 0.88rem; line-height: 1.6; color: var(--text); }
+  .expect li { margin-bottom: 0.15rem; }
+  .expect code { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.83rem; }
+
+  .fail-hint {
+    margin-top: 0.6rem;
+    display: flex;
+    gap: 0.55rem;
+    align-items: flex-start;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    background: var(--bg-sunken);
+    border-radius: 8px;
+    padding: 0.6rem 0.85rem;
+  }
+  .fail-hint .lbl { color: var(--danger); font-weight: 700; flex-shrink: 0; }
+
+  .db-check {
+    margin-top: 0.75rem;
+  }
+  .db-check summary {
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--text-faint);
+    font-weight: 600;
+    padding: 0.2rem 0;
+    user-select: none;
+  }
+  .db-check summary:hover { color: var(--accent-text); }
+  .db-check pre {
+    margin: 0.5rem 0 0;
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 8px;
+    padding: 0.75rem 0.9rem;
+    font-size: 0.8rem;
+    overflow-x: auto;
+    line-height: 1.55;
+  }
+  .db-check .sql-kw { color: var(--code-accent); }
+
+  /* ---------- Callouts ---------- */
+  .note {
+    display: flex; gap: 0.7rem;
+    border-radius: 10px;
+    padding: 0.85rem 1.05rem;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    margin: 1rem 0 1.75rem;
+  }
+  .note.info { background: var(--accent-dim); color: var(--accent-text); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); }
+  .note.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--border)); }
+  .note b { color: inherit; }
+  .note .ic { flex-shrink: 0; font-size: 1rem; line-height: 1.5; }
+  .note-body { color: var(--text); }
+  .note-body b { color: inherit; font-weight: 700; }
+
+  /* ---------- Config table ---------- */
+  .cfgtable-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; margin: 1rem 0 1.75rem; }
+  table.cfg { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: var(--bg-raised); }
+  table.cfg caption { display: none; }
+  table.cfg th {
+    text-align: left; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-faint); font-weight: 700;
+    padding: 0.65rem 0.9rem; background: var(--bg-sunken); border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  table.cfg td { padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border); color: var(--text-dim); vertical-align: top; }
+  table.cfg tr:last-child td { border-bottom: none; }
+  table.cfg td.k { font-weight: 600; color: var(--text); white-space: nowrap; }
+  table.cfg td.default { color: var(--text-faint); white-space: nowrap; }
+
+  /* ---------- Codeblock ---------- */
+  .code-block {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+    font-size: 0.85rem;
+    line-height: 1.65;
+    overflow-x: auto;
+    margin: 0.9rem 0;
+  }
+  .code-block .c { color: var(--text-faint); }
+  .code-block .k { color: var(--code-accent); }
+
+  /* ---------- Sequence / order strip ---------- */
+  .order-strip {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 1.25rem 0 2rem;
+  }
+  .order-step {
+    display: flex; align-items: center; gap: 0.4rem;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.4rem 0.85rem 0.4rem 0.55rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    box-shadow: var(--shadow);
+  }
+  .order-step .num {
+    width: 1.3rem; height: 1.3rem; border-radius: 50%;
+    background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 700;
+  }
+  .order-step.risky .num { background: var(--danger); }
+  .order-arrow { color: var(--text-faint); font-size: 0.9rem; }
+
+  /* ---------- Footer ---------- */
+  footer {
+    max-width: 62rem; margin: 0 auto; padding: 2rem clamp(1.25rem, 5vw, 4rem) 0;
+    color: var(--text-faint); font-size: 0.82rem; border-top: 1px solid var(--border); padding-top: 1.5rem;
+    line-height: 1.6;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .case { transition: box-shadow 0.15s ease; }
+  }
+</style>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <p class="eyebrow"><span class="dot"></span>zalo-agent &middot; nghiệm thu tính năng</p>
+    <h1>Checklist test tay: Lịch hẹn</h1>
+    <p class="lede">
+      Bộ tính năng bot tự nhắn theo lịch (<code>once</code> / <code>every</code> / <code>cron</code>) đã qua
+      904 test tự động và merge vào <code>main</code>, nhưng <b>chưa có lượt nào chạy trên tài khoản Zalo thật</b>.
+      Đây là tính năng rủi ro khóa nick cao nhất dự án - làm đúng thứ tự bên dưới, đừng nhảy cóc lên
+      <code>every</code>/<code>cron</code> trước khi 5 case đầu đã sạch.
+    </p>
+    <div class="meta-row">
+      <span class="meta-chip">Nguồn: <b>docs/project-roadmap.md &middot; mục V3.3</b></span>
+      <span class="meta-chip">Nhánh đã merge: <b>main @ d3599cf</b></span>
+      <span class="meta-chip warn">⚠ <b>7 case, làm tuần tự, không song song</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="toc" aria-label="Mục lục">
+    <p class="toc-title">7 case theo đúng thứ tự nghiệm thu</p>
+    <ol>
+      <li><a href="#chuan-bi"><span class="n">00</span> Chuẩn bị môi trường</a></li>
+      <li><a href="#case-1"><span class="n">01</span> Job message, kiểu once</a></li>
+      <li><a href="#case-2"><span class="n">02</span> Hủy job bằng chat</a></li>
+      <li><a href="#case-3"><span class="n">03</span> Job agent, kiểu once + trace</a></li>
+      <li><a href="#case-4"><span class="n">04</span> Cron chạy đúng giờ VN</a></li>
+      <li><a href="#case-5"><span class="n">05</span> Tắt/bật bot qua mốc lịch</a></li>
+      <li><a href="#case-6"><span class="n">06</span> Job every - rủi ro cao nhất</a></li>
+      <li><a href="#case-7"><span class="n">07</span> Trang Cấu hình (9 tham số)</a></li>
+    </ol>
+  </nav>
+
+  <section class="phase" id="chuan-bi">
+    <div class="phase-head">
+      <span class="phase-num">BƯỚC 0</span>
+      <h2>Chuẩn bị môi trường</h2>
+    </div>
+    <p class="phase-sub">Làm một lần trước khi bắt đầu case 1. Nếu account test đã login sẵn từ trước, bỏ qua bước quét QR.</p>
+
+    <div class="prep">
+      <p class="prep-title">Terminal 1 - chạy bot + API</p>
+      <div class="code-block"><span class="c"># tại thư mục gốc dự án</span>
+pnpm dev</div>
+      <p class="prep-title" style="margin-top:0.9rem;">Đăng nhập dashboard</p>
+      <ul>
+        <li>Mở <code>http://127.0.0.1:3900</code> - nếu chưa <code>pnpm build:web</code>, UI production chưa có; chạy thêm <code>pnpm dev:web</code> ở terminal 2 rồi mở <code>http://127.0.0.1:5173</code> thay thế</li>
+        <li>Đăng nhập chỉ cần <b>mật khẩu</b> (giá trị <code>DASHBOARD_PASSWORD</code> trong <code>.env</code>) - không có ô tài khoản</li>
+        <li>Nếu account nick phụ chưa login: trang <b>Accounts</b> &rarr; nút thêm tài khoản &rarr; quét QR bằng app Zalo trên điện thoại</li>
+      </ul>
+    </div>
+
+    <div class="note warn">
+      <span class="ic">⚠</span>
+      <span class="note-body">
+        Toàn bộ case dưới đây <b>gửi tin thật</b> trên tài khoản Zalo nick phụ. Nhắn với chính bạn
+        (tự chat với account đó) hoặc một thread test riêng, đừng chạy trên group đông người.
+      </span>
+    </div>
+  </section>
+
+  <section class="phase" id="case-1">
+    <div class="phase-head">
+      <span class="phase-num">CASE 01</span>
+      <h2>Job kiểu <code class="mono">message</code>, lịch <code class="mono">once</code></h2>
+    </div>
+    <p class="phase-sub">Ca cơ bản nhất: đặt lịch qua chat, tự nhiên ngôn ngữ, chờ đúng giờ nhận tin. Không tốn token LLM khi job chạy (kind=message gửi nguyên văn payload).</p>
+
+    <div class="case">
+      <div class="case-head">
+        <span class="case-check" aria-hidden="true"></span>
+        <span class="case-id">1.1</span>
+        <span class="case-title">Đặt lịch nhắc bằng câu tự nhiên, chờ đúng giờ nhận tin</span>
+      </div>
+      <div class="case-body">
+        <ol class="step-list">
+          <li>Mở chat với bot (chính account nick phụ, tự chat với mình), nhắn:
+            <div class="say-bubble">"Nhắc tôi 2 phút nữa uống nước"</div>
+          </li>
+          <li>Đợi bot phản hồi xác nhận đã đặt lịch</li>
+          <li>Chờ đúng ~2 phút, quan sát chat</li>
+        </ol>
+        <div class="expect">
+          <p class="expect-label">✓ Kết quả mong đợi</p>
+          <ul>
+            <li>Bot trả lời ngay xác nhận đã đặt, <b>đọc lại đúng mốc giờ</b> (vd "Đã tạo lịch ... lúc HH:MM ngày DD/MM/YYYY") - đây là cơ chế bắt lỗi hiểu sai giờ, phải kiểm bằng mắt khớp ý mình vừa nhắn</li>
+            <li>Đúng ~2 phút sau, bot tự gửi tin <b>nguyên văn</b> nội dung nhắc, không qua bước "đang suy nghĩ"</li>
+            <li><code>agent_turns</code> KHÔNG tăng dòng nào cho lượt gửi này (kind=message không tốn token LLM)</li>
+          </ul>
+        </div>
+        <details class="db-check">
+          <summary>Đối chiếu DB (tùy chọn) - mở sqlite3 trên <code>data/zalo-agent.db</code></summary>
+          <pre><span class="sql-kw">SELECT</span> id, name, kind, schedule_kind, enabled, next_run_at, last_status
+<span class="sql-kw">FROM</span> scheduled_jobs <span class="sql-kw">ORDER BY</span> created_at <span class="sql-kw">DESC</span> <span class="sql-kw">LIMIT</span> 1;</pre>
+        </details>
+        <div class="fail-hint">
+          <span class="lbl">Nếu sai:</span>
+          <span>Không thấy job được tạo &rarr; xem log terminal 1 dòng <code>schedule-routes</code>/<code>schedule_task</code> lỗi gì. Tạo được nhưng không gửi đúng giờ &rarr; kiểm terminal có log <code>"Scheduler đã khởi động"</code> lúc <code>pnpm dev</code> khởi động không (SCHEDULER_ENABLED có thể đang tắt).</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="phase" id="case-2">
+    <div class="phase-head">
+      <span class="phase-num">CASE 02</span>
+      <h2>Hủy job bằng chat</h2>
+    </div>
+    <p class="phase-sub">Bắt buộc bot phải <code>list</code> để lấy đúng id trước khi <code>cancel</code>, không được tự đoán id.</p>
+
+    <div class="case">
+      <div class="case-head">
+        <span class="case-check" aria-hidden="true"></span>
+        <span class="case-id">2.1</span>
+        <span class="case-title">Đặt 1 lịch rồi hủy bằng câu nói thường</span>
+      </div>
+      <div class="case-body">
+        <ol class="step-list">
+          <li>Nhắn: <div class="say-bubble">"30 phút nữa nhắc tôi họp với anh Nam"</div></li>
+          <li>Sau khi bot xác nhận đã đặt, nhắn tiếp: <div class="say-bubble">"Thôi hủy cái nhắc đó đi"</div></li>
+          <li>Nhắn: <div class="say-bubble">"Tôi đang có lịch hẹn nào không?"</div></li>
+        </ol>
+        <div class="expect">
+          <p class="expect-label">✓ Kết quả mong đợi</p>
+          <ul>
+            <li>Bot xác nhận đã hủy đúng job vừa tạo (không hủy nhầm job khác nếu bạn còn job từ case 1 - kiểm bot có phân biệt đúng)</li>
+            <li>Câu hỏi "đang có lịch hẹn nào" trả về danh sách <b>không còn</b> job vừa hủy</li>
+            <li>Sau 30 phút, <b>không có</b> tin nhắc nào được gửi (job đã bị xóa khỏi <code>scheduled_jobs</code>)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="phase" id="case-3">
+    <div class="phase-head">
+      <span class="phase-num">CASE 03</span>
+      <h2>Job kiểu <code class="mono">agent</code>, lịch <code class="mono">once</code> + trang Trace</h2>
+    </div>
+    <p class="phase-sub">Job này chạy 1 lượt AI riêng, <b>cô lập hoàn toàn khỏi lịch sử chat</b> (isolated=true) - phải kiểm bot KHÔNG nhớ gì về cuộc trò chuyện trước đó, và test luôn sentinel <code>[SILENT]</code>.</p>
+
+    <div class="case">
+      <div class="case-head">
+        <span class="case-check" aria-hidden="true"></span>
+        <span class="case-id">3.1</span>
+        <span class="case-title">Job agent chạy phiên cô lập - kiểm không nhớ hội thoại trước</span>
+      </div>
+      <div class="case-body">
+        <ol class="step-list">
+          <li>Nhắn trước 1 câu bất kỳ để có "ngữ cảnh cũ", vd: <div class="say-bubble">"Tôi tên Hải, đang ở Hà Nội"</div></li>
+          <li>Sau đó nhắn: <div class="say-bubble">"3 phút nữa hãy tóm tắt tin công nghệ nổi bật hôm nay cho tôi, và cho biết tôi vừa nói tên gì với bạn lúc nãy"</div></li>
+          <li>Chờ bot xác nhận (schedule kind=<code>agent</code>)</li>
+          <li>Đúng ~3 phút sau, đọc kỹ nội dung job trả về</li>
+          <li>Mở dashboard &rarr; trang <b>Lịch hẹn</b> &rarr; tìm job vừa chạy &rarr; nút "Lịch sử" &rarr; bấm link "Xem trace" trên dòng chạy vừa xong</li>
+        </ol>
+        <div class="expect">
+          <p class="expect-label">✓ Kết quả mong đợi</p>
+          <ul>
+            <li>Bot <b>KHÔNG</b> nhắc lại được tên "Hải" hay "Hà Nội" - phải trả lời kiểu "không có thông tin/ngữ cảnh về việc này" (đây là bằng chứng phiên cô lập hoạt động đúng, không rò lịch sử)</li>
+            <li>Nội dung tóm tắt tin công nghệ vẫn xuất hiện bình thường</li>
+            <li>Trang Trace mở đúng lượt (<code>/trace?turnId=...</code>), hiện khối "Lượt #... (mở từ Lịch hẹn)" phía trên, xem được từng step model đã làm gì</li>
+            <li><code>agent_turns</code> có thêm đúng 1 dòng mới cho lượt này</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="case">
+      <div class="case-head">
+        <span class="case-check" aria-hidden="true"></span>
+        <span class="case-id">3.2</span>
+        <span class="case-title">Sentinel [SILENT] - job im lặng khi không có gì mới</span>
+      </div>
+      <div class="case-body">
+        <ol class="step-list">
+          <li>Nhắn: <div class="say-bubble">"3 phút nữa kiểm tra xem có tin nhắn mới nào trong group 'Test Không Tồn Tại 12345' không, nếu không có gì mới thì đừng nhắn gì cả"</div></li>
+          <li>Đợi đúng giờ, quan sát chat trong 1-2 phút sau mốc đó</li>
+        </ol>
+        <div class="expect">
+          <p class="expect-label">✓ Kết quả mong đợi</p>
+          <ul>
+            <li>Bot <b>không gửi tin nào</b> vào đúng/ngay sau mốc giờ đó</li>
+            <li>Trên dashboard, dòng lịch sử chạy của job này có badge trạng thái <b>"Im lặng"</b> (không phải "Lỗi" hay "Thành công")</li>
+          </ul>
+        </div>
+        <div class="fail-hint">
+          <span class="lbl">Lưu ý:</span>
+          <span>Ca này phụ thuộc model có tuân lệnh <code>[SILENT]</code> hay không - nếu model vẫn trả lời bình thường (không im lặng), đó là hành vi model chưa theo đúng hint, không hẳn là bug code. Ghi lại nội dung model trả về để đối chiếu sau.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="phase" id="case-4">
+    <div class="phase-head">
+      <span class="phase-num">CASE 04</span>
+      <h2>Lịch <code class="mono">cron</code> chạy đúng giờ Việt Nam</h2>
+    </div>
+    <p class="phase-sub">Không chờ được nhiều ngày để xem cron chạy thật lúc 07:00 sáng mai - case này chỉ xác nhận <b>mốc <code>next_run_at</code> được tính đúng</b> ngay lúc tạo, việc cron có bắn đúng giờ hay không đã được 904 test tự động phủ (next-run.test.ts).</p>
+
+    <div class="case">
+      <div class="case-head">
+        <span class="case-check" aria-hidden="true"></span>
+        <span class="case-id">4.1</span>
+        <span class="case-title">Tạo lịch cron "0 7 * * *", đối chiếu next_run_at</span>
+      </div>
+      <div class="case-body">
+        <ol class="step-list">
+          <li>Nhắn: <div class="say-bubble">"Mỗi sáng 7 giờ hãy tóm tắt tin công nghệ nổi bật cho tôi"</div></li>
+          <li>Sau khi bot xác nhận, mở dashboard &rarr; trang <b>Lịch hẹn</b> &rarr; tìm job vừa tạo, đọc dòng "Lần kế tiếp: ..."</li>
+        </ol>
+        <div class="expect">
+          <p class="expect-label">✓ Kết quả mong đợi</p>
+          <ul>
+            <li>Dashboard hiện đúng <b>07:00 sáng ngày mai</b> (hoặc hôm nay nếu giờ hiện tại &lt; 07:00), theo giờ Việt Nam</li>
+            <li>Đối chiếu <code>next_run_at</code> thô trong DB: phải kết thúc bằng <code>T00:00:00.000Z</code> (07:00 giờ VN = 00:00 UTC)</li>
+          </ul>
+        </div>
+        <details class="db-check">
+          <summary>Đối chiếu DB</summary>
+          <pre><span class="sql-kw">SELECT</span> name, cron_expr, next_run_at
+<span class="sql-kw">FROM</span> scheduled_jobs <span class="sql-kw">WHERE</span> schedule_kind = <span class="sql-kw">'cron'</span>
+<span class="sql-kw">ORDER BY</span> created_at <span class="sql-kw">DESC</span> <span class="sql-kw">LIMIT</span> 1;</pre>
+        </details>
+        <div class="fail-hint">
+          <span class="lbl">Sau khi đối chiếu xong:</span>
+          <span>Hủy ngay job này bằng chat ("hủy lịch tóm tắt tin công nghệ đi") để tránh bị bắn thật lúc 7h sáng khi bạn chưa muốn nhận.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="phase" id="case-5">
+    <div class="phase-head">
+      <span class="phase-num">CASE 05</span>
+      <h2>Tắt bot qua mốc lịch rồi bật lại</h2>
+    </div>
+    <p class="phase-sub">Case quan trọng nhất về mặt an toàn dữ liệu: xác nhận restart giữa chừng <b>không làm mất lời nhắc</b>, và nhãn "nhắc trễ" xuất hiện đúng khi bot lỡ hẹn.</p>
+
+    <div class="case">
+      <div class="case-head">
+        <span class="case-check" aria-hidden="true"></span>
+        <span class="case-id">5.1</span>
+        <span class="case-title">Trong grace 10 phút: gửi bình thường, không nhãn trễ</span>
+      </div>
+      <div class="case-body">
+        <ol class="step-list">
+          <li>Nhắn: <div class="say-bubble">"3 phút nữa nhắc tôi nghỉ giải lao"</div></li>
+          <li>Ngay sau khi bot xác nhận, dừng bot: <code>Ctrl+C</code> ở terminal đang chạy <code>pnpm dev</code></li>
+          <li>Đợi khoảng 4-5 phút (đã qua mốc 3 phút, job đang "trễ")</li>
+          <li>Chạy lại <code>pnpm dev</code></li>
+          <li>Quan sát chat trong ~1 phút sau khi bot khởi động lại</li>
+        </ol>
+        <div class="expect">
+          <p class="expect-label">✓ Kết quả mong đợi</p>
+          <ul>
+            <li>Bot gửi tin nhắc <b>ngay sau khi khởi động lại</b> (không cần đợi tick tiếp theo)</li>
+            <li>Nội dung <b>KHÔNG</b> có tiền tố "(nhắc trễ...)" - vì độ trễ (~2 phút) vẫn nằm trong <code>SCHEDULER_ONCE_GRACE_MINUTES</code> mặc định = 10 phút</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="case">
+      <div class="case-head">
+        <span class="case-check" aria-hidden="true"></span>
+        <span class="case-id">5.2</span>
+        <span class="case-title">Quá grace 10 phút: vẫn gửi, kèm nhãn "(nhắc trễ...)"</span>
+      </div>
+      <div class="case-body">
+        <ol class="step-list">
+          <li>Nhắn: <div class="say-bubble">"2 phút nữa nhắc tôi kiểm tra email"</div></li>
+          <li>Ngay sau khi bot xác nhận, dừng bot (<code>Ctrl+C</code>)</li>
+          <li><b>Đợi ít nhất 13-15 phút</b> (2 phút hẹn gốc + hơn 10 phút grace) trước khi khởi động lại</li>
+          <li>Chạy lại <code>pnpm dev</code>, quan sát chat</li>
+        </ol>
+        <div class="expect">
+          <p class="expect-label">✓ Kết quả mong đợi</p>
+          <ul>
+            <li>Bot <b>vẫn gửi</b> tin nhắc (không im lặng nuốt mất) - đây là quyết định thiết kế cố ý khác Hermes/goclaw</li>
+            <li>Nội dung mở đầu đúng format: <code>(nhắc trễ, lịch gốc HH:MM) Kiểm tra email</code> - <code>HH:MM</code> phải khớp đúng giờ bạn hẹn ban đầu, không phải giờ bot vừa khởi động lại</li>
+          </ul>
+        </div>
+        <div class="fail-hint">
+          <span class="lbl">Nếu sai:</span>
+          <span>Không thấy tin nào &rarr; lỗi nghiêm trọng (lời nhắc bị mất) - báo ngay, đừng thử lại nhiều lần vì có thể làm rối thêm trạng thái job. Có tin nhưng thiếu nhãn trễ &rarr; kiểm giờ đợi đã đủ &gt; 10 phút chưa.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="phase" id="case-6">
+    <div class="phase-head">
+      <span class="phase-num">CASE 06</span>
+      <h2>Job <code class="mono">every</code> - lịch lặp lại</h2>
+      <span class="risk-tag">Rủi ro khóa nick cao nhất</span>
+    </div>
+    <p class="phase-sub">
+      Chỉ làm case này <b>sau khi 5 case trên đã sạch một vòng</b> (đúng thứ tự nghiệm thu đã định trong roadmap).
+      Lịch lặp liên tục là hành vi giống spam nhất trên 1 nick cá nhân - test với chu kỳ ngắn nhất cho phép,
+      thời gian giới hạn, rồi tắt ngay.
+    </p>
+
+    <div class="case">
+      <div class="case-head">
+        <span class="case-check" aria-hidden="true"></span>
+        <span class="case-id">6.1</span>
+        <span class="case-title">Lặp mỗi 5 phút (mức tối thiểu), quan sát đúng 2-3 lượt rồi tắt</span>
+      </div>
+      <div class="case-body">
+        <ol class="step-list">
+          <li>Nhắn: <div class="say-bubble">"Cứ mỗi 5 phút nhắc tôi uống nước"</div></li>
+          <li>Xác nhận bot đặt lịch thành công (đúng bằng <code>SCHEDULER_MIN_INTERVAL_MINUTES</code> mặc định = 5, không thấp hơn được)</li>
+          <li>Theo dõi đúng <b>2-3 lượt gửi</b> (khoảng 10-15 phút)</li>
+          <li>Ngay sau đó, <b>tắt job</b> ngay trên dashboard (nút công tắc bật/tắt trên dòng job) hoặc nhắn "hủy lịch nhắc uống nước"</li>
+        </ol>
+        <div class="expect">
+          <p class="expect-label">✓ Kết quả mong đợi</p>
+          <ul>
+            <li>Tin gửi ra đúng nhịp cách nhau ~5 phút, không dồn cục/gửi trùng</li>
+            <li>Tắt xong không còn tin nào gửi thêm</li>
+            <li>Thử đặt lại <code>every</code> với số phút thấp hơn 5 (vd "mỗi 1 phút") để xác nhận bot <b>từ chối</b>, trả lời có chữ "tối thiểu"/"spam" - đây là lưới chống spam lúc tạo, không cần đợi tới lúc gửi mới phát hiện</li>
+          </ul>
+        </div>
+        <div class="fail-hint">
+          <span class="lbl">Bắt buộc:</span>
+          <span>Không để job every chạy quá 3 lượt trong lần test đầu tiên. Nếu nghi ngờ có dấu hiệu bất thường (gửi trùng, gửi dồn dập), tắt bot ngay (<code>Ctrl+C</code>) rồi báo lại thay vì tiếp tục quan sát.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="phase" id="case-7">
+    <div class="phase-head">
+      <span class="phase-num">CASE 07</span>
+      <h2>Trang Cấu hình - nhóm "Lịch hẹn"</h2>
+    </div>
+    <p class="phase-sub">Kiểm bằng mắt trên trình duyệt: mở dashboard &rarr; trang <b>Cấu hình</b> &rarr; nhóm <b>"Lịch hẹn"</b>. Đối chiếu đủ 9 ô, sửa được, lưu được, có nút trả về mặc định.</p>
+
+    <div class="cfgtable-wrap">
+      <table class="cfg">
+        <caption>9 tham số SCHEDULER_*</caption>
+        <thead>
+          <tr><th>Tham số</th><th>Nhãn trên UI</th><th>Mặc định</th><th>Khoảng hợp lệ</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="k">SCHEDULER_ENABLED</td><td>Bật lịch hẹn</td><td class="default mono">true</td><td>bật/tắt</td></tr>
+          <tr><td class="k">SCHEDULER_TICK_MS</td><td>Chu kỳ quét job đến hạn</td><td class="default mono">30000</td><td>5.000 - 300.000 ms</td></tr>
+          <tr><td class="k">SCHEDULER_MIN_INTERVAL_MINUTES</td><td>Khoảng lặp tối thiểu</td><td class="default mono">5</td><td>1 - 1.440 phút</td></tr>
+          <tr><td class="k">SCHEDULER_MAX_JOBS_PER_THREAD</td><td>Số job tối đa / cuộc trò chuyện</td><td class="default mono">20</td><td>1 - 200</td></tr>
+          <tr><td class="k">SCHEDULER_MAX_PROACTIVE_PER_DAY</td><td>Trần tin chủ động mỗi ngày</td><td class="default mono">10</td><td>1 - 100</td></tr>
+          <tr><td class="k">SCHEDULER_SEND_GAP_MS</td><td>Giãn cách gửi chủ động</td><td class="default mono">20000</td><td>0 - 300.000 ms</td></tr>
+          <tr><td class="k">SCHEDULER_ONCE_GRACE_MINUTES</td><td>Grace cho lịch một lần</td><td class="default mono">10</td><td>1 - 1.440 phút</td></tr>
+          <tr><td class="k">SCHEDULER_DEFERRED_RUN_HOUR</td><td>Giờ chạy lại sau khi hoãn vì trần</td><td class="default mono">8</td><td>0 - 23</td></tr>
+          <tr><td class="k">SCHEDULER_RUN_LOG_KEEP</td><td>Số lượt chạy giữ lại / job</td><td class="default mono">50</td><td>5 - 1.000</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="case">
+      <div class="case-head">
+        <span class="case-check" aria-hidden="true"></span>
+        <span class="case-id">7.1</span>
+        <span class="case-title">Đổi 1 giá trị, lưu, xác nhận có tác dụng thật</span>
+      </div>
+      <div class="case-body">
+        <ol class="step-list">
+          <li>Đổi <b>"Trần tin chủ động mỗi ngày"</b> từ 10 xuống 2</li>
+          <li>Bấm "Lưu thay đổi"</li>
+          <li>Trên chat, tạo 1 job <code>every</code> hợp lệ (5 phút) và để nó chạy đủ 3 lượt</li>
+          <li>Sau lượt thứ 2, quan sát lượt thứ 3</li>
+        </ol>
+        <div class="expect">
+          <p class="expect-label">✓ Kết quả mong đợi</p>
+          <ul>
+            <li>Ô "Trần tin chủ động mỗi ngày" hiện nhãn báo đang lấy giá trị khác <code>.env</code> (đã ghi đè)</li>
+            <li>Đến lượt thứ 3, tin <b>bị chặn không gửi</b> (đã chạm trần 2 tin/ngày) - dashboard hiện job ở trạng thái phù hợp (không phải "Thành công")</li>
+            <li>Bấm nút "trả về mặc định" &rarr; ô quay lại 10, không còn nhãn ghi đè</li>
+          </ul>
+        </div>
+        <div class="fail-hint">
+          <span class="lbl">Dọn dẹp:</span>
+          <span>Nhớ tắt/hủy job every đang test và trả trần về giá trị gốc (10) trước khi kết thúc phiên test.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="note info" style="margin-top: 0.5rem;">
+    <span class="ic">ℹ</span>
+    <span class="note-body">
+      <b>Thứ tự bắt buộc</b> (theo <code>docs/project-roadmap.md</code> mục V3.3): case 01 &rarr; 02 &rarr; 03 &rarr; 04 &rarr; 05 &rarr;
+      chỉ sau khi 5 case đó sạch một vòng mới làm case 06 (<code>every</code>) - đây là bước rủi ro khóa nick cao nhất
+      vì lịch lặp lại liên tục trên 1 nick cá nhân. Case 07 (Cấu hình) có thể làm bất kỳ lúc nào, không phụ thuộc thứ tự.
+    </span>
+  </div>
+
+</div>
+
+<footer>
+  Soạn từ code thật trong <code>src/scheduler/</code>, <code>src/agent/tools/schedule-task-*</code>,
+  <code>web/src/pages/schedule-*</code> và <code>docs/project-roadmap.md</code> (mục V3.3) tại thời điểm merge
+  <code>main @ d3599cf</code>. Nếu hành vi thực tế khác mô tả ở đây, đó là thông tin cần báo lại - tài liệu này
+  mô tả thiết kế, không phải cam kết hành vi đã được xác nhận trên Zalo thật.
+</footer>
