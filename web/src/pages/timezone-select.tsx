@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { IconGlobe } from "../shared/dashboard-icons";
 
 /**
  * Chọn múi giờ từ danh sách IANA thật của trình duyệt
@@ -24,19 +25,28 @@ export function TimezoneSelect({
   const zones = useMemo(() => danhSachZone(value), [value]);
 
   return (
-    <select
-      id={id}
-      className="gc-input w-full max-w-sm cursor-pointer"
-      value={value}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      {zones.map((z) => (
-        <option key={z.id} value={z.id}>
-          {z.label}
-        </option>
-      ))}
-    </select>
+    // Icon quả cầu nằm TRONG ô: nhãn zone là chuỗi kỹ thuật ("Asia/Ho_Chi_Minh")
+    // nên cần một dấu hiệu thị giác cho biết ô này nói về múi giờ, không phải
+    // một ô chọn bất kỳ
+    <div className="relative w-full max-w-md">
+      <IconGlobe
+        size={17}
+        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"
+      />
+      <select
+        id={id}
+        className="gc-input w-full cursor-pointer pl-10"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {zones.map((z) => (
+          <option key={z.id} value={z.id}>
+            {z.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 

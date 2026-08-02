@@ -81,11 +81,13 @@ export function TuningField({
     // chia trang thành nhiều ô con không cần thiết.
     <div className="py-1">
       <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <label htmlFor={id} className="text-[14px] font-semibold text-ink">
+        <label htmlFor={id} className="text-[15px] font-semibold text-ink">
           {def.label}
         </label>
         {fromEnv ? (
-          <span className="rounded bg-tile px-1.5 py-0.5 text-[11px] text-ink-soft">theo .env</span>
+          <span className="rounded-full bg-zalo-50 px-2 py-0.5 text-[11px] font-medium text-zalo-600">
+            .env
+          </span>
         ) : (
           <button
             type="button"
@@ -99,7 +101,7 @@ export function TuningField({
         <TrangThaiLuu phase={phase} />
       </div>
 
-      {def.hint && <p className="mb-2.5 text-[12px] leading-[1.6] text-ink-soft">{def.hint}</p>}
+      {def.hint && <p className="mb-3 text-[13px] leading-[1.6] text-ink-soft">{def.hint}</p>}
 
       {def.kind === "number" && (
         <div className="flex items-center gap-2">

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../dashboard-api-client";
 import { IconLock } from "../shared/dashboard-icons";
+import { SecretInput } from "../shared/secret-input";
 
 /**
  * Đổi mật khẩu dashboard. Nằm ở trang Cấu hình vì đây cũng là một thứ trước
@@ -50,15 +51,13 @@ export function ChangePasswordSection() {
   }
 
   return (
-    // FLAT như mọi tham số khác trong panel: không nền, không viền. Bọc trong
-    // một khối riêng làm nó nổi lên như card lồng card, lạc hẳn khỏi phần còn lại.
     <section>
       <div className="mb-3">
-        <div className="flex items-center gap-2 text-[14px] font-semibold text-ink">
-          <IconLock size={15} className="text-ink-soft" />
+        <div className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+          <IconLock size={16} className="text-ink-soft" />
           Mật khẩu dashboard
         </div>
-        <p className="mt-1 text-[12px] leading-[1.6] text-ink-soft">
+        <p className="mt-1 text-[13px] leading-[1.6] text-ink-soft">
           Đổi mật khẩu đăng nhập trang này. Đổi xong, mọi thiết bị khác đang đăng nhập sẽ bị đăng xuất.
         </p>
       </div>
@@ -74,48 +73,42 @@ export function ChangePasswordSection() {
         </div>
       )}
 
-      <div className="grid max-w-sm gap-3">
-        <label className="grid gap-1.5">
-          <span className="text-[13px] text-ink">Mật khẩu hiện tại</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            className="gc-input"
+      <div className="max-w-2xl">
+        <label className="block">
+          <span className="mb-1.5 block text-[13px] font-medium text-ink">Mật khẩu hiện tại</span>
+          {/* Ô này để MỘT MÌNH một hàng: nó xác minh danh tính, khác vai với cặp
+              "mật khẩu mới" bên dưới - xếp chung hàng làm ba ô trông như một bộ */}
+          <SecretInput
+            className="sm:max-w-md"
             value={hienTai}
-            onChange={(e) => setHienTai(e.target.value)}
+            onChange={setHienTai}
+            placeholder="Nhập mật khẩu hiện tại"
           />
         </label>
-        <label className="grid gap-1.5">
-          <span className="text-[13px] text-ink">Mật khẩu mới</span>
-          <input
-            type="password"
-            autoComplete="new-password"
-            className="gc-input"
-            value={moi}
-            onChange={(e) => setMoi(e.target.value)}
-          />
-          <span className="text-[12px] text-ink-soft">Tối thiểu 8 ký tự.</span>
-        </label>
-        <label className="grid gap-1.5">
-          <span className="text-[13px] text-ink">Nhập lại mật khẩu mới</span>
-          <input
-            type="password"
-            autoComplete="new-password"
-            className="gc-input"
-            value={nhapLai}
-            onChange={(e) => setNhapLai(e.target.value)}
-          />
-        </label>
-        <div>
-          <button
-            type="button"
-            onClick={() => void doiMatKhau()}
-            disabled={dangGui || chuaDu}
-            className="rounded-lg bg-zalo-500 px-4 py-2 text-[13px] font-semibold text-white hover:bg-zalo-600 disabled:opacity-50"
-          >
-            {dangGui ? "Đang đổi..." : "Đổi mật khẩu"}
-          </button>
+
+        {/* Mật khẩu mới + nhập lại nằm CẠNH nhau: chúng phải khớp nhau nên đặt
+            sát để mắt so được, thay vì cuộn dọc qua ba ô rời rạc */}
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1.5 block text-[13px] font-medium text-ink">Mật khẩu mới</span>
+            <SecretInput value={moi} onChange={setMoi} placeholder="Nhập mật khẩu mới" />
+            <span className="mt-1.5 block text-[12px] text-ink-soft">Tối thiểu 8 ký tự.</span>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[13px] font-medium text-ink">Nhập lại mật khẩu mới</span>
+            <SecretInput value={nhapLai} onChange={setNhapLai} placeholder="Nhập lại mật khẩu mới" />
+          </label>
         </div>
+
+        <button
+          type="button"
+          onClick={() => void doiMatKhau()}
+          disabled={dangGui || chuaDu}
+          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-zalo-500 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-zalo-600 disabled:opacity-50"
+        >
+          <IconLock size={15} />
+          {dangGui ? "Đang đổi..." : "Đổi mật khẩu"}
+        </button>
       </div>
     </section>
   );
