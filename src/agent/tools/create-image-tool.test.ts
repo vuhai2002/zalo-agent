@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { loiCuaTool } from "./tool-failure-result-test-helper.js";
 import fs from "node:fs";
 import path from "node:path";
 import { after, before, beforeEach, describe, it } from "node:test";
@@ -210,7 +211,7 @@ describe("create_image - sửa ảnh có sẵn", () => {
     });
 
     assert.equal(events.filter((e) => e.kind === "generate").length, 0);
-    assert.match(result, /chỉ còn 1 ảnh/i);
+    assert.match(loiCuaTool(result), /chỉ còn 1 ảnh/i);
   });
 
   it("ảnh đã bị dọn khỏi đĩa -> báo rõ, không gọi API", async () => {
@@ -218,7 +219,7 @@ describe("create_image - sửa ảnh có sẵn", () => {
     const result = await run(ctx, { mode: "sua_anh_da_gui", prompt: "sửa" });
 
     assert.equal(events.filter((e) => e.kind === "generate").length, 0);
-    assert.match(result, /không đọc được|đã bị dọn/i);
+    assert.match(loiCuaTool(result), /không đọc được|đã bị dọn/i);
   });
 });
 
@@ -265,14 +266,14 @@ describe("create_image - chặn và lỗi", () => {
 
     const result = await run(makeCtx(), { mode: "ve_moi", prompt: "3" });
     assert.deepEqual(events, [], "chạm trần mà vẫn nhắn 'đang vẽ' là hứa lèo");
-    assert.match(result, /trần 2/);
+    assert.match(loiCuaTool(result), /trần 2/);
   });
 
   it("provider lỗi -> trả câu cho model đọc, KHÔNG throw ra agent loop", async () => {
     generateError = new Error("API key required for remote API access");
     const result = await run(makeCtx(), { mode: "ve_moi", prompt: "con mèo" });
 
-    assert.match(result, /API key required/);
+    assert.match(loiCuaTool(result), /API key required/);
     assert.equal(events.filter((e) => e.kind === "file").length, 0, "lỗi thì không được gửi file rác");
   });
 
@@ -283,7 +284,7 @@ describe("create_image - chặn và lỗi", () => {
     generateError = null;
 
     const result = await run(makeCtx(), { mode: "ve_moi", prompt: "3" });
-    assert.match(result, /trần 2/);
+    assert.match(loiCuaTool(result), /trần 2/);
   });
 
   it("chưa cấu hình đủ thì báo lỗi thay vì gọi API với key rỗng", async () => {
@@ -296,6 +297,6 @@ describe("create_image - chặn và lỗi", () => {
     });
 
     assert.equal(events.filter((e) => e.kind === "generate").length, 0);
-    assert.match(result, /chưa cấu hình/i);
+    assert.match(loiCuaTool(result), /chưa cấu hình/i);
   });
 });

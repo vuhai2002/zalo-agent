@@ -18,6 +18,7 @@ import { enqueueSend } from "../../middleware/rate-limiter.js";
 import { createLogger } from "../../shared/logger.js";
 import { withNamedTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
+import { ketQuaLoi, type KetQuaLoiTool } from "./tool-failure-result.js";
 
 /**
  * Tool tạo file .docx/.xlsx rồi GỬI LUÔN cho cuộc trò chuyện.
@@ -64,13 +65,17 @@ async function deliverFile(
 }
 
 /** Gói mọi nhánh lỗi thành câu cho model đọc - không throw ra agent loop */
-async function guard(work: () => Promise<string>): Promise<string> {
+async function guard(
+  work: () => Promise<string | KetQuaLoiTool>,
+): Promise<string | KetQuaLoiTool> {
   try {
     return await work();
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     log.warn({ err }, "Tạo/gửi file thất bại");
-    return `Không tạo được file (${reason}). Nói thật với người dùng và trả lời nội dung trực tiếp trong chat.`;
+    return ketQuaLoi(
+      `Không tạo được file (${reason}). Nói thật với người dùng và trả lời nội dung trực tiếp trong chat.`,
+    );
   }
 }
 
@@ -94,10 +99,10 @@ export function createWordDocumentTool(ctx: Ctx) {
     execute: ({ fileName, title, blocks, caption }) =>
       guard(async () => {
         const limit = checkDocumentLimits(blocks as DocumentBlock[]);
-        if (!limit.ok) return limit.reason;
+        if (!limit.ok) return ketQuaLoi(limit.reason);
 
         const rate = checkDocumentRateLimit(`${ctx.account.id}:${ctx.message.threadId}`);
-        if (!rate.ok) return rate.reason;
+        if (!rate.ok) return ketQuaLoi(rate.reason);
 
         const data = await renderDocx(blocks as DocumentBlock[], { title });
         return deliverFile(ctx, safeFileName(fileName, "docx"), data, caption);
@@ -124,10 +129,10 @@ export function createExcelFileTool(ctx: Ctx) {
     execute: ({ fileName, sheets, caption }) =>
       guard(async () => {
         const limit = checkSpreadsheetLimits(sheets as Sheet[]);
-        if (!limit.ok) return limit.reason;
+        if (!limit.ok) return ketQuaLoi(limit.reason);
 
         const rate = checkDocumentRateLimit(`${ctx.account.id}:${ctx.message.threadId}`);
-        if (!rate.ok) return rate.reason;
+        if (!rate.ok) return ketQuaLoi(rate.reason);
 
         const data = await renderXlsx(sheets as Sheet[]);
         return deliverFile(ctx, safeFileName(fileName, "xlsx"), data, caption);

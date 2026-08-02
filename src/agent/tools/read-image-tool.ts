@@ -4,6 +4,7 @@ import { getRecentMessages } from "../../conversation/history-store.js";
 import { loadStoredImage } from "../../conversation/media-store.js";
 import { askAboutImage } from "../vision-sidecar.js";
 import type { ToolContext } from "./index.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
 
 /**
  * Tool "nhìn kỹ lại" ảnh - mảnh cuối của hệ vision (pattern read_image của
@@ -63,24 +64,28 @@ export function createReadImageTool(ctx: ToolContext, ask = askAboutImage) {
     execute: async ({ question, imageIndex }) => {
       const paths = collectRecentImagePaths(ctx);
       if (paths.length === 0) {
-        return "Không có ảnh nào trong hội thoại gần đây để xem.";
+        return ketQuaLoi("Không có ảnh nào trong hội thoại gần đây để xem.");
       }
       const relPath = paths[imageIndex - 1];
       if (!relPath) {
-        return `Hội thoại chỉ còn ${paths.length} ảnh gần đây - imageIndex ${imageIndex} vượt quá.`;
+        return ketQuaLoi(
+          `Hội thoại chỉ còn ${paths.length} ảnh gần đây - imageIndex ${imageIndex} vượt quá.`,
+        );
       }
       const image = loadStoredImage(relPath);
       if (!image) {
-        return "Ảnh này đã bị dọn khỏi bộ nhớ (quá hạn lưu trữ), không xem lại được nữa.";
+        return ketQuaLoi("Ảnh này đã bị dọn khỏi bộ nhớ (quá hạn lưu trữ), không xem lại được nữa.");
       }
       try {
         const answer = await ask(image, question);
-        return answer || "Model đọc ảnh không trả lời được câu hỏi này.";
+        return answer || ketQuaLoi("Model đọc ảnh không trả lời được câu hỏi này.");
       } catch (err) {
         // Trả thông báo cho model diễn giải, không throw ra agent loop -
         // cùng luật với web_search (provider lỗi không được giết cả lượt)
         const reason = err instanceof Error ? err.message : String(err);
-        return `Hệ thống đọc ảnh đang lỗi (${reason}). Nói thật với người dùng là chưa xem kỹ được ảnh, đừng đoán nội dung.`;
+        return ketQuaLoi(
+          `Hệ thống đọc ảnh đang lỗi (${reason}). Nói thật với người dùng là chưa xem kỹ được ảnh, đừng đoán nội dung.`,
+        );
       }
     },
   });

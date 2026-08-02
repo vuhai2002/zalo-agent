@@ -11,6 +11,7 @@ import {
 import { checkThreadJobCap } from "../../scheduler/scheduled-job-thread-cap.js";
 import { getDateTimeParts } from "../../shared/current-datetime.js";
 import { senderTrustFrom } from "../history-to-model-messages.js";
+import { ketQuaLoi, type KetQuaLoiTool } from "./tool-failure-result.js";
 import type { ToolContext } from "./index.js";
 import type { CreateScheduleTaskInput, UpdateScheduleTaskInput } from "./schedule-task-tool-schema.js";
 
@@ -49,21 +50,28 @@ function describeSchedule(job: ScheduledJob): string {
   return `theo lịch cron "${job.cronExpr}", ${mocKe}`;
 }
 
-export function doCreate(ctx: ToolContext, input: CreateScheduleTaskInput): string {
+export function doCreate(
+  ctx: ToolContext,
+  input: CreateScheduleTaskInput,
+): string | KetQuaLoiTool {
   if (!isAllowedToCreate(ctx)) {
-    return "Chỉ người trong danh sách được phép (allowlist) mới đặt được lịch hẹn. Nói thật với người dùng là bạn không tạo được lịch này.";
+    return ketQuaLoi(
+      "Chỉ người trong danh sách được phép (allowlist) mới đặt được lịch hẹn. Nói thật với người dùng là bạn không tạo được lịch này.",
+    );
   }
 
   const cap = checkThreadJobCap(ctx.account.id, ctx.message.threadId);
   if (!cap.ok) {
-    return `${cap.reason} Gọi action='list' rồi hủy bớt lịch cũ (action='cancel') trước khi đặt lịch mới.`;
+    return ketQuaLoi(
+      `${cap.reason} Gọi action='list' rồi hủy bớt lịch cũ (action='cancel') trước khi đặt lịch mới.`,
+    );
   }
 
   const parsed = parseSchedule(input.schedule, {
     timeZone: botTimeZone(),
     minIntervalMinutes: getTuning("SCHEDULER_MIN_INTERVAL_MINUTES"),
   });
-  if (!parsed.ok) return parsed.error;
+  if (!parsed.ok) return ketQuaLoi(parsed.error);
 
   const job = createJob({
     accountId: ctx.account.id,
@@ -90,19 +98,26 @@ export function doList(ctx: ToolContext): string {
     .join("\n");
 }
 
-export function doCancel(ctx: ToolContext, id: string): string {
+export function doCancel(ctx: ToolContext, id: string): string | KetQuaLoiTool {
   const job = getJob(ctx.account.id, ctx.message.threadId, id);
   if (!job) {
-    return `Không tìm thấy lịch hẹn id "${id}" trong cuộc trò chuyện này. Gọi action='list' để lấy đúng id trước khi hủy.`;
+    return ketQuaLoi(
+      `Không tìm thấy lịch hẹn id "${id}" trong cuộc trò chuyện này. Gọi action='list' để lấy đúng id trước khi hủy.`,
+    );
   }
   deleteJob(ctx.account.id, ctx.message.threadId, id);
   return `Đã hủy lịch "${job.name}" (id: ${job.id}).`;
 }
 
-export function doUpdate(ctx: ToolContext, input: UpdateScheduleTaskInput): string {
+export function doUpdate(
+  ctx: ToolContext,
+  input: UpdateScheduleTaskInput,
+): string | KetQuaLoiTool {
   const existing = getJob(ctx.account.id, ctx.message.threadId, input.id);
   if (!existing) {
-    return `Không tìm thấy lịch hẹn id "${input.id}" trong cuộc trò chuyện này. Gọi action='list' để lấy đúng id trước khi sửa.`;
+    return ketQuaLoi(
+      `Không tìm thấy lịch hẹn id "${input.id}" trong cuộc trò chuyện này. Gọi action='list' để lấy đúng id trước khi sửa.`,
+    );
   }
 
   let schedule: ParsedSchedule | undefined;
@@ -111,7 +126,7 @@ export function doUpdate(ctx: ToolContext, input: UpdateScheduleTaskInput): stri
       timeZone: botTimeZone(),
       minIntervalMinutes: getTuning("SCHEDULER_MIN_INTERVAL_MINUTES"),
     });
-    if (!parsed.ok) return parsed.error;
+    if (!parsed.ok) return ketQuaLoi(parsed.error);
     schedule = parsed.schedule;
   }
 

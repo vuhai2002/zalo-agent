@@ -9,6 +9,7 @@ import { createLogger } from "../../shared/logger.js";
 import { withNamedTempFile } from "../../shared/temp-file-store.js";
 import { CREATE_IMAGE_DESCRIPTION } from "./create-image-tool-description.js";
 import { collectRecentImagePaths } from "./read-image-tool.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
 import type { ToolContext } from "./index.js";
 
 /**
@@ -73,7 +74,9 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
       const threadKey = `${ctx.account.id}:${ctx.message.threadId}`;
 
       if (!isImageGenConfigured()) {
-        return "Tool vẽ ảnh chưa cấu hình (thiếu base URL, model hoặc API key). Nói thật với người dùng là chưa vẽ được.";
+        return ketQuaLoi(
+          "Tool vẽ ảnh chưa cấu hình (thiếu base URL, model hoặc API key). Nói thật với người dùng là chưa vẽ được.",
+        );
       }
 
       // Nạp ảnh gốc TRƯỚC khi tính vào trần: xin sửa ảnh không tồn tại thì
@@ -99,18 +102,22 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
         if (paths.length > 0) {
           const relPath = paths[wantedIndex - 1];
           if (!relPath) {
-            return `Hội thoại chỉ còn ${paths.length} ảnh gần đây - imageIndex ${wantedIndex} vượt quá. Dùng imageIndex từ 1 đến ${paths.length}, hoặc đổi mode sang "ve_moi".`;
+            return ketQuaLoi(
+              `Hội thoại chỉ còn ${paths.length} ảnh gần đây - imageIndex ${wantedIndex} vượt quá. Dùng imageIndex từ 1 đến ${paths.length}, hoặc đổi mode sang "ve_moi".`,
+            );
           }
           const loaded = loadStoredImage(relPath);
           if (!loaded) {
-            return "Ảnh này đã bị dọn khỏi bộ nhớ (quá hạn lưu trữ) nên không đọc được để sửa. Nhờ người dùng gửi lại ảnh.";
+            return ketQuaLoi(
+              "Ảnh này đã bị dọn khỏi bộ nhớ (quá hạn lưu trữ) nên không đọc được để sửa. Nhờ người dùng gửi lại ảnh.",
+            );
           }
           refImage = loaded;
         }
       }
 
       const rate = checkImageRateLimit(threadKey);
-      if (!rate.ok) return rate.reason;
+      if (!rate.ok) return ketQuaLoi(rate.reason);
 
       // Chỉ báo sau khi chắc chắn sẽ vẽ thật
       await enqueueSend(threadKey, () =>
@@ -149,7 +156,7 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         log.warn({ err }, "Vẽ ảnh thất bại");
-        return `Vẽ ảnh thất bại (${reason}). Nói thật với người dùng, đừng hứa gửi ảnh sau.`;
+        return ketQuaLoi(`Vẽ ảnh thất bại (${reason}). Nói thật với người dùng, đừng hứa gửi ảnh sau.`);
       }
     },
   });

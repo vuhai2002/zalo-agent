@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import type { API } from "zca-js";
 import { fakeAgentProfile } from "../../shared/fake-agent-profile.js";
+import { loiCuaTool } from "./tool-failure-result-test-helper.js";
 import { cleanupTestEnv, setupTestEnv } from "../../shared/test-env-setup.js";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 
@@ -94,10 +95,12 @@ describe("schedule_task - lỗi SQL thật (bảng bị DROP) đi vào nhánh ca
     // đây sẽ tự ném lỗi và cả test này fail (không cần assert.rejects riêng)
     const result = await run(makeCtx(), { action: "list" });
 
-    assert.equal(typeof result, "string", "phải là chuỗi trả về, không phải exception");
-    assert.match(result, /thất bại/i, "phải là câu lỗi đọc được cho model, không phải chuỗi rỗng hay JSON lỗi thô");
+    // `loiCuaTool` khẳng định luôn hai điều: KHÔNG ném ra agent loop (tới được
+    // dòng này là đã trả về), và nhánh hỏng có đánh dấu để guard đếm được
+    const loi = loiCuaTool(result);
+    assert.match(loi, /thất bại/i, "phải là câu lỗi đọc được cho model, không phải chuỗi rỗng hay JSON lỗi thô");
     assert.match(
-      result.toLowerCase(),
+      loi.toLowerCase(),
       /no such table/,
       "lý do phải là lỗi SQL thật (bảng scheduled_jobs đã bị drop), không phải câu chung chung bịa ra",
     );
@@ -112,7 +115,6 @@ describe("schedule_task - lỗi SQL thật (bảng bị DROP) đi vào nhánh ca
       schedule: { kind: "every", minutes: 30 },
     });
 
-    assert.equal(typeof result, "string");
-    assert.match(result.toLowerCase(), /no such table/);
+    assert.match(loiCuaTool(result).toLowerCase(), /no such table/);
   });
 });

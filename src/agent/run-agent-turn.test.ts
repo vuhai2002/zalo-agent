@@ -205,16 +205,17 @@ describe("runAgentTurn - router trả completion rỗng", () => {
   });
 });
 
-describe("runAgentTurn - chữa theo loại lỗi provider", () => {
-  const loiApi = (statusCode: number, message: string) =>
-    new APICallError({
-      message,
-      url: "https://router.test/v1/chat/completions",
-      requestBodyValues: {},
-      statusCode,
-      responseBody: message,
-    });
+/** Lỗi provider dựng tay - dùng ở cả nhóm "chữa theo loại lỗi" lẫn nhóm "chạm trần step" */
+const loiApi = (statusCode: number, message: string) =>
+  new APICallError({
+    message,
+    url: "https://router.test/v1/chat/completions",
+    requestBodyValues: {},
+    statusCode,
+    responseBody: message,
+  });
 
+describe("runAgentTurn - chữa theo loại lỗi provider", () => {
   // Đo thật trên ai@7.0.37 với maxRetries=2: SDK TỰ retry 429 và 5xx (3 lần
   // gọi), KHÔNG retry 401/400 (1 lần). Nên test phải đo phần vượt lên trên đó,
   // không thì xanh cả khi nhánh chữa chưa được nối.
@@ -347,6 +348,135 @@ describe("runAgentTurn - chạm trần step", () => {
         ket.text,
         "Mình chưa tra được, nói thật với anh.",
         "dừng vì guard vẫn phải ra câu trả lời, không phải câu tường thuật tiến trình",
+      );
+    } finally {
+      tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", null);
+      tuning.setTuning("LLM_MAX_STEPS", null);
+    }
+  });
+
+  it("tool GHI hỏng lặp lại cũng bị guard chặn - đường DUY NHẤT là kết quả đánh dấu hỏng", async () => {
+    // Ca này chạy TOOL THẬT, không phải tool ma. `send_file` với tên file không
+    // có trong kho trả `ketQuaLoi(...)` - nó KHÔNG ném, nên không có phần
+    // `tool-error` nào cả; và nó là tool GHI nên luật "không tiến triển" cũng
+    // không áp. Trước khi guard biết đọc kết quả dạng-lỗi thì không đường nào
+    // chặn được ca này: model đốt trọn trần step rồi người dùng nhận câu cụt.
+    const goiSendFile = () => ({
+      content: [
+        {
+          type: "tool-call" as const,
+          toolCallId: "c",
+          toolName: "send_file",
+          input: JSON.stringify({ source: "khong-co-file-nay.pdf" }),
+        },
+      ],
+      finishReason: "tool-calls" as const,
+      usage: CO_TOKEN,
+      warnings: [],
+    });
+
+    tuning.setTuning("LLM_MAX_STEPS", 8);
+    tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", 2);
+    try {
+      const { ket, calls } = await chayLuot([
+        goiSendFile,
+        goiSendFile,
+        () => traLoi("Không tìm thấy file đó, anh gửi lại giúp em nhé."),
+      ]);
+      assert.equal(
+        calls.length,
+        3,
+        `guard phải dừng ở step 2 (+1 lượt chốt). Chạy ${calls.length} lần nghĩa là kết quả hỏng KHÔNG vào bộ đếm lỗi, trần step 8 mới cắt`,
+      );
+      assert.equal(calls.at(-1)!.tools?.length ?? 0, 0, "lần cuối phải là lượt chốt");
+      assert.equal(ket.text, "Không tìm thấy file đó, anh gửi lại giúp em nhé.");
+    } finally {
+      tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", null);
+      tuning.setTuning("LLM_MAX_STEPS", null);
+    }
+  });
+
+  it("tool ĐỌC hỏng lặp lại vào bộ đếm LỖI chứ không phải bộ không-tiến-triển", async () => {
+    // `get_group_info` trong chat riêng luôn trả `ketQuaLoi("Đây là chat riêng...")`.
+    // Nó là tool ĐỌC nên CẢ HAI bộ đếm đều với tới được - phân biệt bằng NGƯỠNG:
+    // đặt lỗi-giống-hệt = 2 còn không-tiến-triển = 6. Chặn ở step 2 chứng minh
+    // đi vào bộ LỖI; chặn ở step 6 nghĩa là vẫn đi nhánh cũ.
+    const goiGroupInfo = () => ({
+      content: [
+        { type: "tool-call" as const, toolCallId: "c", toolName: "get_group_info", input: "{}" },
+      ],
+      finishReason: "tool-calls" as const,
+      usage: CO_TOKEN,
+      warnings: [],
+    });
+
+    tuning.setTuning("LLM_MAX_STEPS", 8);
+    tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", 2);
+    tuning.setTuning("TOOL_LOOP_NO_PROGRESS_BLOCK", 6);
+    try {
+      const { calls } = await chayLuot([goiGroupInfo, goiGroupInfo, () => traLoi("Đây là chat riêng.")]);
+      assert.equal(
+        calls.length,
+        3,
+        `phải chặn ở step 2 theo bộ đếm LỖI. ${calls.length} lần gọi nghĩa là còn đi nhánh "không tiến triển" (ngưỡng 6) - sai bộ đếm nên câu chẩn đoán cũng sai`,
+      );
+      // Khẳng định SỐNG CÒN của ca này. Chỉ đếm số lần gọi là rỗng: mock trả
+      // `finishReason: "stop"` từ phần tử thứ ba trở đi, nên vòng lặp tự dừng ở
+      // lần 3 kể cả khi guard không hề chặn - và test vẫn xanh. Lượt CHỐT thì
+      // khác: nó chỉ tồn tại khi có thứ gì đó cắt ngang lúc model còn đang gọi
+      // tool, và nó là lần gọi duy nhất không được cấp tool.
+      assert.equal(
+        calls.at(-1)!.tools?.length ?? 0,
+        0,
+        "lần cuối phải là LƯỢT CHỐT (không cấp tool) - còn tool nghĩa là vòng tự kết thúc chứ guard chưa chặn",
+      );
+    } finally {
+      tuning.setTuning("TOOL_LOOP_NO_PROGRESS_BLOCK", null);
+      tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", null);
+      tuning.setTuning("LLM_MAX_STEPS", null);
+    }
+  });
+
+  it("lần chạy MỚI trong cùng lượt xóa sạch bộ đếm guard - không mang tội của lần trước sang", async () => {
+    // `datLai()` chỉ được gọi ở 4 chỗ trong agent-loop và chưa chỗ nào có test ở
+    // tầng vòng lặp. Quên nó đi thì lượt nào phải dựng lại (tràn ngữ cảnh, bị
+    // siết nhịp, router trả rỗng) sẽ bị chặn oan gần như ngay lập tức - mà đó
+    // đúng là lúc lượt đang mong manh nhất.
+    const goiSendFile = () => ({
+      content: [
+        {
+          type: "tool-call" as const,
+          toolCallId: "c",
+          toolName: "send_file",
+          input: JSON.stringify({ source: "khong-co-file-nay.pdf" }),
+        },
+      ],
+      finishReason: "tool-calls" as const,
+      usage: CO_TOKEN,
+      warnings: [],
+    });
+
+    tuning.setTuning("LLM_MAX_STEPS", 8);
+    tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", 2);
+    try {
+      let lan = 0;
+      const { calls } = await chayLuot([
+        () => {
+          lan++;
+          if (lan === 1) return goiSendFile(); // lần chạy 1: hỏng lần thứ nhất
+          if (lan === 2) return loiApi(400, "prompt is too long: 210000 tokens"); // -> dựng lại
+          if (lan === 3) return goiSendFile(); // lần chạy 2: lại hỏng, nhưng phải tính là LẦN ĐẦU
+          return traLoi("Không gửi được file, em nói thật với anh.");
+        },
+      ]);
+
+      assert.equal(calls.length, 4, "1 step + lỗi tràn + 1 step của lần chạy mới + câu trả lời");
+      // Đây là chỗ phân biệt. Còn bộ đếm cũ thì lần hỏng ở call 3 là lần thứ
+      // HAI -> chạm ngưỡng 2 -> guard chặn -> call 4 thành LƯỢT CHỐT (không
+      // tool). Đã xóa đúng thì call 4 là lượt thường, vẫn được cấp tool.
+      assert.ok(
+        (calls.at(-1)!.tools?.length ?? 0) > 0,
+        "lần gọi cuối phải là lượt THƯỜNG - không tool nghĩa là guard chặn oan vì còn giữ bộ đếm của lần chạy trước",
       );
     } finally {
       tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", null);

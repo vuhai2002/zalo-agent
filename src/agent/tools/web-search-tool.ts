@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { getSearchSettings } from "../../config/runtime-tool-settings.js";
 import { searchWeb } from "../../shared/web-search-providers.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
 import { wrapUntrustedContent } from "./wrap-untrusted-content.js";
 import { getTuning } from "../../config/runtime-tuning-settings.js";
 
@@ -30,7 +31,9 @@ export function createWebSearchTool() {
       });
 
       if (results.length === 0) {
-        return "Không tìm thấy kết quả nào (hoặc dịch vụ tìm kiếm đang lỗi). Thử từ khóa khác.";
+        return ketQuaLoi(
+          "Không tìm thấy kết quả nào (hoặc dịch vụ tìm kiếm đang lỗi). Thử từ khóa khác.",
+        );
       }
 
       const lines = results.map(

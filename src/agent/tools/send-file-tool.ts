@@ -7,6 +7,7 @@ import { enqueueSend } from "../../middleware/rate-limiter.js";
 import { downloadFromPublicUrl } from "../../shared/safe-remote-download.js";
 import { withTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
 
 /**
  * Trần tải file từ URL - CHÍNH SÁCH tự đặt, không phải giới hạn của Zalo.
@@ -53,12 +54,12 @@ export function createSendFileTool({ api, account, message }: ToolContext) {
         // basename chặn path traversal kiểu ../../data/accounts/...
         const filePath = path.join(sharedDir, path.basename(source));
         if (!fs.existsSync(filePath)) {
-          return `Không có file "${source}" trong kho shared-files`;
+          return ketQuaLoi(`Không có file "${source}" trong kho shared-files`);
         }
         await sendAttachment(filePath, caption);
         return "Đã gửi file thành công";
       } catch (err) {
-        return `Gửi file thất bại: ${err instanceof Error ? err.message : String(err)}`;
+        return ketQuaLoi(`Gửi file thất bại: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   });

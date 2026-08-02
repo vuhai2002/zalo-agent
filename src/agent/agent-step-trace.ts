@@ -24,8 +24,8 @@ export type RawStep = {
   stepNumber?: number;
   text?: string;
   reasoningText?: string;
-  toolCalls?: { toolName?: string; input?: unknown }[];
-  toolResults?: { toolName?: string; output?: unknown }[];
+  toolCalls?: readonly { toolName?: string; input?: unknown }[];
+  toolResults?: readonly { toolName?: string; input?: unknown; output?: unknown }[];
   /**
    * Các phần nội dung thô của step. Tool CHẠY LỖI nằm ở đây dạng
    * `type: "tool-error"` và KHÔNG BAO GIỜ lọt vào `toolResults` - getter đó chỉ
@@ -33,9 +33,9 @@ export type RawStep = {
    * ra `toolResults.length === 0` còn `content` có `tool-call, tool-error`.
    * Đọc thiếu chỗ này là mù toàn bộ lớp sự kiện tool thất bại.
    */
-  content?: { type?: string; toolName?: string; error?: unknown }[];
+  content?: readonly { type?: string; toolName?: string; input?: unknown; error?: unknown }[];
   finishReason?: string;
-  warnings?: unknown[];
+  warnings?: readonly unknown[];
   usage?: { inputTokens?: number; outputTokens?: number };
 };
 

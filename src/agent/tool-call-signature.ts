@@ -9,12 +9,49 @@ import { createHash } from "node:crypto";
  * bất biến riêng phải test (không được lộ tham số thô).
  */
 
-/** JSON chuẩn hóa: khóa sắp thứ tự ở MỌI cấp, không khoảng trắng */
-export function chuanHoaJson(v: unknown): string {
+/**
+ * JSON chuẩn hóa: khóa sắp thứ tự ở MỌI cấp, không khoảng trắng.
+ *
+ * KHÔNG ĐƯỢC PHÉP NÉM. Hàm này chạy trong `onStepFinish`, mà `notify()` của
+ * ai@7.0.37 gọi callback trong `try { ... } catch (e) {}` - một catch RỖNG (đọc
+ * ở `node_modules/ai/dist/index.js`). Ném ở đây không làm lượt đỏ lên: nó bị
+ * nuốt sạch, guard ngừng đếm và trace ngừng ghi từ step đó trở đi, còn nhìn từ
+ * ngoài thì mọi thứ vẫn xanh. Hỏng im lặng khó truy hơn hỏng ồn ào nhiều.
+ *
+ * Ba đường ném/sai đã bịt, đều là đầu vào hợp lệ chứ không phải ca bịa:
+ *
+ *   - `bigint`: `JSON.stringify` ném TypeError thẳng.
+ *   - Tham chiếu vòng: đệ quy không đáy, tràn stack.
+ *   - Object KHÔNG THUẦN (Date, Map, Set): `Object.entries` trả rỗng nên mọi
+ *     giá trị loại đó băm ra `{}` giống hệt nhau - hai lệnh gọi khác nhau bị
+ *     coi là trùng, guard chặn oan. Date đi qua `toJSON` nên giữ được mốc giờ.
+ */
+export function chuanHoaJson(v: unknown, dangDuyet = new WeakSet<object>()): string {
+  if (typeof v === "bigint") return JSON.stringify(`${v}n`);
+  if (typeof v === "function" || typeof v === "symbol") return "null";
   if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "null";
-  if (Array.isArray(v)) return `[${v.map(chuanHoaJson).join(",")}]`;
-  const cap = Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1));
-  return `{${cap.map(([k, val]) => `${JSON.stringify(k)}:${chuanHoaJson(val)}`).join(",")}}`;
+
+  if (dangDuyet.has(v)) return '"[vòng]"';
+  dangDuyet.add(v);
+  try {
+    if (Array.isArray(v)) return `[${v.map((x) => chuanHoaJson(x, dangDuyet)).join(",")}]`;
+
+    const proto: unknown = Object.getPrototypeOf(v);
+    if (proto !== Object.prototype && proto !== null) {
+      const toJSON = (v as { toJSON?: unknown }).toJSON;
+      if (typeof toJSON === "function") {
+        return chuanHoaJson((toJSON as () => unknown).call(v), dangDuyet);
+      }
+      return JSON.stringify(Object.prototype.toString.call(v));
+    }
+
+    const cap = Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1));
+    return `{${cap.map(([k, val]) => `${JSON.stringify(k)}:${chuanHoaJson(val, dangDuyet)}`).join(",")}}`;
+  } finally {
+    // Xóa sau khi duyệt xong nhánh: cùng một object xuất hiện hai lần ở hai
+    // nhánh SONG SONG là hợp lệ, chỉ vòng lặp mới là vấn đề.
+    dangDuyet.delete(v);
+  }
 }
 
 /** 16 ký tự đầu của SHA-256 - đủ để không đụng nhau trong phạm vi một lượt */

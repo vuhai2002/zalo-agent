@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { loiCuaTool } from "./tool-failure-result-test-helper.js";
 import fs from "node:fs";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -144,7 +145,7 @@ describe("read_image tool", () => {
       return "x";
     });
     const answer = await run(instance, { question: "ảnh gì đây" });
-    assert.match(answer, /Không có ảnh nào/);
+    assert.match(loiCuaTool(answer), /Không có ảnh nào/);
     assert.equal(calls, 0);
   });
 
@@ -155,7 +156,7 @@ describe("read_image tool", () => {
     const instance = toolModule.createReadImageTool(makeContext(t, batch), async () => "x");
 
     const answer = await run(instance, { question: "xem ảnh 5", imageIndex: 5 });
-    assert.match(answer, /chỉ còn 1 ảnh/);
+    assert.match(loiCuaTool(answer), /chỉ còn 1 ảnh/);
   });
 
   it("file đã bị dọn -> báo hết hạn lưu trữ", async () => {
@@ -165,7 +166,7 @@ describe("read_image tool", () => {
     ];
     const instance = toolModule.createReadImageTool(makeContext(t, batch), async () => "x");
     const answer = await run(instance, { question: "xem lại" });
-    assert.match(answer, /đã bị dọn/);
+    assert.match(loiCuaTool(answer), /đã bị dọn/);
   });
 
   it("sidecar lỗi (hết quota) -> thông báo trung thực cho model, không throw", async () => {
@@ -177,8 +178,9 @@ describe("read_image tool", () => {
     });
 
     const answer = await run(instance, { question: "đếm cá" });
-    assert.match(answer, /Hệ thống đọc ảnh đang lỗi/);
-    assert.match(answer, /429 quota exceeded/);
-    assert.match(answer, /đừng đoán/);
+    const loi = loiCuaTool(answer);
+    assert.match(loi, /Hệ thống đọc ảnh đang lỗi/);
+    assert.match(loi, /429 quota exceeded/);
+    assert.match(loi, /đừng đoán/);
   });
 });

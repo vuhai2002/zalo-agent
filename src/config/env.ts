@@ -41,6 +41,13 @@ const envSchema = z.object({
   // mà không ai chặn. Số mặc định lấy đúng của `tool_guardrails.py` (Hermes),
   // vốn đã chạy thật ở đó. Ngưỡng CẢNH BÁO suy ra bằng nửa ngưỡng chặn nên
   // không thêm ba biến nữa.
+  //
+  // RÀNG BUỘC CHÉO với LLM_MAX_STEPS: ngưỡng cao BẰNG trần step là ngưỡng không
+  // bao giờ tới lượt (mỗi step một lệnh gọi thì stepCountIs dừng trước). Ở Hermes
+  // ba số này sống chung với max_iterations=90 nên 8 chỉ là 9% ngân sách; ở đây
+  // trần mặc định là 8 nên SAME_TOOL_BLOCK=8 đứng đúng bằng trần. Không hạ mặc
+  // định (người đặt LLM_MAX_STEPS=30 vẫn nên được đúng ba số của Hermes) mà kẹp
+  // lúc dựng guard - xem `nguongTheoTranStep` trong `tool-loop-guard.ts`.
   TOOL_LOOP_SAME_ARGS_BLOCK: z.coerce.number().int().min(2).max(30).default(5),
   TOOL_LOOP_SAME_TOOL_BLOCK: z.coerce.number().int().min(2).max(50).default(8),
   TOOL_LOOP_NO_PROGRESS_BLOCK: z.coerce.number().int().min(2).max(30).default(5),

@@ -1,6 +1,6 @@
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { createLogger } from "../shared/logger.js";
-import { summarizeStep, type StepTrace } from "./agent-step-trace.js";
+import { summarizeStep, type RawStep, type StepTrace } from "./agent-step-trace.js";
 import type { ToolLoopGuard } from "./tool-loop-guard.js";
 
 const log = createLogger("agent-loop");
@@ -18,8 +18,8 @@ const log = createLogger("agent-loop");
 /** Cắt gọn giá trị cho log - output tool (nội dung trang web) dài hàng nghìn ký tự */
 export function forLog(value: unknown, max: number): string {
   // `JSON.stringify(undefined)` trả về undefined chứ không phải chuỗi - đọc
-  // `.length` của nó là TypeError, mà hàm này chạy trong onStepFinish nên lỗi đó
-  // giết cả lượt. SDK có đặt `input: void 0` cho tool do provider tự chạy.
+  // `.length` của nó là TypeError. SDK có đặt `input: void 0` cho tool do
+  // provider tự chạy.
   const text = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
@@ -46,11 +46,16 @@ function shortArgsOf(input: unknown): Record<string, unknown> | undefined {
   return Object.keys(picked).length > 0 ? picked : undefined;
 }
 
-/** Hình dạng tối thiểu của step mà hàm này đọc - khai theo cấu trúc, không import type SDK */
-type StepDaChay = {
-  toolResults: readonly { toolName: string; input?: unknown; output?: unknown }[];
-  content: readonly { type: string; toolName?: string; input?: unknown; error?: unknown }[];
-};
+/**
+ * Hình dạng tối thiểu của step mà hàm này đọc - khai theo cấu trúc, không import
+ * type SDK.
+ *
+ * Dùng LẠI `RawStep` thay vì khai một hình dạng thứ hai gần giống. Bản đầu khai
+ * riêng nên nó thiếu 7 trường mà `summarizeStep` có đọc (`stepNumber`, `text`,
+ * `usage`...), và chỗ gọi phải cast `step as never` để TypeScript im - tức là
+ * tắt đúng cái kiểm tra sẽ báo khi hai hình dạng lệch nhau thêm nữa.
+ */
+type StepDaChay = RawStep;
 
 /**
  * Dựng handler cho `onStepFinish`.
@@ -66,7 +71,19 @@ export function taoQuanSatStep(input: {
 }) {
   const { guard, trace, layLanChay } = input;
 
+  // Tự bắt lỗi thay vì để SDK bắt. `notify()` của ai@7.0.37 gọi callback trong
+  // `try {...} catch (e) {}` RỖNG, nên một lỗi ở đây không đỏ lên ở đâu cả:
+  // guard ngừng đếm, trace ngừng ghi, mà log thì sạch bong. Bọc lấy để ít nhất
+  // còn một dòng ERROR nói rằng phần quan sát đã chết từ step nào.
   return (step: StepDaChay): void => {
+    try {
+      quanSat(step);
+    } catch (err) {
+      log.error({ err }, "Quan sát step lỗi - guard và trace mất dữ liệu của step này");
+    }
+  };
+
+  function quanSat(step: StepDaChay): void {
     // Ghi nhận TRƯỚC phần log tool bên dưới: quyết định chặn phải có mặt trong
     // cùng cụm log với chính step gây ra nó, không phải mãi step sau.
     const qd = guard.ghiNhan(step);
@@ -79,7 +96,7 @@ export function taoQuanSatStep(input: {
       log.warn({ tool: qd.tool, soLan: qd.soLan, ma: qd.ma }, qd.thongDiep);
     }
 
-    for (const r of step.toolResults) {
+    for (const r of step.toolResults ?? []) {
       log.info(
         {
           tool: r.toolName,
@@ -100,7 +117,7 @@ export function taoQuanSatStep(input: {
     // trống, trace hiện "Gọi tool" rồi cụt, còn model thì vẫn nhận lỗi và thử
     // lại vài vòng - nhìn từ ngoài chỉ thấy bot hứa rồi không làm được. Mức
     // ERROR vì đây là việc đã HỎNG, không phải chẩn đoán.
-    for (const p of step.content) {
+    for (const p of step.content ?? []) {
       if (p.type !== "tool-error") continue;
       log.error(
         {
@@ -113,7 +130,7 @@ export function taoQuanSatStep(input: {
     }
 
     if (!getTuning("AGENT_TRACE_ENABLED")) return;
-    const t = summarizeStep(step as never, getTuning("AGENT_TRACE_MAX_CHARS"), layLanChay());
+    const t = summarizeStep(step, getTuning("AGENT_TRACE_MAX_CHARS"), layLanChay());
     trace.push(t);
     // Mức DEBUG vì đây là dữ liệu chẩn đoán, bật khi cần chứ không đổ vào log
     // thường. Ghi cả TOOL CALL (model gửi gì) chứ không chỉ kết quả, và cả
@@ -135,5 +152,5 @@ export function taoQuanSatStep(input: {
       },
       "Chi tiết step agent",
     );
-  };
+  }
 }

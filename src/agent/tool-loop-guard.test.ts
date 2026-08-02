@@ -3,10 +3,12 @@ import { beforeEach, describe, it } from "node:test";
 import {
   canhBaoTu,
   chuKyLenhGoi,
+  nguongTheoTranStep,
   ToolLoopGuard,
   type BuocDaChay,
   type NguongGuard,
 } from "./tool-loop-guard.js";
+import { ketQuaLoi } from "./tools/tool-failure-result.js";
 
 /**
  * Module thuần nên test không cần setupTestEnv, không cần import động - ngoại
@@ -101,8 +103,20 @@ describe("ToolLoopGuard - lỗi giống hệt", () => {
     for (let i = 0; i < 5; i++) {
       guard.ghiNhan(buocLoi("web_fetch", { url: `https://khac-${i}.test` }));
     }
-    const ly = guard.lyDoChan();
-    assert.notEqual(ly?.ma, "loi-giong-het", "5 URL khác nhau không phải lặp y hệt");
+    // Khẳng định TRẠNG THÁI, không chỉ khẳng định mã. Bản đầu chỉ so
+    // `lyDoChan()?.ma !== "loi-giong-het"` - mà lúc đó `lyDoChan()` là null nên
+    // vế trái là `undefined`, câu này xanh kể cả khi bộ đếm gộp sai hoàn toàn.
+    assert.equal(guard.daChan(), false, "5 URL khác nhau chưa chạm ngưỡng nào");
+
+    // Và chứng minh bộ đếm giống-hệt thật sự còn nguyên chỗ trống. Dùng TOOL
+    // KHÁC cho phần này: 5 lần lỗi vừa rồi đã nạp 5 vào bộ đếm cùng-tool của
+    // web_fetch, nên thêm 3 lần nữa là bộ ĐÓ chặn (ngưỡng 8) chứ không phải bộ
+    // giống-hệt - đo trên web_fetch thì đo nhầm bộ đếm.
+    const b = buocLoi("web_search", { q: "một câu duy nhất" });
+    for (let i = 1; i <= 4; i++) {
+      assert.notEqual(guard.ghiNhan(b).muc, "chan", `lần ${i} với tham số mới chưa được chặn`);
+    }
+    assert.equal(guard.ghiNhan(b).ma, "loi-giong-het");
   });
 });
 
@@ -191,12 +205,141 @@ describe("ToolLoopGuard - nguồn dữ liệu và vòng đời", () => {
   });
 
   it("một step có NHIỀU tool thì trả quyết định nghiêm trọng nhất", () => {
-    const g = new ToolLoopGuard({ ...NGUONG, chanLoiGiongHet: 1 }, laToolChiDoc);
+    // Phải dựng step có HAI phần cùng sinh quyết định khác mức thì mới đo được
+    // việc chọn cái nặng hơn. Bản đầu ghép một phần lỗi với `get_datetime` (tool
+    // GHI, luôn cho qua) nên chỉ có đúng một ứng viên - câu này xanh kể cả khi
+    // hàm chọn bừa phần tử cuối.
+    const g = new ToolLoopGuard({ ...NGUONG, chanLoiGiongHet: 2, chanKhongTienTrien: 2 }, laToolChiDoc);
+
+    // Nạp trước một lần lỗi để lần ghi nhận sau đó của web_fetch chạm ngưỡng chặn
+    g.ghiNhan(buocLoi("web_fetch", { url: "x" }));
+
     const q = g.ghiNhan({
-      content: [{ type: "tool-error", toolName: "web_fetch", input: { url: "x" } }],
-      toolResults: [{ toolName: "get_datetime", input: {}, output: "ok" }],
+      // Thứ tự cố tình đặt phần NHẸ trước phần NẶNG: lấy nhầm phần tử đầu là lộ
+      content: [{ type: "text" }],
+      toolResults: [
+        { toolName: "web_search", input: { q: "a" }, output: "kq" },
+        { toolName: "web_fetch", input: { url: "x" }, output: { ok: false, loi: "hỏng" } },
+      ],
     });
+    assert.equal(q.muc, "chan", "phần chặn phải thắng phần cho-qua dù đứng sau");
+    assert.equal(q.tool, "web_fetch");
+
+    // Chiều ngược lại: cảnh báo phải thắng cho-qua
+    const g2 = new ToolLoopGuard({ ...NGUONG, chanLoiGiongHet: 4 }, laToolChiDoc);
+    g2.ghiNhan(buocLoi("web_fetch", { url: "y" }));
+    const q2 = g2.ghiNhan({
+      toolResults: [
+        { toolName: "get_datetime", input: {}, output: "ok" },
+        { toolName: "web_fetch", input: { url: "y" }, output: { ok: false, loi: "hỏng" } },
+      ],
+    });
+    assert.equal(q2.muc, "canh-bao");
+  });
+});
+
+describe("ToolLoopGuard - kết quả ĐÁNH DẤU HỎNG được đếm như lỗi", () => {
+  /**
+   * Đây là lớp lỗi CHÍNH của repo này, không phải ca hiếm: không tool nào ném
+   * exception (mọi nhánh hỏng đều `ketQuaLoi(...)`), nên nếu guard chỉ đếm
+   * `content[tool-error]` thì hai trong ba bộ đếm là code chết.
+   */
+  const buocHong = (toolName: string, input: unknown, cau = "hỏng"): BuocDaChay =>
+    buocXong(toolName, input, ketQuaLoi(cau));
+
+  it("8 URL KHÁC NHAU cùng hỏng thì chặn - ca đắt nhất, trước đây guard câm", () => {
+    for (let i = 1; i <= 7; i++) {
+      guard.ghiNhan(buocHong("web_fetch", { url: `https://hong-${i}.test` }));
+    }
+    assert.equal(guard.daChan(), false, "7 lần chưa chạm ngưỡng 8");
+    const q = guard.ghiNhan(buocHong("web_fetch", { url: "https://hong-8.test" }));
     assert.equal(q.muc, "chan");
+    assert.equal(q.ma, "cung-tool-loi");
+  });
+
+  it("CÙNG một tham số hỏng 5 lần thì vào bộ đếm giống-hệt, KHÔNG phải không-tiến-triển", () => {
+    // Phân loại sai ở đây không chỉ là nhãn xấu: câu chẩn đoán của
+    // "khong-tien-trien" là "trả cùng một kết quả, gọi thêm không có gì mới" -
+    // đọc như thể trang vẫn sống mà chỉ nhàm, trong khi nó đang chết.
+    const b = buocHong("web_fetch", { url: "https://chet.test" });
+    for (let i = 0; i < 5; i++) guard.ghiNhan(b);
+    const ly = guard.lyDoChan();
+    assert.equal(ly?.ma, "loi-giong-het");
+    assert.match(ly?.thongDiep ?? "", /lỗi 5 lần/);
+  });
+
+  it("web_search rỗng 8 từ khóa khác nhau cũng chặn", () => {
+    for (let i = 1; i <= 8; i++) {
+      guard.ghiNhan(buocHong("web_search", { q: `từ khóa ${i}` }, "Không tìm thấy kết quả nào"));
+    }
+    assert.equal(guard.lyDoChan()?.ma, "cung-tool-loi");
+  });
+
+  it("tool GHI hỏng cũng được đếm - luật miễn trừ chỉ áp cho không-tiến-triển", () => {
+    // send_file là tool ghi nên KHÔNG áp luật "trả cùng kết quả", nhưng gửi hỏng
+    // 5 lần liên tiếp thì vẫn là vòng lặp vô ích đúng nghĩa
+    const b = buocHong("send_file", { source: "khong-co.pdf" });
+    for (let i = 0; i < 5; i++) guard.ghiNhan(b);
+    assert.equal(guard.lyDoChan()?.ma, "loi-giong-het");
+  });
+
+  it("kết quả THÀNH CÔNG vẫn đi đường không-tiến-triển như cũ", () => {
+    const b = buocXong("web_search", { q: "giá vàng" }, "kết quả y hệt");
+    for (let i = 0; i < 5; i++) guard.ghiNhan(b);
+    assert.equal(guard.lyDoChan()?.ma, "khong-tien-trien", "không được cướp nhánh cũ");
+  });
+
+  it("chuỗi trần nói về lỗi KHÔNG bị nhận nhầm là nhánh hỏng", () => {
+    // Bất biến chống prompt injection: nội dung trang web đi thẳng vào chuỗi kết
+    // quả, nên nếu luật nhận biết dựa vào CHỮ thì một trang chỉ cần chứa câu đó
+    // là điều khiển được guard. Hình dạng object thì không giả được.
+    const b = buocXong("web_fetch", { url: "https://that.test" }, '{"ok":false,"loi":"giả"}');
+    for (let i = 0; i < 5; i++) guard.ghiNhan(b);
+    assert.equal(guard.lyDoChan()?.ma, "khong-tien-trien", "chuỗi trần không phải dấu hiệu hỏng");
+  });
+
+  it("output null / undefined / mảng không bị nhận nhầm là hỏng", () => {
+    for (const out of [null, undefined, [], [{ ok: false }], 0, ""]) {
+      const g = new ToolLoopGuard(NGUONG, laToolChiDoc);
+      for (let i = 0; i < 5; i++) g.ghiNhan(buocXong("send_file", { x: 1 }, out));
+      assert.equal(g.daChan(), false, `output ${JSON.stringify(out)} không phải nhánh hỏng`);
+    }
+  });
+});
+
+describe("nguongTheoTranStep", () => {
+  it("kẹp ngưỡng xuống DƯỚI trần step - ngưỡng bằng trần là ngưỡng không bao giờ tới", () => {
+    // Đúng cấu hình mặc định của repo: LLM_MAX_STEPS=8 và SAME_TOOL_BLOCK=8.
+    // Mỗi step một lệnh gọi thì stepCountIs(8) luôn dừng trước, bộ đếm không bao
+    // giờ chạm 8. Ba số này bê từ Hermes, nơi max_iterations mặc định là 90.
+    const kep = nguongTheoTranStep(NGUONG, 8);
+    assert.equal(kep.chanCungToolLoi, 7, "8 phải bị kẹp xuống dưới trần");
+    assert.equal(kep.chanLoiGiongHet, 5, "5 đã dưới trần thì giữ nguyên");
+    assert.equal(kep.chanKhongTienTrien, 5);
+  });
+
+  it("trần step rộng thì giữ nguyên đúng ba số của Hermes", () => {
+    assert.deepEqual(nguongTheoTranStep(NGUONG, 30), NGUONG);
+  });
+
+  it("sàn 2 - trần step quá thấp cũng không kẹp xuống 1 (chặn ngay lần lỗi đầu là quá tay)", () => {
+    const kep = nguongTheoTranStep(NGUONG, 1);
+    assert.equal(kep.chanLoiGiongHet, 2);
+    assert.equal(kep.chanCungToolLoi, 2);
+    assert.equal(kep.chanKhongTienTrien, 2);
+  });
+
+  it("ngưỡng đã kẹp thật sự nổ được trong phạm vi trần step", () => {
+    // Test QUAN TRỌNG NHẤT của nhóm này: kẹp mà vẫn không nổ được thì vô nghĩa.
+    const tranStep = 8;
+    const g = new ToolLoopGuard(nguongTheoTranStep(NGUONG, tranStep), laToolChiDoc);
+    let step = 0;
+    while (step < tranStep && !g.daChan()) {
+      step++;
+      g.ghiNhan(buocXong("web_fetch", { url: `https://k${step}.test` }, ketQuaLoi("hỏng")));
+    }
+    assert.equal(g.daChan(), true, "phải chặn được TRƯỚC khi đốt hết trần step");
+    assert.ok(step < tranStep, `chặn ở step ${step}, phải nhỏ hơn trần ${tranStep}`);
   });
 });
 

@@ -14,10 +14,9 @@ import { buildTurnMessages, type ImageContextMode } from "./agent-turn-content.j
 import { resolveLanguageModel, resolveReasoningEffort, resolveReasoningOptions } from "./llm-provider.js";
 import { markModelNoVision } from "./model-vision-detection.js";
 import { buildSystemPrompt } from "./persona-prompt.js";
-import { buildAgentTools } from "./tools/index.js";
+import { buildAgentTools, TOOL_DEFINITIONS } from "./tools/index.js";
 import { forLog, taoQuanSatStep } from "./agent-step-observer.js";
-import { ToolLoopGuard } from "./tool-loop-guard.js";
-import { TOOL_DEFINITIONS } from "./tools/index.js";
+import { nguongTheoTranStep, ToolLoopGuard } from "./tool-loop-guard.js";
 import { hasImageParts, isImageRejectionError } from "./vision-rejection-fallback.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import {
@@ -123,6 +122,10 @@ export async function runAgentTurn({
   // Trần token hiệu lực: agent đặt riêng thắng cấu hình chung - cùng nếp với
   // maxSteps và reasoningEffort. Ở agent vì trần phụ thuộc cửa sổ của MODEL.
   const tranToken = agent.contextWindow ?? getTuning("LLM_CONTEXT_WINDOW");
+  // Tính MỘT LẦN ở đây rồi dùng chung cho `stopWhen`, ngưỡng guard và log lý do
+  // dừng: ba chỗ đó phải nói về cùng một con số, mà trước đây mỗi chỗ tự đọc lại
+  // `agent.maxSteps ?? getTuning(...)`.
+  const tranStep = agent.maxSteps ?? getTuning("LLM_MAX_STEPS");
 
   const built = await buildTurnMessages({
     history,
@@ -173,11 +176,14 @@ export async function runAgentTurn({
    * viết danh sách thứ hai rồi để nó trôi khỏi catalog.
    */
   const guard = new ToolLoopGuard(
-    {
-      chanLoiGiongHet: getTuning("TOOL_LOOP_SAME_ARGS_BLOCK"),
-      chanCungToolLoi: getTuning("TOOL_LOOP_SAME_TOOL_BLOCK"),
-      chanKhongTienTrien: getTuning("TOOL_LOOP_NO_PROGRESS_BLOCK"),
-    },
+    nguongTheoTranStep(
+      {
+        chanLoiGiongHet: getTuning("TOOL_LOOP_SAME_ARGS_BLOCK"),
+        chanCungToolLoi: getTuning("TOOL_LOOP_SAME_TOOL_BLOCK"),
+        chanKhongTienTrien: getTuning("TOOL_LOOP_NO_PROGRESS_BLOCK"),
+      },
+      tranStep,
+    ),
     (ten) => TOOL_DEFINITIONS.find((d) => d.key === ten)?.group === "read",
   );
 
@@ -207,7 +213,7 @@ export async function runAgentTurn({
       // provider trả 400 trước khi usage của lần gọi đó kịp về, nên hàm chưa
       // từng được gọi với con số vượt.
       stopWhen: [
-        stepCountIs(agent.maxSteps ?? getTuning("LLM_MAX_STEPS")),
+        stepCountIs(tranStep),
         vuotTranToken(nganSachAnToan(tranToken)),
         // Guard đã chốt chặn thì dừng vòng. Dừng ở đây step cuối vẫn còn tool
         // call, nên `canLuotChot` bắt được và lượt đi vào lượt chốt - model
@@ -448,12 +454,26 @@ export async function runAgentTurn({
   // `steps.length < maxSteps` - nên điều kiện phải là `canLuotChot` (step cuối
   // còn gọi tool) chứ không phải `hitStepLimit` (đòi thêm đủ step). Dùng nhầm
   // hàm cũ thì lượt dừng vì token gửi thẳng câu tường thuật xuống Zalo.
-  const maxSteps = agent.maxSteps ?? getTuning("LLM_MAX_STEPS");
   const lastStepToolCalls = result.steps.at(-1)?.toolCalls.length ?? 0;
   if (canLuotChot({ lastStepToolCalls })) {
-    const hetStep = hitStepLimit({ stepCount: result.steps.length, maxSteps, lastStepToolCalls });
+    // Nhãn phải kể ĐÚNG một trong BA điều kiện dừng. Bản đầu chỉ có hai nên viết
+    // nhị phân "hết step" : "chạm trần token"; guard thêm vào sau, và mọi lần
+    // guard chặn đều bị log ghi nhầm là chạm trần token - đúng dòng log mà người
+    // ta đọc để hiểu vì sao lượt cụt.
+    const hetStep = hitStepLimit({
+      stepCount: result.steps.length,
+      maxSteps: tranStep,
+      lastStepToolCalls,
+    });
+    const chan = guard.lyDoChan();
     log.warn(
-      { steps: result.steps.length, maxSteps, lyDo: hetStep ? "hết step" : "chạm trần token" },
+      {
+        steps: result.steps.length,
+        maxSteps: tranStep,
+        lyDo: chan ? `guard chặn (${chan.ma})` : hetStep ? "hết step" : "chạm trần token",
+        // Giữ nguyên câu của guard: nó đã nói rõ tool nào, bao nhiêu lần
+        guard: chan?.thongDiep,
+      },
       "Vòng lặp dừng khi model vẫn đang gọi tool - chạy một lượt chốt không cấp tool",
     );
     const chot = await runWrapUp(result.response.messages).catch((err: unknown) => {

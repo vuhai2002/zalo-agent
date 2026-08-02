@@ -1,4 +1,5 @@
 import { bamNgan, chuanHoaJson, chuKyLenhGoi } from "./tool-call-signature.js";
+import { laKetQuaLoi } from "./tools/tool-failure-result.js";
 
 /**
  * Chặn vòng lặp tool vô ích trong MỘT lượt agent.
@@ -53,14 +54,21 @@ export type NguongGuard = {
  * Hình dạng TỐI THIỂU của một step mà guard cần đọc - khai theo cấu trúc chứ
  * không import type của AI SDK, để test dựng object tay được.
  *
- * Đọc CẢ HAI nguồn là bắt buộc: tool ném exception KHÔNG BAO GIỜ lọt vào
- * `toolResults` (getter đó chỉ lọc `type === "tool-result"`), lỗi nằm ở
- * `content` dạng `tool-error`. Chỉ đọc `toolResults` thì mọi lỗi thật đều vô
- * hình với guard - đúng thứ nó sinh ra để đếm.
+ * Đọc CẢ HAI nguồn là bắt buộc, và trong repo này thì nguồn thứ hai mới là
+ * nguồn CHÍNH:
+ *
+ *   - `content` dạng `tool-error`: chỉ có khi `execute` NÉM. Ở đây gần như
+ *     không bao giờ xảy ra - mọi tool đều bắt lỗi rồi trả câu cho model
+ *     (quyết định có chủ đích, xem `tools/tool-failure-result.ts`). Còn đọc vì
+ *     lỗi TẦNG SDK vẫn đi đường này: schema chặn input sai, model bịa tên tool.
+ *   - `toolResults` có `output` đánh dấu hỏng: đây là mọi lỗi NGHIỆP VỤ thật.
+ *
+ * Bản đầu chỉ đếm `tool-error` nên hai trong ba bộ đếm là code chết: `web_fetch`
+ * hỏng trên 8 URL khác nhau đốt trọn trần step mà guard không hé răng.
  */
 export type BuocDaChay = {
-  toolResults?: readonly { toolName: string; input?: unknown; output?: unknown }[];
-  content?: readonly { type: string; toolName?: string; input?: unknown }[];
+  toolResults?: readonly { toolName?: string; input?: unknown; output?: unknown }[];
+  content?: readonly { type?: string; toolName?: string; input?: unknown }[];
 };
 
 export class ToolLoopGuard {
@@ -110,6 +118,16 @@ export class ToolLoopGuard {
       nhan(this.demLoi(p.toolName, p.input));
     }
     for (const r of buoc.toolResults ?? []) {
+      if (!r.toolName) continue;
+      // Kết quả đánh dấu hỏng đi vào bộ đếm LỖI, không phải bộ "không tiến
+      // triển". Hai nhánh này chữa bằng hai cách khác nhau, và gộp nhầm còn đẻ
+      // ra câu chẩn đoán sai hướng: `web_fetch` chết cùng một URL 5 lần từng bị
+      // báo là "trả cùng một kết quả, gọi thêm không có gì mới" - đọc như thể
+      // trang vẫn sống mà chỉ nhàm.
+      if (laKetQuaLoi(r.output)) {
+        nhan(this.demLoi(r.toolName, r.input));
+        continue;
+      }
       nhan(this.demKetQua(r.toolName, r.input, r.output));
     }
     return nang;
@@ -193,4 +211,27 @@ export class ToolLoopGuard {
  */
 export function canhBaoTu(nguongChan: number): number {
   return Math.max(2, Math.floor(nguongChan / 2));
+}
+
+/**
+ * Kẹp ngưỡng xuống dưới trần step, vì một ngưỡng cao bằng trần step là ngưỡng
+ * KHÔNG BAO GIỜ tới lượt.
+ *
+ * Ba số mặc định (5/8/5) bê nguyên từ `tool_guardrails.py` của Hermes - nhưng bê
+ * thiếu ngữ cảnh: ở Hermes `max_iterations` mặc định là **90**, nên 8 chỉ là 9%
+ * ngân sách. Ở đây `LLM_MAX_STEPS` mặc định là **8**, nên ngưỡng 8 đứng đúng
+ * bằng trần: mỗi step một lệnh gọi thì `stepCountIs` luôn dừng trước, bộ đếm
+ * chạm 8 là chuyện không thể xảy ra.
+ *
+ * Kẹp ở đây chứ không hạ mặc định trong env: người đặt `LLM_MAX_STEPS=30` vẫn
+ * được đúng ba con số của Hermes, còn người để mặc định thì guard vẫn nổ được.
+ * Sàn 2 để không kẹp xuống 1 - chặn ngay lần lỗi đầu là quá tay.
+ */
+export function nguongTheoTranStep(nguong: NguongGuard, tranStep: number): NguongGuard {
+  const kep = (n: number) => Math.max(2, Math.min(n, tranStep - 1));
+  return {
+    chanLoiGiongHet: kep(nguong.chanLoiGiongHet),
+    chanCungToolLoi: kep(nguong.chanCungToolLoi),
+    chanKhongTienTrien: kep(nguong.chanKhongTienTrien),
+  };
 }

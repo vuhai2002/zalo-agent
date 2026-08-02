@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { saveMemoryFact } from "../../conversation/memory-store.js";
 import type { ToolContext } from "./index.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
 
 /**
  * Memory lớp 3 (tương đương tool `bio` của ChatGPT): agent tự quyết lưu fact
@@ -24,7 +25,7 @@ export function createSaveMemoryTool({ account, message }: ToolContext) {
     }),
     execute: async ({ content, about }) => {
       const subjectId = about === "sender" ? message.senderId : message.threadId;
-      if (!subjectId) return "Không xác định được đối tượng để lưu";
+      if (!subjectId) return ketQuaLoi("Không xác định được đối tượng để lưu");
 
       saveMemoryFact({
         accountId: account.id,

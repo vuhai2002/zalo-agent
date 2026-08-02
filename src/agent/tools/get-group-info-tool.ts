@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import type { ToolContext } from "./index.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function createGetGroupInfoTool({ api, message }: ToolContext) {
@@ -9,7 +10,7 @@ export function createGetGroupInfoTool({ api, message }: ToolContext) {
       "Lấy thông tin nhóm hiện tại: tên nhóm, số thành viên, danh sách thành viên (id + tên). Dùng trước khi tag ai đó nếu chưa biết userId.",
     inputSchema: z.object({}),
     execute: async () => {
-      if (!message.isGroup) return "Đây là chat riêng, không phải nhóm";
+      if (!message.isGroup) return ketQuaLoi("Đây là chat riêng, không phải nhóm");
       try {
         const info: any = await api.getGroupInfo(message.threadId);
         const group = info?.gridInfoMap?.[message.threadId] ?? info;
@@ -32,7 +33,9 @@ export function createGetGroupInfoTool({ api, message }: ToolContext) {
           `Member ids (tối đa 50): ${members || "(không đọc được)"}`,
         ].join("\n");
       } catch (err) {
-        return `Lấy thông tin nhóm thất bại: ${err instanceof Error ? err.message : String(err)}`;
+        return ketQuaLoi(
+          `Lấy thông tin nhóm thất bại: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     },
   });

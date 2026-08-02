@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { loiCuaTool } from "./tool-failure-result-test-helper.js";
 import fs from "node:fs";
 import path from "node:path";
 import { after, before, beforeEach, describe, it } from "node:test";
@@ -100,7 +101,7 @@ describe("create_word_document", () => {
       ],
     });
     assert.equal(sent.length, 0);
-    assert.match(result, /11 dòng.*trần 10/);
+    assert.match(loiCuaTool(result), /11 dòng.*trần 10/);
   });
 
   it("gửi lỗi -> trả câu cho model, không ném ra agent loop", async () => {
@@ -109,8 +110,8 @@ describe("create_word_document", () => {
       fileName: "x",
       blocks: [{ type: "paragraph", text: "abc" }],
     });
-    assert.match(result, /Không tạo được file.*Zalo từ chối/);
-    assert.match(result, /Nói thật với người dùng/);
+    assert.match(loiCuaTool(result), /Không tạo được file.*Zalo từ chối/);
+    assert.match(loiCuaTool(result), /Nói thật với người dùng/);
   });
 
   it("hết suất trong giờ -> chặn, không gửi thêm", async () => {
@@ -121,7 +122,7 @@ describe("create_word_document", () => {
 
     const blocked = await run(tools.createWordDocumentTool(ctx), input);
     assert.equal(sent.length, 5, "không được gửi file thứ 6");
-    assert.match(blocked, /trần 5/);
+    assert.match(loiCuaTool(blocked), /trần 5/);
   });
 });
 
@@ -203,6 +204,6 @@ describe("create_excel_file", () => {
       ],
     });
     assert.equal(sent.length, 0);
-    assert.match(result, /Sai cột.*dòng 1/);
+    assert.match(loiCuaTool(result), /Sai cột.*dòng 1/);
   });
 });

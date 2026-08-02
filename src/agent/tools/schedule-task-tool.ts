@@ -3,6 +3,7 @@ import { createLogger } from "../../shared/logger.js";
 import { doCancel, doCreate, doList, doUpdate } from "./schedule-task-actions.js";
 import { SCHEDULE_TASK_DESCRIPTION } from "./schedule-task-tool-description.js";
 import { scheduleTaskInputSchema } from "./schedule-task-tool-schema.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
 import type { ToolContext } from "./index.js";
 
 /**
@@ -43,7 +44,9 @@ export function createScheduleTaskTool(ctx: ToolContext) {
         // luật với web_search/read_image (lỗi hạ tầng không được giết cả lượt)
         const reason = err instanceof Error ? err.message : String(err);
         log.error({ err, action: input.action }, "Tool schedule_task lỗi");
-        return `Thao tác lịch hẹn thất bại (${reason}). Nói thật với người dùng, đừng coi như đã làm xong.`;
+        return ketQuaLoi(
+          `Thao tác lịch hẹn thất bại (${reason}). Nói thật với người dùng, đừng coi như đã làm xong.`,
+        );
       }
     },
   });

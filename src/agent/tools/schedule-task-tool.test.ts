@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { loiCuaTool } from "./tool-failure-result-test-helper.js";
 import { after, before, describe, it } from "node:test";
 import { DateTime } from "luxon";
 import type { API } from "zca-js";
@@ -162,7 +163,7 @@ describe("schedule_task - action create", () => {
       schedule: { kind: "every", minutes: 30 },
     });
 
-    assert.match(result, /allowlist|danh sách được phép/i);
+    assert.match(loiCuaTool(result), /allowlist|danh sách được phép/i);
     assert.equal(store.listJobsForThread("acc-1", "t-allowlist-tu-choi").length, 0, "không được tạo job nào");
   });
 
@@ -194,7 +195,7 @@ describe("schedule_task - action create", () => {
       await create("job 2");
       const ketQua = await create("job 3 - phải bị chặn");
 
-      assert.match(ketQua, /trần|chạm|đủ 2/i);
+      assert.match(loiCuaTool(ketQua), /trần|chạm|đủ 2/i);
       assert.equal(store.listJobsForThread("acc-1", "t-cap").length, 2, "job thứ 3 không được lưu");
     } finally {
       tuning.setTuning("SCHEDULER_MAX_JOBS_PER_THREAD", null);
@@ -238,7 +239,7 @@ describe("schedule_task - action create", () => {
       schedule: { kind: "every", minutes: 1 },
     });
 
-    assert.match(result, /tối thiểu|spam/i);
+    assert.match(loiCuaTool(result), /tối thiểu|spam/i);
     assert.equal(store.listJobsForThread("acc-1", "t-invalid-every").length, 0);
   });
 
@@ -252,7 +253,7 @@ describe("schedule_task - action create", () => {
       schedule: { kind: "once", date: "2020-01-01", time: "08:00" },
     });
 
-    assert.match(result, /quá khứ/);
+    assert.match(loiCuaTool(result), /quá khứ/);
     assert.equal(store.listJobsForThread("acc-1", "t-invalid-past").length, 0);
   });
 });
@@ -301,14 +302,14 @@ describe("schedule_task - action cancel", () => {
     const ctxKhac = makeCtx({ message: msg({ threadId: "t-cancel-la" }) });
     const result = await run(ctxKhac, { action: "cancel", id: job!.id });
 
-    assert.match(result, /Không tìm thấy/);
+    assert.match(loiCuaTool(result), /Không tìm thấy/);
     assert.equal(store.getJob("acc-1", "t-cancel-chu", job!.id)?.id, job!.id, "job của chủ vẫn còn nguyên");
   });
 
   it("id không tồn tại trả câu rõ ràng, không throw", async () => {
     const ctx = makeCtx({ message: msg({ threadId: "t-cancel-khong-ton-tai" }) });
     const result = await run(ctx, { action: "cancel", id: "khong-ton-tai" });
-    assert.match(result, /Không tìm thấy/);
+    assert.match(loiCuaTool(result), /Không tìm thấy/);
   });
 });
 
@@ -351,7 +352,7 @@ describe("schedule_task - action update", () => {
     const ctxKhac = makeCtx({ message: msg({ threadId: "t-update-la" }) });
     const result = await run(ctxKhac, { action: "update", id: job!.id, payload: "bị đổi trái phép" });
 
-    assert.match(result, /Không tìm thấy/);
+    assert.match(loiCuaTool(result), /Không tìm thấy/);
     assert.equal(store.getJob("acc-1", "t-update-chu", job!.id)?.payload, "nội dung cũ");
   });
 
@@ -373,7 +374,7 @@ describe("schedule_task - action update", () => {
       schedule: { kind: "every", minutes: 1 },
     });
 
-    assert.match(result, /tối thiểu|spam/i);
+    assert.match(loiCuaTool(result), /tối thiểu|spam/i);
     const sau = store.getJob("acc-1", "t-update-invalid", job!.id)!;
     assert.equal(sau.payload, "nội dung cũ", "lịch hỏng thì payload cũng không được đổi");
     assert.equal(sau.everyMinutes, 30);

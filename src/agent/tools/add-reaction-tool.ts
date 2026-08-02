@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { Reactions } from "zca-js";
 import { z } from "zod";
 import type { ToolContext } from "./index.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
 
 const REACTION_MAP: Record<string, Reactions> = {
   heart: Reactions.HEART,
@@ -24,7 +25,7 @@ export function createAddReactionTool({ api, message }: ToolContext) {
         .describe("Loại reaction"),
     }),
     execute: async ({ reaction }) => {
-      if (!message.msgId) return "Không thả được reaction: tin nhắn không có msgId";
+      if (!message.msgId) return ketQuaLoi("Không thả được reaction: tin nhắn không có msgId");
       try {
         await api.addReaction(REACTION_MAP[reaction], {
           data: { msgId: message.msgId, cliMsgId: message.cliMsgId },
@@ -33,7 +34,7 @@ export function createAddReactionTool({ api, message }: ToolContext) {
         });
         return `Đã thả reaction ${reaction}`;
       } catch (err) {
-        return `Thả reaction thất bại: ${err instanceof Error ? err.message : String(err)}`;
+        return ketQuaLoi(`Thả reaction thất bại: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   });

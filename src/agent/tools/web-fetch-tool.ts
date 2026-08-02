@@ -5,6 +5,7 @@ import { extractHtmlTitle, htmlToReadableText } from "../../shared/html-to-text.
 import { fetchViaJinaReader } from "../../shared/jina-reader-fallback.js";
 import { createLogger } from "../../shared/logger.js";
 import { downloadFromPublicUrl } from "../../shared/safe-remote-download.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
 import { wrapUntrustedContent } from "./wrap-untrusted-content.js";
 import { getTuning } from "../../config/runtime-tuning-settings.js";
 
@@ -68,7 +69,9 @@ export function createWebFetchTool() {
       }
 
       if (!page) {
-        return `Không đọc được trang ${url}. Trang có thể chặn bot hoặc yêu cầu đăng nhập - thử một nguồn khác.`;
+        return ketQuaLoi(
+          `Không đọc được trang ${url}. Trang có thể chặn bot hoặc yêu cầu đăng nhập - thử một nguồn khác.`,
+        );
       }
 
       log.info({ url, via: page.via, length: page.text.length }, "Đã đọc trang web");

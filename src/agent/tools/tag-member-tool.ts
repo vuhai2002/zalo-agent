@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { enqueueSend } from "../../middleware/rate-limiter.js";
 import type { ToolContext } from "./index.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
 
 export function createTagMemberTool({ api, account, message }: ToolContext) {
   return tool({
@@ -13,7 +14,7 @@ export function createTagMemberTool({ api, account, message }: ToolContext) {
       text: z.string().describe("Nội dung nhắn kèm sau phần tag"),
     }),
     execute: async ({ memberId, memberName, text }) => {
-      if (!message.isGroup) return "Chỉ tag được trong nhóm chat";
+      if (!message.isGroup) return ketQuaLoi("Chỉ tag được trong nhóm chat");
       try {
         const mentionText = `@${memberName}`;
         await enqueueSend(`${account.id}:${message.threadId}`, () =>
@@ -28,7 +29,7 @@ export function createTagMemberTool({ api, account, message }: ToolContext) {
         );
         return `Đã gửi tin nhắn tag ${memberName}`;
       } catch (err) {
-        return `Tag thất bại: ${err instanceof Error ? err.message : String(err)}`;
+        return ketQuaLoi(`Tag thất bại: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   });
