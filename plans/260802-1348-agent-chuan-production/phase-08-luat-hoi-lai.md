@@ -10,7 +10,7 @@
 ## Tổng quan
 
 - **Ưu tiên**: thấp về công sức, cao về giá trị cảm nhận
-- **Trạng thái**: chưa làm. Phụ thuộc phase 07 (cần eval để kiểm chứng).
+- **Trạng thái**: XONG. 9/9 case eval đạt (3 case mới + 6 case cũ không hồi quy).
 - Ba dòng vào `BASE_PERSONA` + case eval canh. Không thêm tool, không thêm bảng, không đụng
   agent loop.
 
@@ -83,12 +83,12 @@ Sửa:
 
 ## Việc cần làm
 
-- [ ] Ba dòng vào `BASE_PERSONA`, đặt đúng chỗ trong khối "Quy tắc trả lời"
-- [ ] Test model giả: ba dòng có trong system prompt
-- [ ] `evals/cases/hoi-lai.ts` - 3 case (phải hỏi / không hỏi vặn / hỏi gộp)
-- [ ] `pnpm eval` xanh cả 3
-- [ ] Ghi quyết định vào `CLAUDE.md`
-- [ ] `pnpm test` + `pnpm typecheck`
+- [x] Ba dòng vào `BASE_PERSONA`, đặt đúng chỗ trong khối "Quy tắc trả lời"
+- [x] Test model giả: ba dòng có trong system prompt
+- [x] `evals/cases/hoi-lai.ts` - 3 case (phải hỏi / không hỏi vặn / hỏi gộp)
+- [x] `pnpm eval` xanh cả 3
+- [x] Ghi quyết định vào `CLAUDE.md`
+- [x] `pnpm test` + `pnpm typecheck`
 
 ## Tiêu chí hoàn thành
 
@@ -115,3 +115,33 @@ Sửa:
 
 Nếu sau này thấy cần lựa chọn đánh số (1/2/3 cho người bấm nhanh), lúc đó mới cân nhắc tool
 `ask_user` kiểu `clarify_tool.py`. Chưa có bằng chứng cần thì đừng thêm.
+
+## Kết quả đo được - đọc trước khi tin vào ba dòng này
+
+**Ba dòng persona KHÔNG chứng minh được tác dụng với model đang dùng.** Bỏ hẳn cả ba
+rồi chạy lại `pnpm eval`, cả ba case hỏi-lại VẪN XANH - kể cả ca khó hơn ("đặt lịch
+nhắc mình uống thuốc buổi sáng": có nội dung nhưng giờ mơ hồ, đúng ca dễ dụ model đoán
+bừa nhất). gpt-combo tự biết hỏi lại mà không cần dặn.
+
+Vẫn giữ ba dòng, và nói rõ vì sao: khoảng 60 token trên một prefix vốn đã được
+prompt-cache nên gần như không tốn gì, và nó ghi lại ý định cho lần đổi sang model rẻ
+hơn. KHÔNG phải vì đã đo thấy nó có tác dụng.
+
+Ba case eval giữ lại với vai HÀNG RÀO HỒI QUY, không phải bằng chứng: chúng canh hành
+vi của CẢ HỆ THỐNG. Đổi model rẻ hơn, hay ai đó sửa persona theo hướng giục model làm
+cho nhanh, thì đây là chỗ đỏ trước khi người dùng nhận một file Excel rỗng.
+
+## Lệch so với kế hoạch (có chủ ý)
+
+- Case nằm trong `evals/eval-cases.ts` chứ không phải file riêng `evals/cases/hoi-lai.ts`
+  (bộ case đã gộp một file từ phase 07).
+- **Không** đòi câu trả lời phải có dấu hỏi, dù bản kế hoạch ghi vậy. Lần chạy thật cho
+  ra: "Bạn gửi mình toàn bộ thông tin trong một lần để mình làm đúng ngay:" rồi liệt kê
+  gạch đầu dòng - gom đúng ý, không tạo file bừa, chỉ là viết ở thể mệnh lệnh nên không
+  có dấu hỏi nào.
+
+  Kế hoạch dặn "case đỏ thì sửa persona, đừng sửa case". Luật đó đúng khi case mã hóa
+  đúng hành vi mong muốn - ở đây nó mã hóa một SỞ THÍCH DIỄN ĐẠT, mà chính bộ eval cấm
+  khẳng định trên câu chữ. Sửa persona để bot luôn kết thúc bằng dấu hỏi là làm câu trả
+  lời tệ đi để chiều một phép đo sai. Bất biến thật nằm ở `khongGoiTool`: thiếu thông
+  tin thì KHÔNG làm bừa.

@@ -167,3 +167,50 @@ describe("buildSystemPrompt - danh sách tool đang bật", () => {
     assert.deepEqual(listedIsolated, builtIsolated, "prompt (qua listAvailableTools) và schema (buildAgentTools) phải khớp cả khi isolated");
   });
 });
+
+describe("BASE_PERSONA - luật hỏi lại (12-Factor #7)", () => {
+  const text = () => prompt.buildSystemPrompt(AGENT, MSG, undefined, account([]));
+
+  /**
+   * Ba dòng, BA VAI khác nhau - bỏ dòng nào cũng mất một vai:
+   *   khi nào HỎI / khi nào KHÔNG hỏi / hỏi THẾ NÀO.
+   *
+   * Test này chỉ chứng minh ba dòng có ĐƯỢC GỬI ĐI, không chứng minh model
+   * nghe theo - việc đó thuộc về `pnpm eval` (case hoi-lai-*). Rẻ nhưng cần:
+   * ai đó dọn persona cho gọn mà bỏ mất một vai thì đây là chỗ đỏ trước.
+   */
+  it("vai 1 - dặn HỎI LẠI trước việc làm xong mới biết sai", () => {
+    assert.match(text(), /thiếu thông tin thì HỎI LẠI/);
+    // Phải kể ví dụ cụ thể, không nói chung chung - "việc tốn công làm lại"
+    // là khái niệm mơ hồ với model
+    for (const viec of ["tạo file", "đặt lịch", "vẽ ảnh"]) {
+      assert.match(text(), new RegExp(viec), `thiếu ví dụ "${viec}"`);
+    }
+  });
+
+  it("vai 2 - dặn KHÔNG hỏi vặn khi đã đủ rõ", () => {
+    // Thiếu vế này thì luật quá rộng và bot hỏi vặn cả câu hỏi kiến thức
+    // thường - tệ hơn là cứ trả lời thẳng
+    assert.match(text(), /đừng hỏi vặn/);
+    assert.match(text(), /đã đủ rõ để làm thì làm luôn/);
+  });
+
+  it("vai 3 - dặn gom vào MỘT lần hỏi", () => {
+    assert.match(text(), /hỏi MỘT lần, gom hết thứ còn thiếu vào một câu/);
+    assert.match(text(), /Đừng hỏi lắt nhắt/);
+  });
+
+  it("ba dòng nằm trong khối 'Quy tắc trả lời', TRƯỚC khối an toàn", () => {
+    // Đặt nhầm sang khối an toàn là trộn hai loại luật khác hẳn nhau: một bên
+    // là cách hành xử, một bên là điều tuyệt đối không được làm
+    const t = text();
+    const viTriHoiLai = t.indexOf("HỎI LẠI");
+    const viTriAnToan = t.indexOf("Quy tắc an toàn");
+    assert.ok(viTriHoiLai > 0 && viTriAnToan > 0);
+    assert.ok(viTriHoiLai < viTriAnToan, "luật hỏi lại phải nằm trước khối an toàn");
+  });
+
+  it("có mặt kể cả khi KHÔNG truyền account (đường gọi cũ)", () => {
+    assert.match(prompt.buildSystemPrompt(AGENT, MSG), /thiếu thông tin thì HỎI LẠI/);
+  });
+});

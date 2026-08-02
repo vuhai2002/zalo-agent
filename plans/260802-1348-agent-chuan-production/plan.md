@@ -37,7 +37,7 @@ theo 7 khoảng cách A-G trong `reports/audit-agent-chuan-production.html`.
 | 05 | [Phân loại lỗi provider](phase-05-phan-loai-loi-provider.md) | G | Xong (4a1a825) |
 | 06 | [Kiểm tra đầu ra](phase-06-kiem-tra-dau-ra.md) | E | Xong |
 | 07 | [Bộ eval model thật](phase-07-bo-eval-model-that.md) | C | Xong |
-| 08 | [Luật hỏi lại](phase-08-luat-hoi-lai.md) | F | Chưa làm |
+| 08 | [Luật hỏi lại](phase-08-luat-hoi-lai.md) | F | Xong |
 
 ## Phụ thuộc giữa các phase
 
