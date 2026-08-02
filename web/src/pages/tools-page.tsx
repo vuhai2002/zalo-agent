@@ -64,7 +64,10 @@ export function ToolsPage() {
       api.accountsAdmin.list(),
       api.vision(),
       api.imageGen(),
-      api.agentsAdmin.list(),
+      // Tách lỗi riêng: nhãn "agent đang tắt" là thông tin PHỤ, còn
+      // /api/agents có ghi DB (ensureDefaultAgent) nên dễ lỗi hơn các endpoint
+      // kia. Để nó trong Promise.all chung thì nó hỏng là mất trắng cả trang.
+      api.agentsAdmin.list().catch(() => ({ items: [] as ManagedAgent[] })),
     ])
       .then(([toolsRes, accountsRes, visionRes, imageRes, agentsRes]) => {
         setTools(toolsRes.items);

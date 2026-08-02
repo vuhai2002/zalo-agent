@@ -93,8 +93,9 @@ export function AgentModelSection({
           </select>
           {chung && form.modelProvider !== "" && form.modelProvider !== chung.provider && (
             <p className="mt-2 max-w-3xl text-[12px] leading-[1.6] text-amber-600 dark:text-amber-400">
-              Agent này đang đặt nhà cung cấp khác cấu hình chung, trong khi API key vẫn là key chung. Lượt
-              trả lời sẽ hỏng. Chọn "Theo Providers chung" để sửa.
+              Agent này đang đặt nhà cung cấp khác cấu hình chung, mà API key vẫn là key chung. Bot sẽ BỎ QUA
+              lựa chọn này và chạy bằng cấu hình chung - đặt ở đây không có tác dụng. Chọn "Theo Providers
+              chung" cho khỏi hiểu nhầm.
             </p>
           )}
         </AgentFormField>
@@ -166,6 +167,7 @@ export function AgentModelSection({
               aria-invalid={loiTran !== ""}
             />
             <span className="text-[13px] text-ink-soft">token</span>
+            <span className="text-[12px] text-ink-soft/70">(4.000 - 2.000.000)</span>
           </div>
           {loiTran && <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{loiTran}</p>}
         </AgentFormField>

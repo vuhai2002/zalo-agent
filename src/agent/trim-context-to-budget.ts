@@ -1,5 +1,5 @@
 import type { ModelMessage } from "ai";
-import { uocLuongTokenTinNhan } from "./token-estimate.js";
+import { TOKEN_MOI_ANH_THEO_CO, uocLuongTokenTinNhan, type CoAnh } from "./token-estimate.js";
 
 /**
  * Cắt bớt ngữ cảnh khi ước lượng vượt ngân sách token.
@@ -63,23 +63,30 @@ export function catNguCanhTheoNganSach(input: {
   /**
    * Số tin CUỐI mảng thuộc lượt hiện tại - không bao giờ bị cắt. Caller
    * (`agent-turn-content.ts`) biết con số này vì chính nó ghép history với batch.
+   *
+   * Kẹp về tối thiểu 1: bất biến "không bao giờ trả mảng rỗng" ở cuối hàm chỉ
+   * đứng vững khi vùng bảo vệ không rỗng. Truyền 0 hay số âm thì mọi tin đều
+   * cắt được và hàm trả mảng rỗng - provider từ chối, cả lượt chết.
    */
   soTinBaoVeCuoi: number;
+  /** Cỡ ảnh đang cấu hình - quyết định mỗi ảnh nặng bao nhiêu token */
+  coAnh?: CoAnh;
 }): KetQuaCat {
   const { tinNhan, tranToken, soTinBaoVeCuoi } = input;
-  const tokenTruoc = uocLuongTokenTinNhan(tinNhan);
+  const tokenMoiAnh = TOKEN_MOI_ANH_THEO_CO[input.coAnh ?? "normal"];
+  const tokenTruoc = uocLuongTokenTinNhan(tinNhan, tokenMoiAnh);
   if (tranToken <= 0 || tokenTruoc <= tranToken) {
     return { tinNhan, daCat: null };
   }
 
   // Chỉ số tin đầu tiên thuộc vùng được bảo vệ
-  const moBaoVe = Math.max(0, tinNhan.length - Math.max(0, soTinBaoVeCuoi));
+  const moBaoVe = Math.max(0, tinNhan.length - Math.max(1, soTinBaoVeCuoi));
   let ds = [...tinNhan];
   let soAnhBo = 0;
   let soTinBo = 0;
 
   // Bước 1: bỏ ảnh, từ tin CŨ NHẤT đi tới, dừng ngay khi đã đủ chỗ
-  for (let i = 0; i < moBaoVe && uocLuongTokenTinNhan(ds) > tranToken; i++) {
+  for (let i = 0; i < moBaoVe && uocLuongTokenTinNhan(ds, tokenMoiAnh) > tranToken; i++) {
     const { tin, soAnhBo: bo } = boAnhKhoiTin(ds[i]!);
     if (bo > 0) {
       ds[i] = tin;
@@ -89,7 +96,7 @@ export function catNguCanhTheoNganSach(input: {
 
   // Bước 2: vẫn vượt thì bỏ hẳn tin cũ nhất, vẫn chừa vùng bảo vệ
   let dau = 0;
-  while (dau < moBaoVe && uocLuongTokenTinNhan(ds) > tranToken) {
+  while (dau < moBaoVe && uocLuongTokenTinNhan(ds, tokenMoiAnh) > tranToken) {
     dau++;
     soTinBo++;
     ds = ds.slice(1);
@@ -99,8 +106,13 @@ export function catNguCanhTheoNganSach(input: {
 
   // Cắt hết mức vẫn vượt: trả về vùng bảo vệ chứ KHÔNG trả mảng rỗng. Lượt vẫn
   // nên chạy với đúng câu người dùng vừa hỏi, thà tràn còn hơn gửi rỗng.
+  //
+  // Vượt trần nhưng KHÔNG cắt được gì (vùng bảo vệ phủ hết mảng) thì trả `null`
+  // như lúc không phải cắt: báo `daCat` với toàn số 0 sẽ in ra dòng log "đã cắt
+  // bớt" trong khi không bỏ đi thứ gì.
+  if (soAnhBo === 0 && soTinBo === 0) return { tinNhan: ds, daCat: null };
   return {
     tinNhan: ds,
-    daCat: { soAnhBo, soTinBo, tokenTruoc, tokenSau: uocLuongTokenTinNhan(ds) },
+    daCat: { soAnhBo, soTinBo, tokenTruoc, tokenSau: uocLuongTokenTinNhan(ds, tokenMoiAnh) },
   };
 }

@@ -1,7 +1,7 @@
 import { getEffectiveLlmSettings } from "../config/runtime-llm-settings.js";
 import { getVisionSettings } from "../config/runtime-vision-settings.js";
 import { createLogger } from "../shared/logger.js";
-import type { ModelOverride } from "./llm-provider.js";
+import { modelHieuLuc, type ModelOverride } from "./llm-provider.js";
 
 /**
  * Model đang hiệu lực có đọc được ảnh không?
@@ -114,9 +114,13 @@ async function lookupFromRouter(
  */
 export function markModelNoVision(override?: ModelOverride): void {
   const base = getEffectiveLlmSettings();
-  const provider = override?.modelProvider ?? base.provider;
+  // Qua `modelHieuLuc` chứ không đọc override thô: agent khai provider lệch thì
+  // override đã bị bỏ qua lúc dựng client, nên lượt thật chạy trên provider
+  // chung. Đọc thô ở đây sẽ thoát sớm vì tưởng đang chạy Anthropic, cache âm
+  // không bao giờ được ghi, và reactive fallback đâm lại đường pixel MỖI lượt -
+  // mỗi lượt tốn hai lần gọi model.
+  const { provider, model } = modelHieuLuc(override);
   if (provider === "anthropic") return;
-  const model = override?.modelName ?? base.model;
   noVisionUntil.set(`${base.baseUrl ?? ""}|${model}`, Date.now() + CACHE_TTL_MS);
   log.warn({ model }, "Ghi nhớ model không đọc được ảnh (provider từ chối bằng 4xx)");
 }
@@ -140,8 +144,10 @@ export async function classifyModelVision(
   if (mode === "off") return "no-vision";
 
   const base = getEffectiveLlmSettings();
-  const provider = override?.modelProvider ?? base.provider;
-  const model = override?.modelName ?? base.model;
+  // Cùng lý do với markModelNoVision: phải là model THẬT SỰ chạy, không phải
+  // model agent khai. Đọc thô thì agent khai `anthropic` sẽ được coi là đọc
+  // được ảnh và bot đính pixel, trong khi lượt thật đi tới model router có thể mù.
+  const { provider, model } = modelHieuLuc(override);
 
   if (provider === "anthropic") return "vision";
 

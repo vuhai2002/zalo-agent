@@ -18,6 +18,13 @@ import { buildAgentTools } from "./tools/index.js";
 import { hasImageParts, isImageRejectionError } from "./vision-rejection-fallback.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import {
+  nganSachAnToan,
+  soSanhUocLuong,
+  TOKEN_MOI_ANH_THEO_CO,
+  uocLuongTokenTinNhan,
+} from "./token-estimate.js";
+import { catNguCanhTheoNganSach } from "./trim-context-to-budget.js";
+import {
   canLuotChot,
   hitStepLimit,
   isEmptyRouterCompletion,
@@ -198,7 +205,14 @@ export async function runAgentTurn({
       // KÍCH THƯỚC - kết quả tool cộng dồn qua từng step (web_fetch một mình đã
       // tới WEB_FETCH_MAX_CHARS ký tự), nên một lượt ít step vẫn phình được.
       // Đo trên DB thật: đã có lượt cộng dồn 184.835 token qua 8 step.
-      stopWhen: [stepCountIs(agent.maxSteps ?? getTuning("LLM_MAX_STEPS")), vuotTranToken(tranToken)],
+      // Dùng ĐÚNG ngân sách đã trừ hao như lúc cắt ngữ cảnh, không phải trần
+      // thô. So với trần thô thì điều kiện này gần như không bao giờ chạy:
+      // provider trả 400 trước khi usage của lần gọi đó kịp về, nên hàm chưa
+      // từng được gọi với con số vượt.
+      stopWhen: [
+        stepCountIs(agent.maxSteps ?? getTuning("LLM_MAX_STEPS")),
+        vuotTranToken(nganSachAnToan(tranToken)),
+      ],
       maxOutputTokens: getTuning("LLM_MAX_OUTPUT_TOKENS"),
       // Bật thinking theo LLM_REASONING_EFFORT - kiểm chứng bằng
       // usage.outputTokenDetails.reasoningTokens > 0 trong log bên dưới
@@ -278,18 +292,30 @@ export async function runAgentTurn({
    * gọi tiếp và rơi vào đúng cái bẫy vừa thoát ra.
    */
   const runWrapUp = async (daLam: ModelMessage[]): Promise<string> => {
+    const nhacChot: ModelMessage = {
+      role: "user",
+      content:
+        "Bạn đã hết lượt gọi công cụ. Dựa vào những gì đã thu thập được ở trên, hãy trả lời người dùng NGAY BÂY GIỜ. Nói rõ phần nào chắc chắn, phần nào còn thiếu vì chưa tra xong - đừng bịa cho đủ. Không kể lể tiến trình, không hứa sẽ tra thêm.",
+    };
+    // Lượt chốt PHẢI đi qua ngân sách. Nếu không, cách chữa cho "ngữ cảnh sắp
+    // tràn" lại là thực hiện một lần gọi TO HƠN lần vừa suýt tràn: nó gửi cả
+    // `messages` lẫn toàn bộ `daLam` (tool call + tool result của mọi step) cộng
+    // thêm lời nhắc. Chốt xong lại 400 thì mất trắng công của cả lượt.
+    //
+    // Bảo vệ 2 tin cuối: lời nhắc chốt, và tin của lượt hiện tại đứng ngay
+    // trước nó trong `daLam` - bỏ một trong hai là hỏng chính mục đích lượt chốt.
+    const { tinNhan: tinChot, daCat: daCatChot } = catNguCanhTheoNganSach({
+      tinNhan: [...messages, ...daLam, nhacChot],
+      tranToken: nganSachAnToan(tranToken),
+      soTinBaoVeCuoi: 2,
+      coAnh: getTuning("ZALO_IMAGE_QUALITY"),
+    });
+    if (daCatChot) log.warn({ ...daCatChot }, "Đã cắt bớt ngữ cảnh cho lượt chốt");
+
     const r = await generateText({
       model: resolveModel(agent, { accountId: account.id, threadId: latest.threadId }),
       system: buildSystemPrompt(agent, latest, memory, account, isolated),
-      messages: [
-        ...messages,
-        ...daLam,
-        {
-          role: "user",
-          content:
-            "Bạn đã hết lượt gọi công cụ. Dựa vào những gì đã thu thập được ở trên, hãy trả lời người dùng NGAY BÂY GIỜ. Nói rõ phần nào chắc chắn, phần nào còn thiếu vì chưa tra xong - đừng bịa cho đủ. Không kể lể tiến trình, không hứa sẽ tra thêm.",
-        },
-      ],
+      messages: tinChot,
       maxOutputTokens: getTuning("LLM_MAX_OUTPUT_TOKENS"),
       maxRetries: 1,
       timeout: { totalMs: getTuning("LLM_TURN_TIMEOUT_MS") },
@@ -331,9 +357,15 @@ export async function runAgentTurn({
       override: agent,
       forceMode: fallbackMode,
       allowlist: account.allowlist,
+      // Đường này từng QUÊN truyền trần, nên lượt thử lại chạy hoàn toàn không
+      // có ngân sách - đúng lúc ngữ cảnh đã nặng tới mức provider vừa từ chối
+      tranToken,
     });
     messages = rebuilt.messages;
     imageMode = rebuilt.imageMode;
+    if (rebuilt.daCat) {
+      log.warn({ ...rebuilt.daCat, tranToken }, "Ngữ cảnh vượt ngân sách ở lượt dựng lại - đã cắt bớt");
+    }
     lanChay++;
     result = await runOnce();
   }
@@ -345,6 +377,11 @@ export async function runAgentTurn({
     lanChay++;
     result = await runOnce();
   }
+
+  const doLechUocLuong = soSanhUocLuong(
+    uocLuongTokenTinNhan(messages, TOKEN_MOI_ANH_THEO_CO[getTuning("ZALO_IMAGE_QUALITY")]),
+    result.steps[0]?.usage?.inputTokens,
+  );
 
   // info + kèm tên tool: khi bot trả lời kém ("chưa lấy được kết quả...") phải
   // nhìn được ngay nó ĐÃ gọi gì - trước đây chỉ có số steps, debug toàn phải đoán
@@ -370,6 +407,14 @@ export async function runAgentTurn({
       cachedTokens: result.totalUsage.inputTokenDetails?.cacheReadTokens ?? 0,
       toolCalls: result.steps.flatMap((step) => step.toolCalls.map((call) => call.toolName)),
       usage: result.totalUsage,
+      // Ước lượng cạnh SỐ THẬT, ghi ở MỌI lượt chứ không chỉ lượt bị cắt.
+      //
+      // Đây là đường hiệu chỉnh duy nhất cho hai hằng số trong `token-estimate.ts`
+      // (ký tự/token và token mỗi ảnh): không đo được từ bảng `agent_turns` vì
+      // cột ở đó là TỔNG qua mọi step. So với `steps[0].usage.inputTokens` -
+      // step ĐẦU là lần gọi duy nhất mà input đúng bằng thứ mình vừa ước lượng,
+      // các step sau đã cộng thêm tool result mà ước lượng không thấy.
+      uocLuong: doLechUocLuong,
     },
     "Hoàn thành lượt agent",
   );

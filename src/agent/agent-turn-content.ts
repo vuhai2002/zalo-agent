@@ -13,18 +13,10 @@ import {
 } from "./history-to-model-messages.js";
 import type { ModelOverride } from "./llm-provider.js";
 import { classifyModelVision } from "./model-vision-detection.js";
+import { nganSachAnToan } from "./token-estimate.js";
 import { catNguCanhTheoNganSach, type KetQuaCat } from "./trim-context-to-budget.js";
 import { describeImage, ensureDescriptionsFor } from "./vision-sidecar.js";
 
-/**
- * Cắt khi ước lượng vượt 70% trần, không đợi chạm 100%.
- *
- * Trần là của MỘT lần gọi, nhưng lượt còn chạy thêm nhiều step sau đó và mỗi
- * step lại cộng thêm kết quả tool vào input (web_fetch một mình đã tới
- * WEB_FETCH_MAX_CHARS ký tự). Cắt sát trần là step đầu vừa lọt thì step hai đã
- * tràn.
- */
-const NGUONG_CAT = 0.7;
 import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
@@ -90,10 +82,14 @@ export async function buildTurnMessages(params: {
   /** Có thì tin của người ngoài danh sách bị gắn nhãn chưa xác minh trong history */
   allowlist?: { mode: "all" | "list"; userIds: string[] };
   /**
-   * Trần token phần input. Bỏ trống = không cắt (đường gọi cũ và test không
-   * quan tâm ngân sách vẫn chạy như trước).
+   * Trần token phần input - CỬA SỔ của model, không phải ngân sách đã trừ hao
+   * (hàm tự trừ qua `nganSachAnToan`).
+   *
+   * BẮT BUỘC, không optional: để optional với mặc định 0 thì quên truyền nghĩa
+   * là tắt ngân sách một cách âm thầm - đúng lỗi đã dính ở đường dựng lại input
+   * sau khi provider từ chối ảnh. Không muốn giới hạn thì truyền 0 tường minh.
    */
-  tranToken?: number;
+  tranToken: number;
 }): Promise<{
   messages: ModelMessage[];
   imageMode: ImageContextMode;
@@ -123,13 +119,15 @@ export async function buildTurnMessages(params: {
   // cách gộp batch thì phải đổi theo.
   messages.push({ role: "user", content: await buildCurrentTurnContent(params.batch, imageMode) });
 
-  // Cắt ở NGƯỠNG THẤP HƠN trần, chừa chỗ cho phần model viết ra và cho kết quả
-  // tool cộng dồn trong lượt - trần là của cả input một lần gọi, mà lượt còn
-  // chạy thêm nhiều step nữa sau tin cuối cùng này.
+  // Ngân sách suy từ trần bằng `nganSachAnToan` - MỘT hàm dùng chung với điều
+  // kiện dừng trong lượt (`vuotTranToken`) và với lượt chốt. Trước đây chỗ này
+  // tự nhân 0.7 còn điều kiện dừng so với 100% trần, nên hai nửa của cùng một
+  // tính năng hiểu con số theo hai nghĩa khác nhau.
   const { tinNhan, daCat } = catNguCanhTheoNganSach({
     tinNhan: messages,
-    tranToken: Math.floor((params.tranToken ?? 0) * NGUONG_CAT),
+    tranToken: nganSachAnToan(params.tranToken),
     soTinBaoVeCuoi: 1,
+    coAnh: getTuning("ZALO_IMAGE_QUALITY"),
   });
   return { messages: tinNhan, imageMode, daCat };
 }

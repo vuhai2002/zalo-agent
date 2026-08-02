@@ -65,10 +65,15 @@ export function canLuotChot(input: { lastStepToolCalls: number }): boolean {
  * ước lượng chỉ dùng để cắt ngữ cảnh TRƯỚC lượt, còn trong lượt thì đã có số
  * thật để mà tin.
  *
- * `steps[].usage.inputTokens` là input của RIÊNG step đó. Lấy max thay vì tổng:
+ * `steps[].usage.inputTokens` là input của RIÊNG step đó (đã đo bằng
+ * `MockLanguageModelV4` trên `ai@7.0.37`: mock trả 1000/3000/7000 thì từng step
+ * đọc ra đúng ba số đó, còn `totalUsage` mới là 11000). Lấy max thay vì tổng:
  * cái quyết định có tràn cửa sổ hay không là lần gọi NẶNG NHẤT, còn tổng chỉ
- * nói lên tiền đã tiêu. Đo trên DB thật: một lượt từng cộng dồn 184.835 token
- * qua 8 step, nhưng không lần gọi nào chạm cửa sổ.
+ * nói lên tiền đã tiêu.
+ *
+ * Truyền vào phải là NGÂN SÁCH đã trừ hao (`nganSachAnToan`), không phải trần
+ * thô: `usage` chỉ về sau khi lần gọi đó THÀNH CÔNG, nên so với trần thô thì
+ * provider đã trả 400 trước khi hàm này kịp thấy con số vượt.
  */
 export function vuotTranToken(tranToken: number) {
   return ({ steps }: { steps: readonly { usage?: { inputTokens?: number } }[] }): boolean => {

@@ -119,8 +119,24 @@ export function resolveLanguageModel(
  * cần đốt token thinking.
  */
 export function resolveReasoningOptions(override?: ModelOverride) {
-  const provider = override?.modelProvider ?? getEffectiveLlmSettings().provider;
+  // Đi qua `doiProviderAnToan` chứ KHÔNG đọc override thô: với agent khai
+  // provider lệch, override bị bỏ qua ở `resolveLanguageModel` nên model chạy
+  // trên provider chung. Đọc thô ở đây sẽ dựng `providerOptions` cho namespace
+  // của provider KHÔNG chạy, provider thật bỏ qua âm thầm và reasoning tắt hẳn
+  // trong khi giao diện vẫn hiện mức suy nghĩ đang bật.
+  const { provider } = doiProviderAnToan(getEffectiveLlmSettings(), override);
   return reasoningProviderOptions(provider, resolveReasoningEffort(override));
+}
+
+/**
+ * Provider + model THẬT SỰ sẽ chạy, sau khi đã bỏ qua override không an toàn.
+ *
+ * Mọi nơi cần suy ra "model nào đang chạy" phải gọi hàm này thay vì tự đọc
+ * `override?.modelProvider ?? base.provider` - đó là cách bốn chỗ trong repo
+ * từng trôi khỏi nhau.
+ */
+export function modelHieuLuc(override?: ModelOverride): { provider: string; model: string } {
+  return doiProviderAnToan(getEffectiveLlmSettings(), override);
 }
 
 /** Mức suy nghĩ hiệu lực: agent đặt riêng thắng mức mặc định ở trang Cấu hình */

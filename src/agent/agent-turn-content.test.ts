@@ -169,6 +169,9 @@ describe("resolveImageContextMode + buildTurnMessages", () => {
       history: [],
       batch: [msgWithImages("hỏng rồi thử lại", [{ url: "http://x/e.png" }])],
       forceMode: "blind",
+      // 0 = không giới hạn, khai TƯỜNG MINH. Trường này cố ý bắt buộc để quên
+      // truyền là lỗi biên dịch chứ không phải tắt ngân sách âm thầm.
+      tranToken: 0,
     });
     assert.equal(imageMode, "blind");
     const last = partsOf(messages[messages.length - 1]!.content);

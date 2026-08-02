@@ -6,6 +6,7 @@ let dataDir: string;
 let detection: typeof import("./model-vision-detection.js");
 let visionStore: typeof import("../config/runtime-vision-settings.js");
 let database: typeof import("../conversation/database.js");
+let llmStore: typeof import("../config/runtime-llm-settings.js");
 
 before(async () => {
   dataDir = setupTestEnv({
@@ -17,6 +18,7 @@ before(async () => {
   });
   detection = await import("./model-vision-detection.js");
   visionStore = await import("../config/runtime-vision-settings.js");
+  llmStore = await import("../config/runtime-llm-settings.js");
   database = await import("../conversation/database.js");
 });
 
@@ -28,6 +30,9 @@ after(() => {
 beforeEach(() => {
   detection.clearVisionDetectionCache();
   visionStore.updateVisionSettings({ mode: "auto" });
+  // Mỗi test bắt đầu từ cấu hình env (openai-compatible). Không có dòng này thì
+  // test nào đổi provider sẽ rò trạng thái sang test sau - đã dính thật.
+  llmStore.clearLlmSettings();
 });
 
 /** Response /models đúng dạng đo được trên 9Router thật (2026-07-26) */
@@ -111,13 +116,11 @@ describe("classifyModelVision", () => {
       calls++;
       return routerPayload;
     };
-    assert.equal(
-      await detection.classifyModelVision(
-        { modelProvider: "anthropic", modelName: "claude-opus-5" },
-        fetcher,
-      ),
-      "vision",
-    );
+    // Anthropic phải là provider ĐANG HIỆU LỰC. Khai qua override trong khi cấu
+    // hình chung là router thì override bị bỏ qua (chống rò khóa API), nên đây
+    // đặt thẳng vào cấu hình chung.
+    llmStore.updateLlmSettings({ provider: "anthropic", model: "claude-opus-5" });
+    assert.equal(await detection.classifyModelVision(undefined, fetcher), "vision");
     assert.equal(calls, 0);
   });
 
@@ -150,14 +153,31 @@ describe("markModelNoVision - cache âm của reactive fallback", () => {
   });
 
   it("đường anthropic không bao giờ bị đánh dấu (mọi model Claude đều có vision)", async () => {
-    detection.markModelNoVision({ modelProvider: "anthropic", modelName: "claude-opus-5" });
+    // Anthropic phải là provider ĐANG HIỆU LỰC, không chỉ là thứ agent khai:
+    // agent khai provider lệch cấu hình chung thì override bị bỏ qua lúc dựng
+    // client (chống rò khóa API), nên lượt thật vẫn chạy trên provider chung.
+    llmStore.updateLlmSettings({ provider: "anthropic", model: "claude-opus-5" });
+    detection.markModelNoVision({ modelName: "claude-opus-5" });
     assert.equal(
-      await detection.classifyModelVision(
-        { modelProvider: "anthropic", modelName: "claude-opus-5" },
-        async () => routerPayload,
-      ),
+      await detection.classifyModelVision({ modelName: "claude-opus-5" }, async () => routerPayload),
       "vision",
     );
+  });
+
+  it("agent KHAI anthropic nhưng cấu hình chung là router: phân loại theo model THẬT, không theo lời khai", async () => {
+    // Bất biến đi kèm chốt chặn rò khóa API (`doiProviderAnToan`). Đọc override
+    // thô thì đường tắt `provider === "anthropic"` trả "vision" ngay, bot đính
+    // pixel vì tưởng đang chạy Claude, trong khi lượt thật đi tới model router
+    // có thể mù ảnh.
+    //
+    // Đặt model chung thành model router KHÔNG có vision để tách bạch hai khả
+    // năng: honour lời khai -> "vision"; phân loại theo model thật -> "no-vision".
+    llmStore.updateLlmSettings({ provider: "openai-compatible", model: "ds/deepseek-v4-pro" });
+    const kq = await detection.classifyModelVision(
+      { modelProvider: "anthropic", modelName: "claude-opus-5" },
+      async () => routerPayload,
+    );
+    assert.equal(kq, "no-vision", "override provider lệch không được cấp đường tắt vision");
   });
 
   it("clearVisionDetectionCache xóa cả cache âm", async () => {
