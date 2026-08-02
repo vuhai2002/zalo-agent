@@ -52,6 +52,22 @@ Dashboard: set `DASHBOARD_PASSWORD` trong `.env` (không set = tắt), mở `htt
 Thêm tài khoản Zalo + quét QR login + tạo agent (não riêng cho từng account) đều làm
 trên dashboard (trang Accounts / Agents) - account/agent lưu trong DB, không cần sửa file.
 
+## Cập nhật
+
+Bản đang chạy hiện ở chân sidebar dashboard. Bản mới nhất xem ở
+[Releases](https://github.com/vuhai2002/zalo-agent/releases) - bấm **Watch ->
+Custom -> Releases** trên repo để được báo khi có bản mới.
+
+```bash
+git fetch --tags && git checkout v0.2.0   # hoặc git pull nếu bám theo main
+pnpm install
+pnpm build:web                            # thiếu bước này dashboard vẫn là bản cũ
+```
+
+Đọc [CHANGELOG.md](CHANGELOG.md) xem bản mới có cần thêm biến môi trường không.
+Dữ liệu trong `data/` giữ nguyên, migration chạy tự động lúc khởi động.
+Cách phát hành bản mới: [docs/release-guide.md](docs/release-guide.md).
+
 ## Cấu trúc
 
 ```

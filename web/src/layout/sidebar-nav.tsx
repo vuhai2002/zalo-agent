@@ -140,7 +140,7 @@ export function SidebarNav({
         <div className="flex items-center justify-between border-t border-line px-4 py-3">
           <span className="flex items-center gap-2 text-[12px] text-ink-soft">
             <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`} />
-            {online ? "Connected" : "Offline"} · v0.1.0
+            {online ? "Connected" : "Offline"} · v{__APP_VERSION__}
           </span>
           <div className="flex items-center gap-0.5">
             <button
