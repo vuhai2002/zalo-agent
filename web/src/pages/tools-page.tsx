@@ -9,7 +9,10 @@ import type {
 } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
-import { IconSliders } from "../shared/dashboard-icons";
+import {
+  IconBolt,
+  IconSliders,
+} from "../shared/dashboard-icons";
 import { SelectMenu } from "../shared/select-menu";
 import { Badge, ToggleKnob } from "../shared/ui-bits";
 import { ImageSettingsModal } from "./image-settings-modal";
@@ -96,6 +99,7 @@ export function ToolsPage() {
   return (
     <>
       <PageHeader
+        icon={IconBolt}
         title="Tools"
         subtitle="Bật/tắt khả năng của bot cho từng account - tool tắt sẽ không xuất hiện với model"
         aside={

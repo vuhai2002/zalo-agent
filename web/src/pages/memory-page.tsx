@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AccountInfo, MemoryFactItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { IconBrain } from "../shared/dashboard-icons";
 import { AccountFilter, accountLabel } from "../shared/account-filter";
 import { Badge, EmptyRow, formatTime, ListToolbar, TableShell } from "../shared/ui-bits";
 
@@ -35,6 +36,7 @@ export function MemoryPage({ accounts }: { accounts: AccountInfo[] }) {
   return (
     <div>
       <PageHeader
+        icon={IconBrain}
         title="Memory"
         subtitle="Fact bot tự ghi nhớ qua tool save_memory - fact học ở chat riêng không bao giờ dùng trong nhóm"
       />

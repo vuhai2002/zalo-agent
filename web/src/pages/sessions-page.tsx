@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AccountInfo, ThreadItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { IconChat } from "../shared/dashboard-icons";
 import { AccountFilter, accountLabel } from "../shared/account-filter";
 import {
   Badge,
@@ -45,6 +46,7 @@ export function SessionsPage({ accounts }: { accounts: AccountInfo[] }) {
   return (
     <div>
       <PageHeader
+        icon={IconChat}
         title="Sessions"
         subtitle="Mỗi thread (chat riêng / nhóm) là một session, ngữ cảnh giữ trong SQLite"
       />

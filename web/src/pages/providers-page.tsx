@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ProviderSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { IconSliders } from "../shared/dashboard-icons";
 import { SecretInput } from "../shared/secret-input";
 import { Badge } from "../shared/ui-bits";
 
@@ -69,6 +70,7 @@ export function ProvidersPage() {
   return (
     <div className="max-w-2xl">
       <PageHeader
+        icon={IconSliders}
         title="Providers"
         subtitle="Cấu hình LLM runtime - đè lên .env, áp dụng ngay không cần restart bot"
         aside={settings.hasOverride ? <Badge tone="blue">Đang dùng override</Badge> : undefined}

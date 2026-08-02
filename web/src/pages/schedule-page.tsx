@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AccountInfo, ScheduledJobItem } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { IconClock } from "../shared/dashboard-icons";
 import { AccountFilter, accountLabel } from "../shared/account-filter";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { ScheduleEditDrawer } from "./schedule-edit-drawer";
@@ -71,6 +72,7 @@ export function SchedulePage({ accounts }: { accounts: AccountInfo[] }) {
   return (
     <div>
       <PageHeader
+        icon={IconClock}
         title="Lịch hẹn"
         subtitle="Bot tự nhắn theo lịch: nhắc hẹn hoặc chạy 1 lượt agent - xem, sửa, chạy thử ngay không cần chat"
         aside={

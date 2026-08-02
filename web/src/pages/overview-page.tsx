@@ -9,6 +9,7 @@ import {
   IconClock,
   IconCpu,
   IconDatabase,
+  IconGrid,
   IconHeart,
   IconMessage,
   IconSignal,
@@ -22,9 +23,11 @@ import {
   SectionCard,
   StatCard,
 } from "../shared/ui-bits";
+import { UsageBarChart, type UsageDay } from "./usage-bar-chart";
 
 export function OverviewPage() {
   const [data, setData] = useState<OverviewData | null>(null);
+  const [chiSo, setChiSo] = useState<"turns" | "tokens">("turns");
 
   useEffect(() => {
     api.overview().then(setData).catch(() => setData(null));
@@ -58,21 +61,17 @@ export function OverviewPage() {
   // ngày VN vì khóa ngày UTC của trình duyệt không khớp khóa ngày VN của server.
   const todayUsage = dailyByDay.get(data.todayKey);
   // Sparkline chạy trái -> phải theo thời gian
-  const series = [...dailyByDay.entries()]
+  const series: UsageDay[] = [...dailyByDay.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([day, agg]) => ({ day, ...agg }));
 
+  const tongLuot = series.reduce((n, d) => n + d.turns, 0);
+  const tongToken = series.reduce((n, d) => n + d.inputTokens + d.outputTokens, 0);
+  const trungBinhNgay = series.length > 0 ? Math.round(tongToken / series.length) : 0;
+
   return (
     <div>
-      <PageHeader
-        title="Overview"
-        subtitle="Trạng thái bot và mức dùng LLM"
-        aside={
-          <Badge tone={data.system.llm.hasOverride ? "blue" : "gray"} dot={false}>
-            {data.system.llm.provider} · {data.system.llm.model}
-          </Badge>
-        }
-      />
+      <PageHeader icon={IconGrid} title="Tổng quan" subtitle="Trạng thái bot và mức dùng LLM" />
 
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -109,25 +108,47 @@ export function OverviewPage() {
 
       <SectionCard
         icon={IconHeart}
-        title="System Health"
+        title="Tình trạng hệ thống"
+        subtitle="Bot đang chạy ra sao và giữ bao nhiêu dữ liệu"
         aside={<Badge tone="gray" dot={false}>node {data.system.nodeVersion}</Badge>}
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <InfoTile icon={IconClock} label="Uptime" value={formatUptime(data.system.uptimeSeconds)} />
-          <InfoTile icon={IconDatabase} label="Database" value="SQLite · Connected" />
+          <InfoTile
+            icon={IconClock}
+            label="Uptime"
+            value={formatUptime(data.system.uptimeSeconds)}
+            hint="Thời gian hoạt động"
+          />
+          <InfoTile icon={IconDatabase} label="Database" value="SQLite · Connected" hint="Trạng thái kết nối" />
           <InfoTile
             icon={IconSignal}
             label="Accounts online"
             value={`${data.accounts.filter((a) => a.online).length} / ${data.accounts.length}`}
+            hint="Tài khoản đang online"
           />
-          <InfoTile icon={IconChat} label="Sessions" value={formatNumber(stats?.threads ?? 0)} />
-          <InfoTile icon={IconUsers} label="Contacts" value={formatNumber(stats?.contacts ?? 0)} />
-          <InfoTile icon={IconBrain} label="Memory facts" value={formatNumber(stats?.memories ?? 0)} />
+          <InfoTile
+            icon={IconChat}
+            label="Sessions"
+            value={formatNumber(stats?.threads ?? 0)}
+            hint="Phiên hội thoại"
+          />
+          <InfoTile
+            icon={IconUsers}
+            label="Contacts"
+            value={formatNumber(stats?.contacts ?? 0)}
+            hint="Tổng số liên hệ"
+          />
+          <InfoTile
+            icon={IconBrain}
+            label="Memory facts"
+            value={formatNumber(stats?.memories ?? 0)}
+            hint="Dữ liệu trí nhớ"
+          />
         </div>
 
         <div className="mt-5">
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
-            Channels
+            Kênh
           </div>
           <div className="flex flex-wrap gap-2">
             {data.accounts.map((a) => (
@@ -141,34 +162,61 @@ export function OverviewPage() {
 
       {series.length > 0 && (
         <div className="mt-5">
-          <SectionCard icon={IconBolt} title="Mức dùng 7 ngày">
-            <div>
-              {series.map((d) => {
-                const total = d.inputTokens + d.outputTokens;
-                const max = Math.max(...series.map((x) => x.inputTokens + x.outputTokens), 1);
-                return (
-                  <div
-                    key={d.day}
-                    className="flex items-center gap-3 border-b border-line/60 py-2 text-[13px] last:border-0 sm:gap-4"
+          <SectionCard
+            icon={IconBolt}
+            title="Mức sử dụng"
+            subtitle={`Theo dõi hoạt động ${series.length} ngày gần nhất`}
+            aside={
+              // Hai chỉ số KHÔNG vẽ chung một trục: số token lớn hơn số lượt cả
+              // nghìn lần, chồng lên nhau thì cột "lượt" dẹp thành đường kẻ
+              <div className="flex rounded-lg border border-line p-0.5">
+                {(
+                  [
+                    ["turns", "Lượt dùng"],
+                    ["tokens", "Token"],
+                  ] as const
+                ).map(([key, nhan]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setChiSo(key)}
+                    className={`rounded-md px-3 py-1 text-[13px] font-medium transition-colors ${
+                      chiSo === key ? "bg-zalo-50 text-zalo-700" : "text-ink-soft hover:text-ink"
+                    }`}
                   >
-                    <span className="w-12 shrink-0 text-ink-soft sm:w-20">{d.day.slice(5)}</span>
-                    <div className="h-1.5 min-w-8 flex-1 overflow-hidden rounded-full bg-tile">
-                      <div
-                        className="h-full rounded-full bg-zalo-500"
-                        style={{ width: `${Math.max(2, (total / max) * 100)}%` }}
-                      />
-                    </div>
-                    <span className="shrink-0 text-right text-ink-soft">
-                      <span className="hidden sm:inline">{d.turns} lượt · </span>
-                      {formatNumber(total)} token
-                    </span>
-                  </div>
-                );
-              })}
+                    {nhan}
+                  </button>
+                ))}
+              </div>
+            }
+          >
+            <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <TongKet nhan="Tổng lượt" giaTri={formatNumber(tongLuot)} mau="bg-zalo-500" />
+              <TongKet nhan="Tổng token" giaTri={formatNumber(tongToken)} mau="bg-emerald-500" />
+              <TongKet nhan="Trung bình/ngày" giaTri={formatNumber(trungBinhNgay)} mau="bg-violet-500" />
             </div>
+
+            <UsageBarChart data={series} metric={chiSo} />
+
+            <p className="mt-3 text-[12px] text-ink-soft">
+              Đưa chuột lên từng cột để xem cả số lượt lẫn số token của ngày đó.
+            </p>
           </SectionCard>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Ô tổng kết nhỏ phía trên biểu đồ - chấm màu nối số với ý nghĩa của nó */
+function TongKet({ nhan, giaTri, mau }: { nhan: string; giaTri: string; mau: string }) {
+  return (
+    <div className="gc-tile">
+      <div className="flex items-center gap-2">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${mau}`} />
+        <span className="text-[12px] text-ink-soft">{nhan}</span>
+      </div>
+      <div className="mt-1 text-[20px] font-semibold text-ink">{giaTri}</div>
     </div>
   );
 }

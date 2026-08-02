@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { LogEntry } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { IconDatabase } from "../shared/dashboard-icons";
 import { SelectMenu } from "../shared/select-menu";
 
 /**
@@ -109,6 +110,7 @@ export function LogsPage() {
   return (
     <>
       <PageHeader
+        icon={IconDatabase}
         title="Logs"
         subtitle="Log toàn hệ thống đọc từ file. File ghi cả mức debug nên đầy đủ hơn nhìn terminal."
       />

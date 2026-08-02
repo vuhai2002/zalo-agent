@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TuningDef, TuningGroup, TuningValue } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
+import { PageHeader } from "../layout/page-header";
 import { IconGear, IconSearch } from "../shared/dashboard-icons";
 import { ChangePasswordSection } from "./change-password-section";
 import { ResetAllSettingsSection } from "./reset-all-settings-section";
@@ -120,32 +121,28 @@ export function TuningPage() {
 
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-zalo-50 text-zalo-500">
-            <IconGear size={22} />
-          </span>
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Cấu hình</h1>
-            <p className="mt-0.5 text-[14px] text-ink-soft">
-              Thiết lập và tùy chỉnh bot để phù hợp với nhu cầu sử dụng của bạn.
-            </p>
+      {/* Dùng PageHeader chung như mọi trang khác - trước đây trang này tự dựng
+          header riêng, nên sửa kiểu dáng ở một nơi là hai bên lệch nhau ngay */}
+      <PageHeader
+        icon={IconGear}
+        title="Cấu hình"
+        subtitle="Thiết lập và tùy chỉnh bot để phù hợp với nhu cầu sử dụng của bạn."
+        aside={
+          <div className="relative w-full max-w-xs">
+            <IconSearch
+              size={16}
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft/60"
+            />
+            <input
+              type="search"
+              className="gc-input w-full pr-10"
+              placeholder="Tìm kiếm cấu hình..."
+              value={tim}
+              onChange={(e) => setTim(e.target.value)}
+            />
           </div>
-        </div>
-        <div className="relative w-full max-w-xs">
-          <IconSearch
-            size={16}
-            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft/60"
-          />
-          <input
-            type="search"
-            className="gc-input w-full pr-10"
-            placeholder="Tìm kiếm cấu hình..."
-            value={tim}
-            onChange={(e) => setTim(e.target.value)}
-          />
-        </div>
-      </div>
+        }
+      />
 
       {loi && (
         <div className="mb-4 whitespace-pre-line rounded-xl border border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 px-4 py-2.5 text-[13px] leading-[1.6] text-red-700 dark:text-red-300">

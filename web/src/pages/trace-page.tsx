@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { TraceStep, TraceTurnAcrossThreads } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { IconCpu } from "../shared/dashboard-icons";
 import { formatTime } from "../shared/ui-bits";
 import { TraceRong, TraceStepCard } from "./trace-step-card";
 
@@ -64,6 +65,7 @@ export function TracePage() {
   return (
     <>
       <PageHeader
+        icon={IconCpu}
         title="Trace agent"
         subtitle="Mỗi lượt bot trả lời đã chạy qua những step nào: model nói gì, gọi tool nào với tham số gì"
       />

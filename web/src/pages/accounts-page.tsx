@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ManagedAccount, ManagedAgent } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { IconSignal } from "../shared/dashboard-icons";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { Badge, InitialAvatar } from "../shared/ui-bits";
 import { AccountEditDrawer } from "./account-edit-drawer";
@@ -54,6 +55,7 @@ export function AccountsPage() {
   return (
     <div>
       <PageHeader
+        icon={IconSignal}
         title="Accounts"
         subtitle="Tài khoản Zalo của bot - mỗi account gắn một agent (não) và có policies riêng"
         aside={

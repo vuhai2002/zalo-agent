@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ManagedAgent } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { IconBot } from "../shared/dashboard-icons";
 import { AgentEditDrawer } from "./agent-edit-drawer";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { Badge } from "../shared/ui-bits";
@@ -37,6 +38,7 @@ export function AgentsPage() {
   return (
     <div>
       <PageHeader
+        icon={IconBot}
         title="Agents"
         subtitle="Mỗi agent là một bộ não: persona + model riêng, gắn vào tài khoản Zalo ở trang Accounts"
         aside={

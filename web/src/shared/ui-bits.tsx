@@ -106,28 +106,34 @@ export function StatCard({
   );
 }
 
-/** Panel lớn có header icon + title + slot phải (System Health, Connected Clients...) */
+/** Panel lớn có header icon + title (+ subtitle) + slot phải */
 export function SectionCard({
   icon: Icon,
   title,
+  subtitle,
   aside,
   children,
 }: {
   icon?: (p: SVGProps<SVGSVGElement> & { size?: number }) => ReactNode;
   title: string;
+  /** Câu phụ dưới tiêu đề - nói panel này đang cho xem cái gì */
+  subtitle?: string;
   aside?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="gc-card p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
           {Icon && (
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-tile text-ink">
-              <Icon size={15} />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zalo-50 text-zalo-500">
+              <Icon size={19} />
             </span>
           )}
-          <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+          <div className="min-w-0">
+            <h2 className="text-[16px] font-semibold text-ink">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-[13px] text-ink-soft">{subtitle}</p>}
+          </div>
         </div>
         {aside}
       </div>
@@ -136,24 +142,32 @@ export function SectionCard({
   );
 }
 
-/** Tile nhỏ trong panel: icon + label + value */
+/**
+ * Tile nhỏ trong panel: icon + label + value (+ mô tả phụ).
+ *
+ * Giá trị đứng TRÊN mô tả: đọc lướt một bảng số thì mắt bắt số trước, câu giải
+ * thích chỉ cần khi người ta dừng lại ở đúng ô đó.
+ */
 export function InfoTile({
   icon: Icon,
   label,
   value,
+  hint,
 }: {
   icon: (p: SVGProps<SVGSVGElement> & { size?: number }) => ReactNode;
   label: string;
   value: ReactNode;
+  hint?: string;
 }) {
   return (
     <div className="gc-tile flex items-center gap-3">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-surface text-ink-soft">
-        <Icon size={16} />
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface text-zalo-500">
+        <Icon size={17} />
       </span>
       <div className="min-w-0">
         <div className="text-[12px] text-ink-soft">{label}</div>
         <div className="truncate text-[15px] font-semibold text-ink">{value}</div>
+        {hint && <div className="truncate text-[11px] text-ink-soft/80">{hint}</div>}
       </div>
     </div>
   );

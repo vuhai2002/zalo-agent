@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AccountInfo, ContactItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { IconUsers } from "../shared/dashboard-icons";
 import { AccountFilter, accountLabel } from "../shared/account-filter";
 import {
   Badge,
@@ -38,6 +39,7 @@ export function ContactsPage({ accounts }: { accounts: AccountInfo[] }) {
   return (
     <div>
       <PageHeader
+        icon={IconUsers}
         title="Contacts"
         subtitle="Tự thu thập từ mọi tin nhắn đến, kể cả người bot không trả lời"
       />
