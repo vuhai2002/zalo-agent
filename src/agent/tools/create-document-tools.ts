@@ -19,6 +19,7 @@ import { createLogger } from "../../shared/logger.js";
 import { withNamedTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
 import { ketQuaLoi, type KetQuaLoiTool } from "./tool-failure-result.js";
+import { capTionSach } from "./clean-tool-caption.js";
 
 /**
  * Tool tạo file .docx/.xlsx rồi GỬI LUÔN cho cuộc trò chuyện.
@@ -51,7 +52,7 @@ async function deliverFile(
   await withNamedTempFile(fileName, data, (filePath) =>
     enqueueSend(threadKey, () =>
       ctx.api.sendMessage(
-        { msg: caption ?? "", attachments: [filePath] },
+        { msg: capTionSach(caption) ?? "", attachments: [filePath] },
         ctx.message.threadId,
         ctx.message.threadType,
       ),

@@ -43,7 +43,20 @@ export function getAccountStats(accountId: string, startOfTodayUtc: string): Acc
 export type SystemInfo = {
   uptimeSeconds: number;
   nodeVersion: string;
-  llm: { provider: string; model: string; hasOverride: boolean };
+  llm: {
+    provider: string;
+    model: string;
+    hasOverride: boolean;
+    /**
+     * Đủ để GỌI ĐƯỢC model chưa (có key + model, và có base URL nếu cần).
+     *
+     * Cần cờ này vì từ khi `.env` chỉ còn một biến bắt buộc, bot khởi động
+     * BÌNH THƯỜNG khi chưa cấu hình gì - dashboard xanh, account online, mà mọi
+     * tin nhắn đều nhận câu báo lỗi. Cảnh báo duy nhất trước đây là một dòng
+     * `logger.warn` lúc boot, thứ mà người dùng dashboard không bao giờ đọc.
+     */
+    daCauHinh: boolean;
+  };
 };
 
 export function getSystemInfo(): SystemInfo {
@@ -51,6 +64,13 @@ export function getSystemInfo(): SystemInfo {
   return {
     uptimeSeconds: Math.floor(process.uptime()),
     nodeVersion: process.version,
-    llm: { provider: llm.provider, model: llm.model, hasOverride: llm.hasOverride },
+    llm: {
+      provider: llm.provider,
+      model: llm.model,
+      hasOverride: llm.hasOverride,
+      daCauHinh: Boolean(
+        llm.apiKey && llm.model && (llm.provider !== "openai-compatible" || llm.baseUrl),
+      ),
+    },
   };
 }

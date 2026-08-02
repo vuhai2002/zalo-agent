@@ -115,6 +115,19 @@ describe("phatHienLuotHong - lỗi bắt được ở LẦN CHẠY THẬT ĐẦU
     }
   });
 
+  it("câu báo lỗi với token KHÁC 0 vẫn là lượt hỏng - nhánh riêng, không nhờ vế 0 token", () => {
+    // Vòng rà soát bắt được: cả ba ca dưới đây đều truyền tokens:0 nên vế thứ
+    // hai tự bắt hộ, và xóa hẳn nhánh so câu báo lỗi thì 16/16 vẫn xanh.
+    //
+    // Nhánh đó KHÔNG thừa: `deliverChatReply` chặn vì rò prompt xảy ra SAU khi
+    // `finishAgentTurn` đã ghi token thật, nên đúng ca nó sinh ra để bắt lại là
+    // ca `tokens > 0`.
+    assert.ok(
+      phatHienLuotHong({ tokens: 5000, traLoi: CAU_LOI[0]!, cauLoiHeThong: CAU_LOI }),
+      "token > 0 mà bot trả câu báo lỗi hệ thống thì vẫn là lượt hỏng",
+    );
+  });
+
   it("0 token là lượt hỏng dù câu trả lời trông bình thường", () => {
     assert.ok(
       phatHienLuotHong({ tokens: 0, traLoi: "Hôm nay thứ tư ạ", cauLoiHeThong: CAU_LOI }),

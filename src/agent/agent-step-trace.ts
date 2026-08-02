@@ -54,7 +54,20 @@ export type StepTrace = {
   text: string;
   reasoning: string;
   toolCalls: { name: string; input: string }[];
-  toolResults: { name: string; output: string }[];
+  /**
+   * `hong` = nhánh HỎNG của tool (`ketQuaLoi`), không phải kết quả bình thường.
+   *
+   * Cần cờ RIÊNG chứ không để UI dò tiền tố "LỖI: " trong `output`: luật dựa
+   * trên chữ thì đổi một chữ là mù, đúng thứ `tool-failure-result.ts` sinh ra
+   * để tránh. Không có cờ này thì mọi lỗi NGHIỆP VỤ thật (web_fetch chết,
+   * web_search rỗng, hết suất vẽ ảnh) hiện trên trang Trace y hệt một kết quả
+   * thành công - còn khối đỏ "Tool chạy lỗi" chỉ đọc `toolErrors`, thứ mà repo
+   * này gần như không bao giờ sinh ra.
+   *
+   * Cột `tool_results` lưu JSON nên thêm trường KHÔNG cần migration; bản ghi cũ
+   * thiếu trường thì `hong` là `undefined`, UI coi như không hỏng.
+   */
+  toolResults: { name: string; output: string; hong?: boolean }[];
   /** Tool chạy lỗi: schema chặn input, tool ném exception, provider trả lỗi */
   toolErrors: { name: string; error: string }[];
   finishReason: string;
@@ -129,6 +142,7 @@ export function summarizeStep(step: RawStep, maxChars: number, attempt = 1): Ste
     toolResults: (step.toolResults ?? []).map((r) => ({
       name: r.toolName ?? "?",
       output: cat(thanhChuoi(r.output), maxChars),
+      ...(laKetQuaLoi(r.output) ? { hong: true } : {}),
     })),
     toolErrors: (step.content ?? [])
       .filter((p) => p.type === "tool-error")

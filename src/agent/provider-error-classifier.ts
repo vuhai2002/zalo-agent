@@ -1,4 +1,5 @@
 import { APICallError, RetryError } from "ai";
+import { LoiCauHinhLlm } from "./llm-config-error.js";
 
 /**
  * Bóc lớp bọc `RetryError` của SDK.
@@ -33,6 +34,15 @@ function bocLoi(err: unknown): unknown {
  */
 
 export type LoaiLoiProvider =
+  /**
+   * CHÍNH MÌNH chưa cấu hình xong (thiếu API key / model / base URL), chưa hề
+   * gọi ra tới provider. Thử lại VÔ ÍCH và chờ cũng vô ích.
+   *
+   * Tách khỏi `auth` vì hai bên chữa ở hai nơi khác nhau: `auth` là khóa SAI
+   * (đã nhập rồi, provider từ chối), còn đây là CHƯA NHẬP. Câu báo cho người
+   * nhắn cũng phải khác.
+   */
+  | "cau_hinh"
   /** 429 - hết quota hoặc bị siết nhịp. Chờ rồi thử lại có ích. */
   | "rate_limit"
   /** Input vượt cửa sổ ngữ cảnh. Cắt bớt rồi thử lại có ích. */
@@ -109,6 +119,17 @@ export function maHttpCua(raw: unknown): number | undefined {
 
 export function phanLoaiLoiProvider(raw: unknown): LoaiLoiProvider {
   const err = bocLoi(raw);
+
+  // XÉT TRƯỚC mọi thứ khác. Đây là lỗi của chính mình, chưa hề gọi ra ngoài nên
+  // không có mã HTTP nào để mà đọc - để nó rơi xuống dưới là ra `unknown`, và
+  // `unknown` được xử như `transient` nên người nhắn nhận câu "thử lại sau ít
+  // phút". Đó là nói dối: chưa nhập cấu hình thì chờ bao lâu cũng không tự hết.
+  //
+  // Trạng thái này KHÔNG hiếm nữa kể từ khi `.env` chỉ còn một biến bắt buộc:
+  // bot khởi động được khi chưa cấu hình gì, nên đây là trạng thái mặc định của
+  // lần cài đầu, và mỗi tin nhắn tới đều đi qua đây.
+  if (LoiCauHinhLlm.isInstance(err)) return "cau_hinh";
+
   const ma = maHttpCua(err);
   const chuoi = chuoiLoi(err);
 
@@ -136,7 +157,7 @@ export function phanLoaiLoiProvider(raw: unknown): LoaiLoiProvider {
 
 /** Loại nào thì thử lại mới có ích - `unknown` cho thử vì hỏng an toàn */
 export function nenThuLai(loai: LoaiLoiProvider): boolean {
-  return loai !== "auth";
+  return loai !== "auth" && loai !== "cau_hinh";
 }
 
 /**

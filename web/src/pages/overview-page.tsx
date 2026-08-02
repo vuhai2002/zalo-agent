@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import type { OverviewData } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
@@ -73,6 +74,25 @@ export function OverviewPage() {
   return (
     <div>
       <PageHeader icon={IconGrid} title="Tổng quan" subtitle="Trạng thái bot và mức dùng LLM" />
+
+      {/* Bot khởi động BÌNH THƯỜNG khi chưa cấu hình LLM (cố ý - phải vào được
+          dashboard mới nhập được). Không có dải này thì bức tranh người dùng
+          thấy là: dashboard xanh, account online, mà mọi tin nhắn đều nhận câu
+          "chưa cài đặt xong". Cảnh báo duy nhất trước đây là một dòng log lúc
+          boot, thứ không ai mở dashboard để đọc. */}
+      {!data.system.llm.daCauHinh && (
+        <div className="mb-5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
+          <div className="text-[13px] font-semibold text-amber-900 dark:text-amber-200">
+            Chưa cấu hình LLM - bot chưa trả lời được tin nhắn nào
+          </div>
+          <div className="mt-1 text-[12px] leading-relaxed text-amber-800 dark:text-amber-300">
+            Thiếu API key, tên model hoặc base URL.{" "}
+            <Link to="/providers" className="font-medium underline underline-offset-2">
+              Nhập ở trang Providers
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard

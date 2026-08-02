@@ -1671,3 +1671,30 @@ khóa nick cao nhất):
   bước rủi ro khóa nick cao nhất (lịch lặp lại liên tục)
 - [ ] Chưa kiểm trang Cấu hình bằng trình duyệt thật: nhóm `lich-hen` hiện đủ
   9 ô, sửa được, lưu được, ô đang lấy từ `.env` có nhãn riêng + nút trả về mặc định
+
+## Đợt "agent chuẩn production" (A-G) - XONG 02/08 tới 03/08/2026
+
+Kế hoạch đầy đủ: `plans/260802-1348-agent-chuan-production/`. Bảy khoảng cách
+A-G rút ra từ vòng đối chiếu agent của repo với định nghĩa agent của Anthropic,
+OpenAI và 12-Factor Agents.
+
+| Gap | Việc | Trạng thái |
+|---|---|---|
+| A | Công cụ theo agent (giao hai lớp agent x tài khoản) | Xong |
+| B | Chặn vòng lặp công cụ trong một lượt | Xong |
+| C | `pnpm eval` - bộ kiểm thử chạy model thật | Xong |
+| D | Ngân sách token thật cho ngữ cảnh | Xong |
+| E | Lớp làm sạch câu trả lời trước khi ra Zalo | Xong |
+| F | Luật hỏi lại khi thiếu thông tin | Xong |
+| G | Phân loại lỗi nhà cung cấp | Xong |
+
+Kèm theo: `.env.example` rút từ 68 biến còn 13 (dashboard là nguồn cấu hình
+chính), và một vòng rà soát toàn cục bắt được ReDoS 20 giây trong lớp làm sạch.
+
+### Còn treo
+
+- [ ] Chạy `pnpm eval` định kỳ trước mỗi lần phát hành - hiện chạy tay.
+- [ ] Caption của 4 công cụ gửi file đã qua lớp làm sạch, nhưng CHƯA có test
+  riêng cho từng công cụ đó.
+- [ ] Ba dòng "hỏi lại" trong persona chưa chứng minh được tác dụng với model
+  đang dùng (bỏ đi eval vẫn xanh) - giữ làm lưới đỡ cho lần đổi model rẻ hơn.

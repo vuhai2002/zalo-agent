@@ -37,6 +37,11 @@ export const LOI_THEO_LOAI: Record<string, string> = {
   // Đây là lỗi CẤU HÌNH, chờ bao lâu cũng không tự hết - phải nói khác hẳn
   // câu "thử lại sau", kẻo người nhắn ngồi đợi vô vọng.
   auth: "Phần kết nối của mình đang có vấn đề về cấu hình, mình đã báo lại cho chủ bot. Bạn nhắn lại sau nhé.",
+  // Khác `auth` ở chỗ chưa nhập gì cả, chứ không phải nhập sai. Người nhắn
+  // không cần biết chi tiết đó, nhưng câu phải nói rõ là CHƯA DÙNG ĐƯỢC chứ
+  // không phải trục trặc thoáng qua - nếu không họ sẽ nhắn lại mỗi vài phút.
+  cau_hinh:
+    "Bot mình chưa được cài đặt xong nên chưa trả lời được. Mình đã báo cho chủ bot, bạn quay lại sau nhé.",
 };
 
 /** Câu hợp với loại lỗi; loại lạ thì rơi về câu chung */

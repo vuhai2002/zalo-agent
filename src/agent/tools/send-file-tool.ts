@@ -8,6 +8,7 @@ import { downloadFromPublicUrl } from "../../shared/safe-remote-download.js";
 import { withTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
+import { capTionSach } from "./clean-tool-caption.js";
 
 /**
  * Trần tải file từ URL - CHÍNH SÁCH tự đặt, không phải giới hạn của Zalo.
@@ -27,7 +28,7 @@ export function createSendFileTool({ api, account, message }: ToolContext) {
   const sendAttachment = (filePath: string, caption: string | undefined) =>
     enqueueSend(`${account.id}:${message.threadId}`, () =>
       api.sendMessage(
-        { msg: caption ?? "", attachments: [filePath] },
+        { msg: capTionSach(caption) ?? "", attachments: [filePath] },
         message.threadId,
         message.threadType,
       ),

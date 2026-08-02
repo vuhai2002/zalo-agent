@@ -10,6 +10,7 @@ import {
   ROUTER_PROVIDER_OPTIONS_KEY,
   type ReasoningEffort,
 } from "./reasoning-options.js";
+import { LoiCauHinhLlm } from "./llm-config-error.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 
 const log = createLogger("llm-provider");
@@ -78,7 +79,8 @@ export function resolveLanguageModel(
   const base = getEffectiveLlmSettings();
   const settings = { ...base, ...doiProviderAnToan(base, override) };
   if (!settings.apiKey) {
-    throw new Error(
+    throw new LoiCauHinhLlm(
+      "api_key",
       "Chưa cấu hình LLM API key - nhập ở trang Providers trên dashboard (hoặc LLM_API_KEY trong .env)",
     );
   }
@@ -86,7 +88,8 @@ export function resolveLanguageModel(
   // Không có nhánh này thì provider nhận model rỗng và người dùng nhận một lỗi
   // HTTP khó hiểu từ router thay vì câu nói rõ mình cần làm gì.
   if (!settings.model) {
-    throw new Error(
+    throw new LoiCauHinhLlm(
+      "model",
       "Chưa cấu hình model - nhập ở trang Providers trên dashboard (hoặc LLM_MODEL trong .env)",
     );
   }
@@ -98,7 +101,10 @@ export function resolveLanguageModel(
   switch (settings.provider) {
     case "openai-compatible": {
       if (!settings.baseUrl) {
-        throw new Error("Thiếu base URL cho provider openai-compatible");
+        throw new LoiCauHinhLlm(
+          "base_url",
+          "Chưa cấu hình base URL cho provider openai-compatible - nhập ở trang Providers trên dashboard",
+        );
       }
       const provider = createOpenAICompatible({
         // Đổi name phải đổi cả ROUTER_PROVIDER_OPTIONS_KEY (reasoning-options.ts)

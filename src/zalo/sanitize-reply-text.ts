@@ -1,5 +1,6 @@
 import { DAU_HIEU_RO_PROMPT } from "../agent/prompt-leak-markers.js";
 import { laDongSentinel } from "../scheduler/silent-sentinel.js";
+import { MOC_KHOI, tachKhoiCode, traKhoiCodeVe } from "./sanitize-code-block.js";
 
 /**
  * Lớp làm sạch CUỐI CÙNG trước khi chữ của model xuống Zalo - mảnh còn thiếu
@@ -45,53 +46,6 @@ export type KetQuaLamSach = {
   chan: boolean;
 };
 
-/**
- * Ký tự thay chỗ cho khối code trong lúc xử lý.
- *
- * Dùng ký tự NUL: model không sinh ra nó, và không biểu thức nào trong file này
- * đụng tới. Nhờ vậy nội dung bên trong khối code đi qua các bước markdown mà
- * không bị đụng - trước đây `boKhoiCode` gỡ hàng rào NGAY nên `# Tính tổng`
- * trong đoạn Python bị `boTieuDe` cắt mất dấu thăng và code trả về sai cú pháp.
- */
-const MOC_KHOI = "\u0000";
-
-type KhoiDaTach = { than: string; khoi: string[] };
-
-/**
- * Tách khối code ra khỏi thân, thay bằng mốc.
- *
- * Hai dạng, tách hẳn hai biểu thức:
- *
- *   - Nhiều dòng: nhãn ngôn ngữ (```` ```js ````) chỉ hợp lệ khi có xuống dòng
- *     NGAY SAU nó. Bắt buộc `\n` là vế chữa lỗi nuốt trắng: bản đầu để
- *     `[^\n`]*\n?` nên với fence cùng dòng, phần đó ăn luôn cả thân, nhóm bắt
- *     rỗng, và ``Chạy ```pnpm dev``` là xong`` ra thành `Chạy  là xong`.
- *   - Cùng dòng: giữ nguyên nội dung, chỉ bỏ hàng rào.
- *
- * Bắt buộc `\n` cũng khử luôn nhánh bậc hai: `[^\n`]*` không vượt được dòng đầu
- * nên không còn đường backtrack chồng lên `[\s\S]*?`.
- */
-function tachKhoiCode(text: string, daSua: string[]): KhoiDaTach {
-  const khoi: string[] = [];
-  const giu = (than: string): string => {
-    khoi.push(than);
-    return `${MOC_KHOI}${khoi.length - 1}${MOC_KHOI}`;
-  };
-
-  let than = text.replace(/```[ \t]*[A-Za-z0-9+#._-]*[ \t]*\r?\n([\s\S]*?)```/g, (_, ben: string) =>
-    giu(ben.replace(/\s+$/, "")),
-  );
-  than = than.replace(/```([^`\n]+)```/g, (_, ben: string) => giu(ben));
-
-  if (khoi.length > 0) daSua.push("khối code");
-  return { than, khoi };
-}
-
-/** Trả nội dung khối code về đúng chỗ, sau khi mọi bước markdown đã chạy xong */
-function traKhoiCodeVe(text: string, khoi: string[]): string {
-  if (khoi.length === 0) return text;
-  return text.replace(new RegExp(`${MOC_KHOI}(\\d+)${MOC_KHOI}`, "g"), (nguyenVan, i: string) => khoi[Number(i)] ?? nguyenVan);
-}
 
 function boInlineCode(text: string, daSua: string[]): string {
   const sau = text.replace(/`([^`\n]+)`/g, "$1");
@@ -257,9 +211,15 @@ export function lamSachTraLoi(text: string): KetQuaLamSach {
 
   const daSua: string[] = [];
 
+  // Dọn ký tự NUL của model TRƯỚC khi dùng nó làm mốc. Docstring của MOC_KHOI
+  // nói "model không sinh ra nó" - đó là giả định, không phải bất biến: JSON
+  // escape NUL là hợp lệ. Một chuỗi có dạng NUL + số + NUL sẽ va đúng mốc
+  // và `traKhoiCodeVe` nhét nội dung khối code vào nhầm chỗ.
+  const sachNul = text.includes(MOC_KHOI) ? text.split(MOC_KHOI).join("") : text;
+
   // Khối code ra khỏi thân TRƯỚC mọi bước khác, trả về SAU cùng - nội dung bên
   // trong khối là code, không phải văn bản để dọn định dạng
-  const { than, khoi } = tachKhoiCode(text, daSua);
+  const { than, khoi } = tachKhoiCode(sachNul, daSua);
 
   let ra = boInlineCode(than, daSua);
   ra = boLienKet(ra, daSua);

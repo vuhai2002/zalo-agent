@@ -116,8 +116,17 @@ export function TraceStepCard({ step }: { step: TraceStep }) {
           mau="bg-sky-50 text-sky-900"
         />
       ))}
+      {/* Nhánh HỎNG tô đỏ như khối "Tool chạy lỗi" ở trên. Dùng cờ `hong` do
+          `summarizeStep` gắn, KHÔNG dò chữ trong `output` - nội dung web của
+          người lạ đi thẳng vào đó nên luật dựa trên chữ có thể bị soạn cho
+          trùng. Bản ghi cũ không có cờ thì hiện như cũ. */}
       {step.toolResults.map((r, i) => (
-        <KhoiChu key={`r${i}`} nhan={`Tool trả về: ${r.name}`} noiDung={r.output} />
+        <KhoiChu
+          key={`r${i}`}
+          nhan={`Tool trả về: ${r.name}${r.hong ? " (hỏng)" : ""}`}
+          noiDung={r.output}
+          mau={r.hong ? "bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-200" : undefined}
+        />
       ))}
     </div>
   );

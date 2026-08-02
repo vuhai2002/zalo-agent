@@ -42,7 +42,7 @@ export type OverviewData = {
   system: {
     uptimeSeconds: number;
     nodeVersion: string;
-    llm: { provider: string; model: string; hasOverride: boolean };
+    llm: { provider: string; model: string; hasOverride: boolean; daCauHinh: boolean };
   };
   /** Khóa ngày "hôm nay" theo BOT_TIMEZONE - server tính, frontend dùng nguyên
    *  thay vì tự suy từ giờ trình duyệt (dễ lệch với giờ VN của bot). */
@@ -477,7 +477,8 @@ export type TraceStep = {
   /** Rỗng với model không phơi chuỗi suy nghĩ (OpenAI); có với DeepSeek */
   reasoning: string;
   toolCalls: { name: string; input: string }[];
-  toolResults: { name: string; output: string }[];
+  /** `hong` do `summarizeStep` gắn - nhánh HỎNG của tool, không phải kết quả thường */
+  toolResults: { name: string; output: string; hong?: boolean }[];
   /** Tool chạy lỗi - SDK để ở content, không vào toolResults nên từng bị mù hẳn */
   toolErrors: { name: string; error: string }[];
   finishReason: string;

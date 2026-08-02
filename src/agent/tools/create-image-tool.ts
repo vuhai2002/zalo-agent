@@ -10,6 +10,7 @@ import { withNamedTempFile } from "../../shared/temp-file-store.js";
 import { CREATE_IMAGE_DESCRIPTION } from "./create-image-tool-description.js";
 import { collectRecentImagePaths } from "./read-image-tool.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
+import { capTionSach } from "./clean-tool-caption.js";
 import type { ToolContext } from "./index.js";
 
 /**
@@ -142,7 +143,7 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
         await withNamedTempFile(fileName, image.data, (filePath) =>
           enqueueSend(threadKey, () =>
             ctx.api.sendMessage(
-              { msg: caption ?? "", attachments: [filePath] },
+              { msg: capTionSach(caption) ?? "", attachments: [filePath] },
               ctx.message.threadId,
               ctx.message.threadType,
             ),

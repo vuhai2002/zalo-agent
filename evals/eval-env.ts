@@ -9,8 +9,9 @@ import { docLlmTuDbThat } from "./read-real-llm-settings.js";
  * không đụng `data/zalo-agent.db` thật, nhưng phải gọi được model thật, nên
  * phải đọc `.env` rồi truyền ngược vào làm override.
  *
- * KHÔNG lấy key từ DB (`llm-settings`): eval chạy trên DB TẠM nên bảng đó rỗng.
- * Key phải nằm ở `.env`.
+ * Cấu hình LLM đọc theo ĐÚNG luật production: DB (dashboard) đè `.env` - xem
+ * `read-real-llm-settings.ts`. DB đọc ở đây là DB THẬT (chỉ đọc), còn lượt agent
+ * vẫn chạy trên DB tạm.
  */
 
 export type CauHinhLlm = {
@@ -69,6 +70,14 @@ export function dungEvalEnv(): KetQuaDungEnv {
     // Trace là NGUỒN DỮ LIỆU của bộ eval (đọc tool đã gọi từ đó), không phải
     // tùy chọn chẩn đoán - tắt là mọi khẳng định về tool đều mù
     AGENT_TRACE_ENABLED: "true",
+    // Trần token ĐẦU RA phải khớp production. `setupTestEnv` đặt 2048 cho hợp
+    // với test model giả, nhưng eval mà chạy bằng con số đó là đo một hệ thống
+    // khác: 2048 token đủ để cắt ngang câu trả lời dài, đúng loại case mà
+    // persona dặn "PHẢI trình bày đầy đủ". Nặng hơn, tổ hợp đó vi phạm chính
+    // luật chéo của repo (`DOCUMENT_MAX_CHARS/4 > LLM_MAX_OUTPUT_TOKENS*0.7`)
+    // nên trang Cấu hình còn từ chối lưu - eval không được chạy bằng cấu hình
+    // mà dashboard không cho phép tồn tại.
+    LLM_MAX_OUTPUT_TOKENS: "16384",
     // Trần thời gian NGẮN hơn hẳn mặc định (15 phút): eval chạy tay và tuần tự,
     // một case treo là ngồi đợi cả bộ. 3 phút vẫn dư cho lượt nặng nhất ở đây
     // (tra web rồi tổng hợp), vì các tool đắt thời gian như vẽ ảnh đều bị tắt

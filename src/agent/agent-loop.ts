@@ -324,9 +324,10 @@ export async function runAgentTurn({
     const loai = phanLoaiLoiProvider(err);
     log.error({ loai, ma: maHttpCua(err), err: forLog(err, 300) }, "Lượt agent lỗi từ provider");
 
-    if (loai === "auth") {
-      // KHÔNG thử lại: sai khóa thì thử thêm chỉ chậm gấp ba rồi vẫn hỏng.
-      // Ném ra để caller trả câu nói rõ đây là chuyện cấu hình.
+    if (loai === "auth" || loai === "cau_hinh") {
+      // KHÔNG thử lại: sai khóa (hoặc chưa nhập cấu hình) thì thử thêm chỉ chậm
+      // gấp ba rồi vẫn hỏng. Ném ra để caller trả câu nói rõ đây là chuyện cấu
+      // hình, không phải trục trặc thoáng qua.
       throw err;
     }
 

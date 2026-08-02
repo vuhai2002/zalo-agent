@@ -198,3 +198,32 @@ describe("summarizeStep - nhánh HỎNG của tool hiện câu, không hiện v�
     assert.match(t.toolResults[0]!.output, /^\{"ok"/);
   });
 });
+
+describe("summarizeStep - cờ `hong` cho nhánh hỏng của tool", () => {
+  it("kết quả đánh dấu hỏng có hong:true, kết quả thường thì không", () => {
+    // UI dùng cờ này để tô đỏ. KHÔNG được để UI dò tiền tố "LỖI: " trong
+    // output: nội dung web của người lạ đi thẳng vào đó nên luật dựa trên chữ
+    // có thể bị soạn cho trùng.
+    const t = summarizeStep(
+      {
+        toolResults: [
+          { toolName: "web_fetch", output: { ok: false, loi: "Không đọc được trang" } },
+          { toolName: "get_datetime", output: "Bây giờ là 10:00" },
+        ],
+      },
+      500,
+      1,
+    );
+    assert.equal(t.toolResults[0]!.hong, true);
+    assert.equal(t.toolResults[1]!.hong, undefined, "kết quả thường KHÔNG được gắn cờ");
+  });
+
+  it("object có ok:false nhưng khác tên trường KHÔNG bị gắn cờ", () => {
+    const t = summarizeStep(
+      { toolResults: [{ toolName: "x", output: { ok: false, reason: "khác tên trường" } }] },
+      500,
+      1,
+    );
+    assert.equal(t.toolResults[0]!.hong, undefined);
+  });
+});

@@ -35,9 +35,9 @@ theo 7 khoảng cách A-G trong `reports/audit-agent-chuan-production.html`.
 | 03 | [Ngân sách token thật](phase-03-ngan-sach-token-that.md) | D | Xong (0b6718f + 849ad43) |
 | 04 | [Chặn vòng lặp tool](phase-04-chan-vong-lap-tool.md) | B | Xong (83595e8 + 2a401ce) |
 | 05 | [Phân loại lỗi provider](phase-05-phan-loai-loi-provider.md) | G | Xong (4a1a825) |
-| 06 | [Kiểm tra đầu ra](phase-06-kiem-tra-dau-ra.md) | E | Xong |
-| 07 | [Bộ eval model thật](phase-07-bo-eval-model-that.md) | C | Xong |
-| 08 | [Luật hỏi lại](phase-08-luat-hoi-lai.md) | F | Xong |
+| 06 | [Kiểm tra đầu ra](phase-06-kiem-tra-dau-ra.md) | E | Xong (03dbd41 + 3e08906) |
+| 07 | [Bộ eval model thật](phase-07-bo-eval-model-that.md) | C | Xong (bdfc018 + 65900ad) |
+| 08 | [Luật hỏi lại](phase-08-luat-hoi-lai.md) | F | Xong (b9ee0da) |
 
 ## Phụ thuộc giữa các phase
 
@@ -61,9 +61,11 @@ Chỉ 01 chặn 02/03, và 03 chặn một nhánh của 05. Bốn phase 04/05/06
 ## Ràng buộc xuyên suốt
 
 - File code < 200 dòng. Tách module khi vượt.
-- Env var mới phải đủ 3 nơi: `.env.example`, `.env.production.example`, schema Zod
-  `src/config/env.ts`. Tham số chỉnh được từ dashboard thì thêm vào
-  `src/config/tuning-definitions.ts`.
+- **(Cập nhật sau phase 07)** Env var mới khai schema Zod trong `src/config/env.ts`
+  KÈM `.default()`; tham số chỉnh lúc chạy thì thêm vào
+  `src/config/tuning-definitions.ts` là tự hiện trên dashboard. CHỈ đụng vào
+  `.env.example` / `.env.production.example` khi biến phải đọc TRƯỚC lúc mở DB.
+  Luật "đủ 3 nơi" cũ đã bị lật - xem `CLAUDE.md`.
 - `pnpm typecheck` sạch trước khi báo xong phase.
 - Test chạm DB phải gọi `setupTestEnv()` xong mới `await import()` động - xem mục
   "Bẫy khi viết test" trong `CLAUDE.md`.

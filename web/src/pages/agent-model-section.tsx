@@ -52,7 +52,9 @@ export function AgentModelSection({
   chung: ProviderSettings | null;
   onChange: (patch: Partial<AgentModelForm>) => void;
 }) {
-  const nhanChung = chung ? `${chung.provider} / ${chung.model}` : "theo trang Providers";
+  // `chung.model` rỗng khi chưa cấu hình gì (hợp lệ từ khi .env hết bắt buộc)
+  // - ghép thẳng cho ra placeholder cụt kiểu "openai-compatible / "
+  const nhanChung = chung?.model ? `${chung.provider} / ${chung.model}` : "theo trang Providers";
   const loiSoBuoc = kiemSoBuoc(form.maxSteps);
   const loiTran = kiemTranContext(form.contextWindow);
   // Giá trị đang lưu không nằm trong danh sách hợp lệ (và không phải rỗng)

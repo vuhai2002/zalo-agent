@@ -11,13 +11,36 @@ import { createLogger } from "../../shared/logger.js";
 
 const log = createLogger("provider-routes");
 
+/**
+ * Ô rỗng từ form nghĩa là "chưa nhập", KHÔNG phải "giá trị rỗng hợp lệ".
+ *
+ * Trang Providers gửi cả form mỗi lần lưu, nên ô chưa điền đi lên dưới dạng
+ * chuỗi rỗng. `.min(1)` thẳng thì cả request bị 400 và người dùng mất luôn thứ
+ * họ VỪA gõ ở ô khác. Trạng thái đó là mặc định của lần cài đầu kể từ khi
+ * `LLM_MODEL` hết bắt buộc trong `.env`: vào dashboard, dán base URL + API key,
+ * chưa biết tên model nên để trống, bấm Lưu -> mất cả API key vừa dán.
+ */
+const oRong = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v);
+
 const updateSchema = z.object({
   provider: z.enum(["openai-compatible", "anthropic"]).optional(),
-  baseUrl: z.string().startsWith("http").optional(),
-  model: z.string().min(1).optional(),
+  baseUrl: z.preprocess(oRong, z.string().startsWith("http", "phải bắt đầu bằng http").optional()),
+  model: z.preprocess(oRong, z.string().min(1).optional()),
   // Bỏ trống = giữ key cũ. Key mới đi 1 chiều lên server, lưu DB mã hóa.
   apiKey: z.string().optional(),
 });
+
+/** Câu lỗi CHỈ ĐÚNG Ô, không phải "Dữ liệu không hợp lệ" trống trơn */
+function cauLoiTruong(issues: { path: PropertyKey[]; message: string }[]): string {
+  const nhan: Record<string, string> = {
+    provider: "Nhà cung cấp",
+    baseUrl: "Base URL",
+    model: "Model",
+    apiKey: "API key",
+  };
+  const phan = issues.map((i) => `${nhan[String(i.path[0])] ?? String(i.path[0])}: ${i.message}`);
+  return phan.length > 0 ? phan.join("; ") : "Dữ liệu không hợp lệ";
+}
 
 /** /api/provider - xem/sửa LLM runtime. Key KHÔNG BAO GIỜ trả về plaintext. */
 export const providerRoutes = new Hono()
@@ -36,7 +59,7 @@ export const providerRoutes = new Hono()
   .patch("/", async (c) => {
     const parsed = updateSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
-      return c.json({ error: "Dữ liệu không hợp lệ", issues: parsed.error.issues }, 400);
+      return c.json({ error: cauLoiTruong(parsed.error.issues), issues: parsed.error.issues }, 400);
     }
 
     updateLlmSettings(parsed.data);

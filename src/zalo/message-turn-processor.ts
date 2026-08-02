@@ -109,6 +109,10 @@ async function xuLyLuot(
       })
     : () => {};
 
+  // Lượt đã chốt sổ (usage + trace) chưa. Nhánh catch dùng cờ này để không chốt
+  // lần hai - xem giải thích ở đó.
+  let turnFinished = false;
+
   // Ghi 1 lần duy nhất, gọi được ở cả nhánh thành công và nhánh lỗi
   let historyWritten = false;
   const writeBatchToHistory = (): void => {
@@ -140,6 +144,9 @@ async function xuLyLuot(
       resolveModel: options.resolveModel,
     });
     finishAgentTurn(turnId, result.usage);
+    // Từ đây trở đi lượt đã CHỐT SỔ THẬT. Nhánh catch bên dưới không được chốt
+    // lại nữa - xem giải thích ở đó.
+    turnFinished = true;
     // Trace lưu ở đây chứ không trong agent-loop: chỗ này vốn đã là nơi chốt
     // usage của lượt, gom một mối cho dễ tìm.
     if (trace.length > 0) saveTurnTrace(turnId, trace);
@@ -168,10 +175,18 @@ async function xuLyLuot(
     // Trace của những step ĐÃ chạy được là thứ quý nhất lúc này: lượt đi tốt 5
     // step rồi step 6 gặp 500 thì đây là toàn bộ manh mối. Trước đây nhánh này
     // không lưu gì nên lượt hỏng vừa không có trace vừa không lên trang Trace.
-    if (trace.length > 0) saveTurnTrace(turnId, trace);
-    // Chốt luôn số step đã chạy. Token thì KHÔNG biết - lỗi ném ra từ giữa lượt
-    // không mang theo usage - nên để 0 và đọc số step trên trang Trace.
-    finishAgentTurn(turnId, { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: trace.length });
+    // CHỈ chốt sổ khi lượt CHƯA từng chốt. `finishAgentTurn` là UPDATE thuần và
+    // `saveTurnTrace` là INSERT, nên chạy lần hai sẽ ĐÈ MẤT số token thật bằng
+    // {0,0,0} và NHÂN ĐÔI số dòng agent_steps. Ca đó có thật: mọi thứ sau
+    // `finishAgentTurn` ở trên (lưu trace, ghi history, gửi tin) đều có thể ném
+    // vì DB hoặc mạng, và lúc đó lượt ĐÃ chạy xong, đã tiêu token thật.
+    // `run-scheduled-job.ts` đã có đúng lá chắn này; đường chat thì chưa.
+    if (!turnFinished) {
+      if (trace.length > 0) saveTurnTrace(turnId, trace);
+      // Token thì KHÔNG biết - lỗi ném ra từ giữa lượt không mang theo usage -
+      // nên để 0 và đọc số step trên trang Trace.
+      finishAgentTurn(turnId, { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: trace.length });
+    }
     // Phân loại để chọn ĐÚNG câu báo. Một câu cho mọi thứ khiến "bot sai cấu
     // hình" (chờ bao lâu cũng không tự hết) đọc y hệt "mạng chập vài giây".
     const loaiLoi = phanLoaiLoiProvider(err);

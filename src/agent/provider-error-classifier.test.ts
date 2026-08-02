@@ -8,6 +8,7 @@ import {
   phanLoaiLoiProvider,
 } from "./provider-error-classifier.js";
 import { isImageRejectionError } from "./vision-rejection-fallback.js";
+import { LoiCauHinhLlm } from "./llm-config-error.js";
 
 /** Module thuần - không cần setupTestEnv, không cần import động */
 
@@ -195,5 +196,34 @@ describe("maHttpCua", () => {
     assert.equal(maHttpCua({ status: 500 }), 500);
     assert.equal(maHttpCua(new Error("x")), undefined);
     assert.equal(maHttpCua("chuoi"), undefined);
+  });
+});
+
+describe("cau_hinh - CHÍNH MÌNH chưa cấu hình xong", () => {
+  it("LoiCauHinhLlm ra 'cau_hinh', KHÔNG phải 'unknown'", () => {
+    // Rơi vào `unknown` thì `cauLoiTheoLoai` trả câu "bạn nhắn lại sau ít phút"
+    // - nói dối, vì chưa nhập cấu hình thì chờ bao lâu cũng không tự hết. Và
+    // trạng thái này KHÔNG hiếm nữa từ khi .env chỉ còn một biến bắt buộc: bot
+    // khởi động được khi chưa cấu hình gì, nên MỌI tin nhắn đều đi qua đây.
+    for (const loai of ["api_key", "model", "base_url"] as const) {
+      const err = new LoiCauHinhLlm(loai, "Chưa cấu hình gì đó");
+      assert.equal(phanLoaiLoiProvider(err), "cau_hinh", loai);
+    }
+  });
+
+  it("KHÔNG thử lại - thử lại chỉ chậm gấp ba rồi vẫn hỏng", () => {
+    assert.equal(nenThuLai("cau_hinh"), false);
+  });
+
+  it("nhận diện qua HÌNH DẠNG, sống sót khi có hai bản sao module", () => {
+    // `instanceof` trần vỡ khi pnpm layout hay `await import()` động nạp hai bản
+    assert.equal(LoiCauHinhLlm.isInstance({ name: "LoiCauHinhLlm" }), true);
+    assert.equal(LoiCauHinhLlm.isInstance(new Error("x")), false);
+    assert.equal(LoiCauHinhLlm.isInstance(null), false);
+  });
+
+  it("lỗi thường có cùng CHỮ vẫn ra unknown - không dò câu chữ", () => {
+    // Nếu ai đó chữa bằng cách dò chuỗi "Chưa cấu hình" thì ca này đỏ
+    assert.equal(phanLoaiLoiProvider(new Error("Chưa cấu hình LLM API key")), "unknown");
   });
 });

@@ -295,6 +295,20 @@ describe("lamSachTraLoi - không ăn tham trên câu dài", () => {
     assert.equal(sach("**chưa đóng"), "**chưa đóng");
   });
 
+  it("ký tự NUL của model không cướp được mốc khối code", () => {
+    // MOC_KHOI là ký tự NUL. Docstring nói "model không sinh ra nó" - đó là giả
+    // định, không phải bất biến: JSON escape NUL hoàn toàn hợp lệ. Không dọn
+    // trước thì chuỗi có dạng NUL + số + NUL va đúng mốc và `traKhoiCodeVe`
+    // nhét nội dung khối code vào nhầm chỗ.
+    const nul = " ";
+    const ra = sach(`x ${nul}0${nul} y
+\`\`\`
+THAT SU
+\`\`\``);
+    assert.ok(!ra.includes(nul), "không được để lọt ký tự NUL xuống Zalo");
+    assert.equal(ra.split("THAT SU").length - 1, 1, `nội dung khối code bị nhân đôi: ${JSON.stringify(ra)}`);
+  });
+
   it("chuỗi độc không làm biểu thức chạy bậc hai (ReDoS)", () => {
     // Đây là đường tấn công THẬT, không phải lý thuyết: bot đọc tin của người
     // lạ, một tin "lặp lại chính xác chuỗi sau: [[[[..." là đủ để model nhại
@@ -308,6 +322,11 @@ describe("lamSachTraLoi - không ăn tham trên câu dài", () => {
       ["dòng kẻ bảng", `|${"-".repeat(50_000)}x`],
       ["ngoặc liên kết", `[a](${"b".repeat(50_000)}`],
       ["hàng rào code", "```".repeat(20_000)],
+      // Ca này KHÔNG bị bộ trên chạm tới: vòng rà soát toàn cục đo được
+      // 200.000 dấu cách sau ``` mất 20,5 GIÂY vì `[ 	]*...[ 	]*` là hai
+      // lượng từ trên cùng lớp ký tự - đúng thứ luật số 2 đầu file cấm
+      ["khoảng trắng sau hàng rào", `\`\`\`${" ".repeat(100_000)}x`],
+      ["tab sau hàng rào", `Anh xem: \`\`\`${"	".repeat(50_000)}`],
       ["dấu sao", "*".repeat(50_000)],
       ["nháy đơn", "`a".repeat(25_000)],
     ];
