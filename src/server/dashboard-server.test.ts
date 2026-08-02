@@ -370,6 +370,43 @@ describe("dashboard-server", () => {
     assert.equal(res.status, 409);
   });
 
+  it("PATCH agent disabledTools lưu được; key tool lạ bị chặn 400", async () => {
+    // Đây là BIÊN DUY NHẤT chặn key rác vào cột `agents.disabled_tools`.
+    // `parseDisabledTools` phía đọc cố tình fail-open (trả []), nên nếu biên này
+    // hở thì key rác nằm im trong DB và không ai biết cho tới lúc đọc log.
+    const patch = await authed("/api/agents/tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ disabledTools: ["create_image", "web_search"] }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(patch.status, 200);
+    const data = (await patch.json()) as { agent: { disabledTools: string[] } };
+    assert.deepEqual(data.agent.disabledTools.sort(), ["create_image", "web_search"]);
+
+    const bad = await authed("/api/agents/tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ disabledTools: ["khong-phai-tool"] }),
+      headers: { "content-type": "application/json" },
+    });
+    assert.equal(bad.status, 400);
+
+    // Patch KHÔNG chứa disabledTools phải giữ nguyên giá trị cũ, không xoá sạch
+    const khac = await authed("/api/agents/tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ name: "Tư vấn" }),
+      headers: { "content-type": "application/json" },
+    });
+    const sauDo = (await khac.json()) as { agent: { disabledTools: string[] } };
+    assert.deepEqual(sauDo.agent.disabledTools.sort(), ["create_image", "web_search"]);
+
+    // Bật lại hết để các test sau không bị ảnh hưởng
+    await authed("/api/agents/tu-van", {
+      method: "PATCH",
+      body: JSON.stringify({ disabledTools: [] }),
+      headers: { "content-type": "application/json" },
+    });
+  });
+
   it("bật account chưa có credentials: trả warning, không 500", async () => {
     const res = await authed("/api/accounts/acc-tu-van", {
       method: "PATCH",

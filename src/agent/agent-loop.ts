@@ -17,6 +17,15 @@ import { buildSystemPrompt } from "./persona-prompt.js";
 import { buildAgentTools } from "./tools/index.js";
 import { hasImageParts, isImageRejectionError } from "./vision-rejection-fallback.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
+import {
+  canLuotChot,
+  hitStepLimit,
+  isEmptyRouterCompletion,
+  vuotTranToken,
+} from "./agent-loop-conditions.js";
+
+// Re-export để test và mọi call site cũ vẫn import từ "agent-loop.js" như trước
+export { canLuotChot, hitStepLimit, isEmptyRouterCompletion, vuotTranToken };
 
 const log = createLogger("agent-loop");
 
@@ -49,33 +58,6 @@ function shortArgsOf(input: unknown): Record<string, unknown> | undefined {
   // 200 ký tự đầu thì không tài nào biết được
   if (typeof record.prompt === "string") picked.promptChars = record.prompt.length;
   return Object.keys(picked).length > 0 ? picked : undefined;
-}
-
-/**
- * Chữ ký "router trả completion rỗng": 9Router thỉnh thoảng trả HTTP 200 với
- * message trống trơn - không text, không tool call, usage = 0. SDK coi đó là
- * thành công nên maxRetries không cứu. Phân biệt được với lượt "chỉ thả
- * reaction" hợp lệ: lượt đó CÓ tool call và CÓ token.
- */
-export function isEmptyRouterCompletion(input: {
-  text: string;
-  toolCallCount: number;
-  totalTokens: number;
-}): boolean {
-  return !input.text.trim() && input.toolCallCount === 0 && input.totalTokens === 0;
-}
-
-/**
- * Lượt dừng vì HẾT LƯỢT GỌI TOOL chứ không phải vì model xong việc.
- *
- * Nhận biết bằng CẤU TRÚC (đủ số step + step cuối vẫn còn gọi tool) thay vì
- * bằng `finishReason`: model xong việc thì step cuối không có tool call, còn
- * `stopWhen: stepCountIs(n)` cắt ngang đúng lúc model vừa gọi tool xong. Không
- * dùng `finishReason` vì trường đó do provider map, và `MockLanguageModel` của
- * SDK không truyền nó ra nên nhánh này sẽ không test được.
- */
-export function hitStepLimit(input: { stepCount: number; maxSteps: number; lastStepToolCalls: number }): boolean {
-  return input.stepCount >= input.maxSteps && input.lastStepToolCalls > 0;
 }
 
 /**
@@ -158,9 +140,25 @@ export async function runAgentTurn({
   const history = isolated ? [] : getRecentMessages(account.id, latest.threadId);
   // Ảnh xử lý theo chế độ: native (model tự đọc) / describe (sidecar mô tả) /
   // hybrid (combo: cả hai) / blind (bỏ ảnh, dặn bot nói thật)
-  const built = await buildTurnMessages({ history, batch, override: agent, allowlist: account.allowlist });
+  // Trần token hiệu lực: agent đặt riêng thắng cấu hình chung - cùng nếp với
+  // maxSteps và reasoningEffort. Ở agent vì trần phụ thuộc cửa sổ của MODEL.
+  const tranToken = agent.contextWindow ?? getTuning("LLM_CONTEXT_WINDOW");
+
+  const built = await buildTurnMessages({
+    history,
+    batch,
+    override: agent,
+    allowlist: account.allowlist,
+    tranToken,
+  });
   let messages = built.messages;
   let imageMode = built.imageMode;
+  if (built.daCat) {
+    log.warn(
+      { ...built.daCat, tranToken },
+      "Ngữ cảnh vượt ngân sách token - đã cắt bớt trước khi gọi model",
+    );
+  }
 
   // Memory: fact bền (lọc theo quy tắc privacy) + summary phần hội thoại cũ
   const memory = isolated
@@ -196,7 +194,11 @@ export async function runAgentTurn({
       // không có msgId thật, read_image không có ảnh, save_memory chặn injection
       // từ job) - xem runsInScheduledTurn ở tool-registry.ts
       tools: buildAgentTools({ api, account, agent, message: latest, batch, isolated }),
-      stopWhen: stepCountIs(agent.maxSteps ?? getTuning("LLM_MAX_STEPS")),
+      // Hai điều kiện dừng. `stepCountIs` chặn số VÒNG; điều kiện token chặn
+      // KÍCH THƯỚC - kết quả tool cộng dồn qua từng step (web_fetch một mình đã
+      // tới WEB_FETCH_MAX_CHARS ký tự), nên một lượt ít step vẫn phình được.
+      // Đo trên DB thật: đã có lượt cộng dồn 184.835 token qua 8 step.
+      stopWhen: [stepCountIs(agent.maxSteps ?? getTuning("LLM_MAX_STEPS")), vuotTranToken(tranToken)],
       maxOutputTokens: getTuning("LLM_MAX_OUTPUT_TOKENS"),
       // Bật thinking theo LLM_REASONING_EFFORT - kiểm chứng bằng
       // usage.outputTokenDetails.reasoningTokens > 0 trong log bên dưới
@@ -392,17 +394,18 @@ export async function runAgentTurn({
   // (Trước khi có persona đó thì text rỗng và bot im lặng - cũng hỏng.)
   // Chữa bằng một lượt chốt KHÔNG cấp tool: model buộc phải viết câu trả lời từ
   // những gì đã thu thập, thay vì vứt bỏ toàn bộ công sức của 8 step.
+  //
+  // Từ khi `stopWhen` có thêm điều kiện TOKEN, lượt còn dừng sớm được với
+  // `steps.length < maxSteps` - nên điều kiện phải là `canLuotChot` (step cuối
+  // còn gọi tool) chứ không phải `hitStepLimit` (đòi thêm đủ step). Dùng nhầm
+  // hàm cũ thì lượt dừng vì token gửi thẳng câu tường thuật xuống Zalo.
   const maxSteps = agent.maxSteps ?? getTuning("LLM_MAX_STEPS");
-  if (
-    hitStepLimit({
-      stepCount: result.steps.length,
-      maxSteps,
-      lastStepToolCalls: result.steps.at(-1)?.toolCalls.length ?? 0,
-    })
-  ) {
+  const lastStepToolCalls = result.steps.at(-1)?.toolCalls.length ?? 0;
+  if (canLuotChot({ lastStepToolCalls })) {
+    const hetStep = hitStepLimit({ stepCount: result.steps.length, maxSteps, lastStepToolCalls });
     log.warn(
-      { steps: result.steps.length, maxSteps },
-      "Chạm trần số step khi model vẫn đang gọi tool - chạy một lượt chốt không cấp tool",
+      { steps: result.steps.length, maxSteps, lyDo: hetStep ? "hết step" : "chạm trần token" },
+      "Vòng lặp dừng khi model vẫn đang gọi tool - chạy một lượt chốt không cấp tool",
     );
     const chot = await runWrapUp(result.response.messages).catch((err: unknown) => {
       log.error({ err }, "Lượt chốt cũng lỗi");

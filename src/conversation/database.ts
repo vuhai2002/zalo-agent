@@ -257,6 +257,11 @@ function runMigrations(): void {
   // tool mới thêm vào code sẽ không tự có cho agent cũ.
   addColumnIfMissing("agents", "disabled_tools", "TEXT NOT NULL DEFAULT '[]'");
 
+  // Trần token riêng cho agent này (NULL = theo LLM_CONTEXT_WINDOW ở Cấu hình).
+  // Phải nằm ở agent chứ không chỉ ở cấu hình chung: trần phụ thuộc CỬA SỔ của
+  // model, mà model đặt được theo từng agent.
+  addColumnIfMissing("agents", "context_window", "INTEGER");
+
   // Lượt do lịch hẹn tự bắn (source='schedule') khác lượt trả lời tin nhắn
   // (source='message') - Overview và trang Trace cần phân biệt được "có người
   // đang chat" với "job tự chạy lúc 3 giờ sáng". Mặc định 'message' để mọi

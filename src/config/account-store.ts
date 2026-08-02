@@ -46,7 +46,6 @@ type Row = {
   disabled_tools: string;
 };
 
-/** Cột JSON có thể hỏng nếu ai sửa DB tay - hỏng thì coi như không tắt gì */
 const toConfig = (r: Row): AccountConfig => ({
   id: r.id,
   label: r.label,

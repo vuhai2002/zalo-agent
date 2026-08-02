@@ -3,6 +3,7 @@ import type {
   FetchSettings,
   ImageGenSettings,
   ManagedAccount,
+  ManagedAgent,
   SearchSettings,
   ToolCatalogItem,
   VisionSettings,
@@ -49,6 +50,7 @@ export function ToolsPage() {
   const [imageGen, setImageGen] = useState<ImageGenSettings | null>(null);
   const [settingsFor, setSettingsFor] = useState<ToolCatalogItem | null>(null);
   const [accounts, setAccounts] = useState<ManagedAccount[]>([]);
+  const [agents, setAgents] = useState<ManagedAgent[]>([]);
   const [accountId, setAccountId] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -57,20 +59,38 @@ export function ToolsPage() {
   const reloadTools = () => api.tools().then((res) => setTools(res.items));
 
   useEffect(() => {
-    Promise.all([api.tools(), api.accountsAdmin.list(), api.vision(), api.imageGen()])
-      .then(([toolsRes, accountsRes, visionRes, imageRes]) => {
+    Promise.all([
+      api.tools(),
+      api.accountsAdmin.list(),
+      api.vision(),
+      api.imageGen(),
+      api.agentsAdmin.list(),
+    ])
+      .then(([toolsRes, accountsRes, visionRes, imageRes, agentsRes]) => {
         setTools(toolsRes.items);
         setSearch(toolsRes.search);
         setFetchSettings(toolsRes.fetch);
         setVision(visionRes);
         setImageGen(imageRes);
         setAccounts(accountsRes.items);
+        setAgents(agentsRes.items);
         if (accountsRes.items[0]) setAccountId(accountsRes.items[0].id);
       })
       .catch((e: Error) => setError(e.message));
   }, []);
 
   const account = useMemo(() => accounts.find((a) => a.id === accountId), [accounts, accountId]);
+
+  /**
+   * Agent đang gắn vào account này. Cần ở đây vì công tắc trên trang này CHỈ nói
+   * lớp account, trong khi bộ tool model thật nhận là phần GIAO với lớp agent -
+   * không hiện lớp kia ra thì đây thành nơi báo sai, đúng lúc người dùng vào để
+   * tra "sao bot không tra web được".
+   */
+  const agent = useMemo(
+    () => agents.find((a) => a.id === account?.agentId),
+    [agents, account],
+  );
 
   async function toggleTool(toolKey: string) {
     if (!account || saving) return;
@@ -101,7 +121,7 @@ export function ToolsPage() {
       <PageHeader
         icon={IconBolt}
         title="Tools"
-        subtitle="Bật/tắt khả năng của bot cho từng account - tool tắt sẽ không xuất hiện với model"
+        subtitle="Bật/tắt công cụ cho từng tài khoản. Model chỉ nhận được công cụ mà CẢ tài khoản này LẪN agent của nó cùng bật."
         aside={
           accounts.length > 0 ? (
             <SelectMenu
@@ -140,6 +160,10 @@ export function ToolsPage() {
             <div className="gc-card divide-y divide-line">
               {items.map((tool) => {
                 const enabled = !account?.disabledTools.includes(tool.key);
+                // Công tắc ở đây chỉ là lớp ACCOUNT. Agent tắt thì model cũng
+                // không nhận được tool, dù công tắc này đang bật - phải nói ra,
+                // không thì trang này báo ngược với thực tế.
+                const agentTat = Boolean(agent?.disabledTools.includes(tool.key));
                 return (
                   // Không lồng button trong button (HTML không hợp lệ) nên hàng
                   // là div, Settings và toggle là 2 nút riêng - đúng bố cục GoClaw
@@ -173,10 +197,20 @@ export function ToolsPage() {
                         {/* Bật mà thiếu hạ tầng thì model KHÔNG nhận được tool -
                             phải nói thẳng, không để người dùng tưởng bot có khả năng đó */}
                         {!tool.available && <Badge tone="amber">Chưa dùng được</Badge>}
+                        {agentTat && <Badge tone="amber">Agent đang tắt</Badge>}
                       </div>
                       <p className="mt-0.5 text-[12px] leading-[1.6] text-ink-soft">{tool.description}</p>
                       {!tool.available && tool.unavailableHint && (
                         <p className="mt-1 text-[12px] leading-[1.6] text-amber-700 dark:text-amber-300">{tool.unavailableHint}</p>
+                      )}
+                      {/* Bật công tắc này mà agent vẫn tắt thì model KHÔNG nhận
+                          được tool - nói rõ và chỉ đường sửa, đừng để người dùng
+                          gạt qua gạt lại ở đây mà không hiểu vì sao bot vẫn không làm được */}
+                      {agentTat && enabled && (
+                        <p className="mt-1 text-[12px] leading-[1.6] text-amber-700 dark:text-amber-300">
+                          Công tắc này đang bật nhưng agent "{agent?.name}" đã tắt công cụ, nên model vẫn
+                          không nhận được. Bật lại ở trang Agents.
+                        </p>
                       )}
                     </div>
 

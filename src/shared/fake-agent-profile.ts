@@ -25,6 +25,7 @@ export function fakeAgentProfile(patch: Partial<AgentProfile> = {}): AgentProfil
     maxSteps: null,
     reasoningEffort: null,
     disabledTools: [],
+    contextWindow: null,
     isDefault: false,
     ...patch,
   };

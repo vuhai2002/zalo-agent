@@ -146,8 +146,14 @@ export const api = {
 
   agentsAdmin: {
     list: () => request<{ items: ManagedAgent[] }>("/api/agents"),
+    // Cùng lý do với `update` bên dưới: POST trả bản ghi THÔ, `accountCount`
+    // chỉ có ở `list()`. Khai dư thì TypeScript im lặng cho tới lúc ai đó đọc
+    // trường không tồn tại.
     create: (input: { id: string; name: string; icon?: string; persona?: string }) =>
-      request<{ agent: ManagedAgent }>("/api/agents", { method: "POST", body: JSON.stringify(input) }),
+      request<{ agent: Omit<ManagedAgent, "accountCount"> }>("/api/agents", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
     update: (
       id: string,
       patch: Partial<
@@ -161,6 +167,7 @@ export const api = {
           | "maxSteps"
           | "reasoningEffort"
           | "disabledTools"
+          | "contextWindow"
         >
       >,
     ) =>
@@ -378,6 +385,8 @@ export type ManagedAgent = {
   reasoningEffort: ReasoningEffort | null;
   /** Tool agent này KHÔNG dùng - GIAO với danh sách tắt của account */
   disabledTools: string[];
+  /** Trần token phần input; null = theo LLM_CONTEXT_WINDOW ở trang Cấu hình */
+  contextWindow: number | null;
   isDefault: boolean;
   accountCount: number;
 };

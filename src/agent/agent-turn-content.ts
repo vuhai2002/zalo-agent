@@ -13,7 +13,18 @@ import {
 } from "./history-to-model-messages.js";
 import type { ModelOverride } from "./llm-provider.js";
 import { classifyModelVision } from "./model-vision-detection.js";
+import { catNguCanhTheoNganSach, type KetQuaCat } from "./trim-context-to-budget.js";
 import { describeImage, ensureDescriptionsFor } from "./vision-sidecar.js";
+
+/**
+ * Cắt khi ước lượng vượt 70% trần, không đợi chạm 100%.
+ *
+ * Trần là của MỘT lần gọi, nhưng lượt còn chạy thêm nhiều step sau đó và mỗi
+ * step lại cộng thêm kết quả tool vào input (web_fetch một mình đã tới
+ * WEB_FETCH_MAX_CHARS ký tự). Cắt sát trần là step đầu vừa lọt thì step hai đã
+ * tràn.
+ */
+const NGUONG_CAT = 0.7;
 import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
@@ -78,7 +89,17 @@ export async function buildTurnMessages(params: {
   forceMode?: ImageContextMode;
   /** Có thì tin của người ngoài danh sách bị gắn nhãn chưa xác minh trong history */
   allowlist?: { mode: "all" | "list"; userIds: string[] };
-}): Promise<{ messages: ModelMessage[]; imageMode: ImageContextMode }> {
+  /**
+   * Trần token phần input. Bỏ trống = không cắt (đường gọi cũ và test không
+   * quan tâm ngân sách vẫn chạy như trước).
+   */
+  tranToken?: number;
+}): Promise<{
+  messages: ModelMessage[];
+  imageMode: ImageContextMode;
+  /** null = không phải cắt gì. Có giá trị thì agent-loop ghi log cảnh báo. */
+  daCat: KetQuaCat["daCat"];
+}> {
   const imageMode = params.forceMode ?? (await resolveImageContextMode(params.override));
   // blind: ngân sách ảnh history = 0, content tự rơi về text "[gửi kèm N ảnh]"
   const imageLimit = imageMode === "blind" ? 0 : getTuning("HISTORY_IMAGE_CONTEXT_LIMIT");
@@ -97,8 +118,20 @@ export async function buildTurnMessages(params: {
     historyRendering(imageMode),
     params.allowlist ? senderTrustFrom(params.allowlist) : undefined,
   );
+  // Cả batch của lượt này gộp thành ĐÚNG MỘT tin user - nên vùng bảo vệ khỏi
+  // bị cắt là 1 tin cuối. Con số này phải khớp với dòng push ngay dưới; đổi
+  // cách gộp batch thì phải đổi theo.
   messages.push({ role: "user", content: await buildCurrentTurnContent(params.batch, imageMode) });
-  return { messages, imageMode };
+
+  // Cắt ở NGƯỠNG THẤP HƠN trần, chừa chỗ cho phần model viết ra và cho kết quả
+  // tool cộng dồn trong lượt - trần là của cả input một lần gọi, mà lượt còn
+  // chạy thêm nhiều step nữa sau tin cuối cùng này.
+  const { tinNhan, daCat } = catNguCanhTheoNganSach({
+    tinNhan: messages,
+    tranToken: Math.floor((params.tranToken ?? 0) * NGUONG_CAT),
+    soTinBaoVeCuoi: 1,
+  });
+  return { messages: tinNhan, imageMode, daCat };
 }
 
 /** Gộp toàn bộ ảnh + text trong batch thành content của 1 lượt user */

@@ -30,6 +30,12 @@ const envSchema = z.object({
   LLM_API_KEY: z.string().default(""),
   LLM_MODEL: z.string().min(1),
   LLM_MAX_STEPS: z.coerce.number().int().min(1).max(30).default(8),
+  // Trần token cho phần INPUT của một lần gọi model. Trước khi có nó, ngữ cảnh
+  // chỉ bị chặn bằng SỐ TIN (HISTORY_CONTEXT_LIMIT) - mà một tin Zalo dài tùy
+  // ý, nên đó là đếm nhầm đơn vị. Đo trên DB thật: đã có lượt cộng dồn 184.835
+  // token qua 8 step. Mặc định 128k khớp cửa sổ phổ thông của model hiện nay;
+  // agent chạy model khác đặt riêng được ở trang Agents.
+  LLM_CONTEXT_WINDOW: z.coerce.number().int().min(4_000).max(2_000_000).default(128_000),
   // Trần thời gian cho CẢ lượt agent. Không có nó thì chặn trên duy nhất là mặc
   // định của undici (300s chờ header) nhân maxRetries nhân số step - router nhận
   // kết nối rồi treo là khóa luôn thread đó hàng giờ, và mọi tin nhắn sau phải

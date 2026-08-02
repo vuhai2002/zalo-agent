@@ -22,6 +22,12 @@ export type AgentProfile = {
    * `listAvailableTools` ở `tool-registry.ts`.
    */
   disabledTools: string[];
+  /**
+   * Trần token cho phần input mỗi lần gọi model; null = theo LLM_CONTEXT_WINDOW
+   * ở trang Cấu hình. Ở đây chứ không chỉ ở cấu hình chung vì trần phụ thuộc
+   * cửa sổ của MODEL, mà model đặt được theo từng agent.
+   */
+  contextWindow: number | null;
   isDefault: boolean;
 };
 
@@ -35,6 +41,7 @@ type Row = {
   max_steps: number | null;
   reasoning_effort: string | null;
   disabled_tools: string;
+  context_window: number | null;
   is_default: number;
 };
 
@@ -48,11 +55,12 @@ const toProfile = (r: Row): AgentProfile => ({
   maxSteps: r.max_steps,
   reasoningEffort: (r.reasoning_effort as ReasoningEffort | null) ?? null,
   disabledTools: parseDisabledTools(r.disabled_tools),
+  contextWindow: r.context_window,
   isDefault: r.is_default === 1,
 });
 
 const SELECT = `SELECT id, icon, name, persona, model_provider, model_name, max_steps, reasoning_effort,
-                       disabled_tools, is_default
+                       disabled_tools, context_window, is_default
                 FROM agents`;
 
 const DEFAULT_AGENT_ID = "tro-ly-mac-dinh";
@@ -109,7 +117,7 @@ export function updateAgent(
   patch: Partial<
     Pick<
       AgentProfile,
-      "icon" | "name" | "persona" | "modelProvider" | "modelName" | "maxSteps" | "reasoningEffort" | "disabledTools"
+      "icon" | "name" | "persona" | "modelProvider" | "modelName" | "maxSteps" | "reasoningEffort" | "disabledTools" | "contextWindow"
     >
   >,
 ): AgentProfile | null {
@@ -118,7 +126,7 @@ export function updateAgent(
   const next = { ...current, ...patch };
   db.prepare(
     `UPDATE agents SET icon = ?, name = ?, persona = ?, model_provider = ?, model_name = ?, max_steps = ?,
-                       reasoning_effort = ?, disabled_tools = ?
+                       reasoning_effort = ?, disabled_tools = ?, context_window = ?
      WHERE id = ?`,
   ).run(
     next.icon,
@@ -129,6 +137,7 @@ export function updateAgent(
     next.maxSteps,
     next.reasoningEffort,
     JSON.stringify(next.disabledTools),
+    next.contextWindow,
     id,
   );
   return getAgent(id);

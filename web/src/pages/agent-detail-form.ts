@@ -1,6 +1,7 @@
 import type { ManagedAgent, ReasoningEffort } from "../dashboard-api-client";
 import type { AgentIdentityForm } from "./agent-identity-section";
-import { kiemSoBuoc, type AgentModelForm } from "./agent-model-section";
+import { kiemSoBuoc, kiemTranContext } from "./agent-field-validators";
+import type { AgentModelForm } from "./agent-model-section";
 
 /**
  * Ánh xạ giữa bản ghi agent và trạng thái form của trang sửa.
@@ -9,7 +10,8 @@ import { kiemSoBuoc, type AgentModelForm } from "./agent-model-section";
  * chuyển đổi phải soi gương nhau: chỗ nào `null` thành `""` lúc đọc thì lúc ghi
  * phải trả về `null`. Để lẫn trong component thì hai chiều dễ trôi khỏi nhau.
  */
-export type AgentDetailForm = AgentIdentityForm & AgentModelForm & { disabledTools: string[] };
+export type AgentDetailForm = AgentIdentityForm &
+  AgentModelForm & { disabledTools: string[]; contextWindow: string };
 
 /**
  * Nhận cả bản ghi KHÔNG có `accountCount` (response của PATCH trả bản ghi thô,
@@ -28,6 +30,7 @@ export function tuAgent(a: Omit<ManagedAgent, "accountCount">): AgentDetailForm 
     reasoningEffort: a.reasoningEffort ?? "",
     // Sắp xếp để so sánh dirty bằng JSON.stringify không phụ thuộc thứ tự tick
     disabledTools: [...a.disabledTools].sort(),
+    contextWindow: a.contextWindow == null ? "" : String(a.contextWindow),
   };
 }
 
@@ -43,6 +46,7 @@ export function thanhPatch(form: AgentDetailForm) {
     maxSteps: soBuoc === "" ? null : Number(soBuoc),
     reasoningEffort: form.reasoningEffort === "" ? null : (form.reasoningEffort as ReasoningEffort),
     disabledTools: form.disabledTools,
+    contextWindow: form.contextWindow.trim() === "" ? null : Number(form.contextWindow.trim()),
   };
 }
 
@@ -58,5 +62,7 @@ export function kiemForm(form: AgentDetailForm): string {
   if (loiSoBuoc) return `Số bước tối đa: ${loiSoBuoc.toLowerCase()}`;
   if (form.icon.trim() === "") return "Icon không được để trống";
   if (form.name.trim() === "") return "Tên hiển thị không được để trống";
+  const loiTran = kiemTranContext(form.contextWindow);
+  if (loiTran) return `Trần context: ${loiTran.toLowerCase()}`;
   return "";
 }

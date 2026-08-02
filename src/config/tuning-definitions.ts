@@ -166,6 +166,15 @@ const TUNING_BY_KEY = {
     max: 200,
     unit: "tin",
   },
+  LLM_CONTEXT_WINDOW: {
+    kind: "number",
+    group: "ngu-canh",
+    label: "Trần token mỗi lần gọi model",
+    hint: "Khác với số tin nạp lại: một tin Zalo có thể rất dài, nên đếm tin không chặn được ngữ cảnh phình. Vượt mức này bot tự bỏ bớt ảnh cũ trước, rồi mới bỏ tin cũ - phần bỏ đi vẫn còn trong bản tóm tắt. Đặt theo cửa sổ của model đang chạy; agent dùng model khác đặt riêng được ở trang Agents.",
+    min: 4_000,
+    max: 2_000_000,
+    unit: "token",
+  },
   HISTORY_IMAGE_CONTEXT_LIMIT: {
     kind: "number",
     group: "ngu-canh",

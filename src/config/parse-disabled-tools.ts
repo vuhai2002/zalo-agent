@@ -7,9 +7,14 @@
  * chặt còn bảng kia cho lọt.
  *
  * Hỏng thì trả mảng RỖNG (= không tắt gì) chứ không ném: cột hỏng không được
- * phép làm chết cả lượt trả lời. Rỗng là hướng an toàn theo nghĩa khả dụng;
- * hướng an toàn theo nghĩa quyền hạn vẫn được giữ vì lớp còn lại (account) vẫn
- * lọc bình thường, và `runsInScheduledTurn` vẫn chặn lượt theo lịch.
+ * phép làm chết cả lượt trả lời.
+ *
+ * Nói thẳng cái giá của lựa chọn đó: đây là fail-OPEN. Cột `accounts` hỏng thì
+ * chính lớp chính sách mất tác dụng, cột `agents` hỏng thì lớp năng lực mất -
+ * không có chuyện "lớp còn lại đỡ cho", vì hai lớp dùng chung hàm này. Chấp
+ * nhận được vì cột chỉ hỏng khi ai đó sửa DB tay (mọi đường ghi đều đi qua
+ * `JSON.stringify` của một mảng đã lọc bằng `TOOL_KEYS` ở biên API), và vì
+ * `runsInScheduledTurn` cùng `available()` vẫn chặn độc lập với cột này.
  */
 export function parseDisabledTools(raw: string): string[] {
   try {

@@ -33,6 +33,8 @@ const patchSchema = z.object({
   // (đúng nếp account-routes.ts) - key rác lọt vào DB thì im lặng vô hại nhưng
   // đọc log lại tưởng tool đó tồn tại.
   disabledTools: z.array(z.enum(TOOL_KEYS as [string, ...string[]])).optional(),
+  // null = theo LLM_CONTEXT_WINDOW ở trang Cấu hình. Biên trùng với schema env.
+  contextWindow: z.number().int().min(4_000).max(2_000_000).nullable().optional(),
 });
 
 /** /api/agents - quản lý "não" (persona + model override), gắn vào account */

@@ -13,7 +13,8 @@ const NHAN_NHOM: Record<string, { title: string; hint: string }> = {
  *
  * Điểm quan trọng nhất phải nói rõ ra màn hình: đây KHÔNG phải quyết định cuối
  * cùng. Tool bot thật sự dùng được là phần GIAO với công cụ đang bật của từng
- * tài khoản Zalo (trang Accounts). Agent khai năng lực, account áp chính sách;
+ * tài khoản Zalo (công tắc per-account nằm ở trang **Tools**, không phải trang
+ * Accounts). Agent khai năng lực, account áp chính sách;
  * không bên nào bật ngược lại được bên kia. Người dùng tick ở đây rồi tưởng bot
  * chắc chắn có tool đó là hiểu sai một nửa.
  *
@@ -62,7 +63,7 @@ export function AgentToolsSection({
   return (
     <AgentFormSection
       title="Công cụ"
-      hint={`Agent này được phép dùng ${soBat}/${tools.length} công cụ. Đây mới là NĂNG LỰC của agent - công cụ bot thật sự dùng được là phần giao với công cụ đang bật của từng tài khoản Zalo ở trang Accounts.`}
+      hint={`Agent này được phép dùng ${soBat}/${tools.length} công cụ. Đây mới là NĂNG LỰC của agent - công cụ bot thật sự dùng được là phần giao với công cụ đang bật của từng tài khoản Zalo ở trang Tools.`}
     >
       {(["read", "action"] as const).map((nhom) => {
         const cua = tools.filter((t) => t.group === nhom);

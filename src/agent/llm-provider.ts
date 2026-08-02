@@ -20,6 +20,38 @@ const sanitizingFetch = createSanitizingFetch({
     log.warn("Router trả JSON dính đuôi SSE 'data: [DONE]' - đã cắt bỏ (bug 9Router, nên fix tận gốc)"),
 });
 
+/**
+ * Chốt chặn rò khóa API: chỉ nhận override provider khi TRÙNG provider chung.
+ *
+ * `apiKey` và `baseUrl` luôn lấy từ cấu hình chung (per-agent key chưa có). Nên
+ * một agent khai `modelProvider: "anthropic"` trong khi cấu hình chung là router
+ * sẽ khiến `createAnthropic({ apiKey: <khóa router> })` gửi khóa của router
+ * thành header `x-api-key` tới `api.anthropic.com` - vừa lộ credential sang bên
+ * thứ ba vừa làm bot câm vì 401.
+ *
+ * Chặn ở ĐÂY chứ không chỉ ở giao diện hay ở biên API, vì đây là chỗ duy nhất
+ * mọi đường đều đi qua: bản ghi lệch đã nằm sẵn trong DB (sửa tay từ trước), một
+ * route mới quên kiểm, hay lỗi tải cấu hình làm giao diện không kịp khóa ô chọn.
+ *
+ * Bỏ luôn `modelName` khi từ chối provider: tên model được chọn CHO provider kia
+ * (vd `claude-opus-5` cho Anthropic), gửi sang router chỉ nhận 400. Rơi hẳn về
+ * cấu hình chung mới là trạng thái chạy được.
+ */
+export function doiProviderAnToan<P extends string>(
+  base: { provider: P; model: string },
+  override?: { modelProvider?: P | null; modelName?: string | null },
+): { provider: P; model: string } {
+  const muon = override?.modelProvider;
+  if (muon && muon !== base.provider) {
+    log.error(
+      { agentProvider: muon, providerChung: base.provider },
+      "Agent khai nhà cung cấp khác cấu hình chung nhưng chưa có API key riêng - BỎ QUA override để không gửi khóa sang nhầm bên. Sửa lại ở trang Agents.",
+    );
+    return { provider: base.provider, model: base.model };
+  }
+  return { provider: muon ?? base.provider, model: override?.modelName ?? base.model };
+}
+
 export type ModelOverride = {
   modelProvider?: "openai-compatible" | "anthropic" | null;
   modelName?: string | null;
@@ -44,11 +76,7 @@ export function resolveLanguageModel(
   thread?: { accountId: string; threadId: string },
 ): LanguageModel {
   const base = getEffectiveLlmSettings();
-  const settings = {
-    ...base,
-    provider: override?.modelProvider ?? base.provider,
-    model: override?.modelName ?? base.model,
-  };
+  const settings = { ...base, ...doiProviderAnToan(base, override) };
   if (!settings.apiKey) {
     throw new Error(
       "Chưa cấu hình LLM API key - đặt LLM_API_KEY trong .env hoặc nhập ở trang Providers trên dashboard",

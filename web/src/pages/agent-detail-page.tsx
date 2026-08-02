@@ -61,8 +61,31 @@ export function AgentDetailPage() {
   const coDoi = Boolean(form && banDau && JSON.stringify(form) !== JSON.stringify(banDau));
 
   /**
-   * Rời trang khi còn thay đổi chưa lưu thì phải hỏi. Ô persona nhận tới 8000
-   * ký tự - mất trắng vì lỡ bấm "Quay lại" là mất thật.
+   * Đóng/tải lại tab khi còn thay đổi chưa lưu thì trình duyệt tự hỏi.
+   *
+   * KHÔNG dùng `useBlocker` của react-router: hook đó đòi data router
+   * (`createBrowserRouter`), còn app đang dựng bằng `<BrowserRouter>` - gọi vào
+   * là ném "useBlocker must be used within a data router" và trắng cả trang.
+   * Đã thử và đã dính.
+   *
+   * Hệ quả còn lại: điều hướng TRONG app (bấm mục ở sidebar) vẫn không chặn
+   * được, vì `<BrowserRouter>` không có móc nào để chen vào. Muốn chặn nốt thì
+   * phải chuyển cả app sang `createBrowserRouter` - việc riêng, không gộp vào
+   * đây. Nút "Quay lại" thì đã hỏi ở `roiTrang`.
+   */
+  useEffect(() => {
+    if (!coDoi) return;
+    const canhBao = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", canhBao);
+    return () => window.removeEventListener("beforeunload", canhBao);
+  }, [coDoi]);
+
+  /**
+   * Rời trang bằng nút "Quay lại" khi còn sửa dở thì phải hỏi. Ô persona nhận
+   * tới 8000 ký tự - mất trắng là mất thật.
+   *
+   * `tone: "normal"` vì đây không phải hành động phá hủy; để mặc định "danger"
+   * thì hộp thoại rời trang hiện nút đỏ kèm icon cảnh báo y như hộp thoại xóa.
    */
   async function roiTrang() {
     if (coDoi) {
@@ -71,6 +94,7 @@ export function AgentDetailPage() {
         message: "Những thay đổi bạn vừa sửa trên trang này sẽ mất.",
         confirmLabel: "Rời đi",
         cancelLabel: "Ở lại",
+        tone: "normal",
       });
       if (!ok) return;
     }

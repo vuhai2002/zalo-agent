@@ -1,4 +1,5 @@
 import type { ProviderSettings, ReasoningEffort } from "../dashboard-api-client";
+import { kiemSoBuoc, kiemTranContext } from "./agent-field-validators";
 import { AgentFormField, AgentFormRow, AgentFormSection } from "./agent-form-field";
 
 export type AgentModelForm = {
@@ -10,29 +11,14 @@ export type AgentModelForm = {
   maxSteps: string;
   /** "" = theo Cấu hình chung */
   reasoningEffort: "" | ReasoningEffort;
+  /** "" = theo Cấu hình chung */
+  contextWindow: string;
 };
 
 const NHA_CUNG_CAP = [
   { value: "openai-compatible" as const, label: "openai-compatible (router)" },
   { value: "anthropic" as const, label: "anthropic (gọi thẳng)" },
 ];
-
-/**
- * Kiểm ô "Số bước tối đa" NGAY TRÊN CLIENT, khớp đúng giới hạn của
- * `patchSchema` (`agent-routes.ts`: int, 1-30). Không có hàm này thì gõ `99`
- * hoặc `1.5` lọt xuống server và quay về đúng một câu "Dữ liệu không hợp lệ",
- * không nói được là ô nào sai.
- *
- * Rỗng là HỢP LỆ - nó mang nghĩa "theo Cấu hình chung".
- */
-export function kiemSoBuoc(raw: string): string {
-  const s = raw.trim();
-  if (s === "") return "";
-  if (!/^\d+$/.test(s)) return "Chỉ nhập số nguyên, hoặc để trống để theo Cấu hình chung";
-  const n = Number(s);
-  if (n < 1 || n > 30) return "Phải trong khoảng 1 - 30";
-  return "";
-}
 
 const MUC_SUY_NGHI: { value: "" | ReasoningEffort; label: string }[] = [
   { value: "", label: "Theo Cấu hình chung" },
@@ -68,6 +54,7 @@ export function AgentModelSection({
 }) {
   const nhanChung = chung ? `${chung.provider} / ${chung.model}` : "theo trang Providers";
   const loiSoBuoc = kiemSoBuoc(form.maxSteps);
+  const loiTran = kiemTranContext(form.contextWindow);
 
   return (
     <AgentFormSection
@@ -158,6 +145,29 @@ export function AgentModelSection({
             <span className="text-[12px] text-ink-soft/70">(1 - 30)</span>
           </div>
           {loiSoBuoc && <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{loiSoBuoc}</p>}
+        </AgentFormField>
+      </AgentFormRow>
+
+      <AgentFormRow>
+        <AgentFormField
+          label="Trần token mỗi lần gọi"
+          htmlFor="ag-d-ctx"
+          hint="Ngữ cảnh vượt mức này thì bot tự bỏ bớt ảnh cũ trước, rồi mới bỏ tin cũ - phần bỏ đi vẫn còn trong bản tóm tắt. Đặt riêng khi agent này chạy model có cửa sổ khác. Bỏ trống là theo trang Cấu hình."
+        >
+          <div className="flex items-center gap-2">
+            <input
+              id="ag-d-ctx"
+              type="text"
+              inputMode="numeric"
+              className="gc-input w-40"
+              value={form.contextWindow}
+              onChange={(e) => onChange({ contextWindow: e.target.value })}
+              placeholder="theo Cấu hình"
+              aria-invalid={loiTran !== ""}
+            />
+            <span className="text-[13px] text-ink-soft">token</span>
+          </div>
+          {loiTran && <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{loiTran}</p>}
         </AgentFormField>
       </AgentFormRow>
 

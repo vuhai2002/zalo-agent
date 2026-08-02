@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import type { API } from "zca-js";
+import { fakeAgentProfile } from "../../shared/fake-agent-profile.js";
 import { cleanupTestEnv, setupTestEnv } from "../../shared/test-env-setup.js";
 
 // Kéo theo env + DB nên phải setupTestEnv trước, import động sau
@@ -48,18 +49,9 @@ function makeContext(disabledTools: string[], agentDisabled: string[] = []) {
       typingIndicatorEnabled: true,
       disabledTools,
     },
-    agent: {
-      id: "agent-test",
-      icon: "🤖",
-      name: "Agent test",
-      persona: "",
-      modelProvider: null,
-      modelName: null,
-      maxSteps: null,
-      reasoningEffort: null,
-      disabledTools: agentDisabled,
-      isDefault: false,
-    },
+    // Dùng fixture chung thay vì chép literal: thêm trường mới vào AgentProfile
+    // thì chỉ sửa một chỗ, và không có file nào âm thầm thiếu trường
+    agent: fakeAgentProfile({ disabledTools: agentDisabled }),
     message: { threadId: "t-1", threadType: 0 } as never,
     batch: [],
   };

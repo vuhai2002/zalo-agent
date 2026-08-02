@@ -85,3 +85,49 @@ describe("hitStepLimit - phân biệt hết lượt với xong việc", () => {
     assert.equal(loop.hitStepLimit({ stepCount: 9, maxSteps: 8, lastStepToolCalls: 1 }), true);
   });
 });
+
+describe("canLuotChot - dừng sớm vì BẤT KỲ lý do gì cũng phải chốt lại", () => {
+  it("step cuối còn gọi tool = bị cắt ngang, cần lượt chốt", () => {
+    assert.equal(loop.canLuotChot({ lastStepToolCalls: 1 }), true);
+  });
+
+  it("step cuối không gọi tool = model đã chốt kịp", () => {
+    assert.equal(loop.canLuotChot({ lastStepToolCalls: 0 }), false);
+  });
+
+  it("KHÔNG đòi đủ step - đây là điểm khác hitStepLimit và là lý do hàm này tồn tại", () => {
+    // Lượt dừng vì chạm trần TOKEN có steps.length < maxSteps. Dùng hitStepLimit
+    // ở đây sẽ trả false và câu tường thuật nội bộ đi thẳng xuống Zalo.
+    assert.equal(loop.hitStepLimit({ stepCount: 3, maxSteps: 8, lastStepToolCalls: 2 }), false);
+    assert.equal(loop.canLuotChot({ lastStepToolCalls: 2 }), true);
+  });
+});
+
+describe("vuotTranToken - điều kiện dừng theo usage THẬT", () => {
+  const steps = (...n: number[]) => n.map((inputTokens) => ({ usage: { inputTokens } }));
+
+  it("chưa chạm trần thì chạy tiếp", () => {
+    assert.equal(loop.vuotTranToken(10_000)({ steps: steps(3_000, 5_000) }), false);
+  });
+
+  it("một step chạm trần là dừng", () => {
+    assert.equal(loop.vuotTranToken(10_000)({ steps: steps(3_000, 10_000) }), true);
+  });
+
+  it("lấy step NẶNG NHẤT chứ không phải tổng - tràn cửa sổ là chuyện của một lần gọi", () => {
+    // Tổng 12.000 vượt trần nhưng không lần gọi nào vượt: không được dừng
+    assert.equal(loop.vuotTranToken(10_000)({ steps: steps(4_000, 4_000, 4_000) }), false);
+  });
+
+  it("trần <= 0 coi như tắt", () => {
+    assert.equal(loop.vuotTranToken(0)({ steps: steps(999_999) }), false);
+  });
+
+  it("step thiếu usage (provider không trả) không làm vỡ", () => {
+    assert.equal(loop.vuotTranToken(10_000)({ steps: [{}, { usage: {} }] }), false);
+  });
+
+  it("chưa có step nào thì chưa dừng", () => {
+    assert.equal(loop.vuotTranToken(10_000)({ steps: [] }), false);
+  });
+});

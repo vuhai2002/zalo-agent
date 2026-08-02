@@ -122,7 +122,13 @@ export function AgentCreateModal({
               id="ag-ten"
               className="gc-input w-full"
               value={ten}
-              onChange={(e) => setTen(e.target.value)}
+              onChange={(e) => {
+                setTen(e.target.value);
+                // Đổi tên là một cách sửa lỗi trùng ID hợp lệ (ID bám theo tên
+                // sinh lại chuỗi khác). Không xóa câu báo lỗi cũ thì ID mới vẫn
+                // bị kèm chữ đỏ "đã tồn tại", đọc ra vô nghĩa.
+                setLoiId("");
+              }}
               placeholder="vd: Tư Vấn Khóa Học"
               maxLength={100}
             />

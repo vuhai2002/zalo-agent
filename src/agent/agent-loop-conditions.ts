@@ -1,0 +1,80 @@
+/**
+ * Các vị từ THUẦN quyết định vòng lặp agent dừng lúc nào và lượt kết thúc ra sao.
+ *
+ * Tách khỏi `agent-loop.ts` vì file đó đã vượt ngưỡng 200 dòng, và vì đây là
+ * phần duy nhất trong vòng lặp test được mà không cần model, không cần DB,
+ * không cần mạng. `agent-loop.ts` re-export lại để mọi nơi import như cũ.
+ */
+
+/**
+ * Chữ ký "router trả completion rỗng": 9Router thỉnh thoảng trả HTTP 200 với
+ * message trống trơn - không text, không tool call, usage = 0. SDK coi đó là
+ * thành công nên maxRetries không cứu. Phân biệt được với lượt "chỉ thả
+ * reaction" hợp lệ: lượt đó CÓ tool call và CÓ token.
+ */
+export function isEmptyRouterCompletion(input: {
+  text: string;
+  toolCallCount: number;
+  totalTokens: number;
+}): boolean {
+  return !input.text.trim() && input.toolCallCount === 0 && input.totalTokens === 0;
+}
+
+/**
+ * Lượt dừng vì HẾT LƯỢT GỌI TOOL chứ không phải vì model xong việc.
+ *
+ * Nhận biết bằng CẤU TRÚC (đủ số step + step cuối vẫn còn gọi tool) thay vì
+ * bằng `finishReason`: model xong việc thì step cuối không có tool call, còn
+ * `stopWhen: stepCountIs(n)` cắt ngang đúng lúc model vừa gọi tool xong. Không
+ * dùng `finishReason` vì trường đó do provider map, và `MockLanguageModel` của
+ * SDK không truyền nó ra nên nhánh này sẽ không test được.
+ *
+ * Giờ chỉ còn dùng để GHI LOG lý do dừng. Quyết định có chạy lượt chốt hay
+ * không thuộc về `canLuotChot` - xem giải thích ở đó.
+ */
+export function hitStepLimit(input: {
+  stepCount: number;
+  maxSteps: number;
+  lastStepToolCalls: number;
+}): boolean {
+  return input.stepCount >= input.maxSteps && input.lastStepToolCalls > 0;
+}
+
+/**
+ * Lượt có cần LƯỢT CHỐT không - tổng quát hơn `hitStepLimit`.
+ *
+ * Dấu hiệu quyết định là STEP CUỐI VẪN CÒN GỌI TOOL. Model xong việc thì step
+ * cuối không gọi tool nữa; còn gọi nghĩa là vòng lặp bị cắt ngang giữa chừng,
+ * nên `result.text` là câu tường thuật tiến trình ("Đủ 2 nguồn - giờ đối
+ * chiếu") chứ không phải câu trả lời.
+ *
+ * Vì sao không dùng thẳng `hitStepLimit`: hàm đó còn đòi `stepCount >= maxSteps`,
+ * đúng khi lý do dừng DUY NHẤT là hết step. Từ khi `stopWhen` có thêm điều kiện
+ * token (`vuotTranToken`), lượt dừng sớm với `steps.length < maxSteps` sẽ trượt
+ * khỏi nhánh đó và gửi thẳng câu tường thuật xuống Zalo - đúng cái bug mà lượt
+ * chốt sinh ra để chữa.
+ */
+export function canLuotChot(input: { lastStepToolCalls: number }): boolean {
+  return input.lastStepToolCalls > 0;
+}
+
+/**
+ * Điều kiện dừng theo TOKEN, ghép cùng `stepCountIs` trong `stopWhen`.
+ *
+ * Dựa trên usage THẬT do provider trả về sau mỗi step, không phải ước lượng -
+ * ước lượng chỉ dùng để cắt ngữ cảnh TRƯỚC lượt, còn trong lượt thì đã có số
+ * thật để mà tin.
+ *
+ * `steps[].usage.inputTokens` là input của RIÊNG step đó. Lấy max thay vì tổng:
+ * cái quyết định có tràn cửa sổ hay không là lần gọi NẶNG NHẤT, còn tổng chỉ
+ * nói lên tiền đã tiêu. Đo trên DB thật: một lượt từng cộng dồn 184.835 token
+ * qua 8 step, nhưng không lần gọi nào chạm cửa sổ.
+ */
+export function vuotTranToken(tranToken: number) {
+  return ({ steps }: { steps: readonly { usage?: { inputTokens?: number } }[] }): boolean => {
+    if (tranToken <= 0) return false;
+    let nangNhat = 0;
+    for (const s of steps) nangNhat = Math.max(nangNhat, s.usage?.inputTokens ?? 0);
+    return nangNhat >= tranToken;
+  };
+}
