@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { env } from "../config/env.js";
+import { currentPasswordMaterial, verifyPassword } from "./dashboard-password-store.js";
 import {
   deleteSession,
   findSession,
@@ -30,18 +31,23 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 /**
- * Dấu vân tay của password đang hiệu lực. Lưu vào từng phiên để đổi
- * DASHBOARD_PASSWORD là mọi phiên cũ hết giá trị ngay, không cần xóa DB tay.
+ * Dấu vân tay của password đang hiệu lực. Lưu vào từng phiên để đổi mật khẩu
+ * là mọi phiên cũ hết giá trị ngay, không cần xóa DB tay. Nguồn là
+ * `currentPasswordMaterial()` nên đổi qua web cũng đá phiên y như sửa `.env`.
  */
 function passwordFingerprint(): string {
-  return createHmac("sha256", hmacKey())
-    .update(env.DASHBOARD_PASSWORD ?? "")
-    .digest("hex");
+  return createHmac("sha256", hmacKey()).update(currentPasswordMaterial()).digest("hex");
 }
 
+/**
+ * `DASHBOARD_PASSWORD` vẫn là CÔNG TẮC bật/tắt dashboard: không set thì không
+ * đăng nhập được kể cả khi DB có mật khẩu đã đổi. Giữ đúng mặc định an toàn
+ * "không cấu hình = không mở cửa", và khớp với `startDashboardServer` vốn
+ * không mở cổng khi thiếu biến này.
+ */
 export function checkPassword(input: string): boolean {
   if (!env.DASHBOARD_PASSWORD) return false;
-  return safeEqual(input, env.DASHBOARD_PASSWORD);
+  return verifyPassword(input);
 }
 
 export function createSessionToken(nowMs = Date.now()): string {

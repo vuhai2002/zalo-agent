@@ -16,6 +16,7 @@ import {
   revokeSessionToken,
   verifySessionToken,
 } from "./dashboard-auth.js";
+import { setStoredPassword } from "./dashboard-password-store.js";
 import { accountRoutes } from "./routes/account-routes.js";
 import { agentRoutes } from "./routes/agent-routes.js";
 import { contactRoutes } from "./routes/contact-routes.js";
@@ -109,6 +110,51 @@ export function buildDashboardApp(): Hono {
   });
 
   app.get("/api/auth/me", (c) => c.json({ ok: true }));
+
+  /**
+   * Đổi mật khẩu. BẮT BUỘC nhập lại mật khẩu hiện tại dù đã đăng nhập: cookie
+   * bị mượn (máy bỏ quên, XSS) mà đổi được mật khẩu là khoá luôn chủ thật ra
+   * ngoài. Vẫn tính vào rate-limit login vì đây là một chỗ đoán mật khẩu nữa.
+   *
+   * Đổi xong mọi phiên cũ hết hiệu lực (fingerprint đổi theo), nên cấp lại
+   * cookie mới ngay cho chính người vừa đổi - không thì họ bị đá ra khỏi trang
+   * mình đang đứng.
+   */
+  app.post("/api/auth/password", async (c) => {
+    const ip = resolveClientIp(c);
+    if (!allowLoginAttempt(ip)) {
+      return c.json({ error: "Thử quá nhiều lần, đợi 1 phút" }, 429);
+    }
+
+    const body = (await c.req.json().catch(() => null)) as
+      | { currentPassword?: string; newPassword?: string }
+      | null;
+    const hienTai = body?.currentPassword ?? "";
+    const moi = body?.newPassword ?? "";
+
+    if (!checkPassword(hienTai)) {
+      return c.json({ error: "Mật khẩu hiện tại không đúng" }, 401);
+    }
+    // Khớp đúng ràng buộc của schema env - hai nơi lệch nhau thì đổi qua web
+    // được một giá trị mà đặt trong .env lại bị từ chối lúc boot
+    if (moi.length < 8) {
+      return c.json({ error: "Mật khẩu mới phải từ 8 ký tự" }, 400);
+    }
+    if (moi === hienTai) {
+      return c.json({ error: "Mật khẩu mới phải khác mật khẩu hiện tại" }, 400);
+    }
+
+    clearLoginAttempts(ip);
+    setStoredPassword(moi);
+    // Phiên cũ (kể cả của chính người này) đã vô hiệu vì fingerprint đổi - cấp
+    // cookie mới để họ đi tiếp, các thiết bị khác thì phải đăng nhập lại
+    setCookie(c, SESSION_COOKIE, createSessionToken(), {
+      ...SESSION_COOKIE_OPTIONS,
+      maxAge: 7 * 24 * 60 * 60,
+    });
+    log.warn("Mật khẩu dashboard đã đổi - mọi phiên đăng nhập khác bị thu hồi");
+    return c.json({ ok: true });
+  });
   app.route("/api/overview", overviewRoutes);
   app.route("/api/threads", threadRoutes);
   app.route("/api/contacts", contactRoutes);
