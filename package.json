@@ -12,10 +12,11 @@
     "dev:web": "vite web",
     "start": "tsx src/index.ts",
     "zalo-login": "tsx scripts/login-account.ts",
-    "test": "node --import tsx --test \"src/**/*.test.ts\" \"web/src/**/*.test.ts\"",
+    "test": "node --import tsx --test \"src/**/*.test.ts\" \"web/src/**/*.test.ts\" \"evals/**/*.test.ts\"",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "build": "tsc",
-    "build:web": "vite build web"
+    "build:web": "vite build web",
+    "eval": "tsx evals/run-eval.ts"
   },
   "packageManager": "pnpm@11.17.0+sha512.cca3cea332ad254bb84145f966d19f4879615210346fc92c79a047f23a0d7b3cca3c3792f0076ba1f1831d277efbcf0a9119b31a9a60eca7fb3d6231f331ef72",
   "dependencies": {

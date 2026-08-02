@@ -12,7 +12,7 @@
 ## Tổng quan
 
 - **Ưu tiên**: cao - không có thì mọi cải tiến sau này đều là đoán
-- **Trạng thái**: chưa làm. Nên làm **sau** 02-06 để có thứ mà đo.
+- **Trạng thái**: XONG. 6/6 case đạt với model thật (gpt-combo qua 9Router).
 - Dựng `pnpm eval` chạy model thật, khẳng định trên **hành vi** (gọi tool nào), không trên
   câu chữ.
 
@@ -115,15 +115,15 @@ Sửa:
 
 ## Việc cần làm
 
-- [ ] `fake-zalo-api.ts` ghi lại mọi lời gọi
-- [ ] `run-eval.ts` + `setupTestEnv()` đúng thứ tự import động
-- [ ] `eval-case-type.ts` có trường `lyDo` bắt buộc
-- [ ] 5 case đầu
-- [ ] Chạy tuần tự, in bảng, exit code đúng
-- [ ] Thiếu API key thì thoát sớm có hướng dẫn
-- [ ] `package.json` script `eval`
-- [ ] `pnpm test` **không** chạy file nào trong `evals/`
-- [ ] Ghi tài liệu cách thêm case
+- [x] `fake-zalo-api.ts` ghi lại mọi lời gọi
+- [x] `run-eval.ts` + `setupTestEnv()` đúng thứ tự import động
+- [x] `eval-case-type.ts` có trường `lyDo` bắt buộc
+- [x] 5 case đầu
+- [x] Chạy tuần tự, in bảng, exit code đúng
+- [x] Thiếu API key thì thoát sớm có hướng dẫn
+- [x] `package.json` script `eval`
+- [x] `pnpm test` **không** chạy file nào trong `evals/`
+- [x] Ghi tài liệu cách thêm case
 
 ## Tiêu chí hoàn thành
 
@@ -153,3 +153,32 @@ Sửa:
 
 Phase 08 dùng bộ này để kiểm chứng dòng persona hỏi lại. Sau đó bổ sung case cho phase 04
 (guard chặn đúng lần thứ 5) và phase 05 (lỗi auth không retry).
+
+## Lệch so với kế hoạch (có chủ ý)
+
+- Gộp 6 case vào MỘT file `eval-cases.ts` thay vì 5 file trong `cases/`: mỗi case ~15
+  dòng, tách ra là vụn vặt. Tách khi file vượt 200 dòng.
+- Cho MỘT file `.test.ts` vào `evals/` (kế hoạch nói không file nào). `chamCase` là chỗ
+  dễ sai nhất mà chính bộ eval không tự kiểm được - chạy model thật thì mỗi lần một kết
+  quả nên không có mốc để so. File đó thuần, không mạng, không key; `run-eval.ts` không
+  phải `.test.ts` nên ràng buộc "CI không cần mạng" giữ nguyên.
+- Đi qua `processBatch` (đường production đầy đủ) thay vì gọi thẳng `runAgentTurn`: như
+  vậy lớp làm sạch đầu ra của phase 06 và đường gửi cũng nằm trong phép đo.
+- Thêm `EVAL_ONLY=ten1,ten2` để chạy tập con - mỗi lượt là token thật.
+- Tách `secret-cipher-core.ts` (thuần, nhận khóa qua tham số) khỏi `secret-cipher.ts`:
+  bộ eval cần giải mã API key trong DB thật TRƯỚC khi dựng env tạm, mà `env.js` parse
+  `process.env` ngay lúc import nên nạp sớm là chốt nhầm giá trị.
+- Case `ngay-gio` tách làm hai (`gio-chinh-xac` + `ngay-co-san`) - xem mục dưới.
+
+## Ba lỗi do CHÍNH LẦN CHẠY THẬT bắt được
+
+1. **Lượt hỏng bị chấm ĐẠT.** `processBatch` bắt lỗi rồi nhắn câu "trục trặc kỹ thuật"
+   thay vì ném, nên khi router trả 404 thì 3/5 case báo ĐẠT - xanh đúng lúc hệ thống
+   hỏng. Chữa bằng `phatHienLuotHong` (0 token, hoặc trùng hằng số báo lỗi production).
+2. **Đọc cấu hình từ nguồn KHÁC production.** Bản đầu chỉ đọc `.env`, trong khi model
+   cấu hình qua dashboard (DB `runtime_settings`) và DB đè `.env`. Hậu quả: eval gọi
+   sai tên model rồi kết luận nhầm là bot hỏng. Chữa bằng `read-real-llm-settings.ts`.
+3. **Mong đợi mâu thuẫn với thiết kế.** `ngay-gio` đòi gọi `get_datetime` cho câu hỏi
+   ngày, nhưng system prompt CỐ Ý đã có sẵn ngày + thứ nên gọi tool là thừa - đúng thứ
+   case `khong-tra-thua` phạt. Tách làm hai: hỏi GIỜ (prompt cố ý không có) phải gọi
+   tool, hỏi NGÀY thì không được gọi.

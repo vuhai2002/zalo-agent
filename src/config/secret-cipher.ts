@@ -1,5 +1,5 @@
-import crypto from "node:crypto";
 import { env } from "./env.js";
+import { decryptWith, encryptWith } from "./secret-cipher-core.js";
 
 /**
  * Mã hóa secret lưu trong DB (API key nhập từ dashboard). AES-256-GCM cùng
@@ -7,27 +7,18 @@ import { env } from "./env.js";
  *
  * Tách riêng vì đã có 2 nơi cần (LLM API key, key search provider) - hai bản
  * copy của cùng đoạn crypto là chỗ dễ lệch nhất khi sửa.
+ *
+ * File này chỉ còn phần NỐI KHÓA: thuật toán nằm ở `secret-cipher-core.ts`
+ * (thuần, nhận khóa qua tham số) để bộ eval giải mã được cấu hình trong DB thật
+ * mà không phải nạp `env.js` sớm.
  */
 
-const encryptionKey = () => Buffer.from(env.CREDENTIALS_ENCRYPTION_KEY, "hex");
-
 export function encryptSecret(plaintext: string): string {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", encryptionKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf-8"), cipher.final()]);
-  return Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
+  return encryptWith(env.CREDENTIALS_ENCRYPTION_KEY, plaintext);
 }
 
 export function decryptSecret(payload: string): string {
-  const buf = Buffer.from(payload, "base64");
-  const decipher = crypto.createDecipheriv("aes-256-gcm", encryptionKey(), buf.subarray(0, 12));
-  decipher.setAuthTag(buf.subarray(12, 28));
-  return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]).toString("utf-8");
+  return decryptWith(env.CREDENTIALS_ENCRYPTION_KEY, payload);
 }
 
-/** "sk-abc...xyz" - đủ nhận diện key nào, không đủ dùng lại */
-export function maskSecret(value: string): string {
-  if (!value) return "chưa cấu hình";
-  if (value.length <= 8) return "***";
-  return `${value.slice(0, 5)}...${value.slice(-4)}`;
-}
+export { maskSecret } from "./secret-cipher-core.js";
