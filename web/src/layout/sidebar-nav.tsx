@@ -1,5 +1,5 @@
-import type { ReactNode, SVGProps } from "react";
-import { NavLink } from "react-router-dom";
+import type { MouseEvent, ReactNode, SVGProps } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   IconBolt,
   IconClock,
@@ -18,6 +18,7 @@ import {
   IconSun,
   IconUsers,
 } from "../shared/dashboard-icons";
+import { coCanHoiTruocKhiRoi, xinPhepRoiTrang } from "../shared/unsaved-changes-guard";
 import { useTheme } from "../shared/use-theme";
 
 /**
@@ -67,6 +68,30 @@ export function SidebarNav({
   onCloseMobile: () => void;
 }) {
   const { theme, toggle } = useTheme();
+  const navigate = useNavigate();
+
+  /**
+   * Chặn điều hướng khi trang đang mở còn thay đổi chưa lưu.
+   *
+   * `preventDefault()` phải gọi ĐỒNG BỘ, không chờ được promise - nên kiểm bằng
+   * `coCanHoiTruocKhiRoi()` (đồng bộ) trước, rồi mới hỏi. Không có gì chưa lưu
+   * thì đi thẳng theo hành vi mặc định của link, không đụng gì.
+   *
+   * Đây là cách thay cho `useBlocker`: hook đó đòi data router, mà app dựng
+   * bằng `<BrowserRouter>` - xem `unsaved-changes-guard.ts`.
+   */
+  function chanNeuChuaLuu(e: MouseEvent<HTMLAnchorElement>, to: string): void {
+    if (!coCanHoiTruocKhiRoi()) {
+      onCloseMobile();
+      return;
+    }
+    e.preventDefault();
+    void xinPhepRoiTrang().then((ok) => {
+      if (!ok) return;
+      onCloseMobile();
+      navigate(to);
+    });
+  }
 
   return (
     <>
@@ -87,7 +112,7 @@ export function SidebarNav({
         <div className="flex items-center gap-2.5 px-5 pb-4 pt-5">
           <NavLink
             to="/"
-            onClick={onCloseMobile}
+            onClick={(e) => chanNeuChuaLuu(e, "/")}
             className="flex items-center gap-2.5"
             title="Về trang chính"
           >
@@ -120,7 +145,7 @@ export function SidebarNav({
                   key={item.to}
                   to={item.to}
                   end={item.to === "/"}
-                  onClick={onCloseMobile}
+                  onClick={(e) => chanNeuChuaLuu(e, item.to)}
                   className={({ isActive }) =>
                     `mb-0.5 flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-[14px] transition-colors ${
                       isActive

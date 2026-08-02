@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ManagedAgent, ProviderSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { IconBot } from "../shared/dashboard-icons";
+import { useUnsavedChangesPrompt } from "../shared/use-unsaved-changes-prompt";
 import { kiemForm, thanhPatch, tuAgent, type AgentDetailForm } from "./agent-detail-form";
 import { AgentIdentitySection } from "./agent-identity-section";
 import { AgentModelSection } from "./agent-model-section";
@@ -61,43 +62,33 @@ export function AgentDetailPage() {
   const coDoi = Boolean(form && banDau && JSON.stringify(form) !== JSON.stringify(banDau));
 
   /**
-   * Đóng/tải lại tab khi còn thay đổi chưa lưu thì trình duyệt tự hỏi.
-   *
-   * KHÔNG dùng `useBlocker` của react-router: hook đó đòi data router
-   * (`createBrowserRouter`), còn app đang dựng bằng `<BrowserRouter>` - gọi vào
-   * là ném "useBlocker must be used within a data router" và trắng cả trang.
-   * Đã thử và đã dính.
-   *
-   * Hệ quả còn lại: điều hướng TRONG app (bấm mục ở sidebar) vẫn không chặn
-   * được, vì `<BrowserRouter>` không có móc nào để chen vào. Muốn chặn nốt thì
-   * phải chuyển cả app sang `createBrowserRouter` - việc riêng, không gộp vào
-   * đây. Nút "Quay lại" thì đã hỏi ở `roiTrang`.
-   */
-  useEffect(() => {
-    if (!coDoi) return;
-    const canhBao = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", canhBao);
-    return () => window.removeEventListener("beforeunload", canhBao);
-  }, [coDoi]);
-
-  /**
-   * Rời trang bằng nút "Quay lại" khi còn sửa dở thì phải hỏi. Ô persona nhận
-   * tới 8000 ký tự - mất trắng là mất thật.
+   * Một hộp thoại dùng cho MỌI đường rời trang - nút "Quay lại" lẫn sidebar.
+   * Hai câu chữ khác nhau cho cùng một chuyện là cách chắc chắn để chúng trôi
+   * khỏi nhau.
    *
    * `tone: "normal"` vì đây không phải hành động phá hủy; để mặc định "danger"
    * thì hộp thoại rời trang hiện nút đỏ kèm icon cảnh báo y như hộp thoại xóa.
+   *
+   * `useCallback` để tham chiếu ổn định: hàm này nằm trong deps của useEffect
+   * đăng ký chốt, đổi tham chiếu mỗi lần render sẽ đăng ký lại liên tục.
    */
-  async function roiTrang() {
-    if (coDoi) {
-      const ok = await confirm({
+  const hoiRoiTrang = useCallback(
+    () =>
+      confirm({
         title: "Rời trang mà chưa lưu?",
         message: "Những thay đổi bạn vừa sửa trên trang này sẽ mất.",
         confirmLabel: "Rời đi",
         cancelLabel: "Ở lại",
         tone: "normal",
-      });
-      if (!ok) return;
-    }
+      }),
+    [confirm],
+  );
+
+  useUnsavedChangesPrompt(coDoi, hoiRoiTrang);
+
+  /** Rời trang bằng nút "Quay lại". Ô persona nhận tới 8000 ký tự - mất là mất thật. */
+  async function roiTrang() {
+    if (coDoi && !(await hoiRoiTrang())) return;
     navigate("/agents");
   }
 
