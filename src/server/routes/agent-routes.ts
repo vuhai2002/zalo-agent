@@ -8,6 +8,7 @@ import {
   listAgents,
   updateAgent,
 } from "../../config/agent-store.js";
+import { TOOL_KEYS } from "../../agent/tools/tool-registry.js";
 import { createLogger } from "../../shared/logger.js";
 
 const log = createLogger("agent-routes");
@@ -28,6 +29,10 @@ const patchSchema = z.object({
   modelName: z.string().min(1).nullable().optional(),
   maxSteps: z.number().int().min(1).max(30).nullable().optional(),
   reasoningEffort: z.enum(["off", "low", "medium", "high", "xhigh"]).nullable().optional(),
+  // Tool agent này KHÔNG dùng. Chặn key lạ ngay ở biên bằng chính TOOL_KEYS
+  // (đúng nếp account-routes.ts) - key rác lọt vào DB thì im lặng vô hại nhưng
+  // đọc log lại tưởng tool đó tồn tại.
+  disabledTools: z.array(z.enum(TOOL_KEYS as [string, ...string[]])).optional(),
 });
 
 /** /api/agents - quản lý "não" (persona + model override), gắn vào account */

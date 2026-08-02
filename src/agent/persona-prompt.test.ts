@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
+import { fakeAgentProfile } from "../shared/fake-agent-profile.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 
@@ -26,13 +27,10 @@ after(() => {
   cleanupTestEnv(dataDir);
 });
 
-const AGENT = {
-  id: "agent-test",
-  name: "Trợ lý",
-  persona: "",
-  model: null,
-  maxSteps: null,
-} as never;
+// Dùng fixture thật thay vì literal ép `as never`: từ khi agent là một trong
+// hai lớp lọc tool, thiếu `disabledTools` sẽ nổ ngay ở phép gộp hai danh sách
+// tắt trong `listAvailableTools` - mà `as never` thì TypeScript không hé răng.
+const AGENT = fakeAgentProfile({ name: "Trợ lý" });
 
 const MSG = {
   senderName: "Hải",
@@ -43,6 +41,9 @@ const MSG = {
 function account(disabledTools: string[]) {
   return { id: "acc-1", disabledTools } as never;
 }
+
+/** Agent tắt sẵn vài tool - dùng cho các ca kiểm lớp lọc phía agent */
+const agentTat = (disabledTools: string[]) => fakeAgentProfile({ disabledTools });
 
 describe("buildSystemPrompt - danh sách tool đang bật", () => {
   it("kể tên tool đang bật kèm mô tả ngắn", () => {
@@ -75,12 +76,40 @@ describe("buildSystemPrompt - danh sách tool đang bật", () => {
       registry.buildAgentTools({
         api: {} as never,
         account: account(disabled),
+        agent: AGENT,
         message: MSG,
         batch: [],
       }),
     ).sort();
-    const listed = registry.listAvailableTools(account(disabled)).map((t) => t.key).sort();
+    const listed = registry
+      .listAvailableTools({ agent: AGENT, account: account(disabled) })
+      .map((t) => t.key)
+      .sort();
     assert.deepEqual(listed, built, "lệch nhau là prompt kể sai bộ tool model thực nhận");
+  });
+
+  it("tool bị AGENT tắt cũng không xuất hiện trong prompt", () => {
+    // Lớp thứ hai: trước phase này chỉ account tắt được tool, nên prompt kể cả
+    // tool mà chính agent đã tắt.
+    const text = prompt.buildSystemPrompt(agentTat(["web_search"]), MSG, undefined, account([]));
+    assert.doesNotMatch(text, /Tìm kiếm web/);
+    assert.match(text, /Đọc trang web/, "tool agent không tắt vẫn phải còn");
+  });
+
+  it("prompt khớp schema CẢ KHI hai lớp tắt hai tool khác nhau", () => {
+    const ag = agentTat(["web_search"]);
+    const acc = account(["create_excel_file"]);
+    const built = Object.keys(
+      registry.buildAgentTools({ api: {} as never, account: acc, agent: ag, message: MSG, batch: [] }),
+    ).sort();
+    const listed = registry.listAvailableTools({ agent: ag, account: acc }).map((t) => t.key).sort();
+    assert.deepEqual(listed, built);
+    assert.ok(!built.includes("web_search"), "agent tắt phải mất");
+    assert.ok(!built.includes("create_excel_file"), "account tắt phải mất");
+
+    const text = prompt.buildSystemPrompt(ag, MSG, undefined, acc);
+    assert.doesNotMatch(text, /Tìm kiếm web/);
+    assert.doesNotMatch(text, /Tạo file Excel/);
   });
 
 
@@ -121,9 +150,19 @@ describe("buildSystemPrompt - danh sách tool đang bật", () => {
     assert.doesNotMatch(textCoLap, /Thả cảm xúc/, "add_reaction không được kể khi isolated");
     assert.match(textThuong, /Ghi nhớ lâu dài/, "lượt thường (isolated=false) vẫn phải kể - đối chứng cho ca trên");
 
-    const listedIsolated = registry.listAvailableTools(acc, { isolated: true }).map((t) => t.key).sort();
+    const listedIsolated = registry
+      .listAvailableTools({ agent: AGENT, account: acc }, { isolated: true })
+      .map((t) => t.key)
+      .sort();
     const builtIsolated = Object.keys(
-      registry.buildAgentTools({ api: {} as never, account: acc, message: MSG, batch: [], isolated: true }),
+      registry.buildAgentTools({
+        api: {} as never,
+        account: acc,
+        agent: AGENT,
+        message: MSG,
+        batch: [],
+        isolated: true,
+      }),
     ).sort();
     assert.deepEqual(listedIsolated, builtIsolated, "prompt (qua listAvailableTools) và schema (buildAgentTools) phải khớp cả khi isolated");
   });

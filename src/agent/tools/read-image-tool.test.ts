@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
+import { fakeAgentProfile } from "../../shared/fake-agent-profile.js";
 import { cleanupTestEnv, setupTestEnv } from "../../shared/test-env-setup.js";
 
 let dataDir: string;
@@ -57,6 +58,7 @@ function makeContext(threadId: string, batch: ParsedMessage[]): ToolContext {
   return {
     api: {} as never,
     account: { id: "acc-ri", disabledTools: [] } as never,
+    agent: fakeAgentProfile(),
     message: batch[batch.length - 1] ?? batchMsg(threadId, []),
     batch,
   };

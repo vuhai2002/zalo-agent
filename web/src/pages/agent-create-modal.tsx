@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../dashboard-api-client";
 import { slugifyVietnamese } from "../shared/slugify-vietnamese";
-import { AgentIdField } from "./agent-id-field";
+import { AgentIdField, kiemDinhDangId } from "./agent-id-field";
 
 /**
  * Modal TẠO agent - cố tình chỉ hỏi những gì bắt buộc.
@@ -24,6 +24,11 @@ export function AgentCreateModal({
   // null = ID đang bám theo tên. Bấm "sửa" là chốt lại một chuỗi và NGỪNG bám -
   // không có mốc này thì gõ tiếp tên sẽ ghi đè cái người dùng vừa gõ tay.
   const [idTuGo, setIdTuGo] = useState<string | null>(null);
+  // Mở ô nhập ID mà KHÔNG giành quyền hộ người dùng. Tách khỏi `idTuGo` vì
+  // nhánh 409 cần cho người dùng thấy và sửa được ID, nhưng nếu họ chọn cách
+  // khác - đổi hẳn tên agent - thì ID vẫn phải bám theo tên mới. Gộp hai thứ
+  // này làm một sẽ đóng băng ID ở giá trị vừa trùng, rồi báo trùng lần nữa.
+  const [moODoTrung, setMoODoTrung] = useState(false);
   const [persona, setPersona] = useState("");
   const [loiId, setLoiId] = useState("");
   const [loi, setLoi] = useState("");
@@ -38,11 +43,19 @@ export function AgentCreateModal({
   useEffect(() => {
     oTenRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      // KHÔNG cho đóng lúc đang gửi: modal unmount nhưng `tao()` vẫn chạy tiếp
+      // và vẫn gọi `onCreated` (sống ở trang cha), nên app tự nhảy trang sau
+      // vài trăm ms. Nhánh lỗi còn tệ hơn - `setLoiId` chạy trên component đã
+      // unmount nên lỗi mất tăm, người dùng không biết đã hỏng hay đã xong.
+      if (e.key === "Escape" && !busy) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, busy]);
+
+  const dongNeuRanh = () => {
+    if (!busy) onClose();
+  };
 
   async function tao() {
     setBusy(true);
@@ -61,8 +74,8 @@ export function AgentCreateModal({
       // đó là ô người dùng phải sửa.
       if (err instanceof ApiError && err.status === 409) {
         setLoiId(err.message);
-        // Mở ô nhập tay để người dùng sửa ngay (AgentIdField tự focus)
-        setIdTuGo(id);
+        // Chỉ MỞ ô, không chốt giá trị: đổi tên agent vẫn là cách sửa hợp lệ
+        setMoODoTrung(true);
       } else {
         setLoi(err instanceof ApiError ? err.message : "Tạo agent thất bại");
       }
@@ -74,7 +87,7 @@ export function AgentCreateModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-[2px]"
-      onClick={onClose}
+      onClick={dongNeuRanh}
       role="dialog"
       aria-modal="true"
     >
@@ -119,10 +132,12 @@ export function AgentCreateModal({
         <AgentIdField
           id={id}
           idTuGo={idTuGo}
+          moONhap={moODoTrung}
           loi={loiId}
           tenTrong={tenTrong}
           onGoTay={() => setIdTuGo(id)}
           onDoiId={(v) => {
+            // Gõ thẳng vào ô ID mới là giành quyền thật
             setIdTuGo(v);
             setLoiId("");
           }}
@@ -148,7 +163,7 @@ export function AgentCreateModal({
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={dongNeuRanh}
             className="rounded-lg border border-line px-4 py-2 text-[14px] font-medium text-ink-soft hover:bg-tile"
           >
             Hủy
@@ -156,7 +171,7 @@ export function AgentCreateModal({
           <button
             type="button"
             onClick={tao}
-            disabled={busy || tenTrong || idTrong}
+            disabled={busy || tenTrong || idTrong || kiemDinhDangId(id) !== "" || icon.trim() === ""}
             className="rounded-lg bg-zalo-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-zalo-600 disabled:opacity-50"
           >
             {busy ? "Đang tạo..." : "Tạo agent"}

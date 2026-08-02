@@ -1,6 +1,7 @@
 import type { Tool } from "ai";
 import type { API } from "zca-js";
 import type { AccountConfig } from "../../config/account-store.js";
+import type { AgentProfile } from "../../config/agent-store.js";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 
 /**
@@ -15,6 +16,13 @@ import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 export type ToolContext = {
   api: API;
   account: AccountConfig;
+  /**
+   * Agent đang chạy lượt này. BẮT BUỘC (không optional) vì nó là một trong hai
+   * lớp quyết định tool nào được cấp - để optional thì quên truyền sẽ âm thầm
+   * cấp thừa tool thay vì báo lỗi biên dịch. Xem `ToolScope` ở
+   * `tool-registry.ts`.
+   */
+  agent: AgentProfile;
   /** Tin cuối của lượt - tools tác động (reaction, quote) nhắm vào tin này */
   message: ParsedMessage;
   /**

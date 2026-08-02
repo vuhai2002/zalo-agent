@@ -1,5 +1,6 @@
 import { db } from "../conversation/database.js";
 import type { ReasoningEffort } from "../agent/reasoning-options.js";
+import { parseDisabledTools } from "./parse-disabled-tools.js";
 
 /** Não của bot: persona + model override. Gắn vào account qua accounts.agent_id. */
 export type AgentProfile = {
@@ -13,6 +14,14 @@ export type AgentProfile = {
   maxSteps: number | null;
   /** Mức suy nghĩ riêng; null = dùng mức mặc định ở trang Cấu hình */
   reasoningEffort: ReasoningEffort | null;
+  /**
+   * Tool agent này KHÔNG dùng (danh sách TẮT, rỗng = bật hết).
+   *
+   * GIAO với `AccountConfig.disabledTools`, không thay thế: tool dùng được là
+   * phần không bên nào tắt. Agent khai năng lực, account áp chính sách - xem
+   * `listAvailableTools` ở `tool-registry.ts`.
+   */
+  disabledTools: string[];
   isDefault: boolean;
 };
 
@@ -25,6 +34,7 @@ type Row = {
   model_name: string | null;
   max_steps: number | null;
   reasoning_effort: string | null;
+  disabled_tools: string;
   is_default: number;
 };
 
@@ -37,10 +47,12 @@ const toProfile = (r: Row): AgentProfile => ({
   modelName: r.model_name,
   maxSteps: r.max_steps,
   reasoningEffort: (r.reasoning_effort as ReasoningEffort | null) ?? null,
+  disabledTools: parseDisabledTools(r.disabled_tools),
   isDefault: r.is_default === 1,
 });
 
-const SELECT = `SELECT id, icon, name, persona, model_provider, model_name, max_steps, reasoning_effort, is_default
+const SELECT = `SELECT id, icon, name, persona, model_provider, model_name, max_steps, reasoning_effort,
+                       disabled_tools, is_default
                 FROM agents`;
 
 const DEFAULT_AGENT_ID = "tro-ly-mac-dinh";
@@ -94,15 +106,31 @@ export function createAgent(input: {
 
 export function updateAgent(
   id: string,
-  patch: Partial<Pick<AgentProfile, "icon" | "name" | "persona" | "modelProvider" | "modelName" | "maxSteps" | "reasoningEffort">>,
+  patch: Partial<
+    Pick<
+      AgentProfile,
+      "icon" | "name" | "persona" | "modelProvider" | "modelName" | "maxSteps" | "reasoningEffort" | "disabledTools"
+    >
+  >,
 ): AgentProfile | null {
   const current = getAgent(id);
   if (!current) return null;
   const next = { ...current, ...patch };
   db.prepare(
-    `UPDATE agents SET icon = ?, name = ?, persona = ?, model_provider = ?, model_name = ?, max_steps = ?, reasoning_effort = ?
+    `UPDATE agents SET icon = ?, name = ?, persona = ?, model_provider = ?, model_name = ?, max_steps = ?,
+                       reasoning_effort = ?, disabled_tools = ?
      WHERE id = ?`,
-  ).run(next.icon, next.name, next.persona, next.modelProvider, next.modelName, next.maxSteps, next.reasoningEffort, id);
+  ).run(
+    next.icon,
+    next.name,
+    next.persona,
+    next.modelProvider,
+    next.modelName,
+    next.maxSteps,
+    next.reasoningEffort,
+    JSON.stringify(next.disabledTools),
+    id,
+  );
   return getAgent(id);
 }
 

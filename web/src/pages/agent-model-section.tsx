@@ -12,6 +12,28 @@ export type AgentModelForm = {
   reasoningEffort: "" | ReasoningEffort;
 };
 
+const NHA_CUNG_CAP = [
+  { value: "openai-compatible" as const, label: "openai-compatible (router)" },
+  { value: "anthropic" as const, label: "anthropic (gọi thẳng)" },
+];
+
+/**
+ * Kiểm ô "Số bước tối đa" NGAY TRÊN CLIENT, khớp đúng giới hạn của
+ * `patchSchema` (`agent-routes.ts`: int, 1-30). Không có hàm này thì gõ `99`
+ * hoặc `1.5` lọt xuống server và quay về đúng một câu "Dữ liệu không hợp lệ",
+ * không nói được là ô nào sai.
+ *
+ * Rỗng là HỢP LỆ - nó mang nghĩa "theo Cấu hình chung".
+ */
+export function kiemSoBuoc(raw: string): string {
+  const s = raw.trim();
+  if (s === "") return "";
+  if (!/^\d+$/.test(s)) return "Chỉ nhập số nguyên, hoặc để trống để theo Cấu hình chung";
+  const n = Number(s);
+  if (n < 1 || n > 30) return "Phải trong khoảng 1 - 30";
+  return "";
+}
+
 const MUC_SUY_NGHI: { value: "" | ReasoningEffort; label: string }[] = [
   { value: "", label: "Theo Cấu hình chung" },
   { value: "off", label: "Tắt" },
@@ -45,6 +67,7 @@ export function AgentModelSection({
   onChange: (patch: Partial<AgentModelForm>) => void;
 }) {
   const nhanChung = chung ? `${chung.provider} / ${chung.model}` : "theo trang Providers";
+  const loiSoBuoc = kiemSoBuoc(form.maxSteps);
 
   return (
     <AgentFormSection
@@ -55,7 +78,7 @@ export function AgentModelSection({
         <AgentFormField
           label="Nhà cung cấp"
           htmlFor="ag-d-provider"
-          hint="Chọn riêng khi muốn agent này gọi thẳng Anthropic trong lúc phần còn lại đi qua router."
+          hint="Đổi được nhà cung cấp thì mới có ý nghĩa khi agent có API key riêng - hiện chưa có, key và base URL vẫn lấy từ trang Providers cho mọi agent."
         >
           <select
             id="ag-d-provider"
@@ -64,9 +87,29 @@ export function AgentModelSection({
             onChange={(e) => onChange({ modelProvider: e.target.value as AgentModelForm["modelProvider"] })}
           >
             <option value="">Theo Providers chung{chung ? ` (${chung.provider})` : ""}</option>
-            <option value="openai-compatible">openai-compatible (router)</option>
-            <option value="anthropic">anthropic (gọi thẳng)</option>
+            {/*
+              Khóa mọi lựa chọn KHÁC nhà cung cấp chung. `resolveLanguageModel`
+              (llm-provider.ts) chỉ override `provider` và `model`, còn `apiKey`
+              luôn lấy từ cấu hình chung - chọn lệch nghĩa là gửi key của router
+              thẳng sang api.anthropic.com. Vừa rò credential sang bên thứ ba
+              vừa làm bot câm (401 -> mọi lượt trả câu xin lỗi chung).
+
+              Vẫn hiện ra chứ không ẩn, để người dùng thấy được và xoá được một
+              giá trị cũ lỡ nằm sẵn trong DB.
+            */}
+            {NHA_CUNG_CAP.map((p) => (
+              <option key={p.value} value={p.value} disabled={chung !== null && chung.provider !== p.value}>
+                {p.label}
+                {chung !== null && chung.provider !== p.value ? " - cần API key riêng" : ""}
+              </option>
+            ))}
           </select>
+          {chung && form.modelProvider !== "" && form.modelProvider !== chung.provider && (
+            <p className="mt-2 max-w-3xl text-[12px] leading-[1.6] text-amber-600 dark:text-amber-400">
+              Agent này đang đặt nhà cung cấp khác cấu hình chung, trong khi API key vẫn là key chung. Lượt
+              trả lời sẽ hỏng. Chọn "Theo Providers chung" để sửa.
+            </p>
+          )}
         </AgentFormField>
       </AgentFormRow>
 
@@ -92,20 +135,29 @@ export function AgentModelSection({
           htmlFor="ag-d-steps"
           hint="Một bước là một lần bot nói chuyện với model, có thể gọi nhiều công cụ cùng lúc. Bỏ trống là theo trang Cấu hình."
         >
+          {/*
+            CỐ Ý dùng type="text" + inputMode numeric chứ không phải type="number".
+            Với type="number", trình duyệt tự nuốt ký tự rác thành chuỗi rỗng
+            (`e.target.value === ""`), mà rỗng ở đây MANG NGHĨA "theo Cấu hình
+            chung" - nên gõ nhầm một chữ là âm thầm xoá mất giới hạn bước của
+            agent, trong khi ô vẫn hiện chữ vừa gõ. Đổi sang text thì chữ rác ở
+            lại đúng chỗ và `loiSoBuoc` bắt được.
+          */}
           <div className="flex items-center gap-2">
             <input
               id="ag-d-steps"
-              type="number"
-              min={1}
-              max={30}
+              type="text"
+              inputMode="numeric"
               className="gc-input w-40"
               value={form.maxSteps}
               onChange={(e) => onChange({ maxSteps: e.target.value })}
               placeholder="theo Cấu hình"
+              aria-invalid={loiSoBuoc !== ""}
             />
             <span className="text-[13px] text-ink-soft">bước</span>
             <span className="text-[12px] text-ink-soft/70">(1 - 30)</span>
           </div>
+          {loiSoBuoc && <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{loiSoBuoc}</p>}
         </AgentFormField>
       </AgentFormRow>
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { after, before, beforeEach, describe, it } from "node:test";
+import { fakeAgentProfile } from "../../shared/fake-agent-profile.js";
 import { cleanupTestEnv, setupTestEnv } from "../../shared/test-env-setup.js";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 
@@ -106,6 +107,7 @@ function makeCtx(batch: ParsedMessage[] = [batchMsg([])]): ToolContext {
       },
     } as never,
     account: { id: "acc-img", disabledTools: [] } as never,
+    agent: fakeAgentProfile(),
     message: batch[batch.length - 1]!,
     batch,
   };

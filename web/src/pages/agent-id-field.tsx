@@ -7,9 +7,26 @@
  * - `idTuGo !== null`: người dùng đã giành quyền, ô nhập tay và NGỪNG bám.
  *   Không có mốc này thì gõ tiếp tên sẽ ghi đè cái người dùng vừa gõ.
  */
+/**
+ * Regex ID PHẢI khớp `createSchema` ở `src/server/routes/agent-routes.ts`.
+ * `slugifyVietnamese` không bao giờ sinh ra chuỗi vi phạm, nhưng ô này cho gõ
+ * tay - và trước khi có hàm này, gõ "Bot Test" hay "-abc" chỉ nhận đúng một câu
+ * "Dữ liệu không hợp lệ" ở đáy modal, không chỉ ra được ô nào sai.
+ */
+const ID_HOP_LE = /^[a-z0-9][a-z0-9-]*$/;
+
+export function kiemDinhDangId(id: string): string {
+  if (id === "") return "";
+  if (!ID_HOP_LE.test(id)) {
+    return "Chỉ dùng chữ thường không dấu, số và dấu gạch ngang; phải bắt đầu bằng chữ hoặc số";
+  }
+  return "";
+}
+
 export function AgentIdField({
   id,
   idTuGo,
+  moONhap = false,
   loi,
   tenTrong,
   onGoTay,
@@ -19,26 +36,30 @@ export function AgentIdField({
   id: string;
   /** null = đang bám theo tên */
   idTuGo: string | null;
+  /**
+   * Buộc hiện ô nhập mà KHÔNG coi là người dùng đã giành quyền. Dùng cho nhánh
+   * trùng ID: phải cho sửa được ngay, nhưng đổi tên agent vẫn là cách sửa hợp
+   * lệ nên ID phải còn bám theo tên mới.
+   */
+  moONhap?: boolean;
   loi: string;
   tenTrong: boolean;
   onGoTay: () => void;
   onDoiId: (v: string) => void;
 }) {
   const idTrong = id === "";
+  const hienONhap = idTuGo !== null || moONhap;
+  const loiDinhDang = kiemDinhDangId(id);
 
   return (
     <div className="mt-2">
-      {idTuGo === null ? (
+      {!hienONhap ? (
         <p className="text-[12px] text-ink-soft">
           ID:{" "}
           <span className="font-mono">
             {idTrong ? <span className="italic">chưa tạo được từ tên</span> : id}
           </span>{" "}
-          <button
-            type="button"
-            onClick={onGoTay}
-            className="text-zalo-600 hover:underline dark:text-zalo-400"
-          >
+          <button type="button" onClick={onGoTay} className="text-zalo-600 hover:underline">
             sửa
           </button>
         </p>
@@ -50,11 +71,14 @@ export function AgentIdField({
           <input
             id="ag-id"
             className="gc-input w-full font-mono"
-            value={idTuGo}
+            // `idTuGo ?? id`: khi ô mở vì trùng ID mà người dùng CHƯA gõ gì, vẫn
+            // phải hiện ID đang bám theo tên chứ không phải ô trống
+            value={idTuGo ?? id}
             onChange={(e) => onDoiId(e.target.value)}
             placeholder="tu-van-khoa-hoc"
             autoFocus
           />
+          {loiDinhDang && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{loiDinhDang}</p>}
         </>
       )}
 

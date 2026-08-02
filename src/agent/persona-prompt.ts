@@ -65,7 +65,11 @@ export function buildSystemPrompt(
     // 9 tool bị runsInScheduledTurn:false, trong khi buildAgentTools ĐÃ lọc
     // chúng khỏi schema thật - model tự nhận "mình vừa ghi nhớ" mà chẳng lưu
     // gì (đúng bug persona-prompt.test.ts đã dựng bất biến để canh).
-    const available = listAvailableTools(account, { isolated });
+    //
+    // `agent` truyền cả vào đây chứ không chỉ vào buildAgentTools: từ khi agent
+    // có lớp tắt tool riêng, thiếu nó thì mục "Khả năng" kể luôn tool mà chính
+    // agent này đã tắt - đúng lớp bug bất biến kia sinh ra để chặn.
+    const available = listAvailableTools({ agent, account }, { isolated });
     sections.push(toolCapabilitySection(available));
     sections.push(...toolPersonaSections(available.map((t) => t.key)));
   }

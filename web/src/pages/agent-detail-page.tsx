@@ -1,24 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { ManagedAgent, ProviderSettings, ReasoningEffort } from "../dashboard-api-client";
+import type { ManagedAgent, ProviderSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { useConfirmDialog } from "../shared/confirm-dialog";
 import { IconBot } from "../shared/dashboard-icons";
-import { AgentIdentitySection, type AgentIdentityForm } from "./agent-identity-section";
-import { AgentModelSection, type AgentModelForm } from "./agent-model-section";
-
-type Form = AgentIdentityForm & AgentModelForm;
-
-const tuAgent = (a: ManagedAgent): Form => ({
-  icon: a.icon,
-  name: a.name,
-  persona: a.persona,
-  modelProvider: a.modelProvider ?? "",
-  modelName: a.modelName ?? "",
-  // Chuỗi rỗng = "theo cấu hình chung"; gửi lên thành null
-  maxSteps: a.maxSteps == null ? "" : String(a.maxSteps),
-  reasoningEffort: a.reasoningEffort ?? "",
-});
+import { kiemForm, thanhPatch, tuAgent, type AgentDetailForm } from "./agent-detail-form";
+import { AgentIdentitySection } from "./agent-identity-section";
+import { AgentModelSection } from "./agent-model-section";
+import { AgentToolsSection } from "./agent-tools-section";
 
 /**
  * Trang sửa một agent. Tách khỏi màn TẠO (`agent-create-modal.tsx`) vì hai việc
@@ -34,11 +24,12 @@ export function AgentDetailPage() {
   const navigate = useNavigate();
   const [agent, setAgent] = useState<ManagedAgent | null>(null);
   const [chung, setChung] = useState<ProviderSettings | null>(null);
-  const [form, setForm] = useState<Form | null>(null);
+  const [form, setForm] = useState<AgentDetailForm | null>(null);
   const [dangTai, setDangTai] = useState(true);
   const [loi, setLoi] = useState("");
   const [daLuu, setDaLuu] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     let huy = false;
@@ -60,7 +51,7 @@ export function AgentDetailPage() {
     };
   }, [id]);
 
-  const doi = (patch: Partial<Form>) => {
+  const doi = (patch: Partial<AgentDetailForm>) => {
     setForm((f) => (f ? { ...f, ...patch } : f));
     setDaLuu(false);
     setLoi("");
@@ -69,26 +60,42 @@ export function AgentDetailPage() {
   const banDau = agent ? tuAgent(agent) : null;
   const coDoi = Boolean(form && banDau && JSON.stringify(form) !== JSON.stringify(banDau));
 
+  /**
+   * Rời trang khi còn thay đổi chưa lưu thì phải hỏi. Ô persona nhận tới 8000
+   * ký tự - mất trắng vì lỡ bấm "Quay lại" là mất thật.
+   */
+  async function roiTrang() {
+    if (coDoi) {
+      const ok = await confirm({
+        title: "Rời trang mà chưa lưu?",
+        message: "Những thay đổi bạn vừa sửa trên trang này sẽ mất.",
+        confirmLabel: "Rời đi",
+        cancelLabel: "Ở lại",
+      });
+      if (!ok) return;
+    }
+    navigate("/agents");
+  }
+
   async function luu() {
     if (!form || !agent) return;
-    const soBuoc = form.maxSteps.trim();
-    if (soBuoc !== "" && !Number.isFinite(Number(soBuoc))) {
-      setLoi("Số bước tối đa phải là một số");
+    // Kiểm bằng đúng luật của `patchSchema` phía server. Chốt cũ
+    // `!Number.isFinite(...)` là code chết: ô lúc đó là type="number" nên trình
+    // duyệt đã nuốt chữ rác thành rỗng trước khi tới đây, `Number("")` ra 0 chứ
+    // không bao giờ ra NaN. Hai ca thật (99 và 1.5) thì không ai chặn.
+    const loiForm = kiemForm(form);
+    if (loiForm) {
+      setLoi(loiForm);
       return;
     }
     setBusy(true);
     setLoi("");
     try {
-      const { agent: moi } = await api.agentsAdmin.update(agent.id, {
-        icon: form.icon,
-        name: form.name.trim(),
-        persona: form.persona,
-        modelProvider: form.modelProvider === "" ? null : form.modelProvider,
-        modelName: form.modelName.trim() === "" ? null : form.modelName.trim(),
-        maxSteps: soBuoc === "" ? null : Number(soBuoc),
-        reasoningEffort: form.reasoningEffort === "" ? null : (form.reasoningEffort as ReasoningEffort),
-      });
-      setAgent(moi);
+      const { agent: moi } = await api.agentsAdmin.update(agent.id, thanhPatch(form));
+      // `accountCount` do `listAgents` tính bằng subquery, PATCH trả về bản ghi
+      // THÔ nên không có cột đó. Tin thẳng response sẽ làm dòng phụ đề lật thành
+      // "Chưa tài khoản nào dùng" ngay sau khi bấm Lưu, tới khi F5 mới đúng lại.
+      setAgent((cu) => ({ ...moi, accountCount: cu?.accountCount ?? 0 }));
       setForm(tuAgent(moi));
       setDaLuu(true);
     } catch (err) {
@@ -104,7 +111,7 @@ export function AgentDetailPage() {
     return (
       <div>
         <PageHeader icon={IconBot} title="Không tìm thấy agent" subtitle={`Không có agent nào mang id "${id}"`} />
-        <Link to="/agents" className="text-[14px] text-zalo-600 hover:underline dark:text-zalo-400">
+        <Link to="/agents" className="text-[14px] text-zalo-600 hover:underline">
           Quay lại danh sách agent
         </Link>
       </div>
@@ -125,7 +132,7 @@ export function AgentDetailPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => navigate("/agents")}
+              onClick={roiTrang}
               className="rounded-lg border border-line px-4 py-2 text-[14px] font-medium text-ink-soft hover:bg-tile"
             >
               Quay lại
@@ -155,7 +162,13 @@ export function AgentDetailPage() {
           onChange={doi}
         />
         <AgentModelSection form={form} chung={chung} onChange={doi} />
+        <AgentToolsSection
+          disabledTools={form.disabledTools}
+          onChange={(disabledTools) => doi({ disabledTools })}
+        />
       </div>
+
+      {confirmDialog}
     </div>
   );
 }

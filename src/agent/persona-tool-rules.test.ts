@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
+import { fakeAgentProfile } from "../shared/fake-agent-profile.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 
 let dataDir: string;
@@ -63,7 +64,10 @@ describe("toolPersonaSections", () => {
 });
 
 describe("buildSystemPrompt ghép luật theo tool đang bật", () => {
-  const agent = { id: "a", name: "test", persona: "", maxSteps: null } as never;
+  // Fixture thật thay vì `as never`: agent là một trong hai lớp lọc tool, thiếu
+  // `disabledTools` thì nổ ở phép gộp trong listAvailableTools mà TypeScript
+  // không hé răng vì đã bị ép kiểu.
+  const agent = fakeAgentProfile({ id: "a", name: "test" });
   const msg = {
     threadId: "t1",
     senderName: "Hải",

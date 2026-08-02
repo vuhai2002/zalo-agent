@@ -150,9 +150,25 @@ export const api = {
       request<{ agent: ManagedAgent }>("/api/agents", { method: "POST", body: JSON.stringify(input) }),
     update: (
       id: string,
-      patch: Partial<Pick<ManagedAgent, "name" | "icon" | "persona" | "modelProvider" | "modelName" | "maxSteps" | "reasoningEffort">>,
+      patch: Partial<
+        Pick<
+          ManagedAgent,
+          | "name"
+          | "icon"
+          | "persona"
+          | "modelProvider"
+          | "modelName"
+          | "maxSteps"
+          | "reasoningEffort"
+          | "disabledTools"
+        >
+      >,
     ) =>
-      request<{ agent: ManagedAgent }>(`/api/agents/${encodeURIComponent(id)}`, {
+      // KHÔNG phải `ManagedAgent`: route PATCH trả bản ghi THÔ, còn
+      // `accountCount` chỉ có ở `list()` (tính bằng subquery). Khai đúng hình
+      // dạng thật để caller buộc phải tự giữ lại `accountCount` - khai dư thì
+      // TypeScript im lặng và giao diện hiện "chưa tài khoản nào dùng" sau khi lưu.
+      request<{ agent: Omit<ManagedAgent, "accountCount"> }>(`/api/agents/${encodeURIComponent(id)}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
       }),
@@ -360,6 +376,8 @@ export type ManagedAgent = {
   maxSteps: number | null;
   /** Mức suy nghĩ riêng; null = theo mức mặc định ở trang Cấu hình */
   reasoningEffort: ReasoningEffort | null;
+  /** Tool agent này KHÔNG dùng - GIAO với danh sách tắt của account */
+  disabledTools: string[];
   isDefault: boolean;
   accountCount: number;
 };

@@ -24,8 +24,14 @@ after(async () => {
   cleanupTestEnv(dataDir);
 });
 
-/** build() không gọi API lúc dựng schema nên stub rỗng là đủ */
-function makeContext(disabledTools: string[]) {
+/**
+ * build() không gọi API lúc dựng schema nên stub rỗng là đủ.
+ *
+ * Hai danh sách tắt RỜI NHAU vì đó chính là thứ cần kiểm: `disabledTools` là
+ * chính sách của nick Zalo, `agentDisabled` là năng lực của agent, và tool dùng
+ * được là phần không bên nào tắt.
+ */
+function makeContext(disabledTools: string[], agentDisabled: string[] = []) {
   return {
     api: {} as API,
     account: {
@@ -41,6 +47,18 @@ function makeContext(disabledTools: string[]) {
       autoReactIcon: "heart",
       typingIndicatorEnabled: true,
       disabledTools,
+    },
+    agent: {
+      id: "agent-test",
+      icon: "🤖",
+      name: "Agent test",
+      persona: "",
+      modelProvider: null,
+      modelName: null,
+      maxSteps: null,
+      reasoningEffort: null,
+      disabledTools: agentDisabled,
+      isDefault: false,
     },
     message: { threadId: "t-1", threadType: 0 } as never,
     batch: [],
@@ -130,6 +148,57 @@ describe("tool-registry", () => {
     imageStore.clearImageSettings();
     const tools = registry.buildAgentTools(makeContext(["khong-ton-tai"]));
     // 2 tool có điều kiện vắng vì chưa cấu hình, phần còn lại đủ
+    assert.equal(Object.keys(tools).length, registry.TOOL_KEYS.length - GATED_TOOLS.length);
+  });
+
+  // ===== Hai lớp lọc: agent khai năng lực, account áp chính sách =====
+  // Bất biến: tool dùng được là phần KHÔNG BÊN NÀO tắt. Không bên nào bật ngược
+  // lại được bên kia - nhờ vậy thêm một agent mới không bao giờ nới rộng được
+  // quyền của một nick, kể cả khi agent đó được tạo cẩu thả.
+
+  it("agent tắt tool thì mất, dù account bật", () => {
+    const tools = registry.buildAgentTools(makeContext([], ["web_search"]));
+    assert.equal(tools.web_search, undefined, "agent tắt phải thắng");
+    assert.ok(tools.web_fetch, "tool agent không tắt vẫn phải còn");
+  });
+
+  it("account tắt tool thì mất, dù agent bật", () => {
+    const tools = registry.buildAgentTools(makeContext(["web_search"], []));
+    assert.equal(tools.web_search, undefined, "account tắt phải thắng");
+  });
+
+  it("cả hai cùng tắt một tool cũng chỉ mất một lần, không lỗi", () => {
+    const tools = registry.buildAgentTools(makeContext(["web_search"], ["web_search"]));
+    assert.equal(tools.web_search, undefined);
+    assert.ok(tools.get_datetime, "phần còn lại không bị ảnh hưởng");
+  });
+
+  it("hai bên tắt hai tool KHÁC nhau thì mất cả hai - đây là phép giao, không phải ghi đè", () => {
+    unconfigureSidecar();
+    imageStore.clearImageSettings();
+    const tools = registry.buildAgentTools(makeContext(["send_file"], ["web_search"]));
+    assert.equal(tools.send_file, undefined, "account tắt send_file");
+    assert.equal(tools.web_search, undefined, "agent tắt web_search");
+    // Chứng minh không phải "bên này ghi đè bên kia": nếu ghi đè thì một trong
+    // hai tool trên sẽ còn sống.
+    assert.equal(
+      Object.keys(tools).length,
+      registry.TOOL_KEYS.length - GATED_TOOLS.length - 2,
+      "phải mất ĐÚNG 2 tool",
+    );
+  });
+
+  it("không bên nào tắt thì đủ bộ - đối chứng cho 4 ca trên", () => {
+    unconfigureSidecar();
+    imageStore.clearImageSettings();
+    const tools = registry.buildAgentTools(makeContext([], []));
+    assert.equal(Object.keys(tools).length, registry.TOOL_KEYS.length - GATED_TOOLS.length);
+  });
+
+  it("key lạ trong danh sách tắt của AGENT cũng không làm crash", () => {
+    unconfigureSidecar();
+    imageStore.clearImageSettings();
+    const tools = registry.buildAgentTools(makeContext([], ["khong-ton-tai-2"]));
     assert.equal(Object.keys(tools).length, registry.TOOL_KEYS.length - GATED_TOOLS.length);
   });
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { DateTime } from "luxon";
 import type { API } from "zca-js";
+import { fakeAgentProfile } from "../../shared/fake-agent-profile.js";
 import { cleanupTestEnv, setupTestEnv } from "../../shared/test-env-setup.js";
 import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 
@@ -75,6 +76,7 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
       typingIndicatorEnabled: true,
       disabledTools: [],
     },
+    agent: fakeAgentProfile(),
     message: msg(),
     batch: [],
     ...overrides,

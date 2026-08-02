@@ -2,6 +2,7 @@ import { db } from "../conversation/database.js";
 import { createLogger } from "../shared/logger.js";
 import { createAgent, ensureDefaultAgent, getAgent } from "./agent-store.js";
 import { readAccountsSeedFile } from "./accounts.js";
+import { parseDisabledTools } from "./parse-disabled-tools.js";
 
 const log = createLogger("account-store");
 
@@ -46,15 +47,6 @@ type Row = {
 };
 
 /** Cột JSON có thể hỏng nếu ai sửa DB tay - hỏng thì coi như không tắt gì */
-function parseDisabledTools(raw: string): string[] {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
 const toConfig = (r: Row): AccountConfig => ({
   id: r.id,
   label: r.label,

@@ -248,6 +248,15 @@ function runMigrations(): void {
   // Lưu danh sách TẮT thay vì BẬT để tool mới thêm vào code tự bật cho account cũ.
   addColumnIfMissing("accounts", "disabled_tools", "TEXT NOT NULL DEFAULT '[]'");
 
+  // Lớp tool THỨ HAI, theo agent - GIAO với lớp account ở trên, không thay thế.
+  // Agent khai NĂNG LỰC (agent này biết làm gì), account áp CHÍNH SÁCH (nick này
+  // được phép gì); tool dùng được là phần không bên nào tắt. Nhờ vậy thêm một
+  // agent mới không bao giờ nới rộng được quyền của một nick.
+  //
+  // Cũng lưu danh sách TẮT vì đúng lý do của dòng trên: làm danh sách BẬT thì
+  // tool mới thêm vào code sẽ không tự có cho agent cũ.
+  addColumnIfMissing("agents", "disabled_tools", "TEXT NOT NULL DEFAULT '[]'");
+
   // Lượt do lịch hẹn tự bắn (source='schedule') khác lượt trả lời tin nhắn
   // (source='message') - Overview và trang Trace cần phân biệt được "có người
   // đang chat" với "job tự chạy lúc 3 giờ sáng". Mặc định 'message' để mọi

@@ -191,10 +191,11 @@ export async function runAgentTurn({
       }),
       system: buildSystemPrompt(agent, latest, memory, account, isolated),
       messages,
-      // isolated lọc bớt tool không hợp với lượt theo lịch (add_reaction không
-      // có msgId thật, read_image không có ảnh, save_memory chặn injection từ
-      // job) - xem runsInScheduledTurn ở tool-registry.ts
-      tools: buildAgentTools({ api, account, message: latest, batch, isolated }),
+      // Hai lớp lọc tool giao nhau: agent khai năng lực, account áp chính sách.
+      // Thêm `isolated` lọc bớt tool không hợp với lượt theo lịch (add_reaction
+      // không có msgId thật, read_image không có ảnh, save_memory chặn injection
+      // từ job) - xem runsInScheduledTurn ở tool-registry.ts
+      tools: buildAgentTools({ api, account, agent, message: latest, batch, isolated }),
       stopWhen: stepCountIs(agent.maxSteps ?? getTuning("LLM_MAX_STEPS")),
       maxOutputTokens: getTuning("LLM_MAX_OUTPUT_TOKENS"),
       // Bật thinking theo LLM_REASONING_EFFORT - kiểm chứng bằng
