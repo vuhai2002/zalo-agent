@@ -22,7 +22,7 @@ export function TuningNav({
 }) {
   return (
     <nav aria-label="Danh mục cấu hình" className="w-full shrink-0 lg:w-[20rem]">
-      <div className="rounded-2xl border border-line bg-white p-2">
+      <div className="rounded-2xl border border-line bg-white/95 p-2 backdrop-blur-sm">
         {groups.map((g, i) => {
           const active = dangChon === g.id;
           // Đường kẻ ngăn cách vẽ ở mục TRÊN, và bỏ đi khi mục này hoặc mục

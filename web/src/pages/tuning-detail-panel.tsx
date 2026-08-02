@@ -39,7 +39,10 @@ export function TuningDetailPanel({
 
   return (
     <div className="min-w-0 flex-1">
-      <div className="rounded-2xl border border-line bg-white p-6">
+      {/* Hơi trong (95%) để thấy được ảnh nền phía sau, kèm blur nhẹ cho chữ
+          không bị hoa văn nền làm khó đọc - card đục hoàn toàn thì ảnh nền chỉ
+          còn thấy ở mép trang, phí công đặt nền */}
+      <div className="rounded-2xl border border-line bg-white/95 p-6 backdrop-blur-sm">
         {/* Tiêu đề KHÔNG lặp lại icon của nhóm: icon đã có ngay bên trái ở nav,
             lặp lần nữa cách đó vài chục pixel chỉ thêm nhiễu chứ không thêm tin */}
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">

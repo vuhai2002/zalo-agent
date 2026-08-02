@@ -48,9 +48,11 @@ summary,
 
 /* Trong @layer components để utility (pl-9...) vẫn override được khi cần */
 @layer components {
-  /* Card chuẩn mẫu: trắng, border mảnh, radius 12, KHÔNG shadow */
+  /* Card chuẩn mẫu: trắng, border mảnh, radius 12, KHÔNG shadow.
+     Hơi trong + blur nhẹ để ảnh nền của trang lộ ra sau card thay vì bị che
+     kín - đục hoàn toàn thì nền chỉ còn thấy ở mép, phí công đặt nền. */
   .gc-card {
-    @apply rounded-xl border border-line bg-white;
+    @apply rounded-xl border border-line bg-white/95 backdrop-blur-sm;
   }
 
   /* Tile nhỏ trong panel (System Health): nền muted mờ */

@@ -77,7 +77,18 @@ function DashboardShell() {
           </Link>
         </header>
 
-        <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:overflow-y-auto lg:px-8 lg:py-7">
+        {/*
+          Ảnh nền phủ vùng NỘI DUNG, không phủ sidebar - sidebar giữ nền trắng
+          đặc để danh sách điều hướng luôn đọc rõ.
+          - `bg-fixed`: nền đứng yên khi cuộn, không trôi theo nội dung dài
+          - `bg-cover`: luôn phủ kín, không lộ mép ở màn hình rất rộng/rất cao
+          Vẫn giữ `bg-canvas` làm màu lót: ảnh chưa tải xong (hoặc chặn tải) thì
+          trang vẫn ra đúng tông, không nháy trắng.
+        */}
+        <main
+          className="min-w-0 flex-1 bg-canvas bg-cover bg-fixed bg-center px-4 py-5 sm:px-6 lg:overflow-y-auto lg:px-8 lg:py-7"
+          style={{ backgroundImage: "url(/dashboard-background.webp)" }}
+        >
           <Routes>
             <Route path="/" element={<OverviewPage />} />
             <Route path="/sessions" element={<SessionsPage accounts={accounts} />} />

@@ -23,8 +23,13 @@ export function LoginPage() {
     }
   }
 
+  // Cùng ảnh nền với vùng nội dung sau khi đăng nhập - vào thẳng trang trắng
+  // trơn rồi mới thấy nền ở màn sau thì hai màn trông như hai sản phẩm
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-canvas px-4">
+    <div
+      className="flex min-h-[100dvh] items-center justify-center bg-canvas bg-cover bg-center px-4"
+      style={{ backgroundImage: "url(/dashboard-background.webp)" }}
+    >
       <form onSubmit={submit} className="gc-card w-full max-w-sm p-8">
         <div className="mb-6 flex flex-col items-center gap-1">
           {/* Logo bản đầy đủ đã có chữ "Zalo Agent" bên trong */}
