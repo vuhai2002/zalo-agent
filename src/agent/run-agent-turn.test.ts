@@ -22,6 +22,7 @@ import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 let dataDir: string;
 let loop: typeof import("./agent-loop.js");
 let history: typeof import("../conversation/history-store.js");
+let tuning: typeof import("../config/runtime-tuning-settings.js");
 
 before(async () => {
   // Trần 2 step: đủ để dựng cả nhánh "chạm trần" lẫn nhánh "step sau ném lỗi"
@@ -29,6 +30,7 @@ before(async () => {
   dataDir = setupTestEnv({ LLM_MAX_STEPS: "2" });
   loop = await import("./agent-loop.js");
   history = await import("../conversation/history-store.js");
+  tuning = await import("../config/runtime-tuning-settings.js");
 });
 
 after(async () => {
@@ -220,6 +222,54 @@ describe("runAgentTurn - chạm trần step", () => {
       "lượt chốt KHÔNG được cấp tool - còn tool thì model lại gọi tiếp và rơi vào đúng cái bẫy vừa thoát",
     );
     assert.equal(ket.text, "Chốt lại: hôm nay thứ tư.");
+  });
+
+  it("GUARD chống lặp dừng vòng TRƯỚC trần step, và vẫn chạy lượt chốt", async () => {
+    // Tool không tồn tại -> AI SDK sinh `tool-error` ở `content` (KHÔNG vào
+    // `toolResults`), đúng nguồn mà guard phải đọc. Gọi y hệt nhiều lần là
+    // nhánh `loi-giong-het`.
+    const goiToolMa = () => ({
+      content: [
+        { type: "tool-call" as const, toolCallId: "c", toolName: "tool_khong_ton_tai", input: "{}" },
+      ],
+      finishReason: "tool-calls" as const,
+      usage: CO_TOKEN,
+      warnings: [],
+    });
+
+    // Trần step ĐỂ CAO (8) còn ngưỡng guard THẤP (2), để chỉ guard mới dừng
+    // được vòng. Nếu để cả hai bằng 2 thì test này đúng cả khi guard không hề
+    // được nối - trần step cũng dừng ở đúng chỗ đó.
+    tuning.setTuning("LLM_MAX_STEPS", 8);
+    tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", 2);
+    try {
+      const { ket, calls } = await chayLuot([
+        goiToolMa,
+        goiToolMa,
+        () => traLoi("Mình chưa tra được, nói thật với anh."),
+      ]);
+      assert.equal(
+        calls.length,
+        3,
+        `guard phải dừng ở step 2 (+1 lượt chốt). Chạy tới ${calls.length} lần nghĩa là guard KHÔNG chặn, trần step 8 mới cắt`,
+      );
+      assert.equal(calls.at(-1)!.tools?.length ?? 0, 0, "lần gọi cuối phải là lượt chốt (không tool)");
+      assert.equal(
+        ket.text,
+        "Mình chưa tra được, nói thật với anh.",
+        "dừng vì guard vẫn phải ra câu trả lời, không phải câu tường thuật tiến trình",
+      );
+    } finally {
+      tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", null);
+      tuning.setTuning("LLM_MAX_STEPS", null);
+    }
+  });
+
+  it("lượt bình thường KHÔNG bị guard đụng tới - đối chứng cho ca trên", async () => {
+    // Tool chạy được, gọi một lần: guard không được xen vào hành vi cũ
+    const { ket, calls } = await chayLuot([goiTool, () => traLoi("hôm nay thứ tư")]);
+    assert.equal(calls.length, 2, "không có lượt chốt thừa");
+    assert.equal(ket.text, "hôm nay thứ tư");
   });
 
   it("lượt chốt vào trace như một lần chạy riêng", async () => {

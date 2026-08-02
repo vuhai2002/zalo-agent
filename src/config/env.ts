@@ -36,6 +36,14 @@ const envSchema = z.object({
   // token qua 8 step. Mặc định 128k khớp cửa sổ phổ thông của model hiện nay;
   // agent chạy model khác đặt riêng được ở trang Agents.
   LLM_CONTEXT_WINDOW: z.coerce.number().int().min(4_000).max(2_000_000).default(128_000),
+  // Chặn vòng lặp tool. Trước khi có ba biến này, chặn trên duy nhất là
+  // LLM_MAX_STEPS: model gọi cùng một tool lỗi 5 lần liên tiếp thì đốt 5/8 step
+  // mà không ai chặn. Số mặc định lấy đúng của `tool_guardrails.py` (Hermes),
+  // vốn đã chạy thật ở đó. Ngưỡng CẢNH BÁO suy ra bằng nửa ngưỡng chặn nên
+  // không thêm ba biến nữa.
+  TOOL_LOOP_SAME_ARGS_BLOCK: z.coerce.number().int().min(2).max(30).default(5),
+  TOOL_LOOP_SAME_TOOL_BLOCK: z.coerce.number().int().min(2).max(50).default(8),
+  TOOL_LOOP_NO_PROGRESS_BLOCK: z.coerce.number().int().min(2).max(30).default(5),
   // Trần thời gian cho CẢ lượt agent. Không có nó thì chặn trên duy nhất là mặc
   // định của undici (300s chờ header) nhân maxRetries nhân số step - router nhận
   // kết nối rồi treo là khóa luôn thread đó hàng giờ, và mọi tin nhắn sau phải
