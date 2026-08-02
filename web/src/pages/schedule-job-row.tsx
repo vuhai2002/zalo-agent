@@ -85,9 +85,12 @@ export function ScheduleJobRow({
   }
 
   return (
-    <div className="gc-card space-y-2.5 bg-tile/30 px-5 py-4">
+    // KHÔNG đè `bg-tile/30` lên `.gc-card` như trước: lớp xám mờ đó cộng với
+    // nền trắng 95% của card làm cả thẻ chìm hẳn vào ảnh nền, đọc rất mệt.
+    // Để card giữ đúng nền của design system, giống hệt trang Cấu hình.
+    <div className="gc-card space-y-2.5 rounded-2xl px-5 py-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[14px] font-semibold text-ink">{job.name}</span>
+        <span className="text-[15px] font-semibold text-ink">{job.name}</span>
         <Badge tone={job.kind === "agent" ? "blue" : "gray"} dot={false}>
           {job.kind === "agent" ? "Agent" : "Nhắn tin"}
         </Badge>
@@ -107,7 +110,7 @@ export function ScheduleJobRow({
           ))}
       </div>
 
-      <div className="text-[12px] leading-[1.6] text-ink-soft">
+      <div className="text-[13px] leading-[1.6] text-ink-soft">
         {accountName && <>{accountName} · </>}
         {threadName} · Lần kế tiếp:{" "}
         {job.enabled ? formatBotTime(job.nextRunAt, timezone) : finished ? "không còn lần nào" : "-"}
