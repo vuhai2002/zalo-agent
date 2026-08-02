@@ -22,6 +22,28 @@ const log = createLogger("send-reply");
 export const TECHNICAL_ERROR_REPLY =
   "Mình đang gặp trục trặc kỹ thuật nên chưa trả lời được tin này, bạn nhắn lại giúp mình sau ít phút nhé.";
 
+/**
+ * Câu riêng cho từng loại lỗi provider.
+ *
+ * Một câu cho mọi thứ là nói dối người nhắn: "bot hết quota" và "mạng chập" đọc
+ * ra y hệt nhau, nên họ không biết nên chờ hay báo cho chủ bot.
+ *
+ * Cả ba câu đều viết bằng lời thường, KHÔNG lộ chi tiết kỹ thuật (mã lỗi, tên
+ * provider, endpoint) - người nhắn có thể là người lạ, chi tiết chỉ đi vào log.
+ */
+export const LOI_THEO_LOAI: Record<string, string> = {
+  rate_limit:
+    "Mình đang bị quá tải nên chưa trả lời kịp tin này, bạn nhắn lại giúp mình sau vài phút nhé.",
+  // Đây là lỗi CẤU HÌNH, chờ bao lâu cũng không tự hết - phải nói khác hẳn
+  // câu "thử lại sau", kẻo người nhắn ngồi đợi vô vọng.
+  auth: "Phần kết nối của mình đang có vấn đề về cấu hình, mình đã báo lại cho chủ bot. Bạn nhắn lại sau nhé.",
+};
+
+/** Câu hợp với loại lỗi; loại lạ thì rơi về câu chung */
+export function cauLoiTheoLoai(loai: string | undefined): string {
+  return (loai && LOI_THEO_LOAI[loai]) || TECHNICAL_ERROR_REPLY;
+}
+
 export type ReplyTarget = {
   api: API;
   /** Khóa hàng đợi gửi của rate-limiter: `${accountId}:${threadId}` */
@@ -87,9 +109,9 @@ export async function sendReplyInParts(target: ReplyTarget, text: string): Promi
  * Báo cho người nhắn biết bot đang hỏng. Tự nuốt lỗi: đây đã là đường cứu cánh,
  * hỏng nốt thì chỉ còn cách ghi log.
  */
-export async function notifyTechnicalError(target: ReplyTarget): Promise<void> {
+export async function notifyTechnicalError(target: ReplyTarget, loaiLoi?: string): Promise<void> {
   try {
-    await sendOne(target, TECHNICAL_ERROR_REPLY);
+    await sendOne(target, cauLoiTheoLoai(loaiLoi));
   } catch (err) {
     log.error({ threadId: target.threadId, err }, "Không gửi được cả thông báo lỗi");
   }

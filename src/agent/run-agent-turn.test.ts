@@ -205,6 +205,95 @@ describe("runAgentTurn - router trả completion rỗng", () => {
   });
 });
 
+describe("runAgentTurn - chữa theo loại lỗi provider", () => {
+  const loiApi = (statusCode: number, message: string) =>
+    new APICallError({
+      message,
+      url: "https://router.test/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode,
+      responseBody: message,
+    });
+
+  // Đo thật trên ai@7.0.37 với maxRetries=2: SDK TỰ retry 429 và 5xx (3 lần
+  // gọi), KHÔNG retry 401/400 (1 lần). Nên test phải đo phần vượt lên trên đó,
+  // không thì xanh cả khi nhánh chữa chưa được nối.
+  const SDK_TU_THU = 3;
+
+  it("401 dừng ngay - KHÔNG chồng thêm lần thử nào lên trên SDK", async () => {
+    let lan = 0;
+    await assert.rejects(
+      chayLuot([
+        () => {
+          lan++;
+          return loiApi(401, "Invalid API key");
+        },
+      ]),
+    );
+    // SDK vốn không retry 401. Bất biến ở đây là nhánh chữa cũng KHÔNG được
+    // thêm lần nào - sai khóa thì thử mấy cũng hỏng, chỉ tổ chậm.
+    assert.equal(lan, 1, "gọi đúng một lần");
+  });
+
+  it("429 dai dẳng: chữa THÊM một vòng nữa lên trên phần SDK tự thử", async () => {
+    let lan = 0;
+    await assert.rejects(
+      chayLuot([
+        () => {
+          lan++;
+          return loiApi(429, "Rate limit exceeded");
+        },
+      ]),
+    );
+    // Không có nhánh chữa thì dừng ở 3. Có nhánh chữa thì chờ Retry-After rồi
+    // chạy lại `runOnce`, và lần chạy đó lại được SDK thử 3 lần nữa.
+    assert.equal(lan, SDK_TU_THU * 2, `mong ${SDK_TU_THU * 2} lần gọi, nhận ${lan}`);
+  });
+
+  it("tràn ngữ cảnh: cắt sâu hơn rồi thử lại, lần hai gửi ÍT tin hơn", async () => {
+    // Thread RIÊNG: 12 tin dài nhồi vào đây không được rò sang test khác
+    const threadId = "thread-tran-context";
+    for (let i = 0; i < 12; i++) {
+      history.appendMessage(account.id, threadId, {
+        role: "user",
+        content: `tin dài số ${i} `.repeat(200),
+        senderName: "Hải",
+        senderId: "user-1",
+      });
+    }
+    // Trần đủ RỘNG để lần đầu không bị cắt, nhưng NỬA trần thì bị - đó chính là
+    // thứ nhánh context_overflow làm. Để trần mặc định 128k thì 12 tin này
+    // (~13k token) lọt cả hai lần và test không đo được gì.
+    tuning.setTuning("LLM_CONTEXT_WINDOW", 20_000);
+    try {
+      let lan = 0;
+      const { ket, calls } = await chayLuot(
+        [
+          () => {
+            lan++;
+            return lan === 1
+              ? loiApi(400, "prompt is too long: 210000 tokens")
+              : traLoi("cắt bớt rồi trả lời được");
+          },
+        ],
+        [{ ...tinNhan(), threadId }],
+      );
+      assert.equal(lan, 2, "thử lại đúng 1 lần");
+      assert.ok(
+        calls[1]!.prompt.length < calls[0]!.prompt.length,
+        `lần hai phải gửi ít tin hơn: ${calls[0]!.prompt.length} -> ${calls[1]!.prompt.length}`,
+      );
+      assert.equal(ket.text, "cắt bớt rồi trả lời được");
+    } finally {
+      tuning.setTuning("LLM_CONTEXT_WINDOW", null);
+    }
+  });
+
+  it("5xx vẫn ném ra ngoài cho caller báo người dùng, không nuốt", async () => {
+    await assert.rejects(chayLuot([() => loiApi(503, "Upstream unavailable")]));
+  });
+});
+
 describe("runAgentTurn - chạm trần step", () => {
   it("hết step khi model còn gọi tool thì chạy lượt chốt KHÔNG cấp tool", async () => {
     // Trần 2 step: gọi tool hai lần là chạm trần, request thứ 3 là lượt chốt

@@ -27,6 +27,7 @@ import {
   uocLuongTokenTinNhan,
 } from "./token-estimate.js";
 import { catNguCanhTheoNganSach } from "./trim-context-to-budget.js";
+import { giayChoLai, maHttpCua, phanLoaiLoiProvider } from "./provider-error-classifier.js";
 import {
   canLuotChot,
   hitStepLimit,
@@ -277,19 +278,11 @@ export async function runAgentTurn({
       totalTokens: r.totalUsage.totalTokens ?? 0,
     });
 
-  let result: Awaited<ReturnType<typeof runOnce>>;
-  try {
-    result = await runOnce();
-  } catch (err) {
-    // Reactive fallback: lượt đang đính pixel mà provider từ chối bằng 4xx
-    // (endpoint ngoài 9Router không khai capability, detect đoán lạc quan) ->
-    // ghi nhớ model mù + dựng lại input không pixel rồi thử lại 1 lần.
-    // Combo qua 9Router không rơi vào đây - router lột ảnh êm, không lỗi.
-    const pixelModes: ImageContextMode[] = ["native", "hybrid"];
-    if (!pixelModes.includes(imageMode) || !hasImageParts(messages) || !isImageRejectionError(err)) {
-      throw err;
-    }
-    markModelNoVision(agent);
+  /**
+   * Dựng lại input KHÔNG kèm pixel rồi chạy lại - đường reactive fallback khi
+   * provider từ chối lượt có ảnh bằng 4xx.
+   */
+  const thuLaiKhongPixel = async (err: unknown) => {
     const fallbackMode: ImageContextMode = isSidecarConfigured() ? "describe" : "blind";
     log.warn(
       { imageMode, fallbackMode, err: forLog(err, 200) },
@@ -312,7 +305,72 @@ export async function runAgentTurn({
     }
     lanChay++;
     guard.datLai();
+    return runOnce();
+  };
+
+  /**
+   * Chữa theo ĐÚNG loại lỗi provider. Mỗi loại thử lại TỐI ĐA MỘT lần - vòng
+   * lặp đã có hai tầng chịu lỗi (`maxRetries` của SDK, retry completion rỗng),
+   * chồng thêm backoff nhiều tầng là ba tầng đè nhau.
+   */
+  const chuaLoiProvider = async (err: unknown) => {
+    const loai = phanLoaiLoiProvider(err);
+    log.error({ loai, ma: maHttpCua(err), err: forLog(err, 300) }, "Lượt agent lỗi từ provider");
+
+    if (loai === "auth") {
+      // KHÔNG thử lại: sai khóa thì thử thêm chỉ chậm gấp ba rồi vẫn hỏng.
+      // Ném ra để caller trả câu nói rõ đây là chuyện cấu hình.
+      throw err;
+    }
+
+    if (loai === "rate_limit") {
+      const cho = giayChoLai(err) ?? 5;
+      log.warn({ giayCho: cho }, "Provider siết nhịp - chờ rồi thử lại đúng 1 lần");
+      await new Promise((r) => setTimeout(r, cho * 1000));
+      lanChay++;
+      guard.datLai();
+      return runOnce();
+    }
+
+    if (loai === "context_overflow") {
+      // Cắt SÂU HƠN lần đầu (một nửa ngân sách thường): provider vừa nói thẳng
+      // là quá dài, nên ước lượng của mình đang lạc quan hơn thực tế.
+      const { tinNhan: hep, daCat } = catNguCanhTheoNganSach({
+        tinNhan: messages,
+        tranToken: Math.floor(nganSachAnToan(tranToken) / 2),
+        soTinBaoVeCuoi: 1,
+        coAnh: getTuning("ZALO_IMAGE_QUALITY"),
+      });
+      log.warn({ ...daCat }, "Provider báo tràn ngữ cảnh - cắt sâu hơn rồi thử lại 1 lần");
+      messages = hep;
+      lanChay++;
+      guard.datLai();
+      return runOnce();
+    }
+
+    // transient + unknown: `maxRetries` của SDK đã thử rồi mà vẫn hỏng, thử
+    // thêm ở đây chỉ lặp lại đúng việc đó. Ném ra cho caller báo người dùng.
+    throw err;
+  };
+
+  let result: Awaited<ReturnType<typeof runOnce>>;
+  try {
     result = await runOnce();
+  } catch (err) {
+    // Reactive fallback: lượt đang đính pixel mà provider từ chối bằng 4xx
+    // (endpoint ngoài 9Router không khai capability, detect đoán lạc quan) ->
+    // ghi nhớ model mù + dựng lại input không pixel rồi thử lại 1 lần.
+    // Combo qua 9Router không rơi vào đây - router lột ảnh êm, không lỗi.
+    const pixelModes: ImageContextMode[] = ["native", "hybrid"];
+    if (!pixelModes.includes(imageMode) || !hasImageParts(messages) || !isImageRejectionError(err)) {
+      // KHÔNG phải lỗi ảnh: phân loại rồi chữa đúng bệnh. Nhánh này phải nằm
+      // SAU nhánh ảnh ở trên - lỗi ảnh cũng là 400, để bộ phân loại chạy trước
+      // thì nó ra "unknown" và đường bỏ pixel không bao giờ chạy.
+      result = await chuaLoiProvider(err);
+    } else {
+      markModelNoVision(agent);
+      result = await thuLaiKhongPixel(err);
+    }
   }
 
   // 9Router thỉnh thoảng trả 200 + completion rỗng (0 token). maxRetries của

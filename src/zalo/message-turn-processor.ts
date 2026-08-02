@@ -1,5 +1,6 @@
 import type { API } from "zca-js";
 import { runAgentTurn } from "../agent/agent-loop.js";
+import { phanLoaiLoiProvider } from "../agent/provider-error-classifier.js";
 import type { StepTrace } from "../agent/agent-step-trace.js";
 import type { AccountConfig } from "../config/account-store.js";
 import { appendMessage } from "../conversation/history-store.js";
@@ -168,10 +169,13 @@ async function xuLyLuot(
     // Chốt luôn số step đã chạy. Token thì KHÔNG biết - lỗi ném ra từ giữa lượt
     // không mang theo usage - nên để 0 và đọc số step trên trang Trace.
     finishAgentTurn(turnId, { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: trace.length });
-    log.error({ err, steps: trace.length }, "Lỗi xử lý lượt tin nhắn");
+    // Phân loại để chọn ĐÚNG câu báo. Một câu cho mọi thứ khiến "bot sai cấu
+    // hình" (chờ bao lâu cũng không tự hết) đọc y hệt "mạng chập vài giây".
+    const loaiLoi = phanLoaiLoiProvider(err);
+    log.error({ err, loaiLoi, steps: trace.length }, "Lỗi xử lý lượt tin nhắn");
     // Báo cho người nhắn thay vì im lặng bỏ treo. KHÔNG ghi câu này vào history:
     // nó là thông báo hệ thống, để lại chỉ khiến lượt sau model neo vào tiền lệ hỏng.
-    await notifyTechnicalError(replyTarget);
+    await notifyTechnicalError(replyTarget, loaiLoi);
   } finally {
     stopTyping();
   }
