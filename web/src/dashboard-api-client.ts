@@ -49,6 +49,8 @@ export type OverviewData = {
   todayKey: string;
   /** Tên timezone IANA của bot, vd Asia/Ho_Chi_Minh */
   timezone: string;
+  /** Số ngày của cửa sổ biểu đồ ĐANG hiệu lực (server đã kẹp về giá trị hợp lệ) */
+  days: number;
 };
 
 export type ThreadItem = {
@@ -95,7 +97,8 @@ export const api = {
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
 
-  overview: () => request<OverviewData>("/api/overview"),
+  overview: (days?: number) =>
+    request<OverviewData>(`/api/overview${days ? `?days=${days}` : ""}`),
 
   threads: (accountId: string, q: string, page: number) =>
     request<{ items: ThreadItem[]; hasMore: boolean }>(
