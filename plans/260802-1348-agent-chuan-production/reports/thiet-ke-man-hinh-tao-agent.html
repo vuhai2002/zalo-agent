@@ -1,0 +1,622 @@
+<title>Màn hình tạo Agent - đối chiếu GoClaw, Hermes, ChatGPT</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --bg-raised: #ffffff; --bg-sunken: #eef1f6;
+    --border: #dbe2ea; --border-strong: #b9c4d1;
+    --text: #16202c; --text-dim: #56626f; --text-faint: #8895a3;
+    --accent: #0068ff; --accent-dim: #e8f0ff; --accent-text: #0052cc;
+    --ok: #0a8a5f; --ok-bg: #e4f7ef;
+    --warn: #b5730a; --warn-bg: #fdf1de;
+    --danger: #c22a3e; --danger-bg: #fdeaed;
+    --code-bg: #101820; --code-text: #d6e2ea;
+    --shadow: 0 1px 2px rgba(22, 32, 44, 0.04), 0 4px 16px rgba(22, 32, 44, 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171f; --bg-raised: #1a212b; --bg-sunken: #0e1319;
+      --border: #2a333f; --border-strong: #3c4757;
+      --text: #e7ecf2; --text-dim: #a5b1bf; --text-faint: #6c7887;
+      --accent: #4d94ff; --accent-dim: #1c2a3f; --accent-text: #7cb2ff;
+      --ok: #3ecb95; --ok-bg: #103326;
+      --warn: #e0a94a; --warn-bg: #362a12;
+      --danger: #f2697d; --danger-bg: #3a1620;
+      --code-bg: #0a0e13; --code-text: #cfe0eb;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12171f; --bg-raised: #1a212b; --bg-sunken: #0e1319;
+    --border: #2a333f; --border-strong: #3c4757;
+    --text: #e7ecf2; --text-dim: #a5b1bf; --text-faint: #6c7887;
+    --accent: #4d94ff; --accent-dim: #1c2a3f; --accent-text: #7cb2ff;
+    --ok: #3ecb95; --ok-bg: #103326; --warn: #e0a94a; --warn-bg: #362a12;
+    --danger: #f2697d; --danger-bg: #3a1620;
+    --code-bg: #0a0e13; --code-text: #cfe0eb;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f7fa; --bg-raised: #ffffff; --bg-sunken: #eef1f6;
+    --border: #dbe2ea; --border-strong: #b9c4d1;
+    --text: #16202c; --text-dim: #56626f; --text-faint: #8895a3;
+    --accent: #0068ff; --accent-dim: #e8f0ff; --accent-text: #0052cc;
+    --ok: #0a8a5f; --ok-bg: #e4f7ef; --warn: #b5730a; --warn-bg: #fdf1de;
+    --danger: #c22a3e; --danger-bg: #fdeaed;
+    --code-bg: #101820; --code-text: #d6e2ea;
+    --shadow: 0 1px 2px rgba(22,32,44,0.04), 0 4px 16px rgba(22,32,44,0.06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { padding: 0 0 6rem; }
+  code, .mono {
+    font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  code {
+    background: var(--bg-sunken); border: 1px solid var(--border);
+    border-radius: 5px; padding: 0.08em 0.36em; font-size: 0.87em; word-break: break-word;
+  }
+  a { color: var(--accent-text); }
+
+  .masthead {
+    background: var(--bg-raised); border-bottom: 1px solid var(--border);
+    padding: 2.75rem clamp(1.25rem, 5vw, 4rem) 2.25rem;
+  }
+  .masthead-inner { max-width: 66rem; margin: 0 auto; }
+  .eyebrow {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase;
+    color: var(--accent-text); display: flex; align-items: center; gap: 0.5rem;
+  }
+  .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  h1 { font-size: clamp(1.7rem, 3.4vw, 2.35rem); line-height: 1.15; letter-spacing: -0.015em; margin: 0.6rem 0 0.65rem; text-wrap: balance; font-weight: 700; }
+  .lede { color: var(--text-dim); font-size: 1rem; line-height: 1.65; max-width: 50rem; margin: 0 0 1.5rem; }
+  .lede b { color: var(--text); font-weight: 600; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+  .meta-chip {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 999px;
+    padding: 0.32rem 0.8rem; font-size: 0.79rem; color: var(--text-dim);
+  }
+  .meta-chip b { color: var(--text); font-weight: 600; }
+
+  .wrap { max-width: 66rem; margin: 0 auto; padding: 0 clamp(1.25rem, 5vw, 4rem); }
+
+  .verdict { margin-top: 2.25rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; }
+  .v-card { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); padding: 1.15rem 1.3rem 1.25rem; border-top: 3px solid var(--border-strong); }
+  .v-card.ok { border-top-color: var(--ok); }
+  .v-card.warn { border-top-color: var(--warn); }
+  .v-card.danger { border-top-color: var(--danger); }
+  .v-q { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 0.5rem; }
+  .v-a { font-size: 1.06rem; font-weight: 700; margin: 0 0 0.5rem; letter-spacing: -0.01em; }
+  .v-card.ok .v-a { color: var(--ok); }
+  .v-card.warn .v-a { color: var(--warn); }
+  .v-card.danger .v-a { color: var(--danger); }
+  .v-body { font-size: 0.88rem; line-height: 1.6; color: var(--text-dim); margin: 0; }
+  .v-body b { color: var(--text); font-weight: 600; }
+
+  .toc { margin-top: 2rem; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.15rem; }
+  .toc-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 0.65rem; }
+  .toc ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 0.35rem 1.5rem; }
+  .toc a { display: flex; gap: 0.55rem; text-decoration: none; color: var(--text-dim); font-size: 0.87rem; padding: 0.2rem 0; border-bottom: 1px dashed transparent; }
+  .toc a:hover { color: var(--accent-text); border-color: var(--accent-dim); }
+  .toc a .n { color: var(--text-faint); font-weight: 600; min-width: 1.1rem; }
+
+  section.phase { padding: 2.75rem 0; border-top: 1px solid var(--border); scroll-margin-top: 1.5rem; }
+  .phase-head { display: flex; align-items: baseline; gap: 0.85rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
+  .phase-num { font-size: 0.82rem; font-weight: 700; color: var(--accent-text); background: var(--accent-dim); border-radius: 6px; padding: 0.12rem 0.5rem; }
+  .phase-head h2 { font-size: 1.32rem; margin: 0; letter-spacing: -0.01em; }
+  .phase-sub { color: var(--text-dim); font-size: 0.93rem; margin: 0 0 1.6rem; max-width: 48rem; line-height: 1.6; }
+  .phase-sub b { color: var(--text); font-weight: 600; }
+
+  h3 { font-size: 1rem; margin: 1.9rem 0 0.7rem; letter-spacing: -0.005em; }
+  p { line-height: 1.68; font-size: 0.93rem; }
+  p.body { color: var(--text-dim); max-width: 50rem; }
+  p.body b { color: var(--text); font-weight: 600; }
+  ul.plain { margin: 0.5rem 0 1rem; padding-left: 1.2rem; color: var(--text-dim); font-size: 0.91rem; line-height: 1.72; }
+  ul.plain li { margin-bottom: 0.35rem; }
+  ul.plain b { color: var(--text); font-weight: 600; }
+
+  .tbl-scroll { overflow-x: auto; margin: 1rem 0 1.5rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; min-width: 36rem; background: var(--bg-raised); font-size: 0.89rem; }
+  th { text-align: left; background: var(--bg-sunken); color: var(--text-faint); font-size: 0.71rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.6; color: var(--text-dim); }
+  tr:last-child td { border-bottom: none; }
+  td b, td strong { color: var(--text); font-weight: 600; }
+  td.k { color: var(--text); font-weight: 600; white-space: nowrap; }
+  tbody tr.take { background: color-mix(in srgb, var(--ok) 6%, transparent); }
+  tbody tr.skip { opacity: 0.72; }
+
+  .pill { display: inline-block; font-size: 0.71rem; font-weight: 700; padding: 0.16rem 0.5rem; border-radius: 999px; white-space: nowrap; letter-spacing: 0.02em; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.no { background: var(--danger-bg); color: var(--danger); }
+  .pill.gray { background: var(--bg-sunken); color: var(--text-faint); }
+
+  .note { display: flex; gap: 0.75rem; align-items: flex-start; border-radius: 12px; padding: 0.95rem 1.15rem; margin: 1.25rem 0; font-size: 0.9rem; line-height: 1.65; border: 1px solid var(--border); background: var(--bg-raised); }
+  .note .ic { font-size: 1rem; line-height: 1.5; flex-shrink: 0; }
+  .note b { font-weight: 600; }
+  .note.good { background: var(--ok-bg); border-color: color-mix(in srgb, var(--ok) 35%, var(--border)); color: var(--ok); }
+  .note.good b { color: var(--ok); }
+  .note.bad { background: var(--danger-bg); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); color: var(--danger); }
+  .note.bad b { color: var(--danger); }
+  .note.info { background: var(--accent-dim); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); color: var(--accent-text); }
+  .note.info b { color: var(--accent-text); }
+  .note.fix { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); color: var(--warn); }
+  .note.fix b { color: var(--warn); }
+  .note code { background: rgba(127,127,127,0.16); border-color: transparent; }
+
+  pre.diagram {
+    background: var(--code-bg); color: var(--code-text); border-radius: 12px;
+    padding: 1.15rem 1.3rem; overflow-x: auto;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.82rem; line-height: 1.7; margin: 1rem 0 1.4rem;
+  }
+  pre.diagram .hl { color: #ffb454; font-weight: 700; }
+  pre.diagram .dim { color: #6b7d8c; }
+  pre.diagram .good { color: #5ddc9a; }
+
+  .form-mock { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; margin: 1.2rem 0 1.5rem; }
+  .fm-group { border-bottom: 1px solid var(--border); }
+  .fm-group:last-child { border-bottom: none; }
+  .fm-title { background: var(--bg-sunken); padding: 0.6rem 1.15rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-faint); }
+  .fm-rows { padding: 0.5rem 0; }
+  .fm-row { display: flex; gap: 0.9rem; align-items: baseline; padding: 0.45rem 1.15rem; font-size: 0.89rem; flex-wrap: wrap; }
+  .fm-name { font-weight: 600; color: var(--text); min-width: 12rem; }
+  .fm-desc { color: var(--text-dim); flex: 1; min-width: 12rem; line-height: 1.55; }
+
+  .q-list { counter-reset: q; margin: 1rem 0 0; padding: 0; list-style: none; }
+  .q-list li { counter-increment: q; position: relative; padding: 0.55rem 0 0.55rem 2.2rem; font-size: 0.93rem; line-height: 1.65; color: var(--text); border-bottom: 1px dashed var(--border); }
+  .q-list li:last-child { border-bottom: none; }
+  .q-list li::before { content: "Q" counter(q); position: absolute; left: 0; top: 0.55rem; font-size: 0.72rem; font-weight: 700; color: var(--warn); background: var(--warn-bg); border-radius: 5px; padding: 0.1rem 0.35rem; }
+
+  footer { max-width: 66rem; margin: 3rem auto 0; padding: 1.75rem clamp(1.25rem, 5vw, 4rem) 0; border-top: 1px solid var(--border); color: var(--text-faint); font-size: 0.82rem; line-height: 1.7; }
+  footer a { color: var(--accent-text); }
+</style>
+
+<div class="masthead">
+  <div class="masthead-inner">
+    <div class="eyebrow"><span class="dot"></span>Thiết kế</div>
+    <h1>Màn hình tạo Agent nên có những gì?</h1>
+    <p class="lede">
+      Đọc schema thật của <b>GoClaw</b> (bảng <code>agents</code> + <code>policy.go</code>),
+      <b>Hermes</b> (<code>cli-config.yaml</code> + <code>delegate_tool.py</code>), và ảnh
+      <b>ChatGPT Agent Builder</b>. Trả lời 3 câu: form hiện tại đủ chưa, GoClaw có thừa không,
+      Hermes làm thế nào. Kèm <b>một đính chính</b> cho báo cáo audit trước.
+    </p>
+    <div class="meta-row">
+      <span class="meta-chip">Ngày <b>02/08/2026</b></span>
+      <span class="meta-chip">Bối cảnh <b>sẽ làm đủ A -&gt; G</b></span>
+      <span class="meta-chip">Form hiện tại <b>7 trường / 196 dòng</b></span>
+      <span class="meta-chip">GoClaw <b>21 cột + 8 bảng phụ</b></span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="verdict">
+    <div class="v-card warn">
+      <p class="v-q">Form hiện tại đủ chưa?</p>
+      <p class="v-a">Thiếu 5, trong đó 1 cái oan</p>
+      <p class="v-body">
+        <code>modelProvider</code> <b>đã có sẵn</b> trong DB và API schema nhưng form không phơi ra -
+        nên không đổi được agent giữa router và Anthropic từ UI. Bốn cái còn lại là mới.
+      </p>
+    </div>
+    <div class="v-card ok">
+      <p class="v-q">GoClaw có thừa không?</p>
+      <p class="v-a">Thừa 7, nên lấy 8</p>
+      <p class="v-body">
+        Phần thừa gần như đều là <b>di sản agent coding</b> (workspace, sandbox) và <b>SaaS nhiều
+        người dùng</b> (owner, shares, teams). Bỏ đúng những cái đó là vừa.
+      </p>
+    </div>
+    <div class="v-card danger">
+      <p class="v-q">Hermes làm thế nào?</p>
+      <p class="v-a">Không có màn tạo agent</p>
+      <p class="v-body">
+        Không có bảng <code>agents</code>, không có CRUD. <b>Một agent duy nhất</b> cấu hình bằng
+        <code>config.yaml</code>; nhiều tính cách là một map chuỗi; agent con do model tự đẻ lúc chạy
+        rồi biến mất.
+      </p>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <p class="toc-title">Nội dung</p>
+    <ol>
+      <li><a href="#s0"><span class="n">0</span><span>Đính chính báo cáo trước (quan trọng)</span></a></li>
+      <li><a href="#s1"><span class="n">1</span><span>Ba mô hình agent hoàn toàn khác nhau</span></a></li>
+      <li><a href="#s2"><span class="n">2</span><span>GoClaw: bóc từng trường, thừa hay thiếu</span></a></li>
+      <li><a href="#s3"><span class="n">3</span><span>Hermes: vì sao cố tình không có màn tạo</span></a></li>
+      <li><a href="#s4"><span class="n">4</span><span>Form hiện tại của mình: có gì, hụt gì</span></a></li>
+      <li><a href="#s5"><span class="n">5</span><span>Đề xuất form sau khi làm đủ A -&gt; G</span></a></li>
+      <li><a href="#s6"><span class="n">6</span><span>Những thứ cố tình KHÔNG lấy</span></a></li>
+      <li><a href="#s7"><span class="n">7</span><span>Câu hỏi treo</span></a></li>
+    </ol>
+  </nav>
+
+  <!-- ============ 0 ============ -->
+  <section class="phase" id="s0">
+    <div class="phase-head"><span class="phase-num">00</span><h2>Đính chính báo cáo audit trước</h2></div>
+    <p class="phase-sub">
+      Đọc kỹ source GoClaw và Hermes làm lộ ra rằng cách tôi diễn đạt <b>khoảng cách A</b> hôm nay
+      là <b>sai</b>, và cái sai đó đổi luôn cách phải sửa.
+    </p>
+
+    <div class="note bad">
+      <span class="ic">&#10007;</span>
+      <span>
+        <b>Tôi đã viết:</b> "Tool là thuộc tính của agent, <b>không phải của kênh</b>." Rồi kết luận
+        phải <b>chuyển</b> <code>disabled_tools</code> từ bảng <code>accounts</code> sang
+        <code>agents</code>.
+      </span>
+    </div>
+
+    <p class="body">Bằng chứng ngược lại, đọc thẳng từ source:</p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:9rem">Hệ</th><th>Tool gắn ở đâu</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="k">GoClaw</td>
+            <td><code>policy.go:208</code> - chuỗi <b>10 bước giao nhau</b>: global profile, provider, <b>allow của agent</b>, provider-của-agent, <b>allow của group (kênh)</b>, rồi trừ deny global, trừ deny của agent, cuối cùng cộng <code>alsoAllow</code>. Tức là <b>CẢ agent LẪN kênh</b> đều thu hẹp được toolset.</td>
+          </tr>
+          <tr>
+            <td class="k">Hermes</td>
+            <td><code>platform_toolsets</code> trong <code>cli-config.yaml</code> - gắn theo <b>NỀN TẢNG</b> (cli, telegram, discord, whatsapp, slack...). <b>Không có</b> lớp agent nào cả.</td>
+          </tr>
+          <tr>
+            <td class="k">zalo-agent</td>
+            <td><code>accounts.disabled_tools</code> - gắn theo <b>kênh</b>. Giống hệt Hermes.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note fix">
+      <span class="ic">&#9998;</span>
+      <span>
+        <b>Phát biểu đúng:</b> gắn tool theo kênh <b>không sai</b> - Hermes làm y hệt, GoClaw cũng có
+        lớp group. Vấn đề thật của zalo-agent là: <b>có nhiều agent nhưng trục agent không có tí quyền
+        nào với tool.</b> Hermes gắn theo kênh thì hợp lý vì nó chỉ có MỘT agent. Mình có N agent x M
+        account mà chỉ điều khiển được một trục.
+      </span>
+    </div>
+
+    <p class="body">
+      <b>Đổi cách sửa:</b> không phải <b>chuyển</b> tool sang agent, mà <b>thêm một lớp</b> rồi
+      <b>giao nhau</b> - đúng mô hình GoClaw:
+    </p>
+
+    <pre class="diagram">Tool cuối cùng model nhận được:
+
+  TOOL_DEFINITIONS
+    <span class="dim">giao</span> agent.allowedTools      <span class="dim">&lt;- NĂNG LỰC: agent này biết làm gì</span>  <span class="hl">(thêm mới)</span>
+    <span class="dim">giao</span> account.enabledTools    <span class="dim">&lt;- CHÍNH SÁCH: kênh này cho phép gì</span> <span class="good">(đã có)</span>
+    <span class="dim">giao</span> available()            <span class="dim">&lt;- HẠ TẦNG: có cấu hình chưa</span>       <span class="good">(đã có)</span>
+    <span class="dim">trừ </span> runsInScheduledTurn    <span class="dim">&lt;- BỐI CẢNH: lượt theo lịch</span>        <span class="good">(đã có)</span></pre>
+
+    <p class="body">
+      Đọc theo nghĩa an ninh thì rõ: <b>agent khai năng lực, account áp chính sách.</b> Thêm một agent
+      mới không bao giờ nới rộng được quyền của kênh, vì mọi lớp đều là phép giao. Đây cũng đúng luật
+      Hermes ghi cho subagent: <code>inherit_mcp_toolsets: false</code> cho ra <b>"strict
+      intersection"</b>.
+    </p>
+    <p class="body">
+      Ba cái kia trong báo cáo audit (B loop guardrail, C eval, D ngân sách token) <b>không đổi gì</b> -
+      chúng được kiểm chứng độc lập với chỗ này.
+    </p>
+  </section>
+
+  <!-- ============ 1 ============ -->
+  <section class="phase" id="s1">
+    <div class="phase-head"><span class="phase-num">01</span><h2>Ba mô hình agent hoàn toàn khác nhau</h2></div>
+    <p class="phase-sub">
+      Trước khi chọn field, phải chọn <b>mô hình</b>. Ba hệ tham chiếu trả lời câu "agent là gì" theo
+      ba cách không tương thích nhau.
+    </p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:11rem"></th><th>Hermes</th><th>GoClaw / ChatGPT</th><th>zalo-agent</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="k">Agent là gì</td>
+            <td>Một tiến trình duy nhất, cấu hình bằng file</td>
+            <td>Bản ghi bền trong DB, sở hữu mọi thứ</td>
+            <td><b>Bản ghi bền</b> (giống GoClaw)</td>
+          </tr>
+          <tr>
+            <td class="k">Nhiều tính cách</td>
+            <td><code>personalities:</code> map tên -&gt; chuỗi, đổi bằng lệnh <code>/personality</code></td>
+            <td>Nhiều bản ghi agent</td>
+            <td><b>Nhiều bản ghi agent</b></td>
+          </tr>
+          <tr>
+            <td class="k">Tool gắn ở đâu</td>
+            <td>Nền tảng (<code>platform_toolsets</code>)</td>
+            <td>Global -&gt; provider -&gt; <b>agent</b> -&gt; group, giao nhau</td>
+            <td><b>Chỉ kênh</b> (thiếu lớp agent)</td>
+          </tr>
+          <tr>
+            <td class="k">Agent con</td>
+            <td>Ephemeral - model gọi <code>delegate_task</code>, chạy xong biến mất</td>
+            <td>Agent Teams + <code>agent_links</code>, bền</td>
+            <td>Không có</td>
+          </tr>
+          <tr>
+            <td class="k">Persona lưu ở đâu</td>
+            <td>Chuỗi trong YAML + <code>SOUL.md</code>/<code>USER.md</code> trên đĩa</td>
+            <td>Bảng <code>agent_context_files</code>, nhiều file .md</td>
+            <td>Một cột <code>persona</code> TEXT</td>
+          </tr>
+          <tr>
+            <td class="k">Nhiều người dùng</td>
+            <td>Một chủ</td>
+            <td><code>owner_id</code> + <code>agent_shares</code> + permission</td>
+            <td>Một chủ (một mật khẩu dashboard)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note info">
+      <span class="ic">&#8505;</span>
+      <span>
+        zalo-agent đang là <b>lai</b>: cấu trúc agent kiểu GoClaw (nhiều bản ghi bền), nhưng cách gắn
+        tool kiểu Hermes (theo kênh). Chính chỗ lai này đẻ ra khoảng cách A - và cũng chính nó nói cho
+        mình biết nên bổ sung gì: <b>lấy lớp tool của GoClaw, không lấy phần SaaS của GoClaw.</b>
+      </span>
+    </div>
+  </section>
+
+  <!-- ============ 2 ============ -->
+  <section class="phase" id="s2">
+    <div class="phase-head"><span class="phase-num">02</span><h2>GoClaw: bóc từng trường, thừa hay thiếu</h2></div>
+    <p class="phase-sub">
+      Bảng <code>agents</code> của GoClaw có <b>21 cột</b> cộng <b>8 bảng phụ</b>. Dưới đây là từng cái,
+      kèm phán quyết cho bối cảnh bot Zalo cá nhân.
+    </p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:15rem">Trường GoClaw</th><th style="width:8rem">Phán quyết</th><th>Lý do</th></tr></thead>
+        <tbody>
+          <tr class="take"><td class="k">agent_key</td><td><span class="pill ok">Đã có</span></td><td>Chính là cột <code>id</code> kebab-case</td></tr>
+          <tr class="take"><td class="k">display_name</td><td><span class="pill ok">Đã có</span></td><td><code>name</code></td></tr>
+          <tr class="take"><td class="k">provider</td><td><span class="pill warn">Có DB, thiếu UI</span></td><td>Nằm trong <code>agents.model_provider</code> và cả <code>patchSchema</code> của <code>agent-routes.ts</code>, nhưng drawer không render. Không đổi được agent giữa router và Anthropic từ UI</td></tr>
+          <tr class="take"><td class="k">model</td><td><span class="pill warn">Có, nên nâng</span></td><td>Đang là ô text tự gõ. GoClaw cũng text, nhưng mình đã có trang Providers biết danh sách model - nên đổi thành dropdown kèm tùy chọn tự gõ</td></tr>
+          <tr class="take"><td class="k">context_window</td><td><span class="pill ok">NÊN LẤY</span></td><td>Chính là <b>khoảng cách D</b>. Và nó <b>phải nằm ở agent</b> chứ không phải Cấu hình chung, vì mỗi agent chạy model khác nhau thì trần context khác nhau</td></tr>
+          <tr class="take"><td class="k">max_tool_iterations</td><td><span class="pill ok">Đã có</span></td><td><code>maxSteps</code></td></tr>
+          <tr class="take"><td class="k">tools_config</td><td><span class="pill ok">NÊN LẤY</span></td><td>Chính là <b>khoảng cách A</b>. Hình dạng GoClaw: <code>profile</code> + <code>allow</code> + <code>deny</code> + <code>alsoAllow</code></td></tr>
+          <tr class="take"><td class="k">is_default</td><td><span class="pill ok">Đã có</span></td><td><code>isDefault</code></td></tr>
+          <tr class="take"><td class="k">status</td><td><span class="pill ok">NÊN LẤY</span></td><td>Tắt tạm một agent mà không xóa. Hiện tại agent đang gắn account thì không xóa được (đúng), nhưng cũng không có cách nào tạm dừng</td></tr>
+          <tr class="take"><td class="k">agent_budget <span class="pill gray">bảng phụ</span></td><td><span class="pill ok">NÊN LẤY</span></td><td>Trần chi tiêu USD/tháng, vượt thì agent từ chối. Rất hợp bot chạy 24/7 với router tính tiền theo token</td></tr>
+
+          <tr class="skip"><td class="k">workspace<br>restrict_to_workspace</td><td><span class="pill no">Bỏ</span></td><td>Thư mục làm việc cho agent coding. zalo-agent không chạy shell, không có workspace</td></tr>
+          <tr class="skip"><td class="k">sandbox_config</td><td><span class="pill no">Bỏ</span></td><td>Cùng lý do - không chạy code do model sinh ra (đã chốt trong CLAUDE.md)</td></tr>
+          <tr class="skip"><td class="k">owner_id<br>agent_shares</td><td><span class="pill no">Bỏ</span></td><td>Phần SaaS nhiều người dùng. Dashboard mình một mật khẩu, một chủ</td></tr>
+          <tr class="skip"><td class="k">subagents_config</td><td><span class="pill no">Bỏ (giờ)</span></td><td>Khoảng cách H, đã xếp ngoài phạm vi</td></tr>
+          <tr class="skip"><td class="k">agent_type<br><span style="font-weight:400">open / predefined</span></td><td><span class="pill no">Bỏ - có lý do</span></td><td><b>Đáng chú ý.</b> "open" nghĩa là agent tự sửa <code>SOUL.md</code>/<code>AGENTS.md</code> của chính nó bằng <code>write_file</code>. Với bot đọc tin người lạ, đó là đường prompt injection ghi thẳng vào persona vĩnh viễn - cùng họ với lý do đã loại <code>save_memory</code> khỏi lượt theo lịch</td></tr>
+          <tr class="skip"><td class="k">agent_links<br>agent_teams</td><td><span class="pill no">Bỏ</span></td><td>Agent gọi agent. Ngoài phạm vi</td></tr>
+          <tr class="skip"><td class="k">agent_heartbeats</td><td><span class="pill no">Bỏ</span></td><td>Scheduler của mình đã lo phần chạy định kỳ</td></tr>
+          <tr class="skip"><td class="k">user_context_files<br><span style="font-weight:400">(tab Instances)</span></td><td><span class="pill no">Bỏ - trùng</span></td><td>Mỗi liên hệ một <code>USER.md</code> riêng. Nghe hay, nhưng mình <b>đã có</b> bảng <code>memories</code> làm đúng việc đó, còn kèm quy tắc privacy bất đối xứng mà GoClaw không có</td></tr>
+
+          <tr><td class="k">memory_config</td><td><span class="pill warn">Để sau</span></td><td>Hiện <code>MEMORY_MAX_FACTS_PER_SUBJECT</code> là toàn cục. Tách theo agent hợp lý nhưng chưa cấp bách</td></tr>
+          <tr><td class="k">compaction_config<br>context_pruning</td><td><span class="pill warn">Để sau</span></td><td>Hiện <code>SUMMARY_TRIGGER_MESSAGES</code> toàn cục. Cùng lý do</td></tr>
+          <tr><td class="k">agent_context_files<br><span style="font-weight:400">(tab Files)</span></td><td><span class="pill warn">Để sau</span></td><td>Tách persona thành <code>AGENTS.md</code> / <code>SOUL.md</code> / <code>IDENTITY.md</code>. Khoảng cách I. Nhưng xem ý dưới đây</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Hai chi tiết nhỏ của GoClaw đáng chép ngay, gần như miễn phí</h3>
+    <ul class="plain">
+      <li>
+        <b>Đếm token ngay dưới ô nhập.</b> Tab Files hiện "Est 1.3k tokens" cho từng file. Persona của
+        mình là một textarea 8000 ký tự mà <b>không ai biết nó tốn bao nhiêu token mỗi lượt</b> - trong
+        khi nó được gửi lại ở <b>mọi</b> step của <b>mọi</b> lượt. Một dòng ước lượng là đủ để người dùng
+        thấy cái giá.
+      </li>
+      <li>
+        <b>Dòng "LLM sees this as:".</b> GoClaw hiện ngay bên dưới ô mô tả một dòng xem trước đúng thứ
+        model thật sự đọc. Với persona thì càng đáng, vì system prompt của mình còn ghép thêm ngày,
+        danh sách khả năng, luật tool, tóm tắt, trí nhớ - người viết persona không hình dung được kết quả.
+      </li>
+    </ul>
+  </section>
+
+  <!-- ============ 3 ============ -->
+  <section class="phase" id="s3">
+    <div class="phase-head"><span class="phase-num">03</span><h2>Hermes: vì sao cố tình không có màn tạo agent</h2></div>
+    <p class="phase-sub">
+      Tìm cả repo: <b>không có bảng <code>agents</code>, không có CRUD agent, không có lệnh CLI tạo
+      agent.</b> Đây là lựa chọn thiết kế, không phải thiếu sót.
+    </p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:14rem">Thứ tương đương</th><th>Hermes làm sao</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Cấu hình agent</td><td>Mục <code>agent:</code> trong <code>config.yaml</code>: <code>max_turns: 60</code>, <code>api_max_retries</code>, <code>reasoning_effort</code>, <code>gateway_timeout</code>, <code>verify_on_stop</code>. Toàn knob vận hành, <b>không có danh tính</b></td></tr>
+          <tr><td class="k">Nhiều tính cách</td><td><code>personalities:</code> - map <b>tên -&gt; một chuỗi</b>. 13 cái ship sẵn (helpful, concise, technical, pirate, noir...). Đổi lúc chạy bằng <code>/personality</code></td></tr>
+          <tr><td class="k">Toolset</td><td><code>platform_toolsets:</code> theo nền tảng, dùng preset (<code>hermes-telegram</code>) hoặc tự ghép (<code>[web, terminal, file, todo]</code>)</td></tr>
+          <tr><td class="k">Model riêng</td><td><code>reasoning_overrides:</code> theo tên model, khớp lỏng (dấu chấm và gạch ngang hoán đổi được, tiền tố provider tùy chọn)</td></tr>
+          <tr><td class="k">Agent con</td><td><code>delegate_task</code> - model tự gọi lúc chạy với đúng <b>3 tham số</b>: <code>goal</code>, <code>context</code>, <code>role</code> (leaf/orchestrator). Ngân sách, model, provider của con lấy từ mục <code>delegation:</code>. <b>Không lưu lại</b></td></tr>
+          <tr><td class="k">Tự động hóa</td><td><code>blueprints</code> - và đây là chỗ hay nhất</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note good">
+      <span class="ic">&#10003;</span>
+      <span>
+        <b>Nguyên tắc Hermes tự viết trong <code>tools/blueprints.py</code>:</b> một blueprint
+        <b>KHÔNG phải kiểu đối tượng mới</b> - nó là một skill thường có thêm lịch cron trong
+        frontmatter. Nhờ vậy nó thừa hưởng <b>toàn bộ</b> đường ống skill sẵn có: tìm kiếm, kiểm duyệt,
+        quét bảo mật, cài đặt, nhật ký. Họ gọi luật này là <b>"Extend, Don't Duplicate"</b>.
+      </span>
+    </div>
+
+    <p class="body">
+      <b>Bài học rút ra cho mình:</b> đừng đẻ khái niệm mới khi mở rộng được cái đã có. Cụ thể:
+      trần token của agent nên tái dùng đúng cơ chế "để trống = theo Cấu hình chung" mà
+      <code>maxSteps</code> và <code>reasoningEffort</code> đang dùng, chứ không phải một hệ cấu hình
+      thứ hai. Tool policy của agent nên tái dùng đúng <code>TOOL_KEYS</code> và trang Tools sẵn có.
+    </p>
+
+    <div class="note info">
+      <span class="ic">&#8505;</span>
+      <span>
+        <b>Vậy mình có nên bỏ khái niệm agent như Hermes không?</b> Không. Hermes là CLI một người
+        dùng, một phiên - một agent là đủ. zalo-agent chạy <b>nhiều nick Zalo cùng lúc</b>, mỗi nick có
+        thể là một vai khác nhau. Đó chính là ca mà GoClaw giải, còn Hermes thì không gặp.
+      </span>
+    </div>
+  </section>
+
+  <!-- ============ 4 ============ -->
+  <section class="phase" id="s4">
+    <div class="phase-head"><span class="phase-num">04</span><h2>Form hiện tại của mình: có gì, hụt gì</h2></div>
+    <p class="phase-sub">
+      <code>web/src/pages/agent-edit-drawer.tsx</code>, 196 dòng, drawer rộng <code>max-w-md</code>.
+    </p>
+
+    <div class="form-mock">
+      <div class="fm-group">
+        <div class="fm-title">Đang có - 7 trường</div>
+        <div class="fm-rows">
+          <div class="fm-row"><span class="fm-name">ID</span><span class="fm-desc">kebab-case, chỉ hiện lúc tạo, không đổi được sau</span></div>
+          <div class="fm-row"><span class="fm-name">Icon</span><span class="fm-desc">emoji, ô text tự do</span></div>
+          <div class="fm-row"><span class="fm-name">Tên hiển thị</span><span class="fm-desc"></span></div>
+          <div class="fm-row"><span class="fm-name">Persona / chỉ dẫn</span><span class="fm-desc">textarea, trần 8000 ký tự, không hiện số token</span></div>
+          <div class="fm-row"><span class="fm-name">Model override</span><span class="fm-desc">ô text tự gõ, để trống = theo Providers chung</span></div>
+          <div class="fm-row"><span class="fm-name">Số bước tối đa</span><span class="fm-desc">1-30, để trống = theo Cấu hình</span></div>
+          <div class="fm-row"><span class="fm-name">Mức suy nghĩ</span><span class="fm-desc">dropdown 5 mức + "theo mặc định chung"</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note fix">
+      <span class="ic">&#9998;</span>
+      <span>
+        <b>Lỗi nhỏ tìm được khi đọc code:</b> <code>modelProvider</code> có trong bảng
+        <code>agents</code>, có trong <code>patchSchema</code> ở <code>agent-routes.ts</code>, có trong
+        type <code>AgentProfile</code> - nhưng drawer <b>không render nó và không gửi nó</b>. Nghĩa là
+        một agent tạo từ UI vĩnh viễn dùng provider chung; muốn agent chạy thẳng Anthropic trong khi
+        phần còn lại đi qua router thì phải sửa DB tay. Cái này sửa được ngay, không phụ thuộc A-G.
+      </span>
+    </div>
+  </section>
+
+  <!-- ============ 5 ============ -->
+  <section class="phase" id="s5">
+    <div class="phase-head"><span class="phase-num">05</span><h2>Đề xuất form sau khi làm đủ A -&gt; G</h2></div>
+    <p class="phase-sub">
+      Làm hết A-G thì agent phải giữ thêm 4 thứ. Cộng cái provider đang thiếu là <b>12 trường, 4 nhóm</b>.
+    </p>
+
+    <div class="form-mock">
+      <div class="fm-group">
+        <div class="fm-title">1 &middot; Danh tính</div>
+        <div class="fm-rows">
+          <div class="fm-row"><span class="fm-name">Icon + Tên</span><span class="fm-desc">giữ nguyên</span></div>
+          <div class="fm-row"><span class="fm-name">ID</span><span class="fm-desc">giữ nguyên, chỉ lúc tạo</span></div>
+          <div class="fm-row"><span class="fm-name">Trạng thái <span class="pill ok">mới</span></span><span class="fm-desc">Đang chạy / Tạm dừng - tắt tạm mà không xóa</span></div>
+        </div>
+      </div>
+      <div class="fm-group">
+        <div class="fm-title">2 &middot; Chỉ dẫn</div>
+        <div class="fm-rows">
+          <div class="fm-row"><span class="fm-name">Persona</span><span class="fm-desc">giữ nguyên, thêm <b>đếm token ước lượng</b> và nút xem trước system prompt đầy đủ</span></div>
+        </div>
+      </div>
+      <div class="fm-group">
+        <div class="fm-title">3 &middot; Model &amp; ngân sách</div>
+        <div class="fm-rows">
+          <div class="fm-row"><span class="fm-name">Provider <span class="pill warn">đang thiếu UI</span></span><span class="fm-desc">router / anthropic / theo Providers chung</span></div>
+          <div class="fm-row"><span class="fm-name">Model</span><span class="fm-desc">dropdown lấy từ Providers + cho tự gõ</span></div>
+          <div class="fm-row"><span class="fm-name">Trần context <span class="pill ok">khoảng cách D</span></span><span class="fm-desc">token. Phải ở đây chứ không phải Cấu hình chung, vì phụ thuộc model mà agent đang chạy</span></div>
+          <div class="fm-row"><span class="fm-name">Số bước tối đa</span><span class="fm-desc">giữ nguyên</span></div>
+          <div class="fm-row"><span class="fm-name">Mức suy nghĩ</span><span class="fm-desc">giữ nguyên</span></div>
+          <div class="fm-row"><span class="fm-name">Trần chi tiêu <span class="pill gray">tùy chọn</span></span><span class="fm-desc">USD/tháng, vượt thì agent từ chối lượt mới</span></div>
+        </div>
+      </div>
+      <div class="fm-group">
+        <div class="fm-title">4 &middot; Công cụ</div>
+        <div class="fm-rows">
+          <div class="fm-row"><span class="fm-name">Công cụ cho phép <span class="pill ok">khoảng cách A</span></span><span class="fm-desc">danh sách check theo nhóm read/action. Kèm dòng nói rõ <b>kết quả cuối = giao với công cụ đang bật của account</b></span></div>
+          <div class="fm-row"><span class="fm-name">Cần duyệt trước khi chạy <span class="pill ok">khoảng cách F</span></span><span class="fm-desc">chọn tool nào phải hỏi người trước khi thực thi</span></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Hệ quả về mặt giao diện</h3>
+    <p class="body">
+      12 trường trong 4 nhóm thì <b>drawer <code>max-w-md</code> không đủ</b>. GoClaw dùng trang riêng
+      có tab (Agent / Files / Permissions / Instances). Mình chưa cần tab vì đã bỏ Files, Permissions,
+      Instances - nhưng <b>nên chuyển từ drawer sang trang riêng chia nhóm</b>, dùng lại đúng ngôn ngữ
+      thiết kế của trang Cấu hình vừa dựng (nhóm phẳng, tiêu đề chữ nhỏ in hoa, không lồng khối).
+    </p>
+
+    <div class="note info">
+      <span class="ic">&#8505;</span>
+      <span>
+        <b>Thứ tự làm gợi ý:</b> tách trang riêng <b>trước</b>, rồi mới nhồi các trường của A-G vào.
+        Làm ngược lại thì phải sửa layout hai lần. Riêng <b>provider</b> thì vá ngay được vào drawer
+        hiện tại vì backend đã sẵn sàng - không cần đợi gì.
+      </span>
+    </div>
+  </section>
+
+  <!-- ============ 6 ============ -->
+  <section class="phase" id="s6">
+    <div class="phase-head"><span class="phase-num">06</span><h2>Những thứ cố tình KHÔNG lấy</h2></div>
+    <p class="phase-sub">Ghi lại lý do để sau này không ai mở lại mà không có bằng chứng mới.</p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:16rem">Thứ bỏ</th><th>Lý do</th></tr></thead>
+        <tbody>
+          <tr><td class="k">workspace, sandbox</td><td>Di sản agent coding. zalo-agent không chạy shell, không chạy code do model sinh ra - đã chốt trong CLAUDE.md</td></tr>
+          <tr><td class="k">owner_id, agent_shares, permissions</td><td>Bot cá nhân một chủ. Dashboard đã có đúng một mật khẩu</td></tr>
+          <tr><td class="k">agent_type "open"</td><td><b>Rủi ro an ninh thật.</b> Agent tự ghi lại persona của chính nó = một tin nhắn soạn khéo sửa được tính cách bot vĩnh viễn. Cùng họ lý do đã loại <code>save_memory</code> khỏi lượt theo lịch</td></tr>
+          <tr><td class="k">Instances (USER.md theo từng người)</td><td>Trùng bảng <code>memories</code> sẵn có, mà bảng của mình còn <b>hơn</b>: có quy tắc privacy bất đối xứng chặn fact học ở DM rò ra group. GoClaw không có luật đó</td></tr>
+          <tr><td class="k">Agent Teams, agent_links</td><td>Khoảng cách H, đã xếp ngoài phạm vi cùng lý do với "gửi tin hàng loạt"</td></tr>
+          <tr><td class="k">heartbeats</td><td>Scheduler đã lo phần chạy định kỳ</td></tr>
+          <tr><td class="k">Bỏ hẳn khái niệm agent (kiểu Hermes)</td><td>Hermes một phiên một người dùng nên một agent là đủ. Mình chạy nhiều nick Zalo cùng lúc, mỗi nick một vai</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 7 ============ -->
+  <section class="phase" id="s7">
+    <div class="phase-head"><span class="phase-num">07</span><h2>Câu hỏi treo</h2></div>
+    <ol class="q-list">
+      <li>Chốt <b>phép giao</b> (agent khai năng lực, account áp chính sách, kết quả là giao của cả hai) hay muốn agent <b>đè</b> luôn account khi có khai báo?</li>
+      <li><b>Trần chi tiêu USD</b> có làm không? Nó cần bảng giá token theo model - mà router 9Router có thể âm thầm đổi model thật, nên con số sẽ là <b>ước lượng</b> chứ không phải hóa đơn chính xác.</li>
+      <li><b>Tách trang riêng cho agent</b> làm trước A-G, hay nhét tạm vào drawer rồi tách sau?</li>
+      <li>Tool nào nên vào danh sách <b>cần duyệt</b> mặc định (khoảng cách F)? Đề xuất: <code>send_file</code>, <code>create_image</code>, <code>tag_member</code> - ba tool tác động ra ngoài mà người nhận thấy ngay.</li>
+    </ol>
+  </section>
+
+</div>
+
+<footer>
+  Soạn từ: <code>goclaw/migrations/000001_init_schema.up.sql</code>,
+  <code>goclaw/internal/tools/policy.go</code>,
+  <code>goclaw/internal/config/config_channels.go</code>,
+  <code>hermes-agent/cli-config.yaml.example</code>,
+  <code>hermes-agent/tools/delegate_tool.py</code>,
+  <code>hermes-agent/tools/blueprints.py</code>,
+  và code zalo-agent tại <code>main @ c467731</code>.
+  Ảnh tham chiếu: GoClaw v2.23.7 (4 tab Agent/Files/Permissions/Instances), ChatGPT Agent Builder.
+  GoClaw là CC BY-NC 4.0 - tài liệu này chỉ mô tả pattern, không chép code.
+  Đọc kèm: <code>audit-agent-chuan-production.html</code> (có một mục bị đính chính, xem phần 00).
+</footer>

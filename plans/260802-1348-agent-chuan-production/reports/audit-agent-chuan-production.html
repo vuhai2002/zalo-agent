@@ -1,0 +1,835 @@
+<title>Audit agent - zalo-agent đã chuẩn production chưa?</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --bg-raised: #ffffff;
+    --bg-sunken: #eef1f6;
+    --border: #dbe2ea;
+    --border-strong: #b9c4d1;
+    --text: #16202c;
+    --text-dim: #56626f;
+    --text-faint: #8895a3;
+    --accent: #0068ff;
+    --accent-dim: #e8f0ff;
+    --accent-text: #0052cc;
+    --ok: #0a8a5f;
+    --ok-bg: #e4f7ef;
+    --warn: #b5730a;
+    --warn-bg: #fdf1de;
+    --danger: #c22a3e;
+    --danger-bg: #fdeaed;
+    --code-bg: #101820;
+    --code-text: #d6e2ea;
+    --shadow: 0 1px 2px rgba(22, 32, 44, 0.04), 0 4px 16px rgba(22, 32, 44, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171f;
+      --bg-raised: #1a212b;
+      --bg-sunken: #0e1319;
+      --border: #2a333f;
+      --border-strong: #3c4757;
+      --text: #e7ecf2;
+      --text-dim: #a5b1bf;
+      --text-faint: #6c7887;
+      --accent: #4d94ff;
+      --accent-dim: #1c2a3f;
+      --accent-text: #7cb2ff;
+      --ok: #3ecb95;
+      --ok-bg: #103326;
+      --warn: #e0a94a;
+      --warn-bg: #362a12;
+      --danger: #f2697d;
+      --danger-bg: #3a1620;
+      --code-bg: #0a0e13;
+      --code-text: #cfe0eb;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12171f; --bg-raised: #1a212b; --bg-sunken: #0e1319;
+    --border: #2a333f; --border-strong: #3c4757;
+    --text: #e7ecf2; --text-dim: #a5b1bf; --text-faint: #6c7887;
+    --accent: #4d94ff; --accent-dim: #1c2a3f; --accent-text: #7cb2ff;
+    --ok: #3ecb95; --ok-bg: #103326; --warn: #e0a94a; --warn-bg: #362a12;
+    --danger: #f2697d; --danger-bg: #3a1620;
+    --code-bg: #0a0e13; --code-text: #cfe0eb;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f7fa; --bg-raised: #ffffff; --bg-sunken: #eef1f6;
+    --border: #dbe2ea; --border-strong: #b9c4d1;
+    --text: #16202c; --text-dim: #56626f; --text-faint: #8895a3;
+    --accent: #0068ff; --accent-dim: #e8f0ff; --accent-text: #0052cc;
+    --ok: #0a8a5f; --ok-bg: #e4f7ef; --warn: #b5730a; --warn-bg: #fdf1de;
+    --danger: #c22a3e; --danger-bg: #fdeaed;
+    --code-bg: #101820; --code-text: #d6e2ea;
+    --shadow: 0 1px 2px rgba(22, 32, 44, 0.04), 0 4px 16px rgba(22, 32, 44, 0.06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { padding: 0 0 6rem; }
+
+  code, .mono {
+    font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  code {
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.08em 0.36em;
+    font-size: 0.87em;
+    word-break: break-word;
+  }
+  a { color: var(--accent-text); }
+
+  /* ---------- Header ---------- */
+  .masthead {
+    background: var(--bg-raised);
+    border-bottom: 1px solid var(--border);
+    padding: 2.75rem clamp(1.25rem, 5vw, 4rem) 2.25rem;
+  }
+  .masthead-inner { max-width: 64rem; margin: 0 auto; }
+  .eyebrow {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.11em;
+    text-transform: uppercase; color: var(--accent-text);
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .eyebrow .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  h1 {
+    font-size: clamp(1.7rem, 3.4vw, 2.35rem);
+    line-height: 1.15; letter-spacing: -0.015em;
+    margin: 0.6rem 0 0.65rem; text-wrap: balance; font-weight: 700;
+  }
+  .lede {
+    color: var(--text-dim); font-size: 1rem; line-height: 1.65;
+    max-width: 48rem; margin: 0 0 1.5rem;
+  }
+  .lede b { color: var(--text); font-weight: 600; }
+
+  .meta-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+  .meta-chip {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: var(--bg-sunken); border: 1px solid var(--border);
+    border-radius: 999px; padding: 0.32rem 0.8rem;
+    font-size: 0.79rem; color: var(--text-dim);
+  }
+  .meta-chip b { color: var(--text); font-weight: 600; }
+
+  /* ---------- Layout ---------- */
+  .wrap { max-width: 64rem; margin: 0 auto; padding: 0 clamp(1.25rem, 5vw, 4rem); }
+
+  /* ---------- Verdict ---------- */
+  .verdict {
+    margin-top: 2.25rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 1rem;
+  }
+  .v-card {
+    background: var(--bg-raised); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+    padding: 1.15rem 1.3rem 1.25rem;
+    border-top: 3px solid var(--border-strong);
+  }
+  .v-card.ok { border-top-color: var(--ok); }
+  .v-card.warn { border-top-color: var(--warn); }
+  .v-card.danger { border-top-color: var(--danger); }
+  .v-q {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-faint); margin: 0 0 0.5rem;
+  }
+  .v-a { font-size: 1.06rem; font-weight: 700; margin: 0 0 0.5rem; letter-spacing: -0.01em; }
+  .v-card.ok .v-a { color: var(--ok); }
+  .v-card.warn .v-a { color: var(--warn); }
+  .v-card.danger .v-a { color: var(--danger); }
+  .v-body { font-size: 0.88rem; line-height: 1.6; color: var(--text-dim); margin: 0; }
+  .v-body b { color: var(--text); font-weight: 600; }
+
+  /* ---------- TOC ---------- */
+  .toc {
+    margin-top: 2rem; background: var(--bg-sunken);
+    border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.15rem;
+  }
+  .toc-title {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-faint); margin: 0 0 0.65rem;
+  }
+  .toc ol {
+    margin: 0; padding: 0; list-style: none; display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.35rem 1.5rem;
+  }
+  .toc a {
+    display: flex; gap: 0.55rem; text-decoration: none; color: var(--text-dim);
+    font-size: 0.87rem; padding: 0.2rem 0; border-bottom: 1px dashed transparent;
+  }
+  .toc a:hover { color: var(--accent-text); border-color: var(--accent-dim); }
+  .toc a .n { color: var(--text-faint); font-weight: 600; min-width: 1.1rem; }
+
+  /* ---------- Sections ---------- */
+  section.phase { padding: 2.75rem 0; border-top: 1px solid var(--border); scroll-margin-top: 1.5rem; }
+  .phase-head { display: flex; align-items: baseline; gap: 0.85rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
+  .phase-num {
+    font-size: 0.82rem; font-weight: 700; color: var(--accent-text);
+    background: var(--accent-dim); border-radius: 6px; padding: 0.12rem 0.5rem;
+  }
+  .phase-head h2 { font-size: 1.32rem; margin: 0; letter-spacing: -0.01em; }
+  .phase-sub { color: var(--text-dim); font-size: 0.93rem; margin: 0 0 1.6rem; max-width: 46rem; line-height: 1.6; }
+  .phase-sub b { color: var(--text); font-weight: 600; }
+
+  h3 {
+    font-size: 1rem; margin: 1.9rem 0 0.7rem; letter-spacing: -0.005em;
+  }
+  p { line-height: 1.68; font-size: 0.93rem; }
+  p.body { color: var(--text-dim); max-width: 48rem; }
+  p.body b { color: var(--text); font-weight: 600; }
+
+  ul.plain { margin: 0.5rem 0 1rem; padding-left: 1.2rem; color: var(--text-dim); font-size: 0.91rem; line-height: 1.72; }
+  ul.plain li { margin-bottom: 0.35rem; }
+  ul.plain b { color: var(--text); font-weight: 600; }
+
+  /* ---------- Tables ---------- */
+  .tbl-scroll { overflow-x: auto; margin: 1rem 0 1.5rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; min-width: 34rem; background: var(--bg-raised); font-size: 0.89rem; }
+  th {
+    text-align: left; background: var(--bg-sunken); color: var(--text-faint);
+    font-size: 0.71rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+    padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.6; color: var(--text-dim); }
+  tr:last-child td { border-bottom: none; }
+  td b, td strong { color: var(--text); font-weight: 600; }
+  td.k { color: var(--text); font-weight: 600; white-space: nowrap; }
+
+  .pill {
+    display: inline-block; font-size: 0.71rem; font-weight: 700;
+    padding: 0.16rem 0.5rem; border-radius: 999px; white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.no { background: var(--danger-bg); color: var(--danger); }
+
+  /* ---------- Notes ---------- */
+  .note {
+    display: flex; gap: 0.75rem; align-items: flex-start;
+    border-radius: 12px; padding: 0.95rem 1.15rem; margin: 1.25rem 0;
+    font-size: 0.9rem; line-height: 1.65;
+    border: 1px solid var(--border); background: var(--bg-raised);
+  }
+  .note .ic { font-size: 1rem; line-height: 1.5; flex-shrink: 0; }
+  .note b { font-weight: 600; }
+  .note.good { background: var(--ok-bg); border-color: color-mix(in srgb, var(--ok) 35%, var(--border)); color: var(--ok); }
+  .note.good b { color: var(--ok); }
+  .note.bad { background: var(--danger-bg); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); color: var(--danger); }
+  .note.bad b { color: var(--danger); }
+  .note.info { background: var(--accent-dim); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); color: var(--accent-text); }
+  .note.info b { color: var(--accent-text); }
+  .note code { background: rgba(127,127,127,0.16); border-color: transparent; }
+
+  /* ---------- Diagram ---------- */
+  pre.diagram {
+    background: var(--code-bg); color: var(--code-text);
+    border-radius: 12px; padding: 1.15rem 1.3rem; overflow-x: auto;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.82rem; line-height: 1.7; margin: 1rem 0 1.4rem;
+  }
+  pre.diagram .hl { color: #ffb454; font-weight: 700; }
+
+  /* ---------- Gap cards ---------- */
+  .gap {
+    background: var(--bg-raised); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+    margin-bottom: 0.9rem; overflow: hidden;
+  }
+  .gap-head {
+    display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;
+    padding: 0.85rem 1.2rem; background: var(--bg-sunken);
+    border-bottom: 1px solid var(--border);
+  }
+  .gap-id {
+    font-size: 0.78rem; font-weight: 700; color: var(--accent-text);
+    background: var(--accent-dim); border-radius: 6px; padding: 0.1rem 0.45rem;
+  }
+  .gap-title { font-size: 0.97rem; font-weight: 600; flex: 1; min-width: 12rem; }
+  .gap-body { padding: 0.95rem 1.2rem 1.1rem; font-size: 0.9rem; line-height: 1.68; color: var(--text-dim); }
+  .gap-body b { color: var(--text); font-weight: 600; }
+  .gap-body p { margin: 0 0 0.55rem; font-size: 0.9rem; }
+  .gap-body p:last-child { margin-bottom: 0; }
+
+  /* ---------- Priority ---------- */
+  .prio { display: grid; gap: 0.85rem; margin: 1.2rem 0 0; counter-reset: prio; }
+  .prio-item {
+    display: flex; gap: 1rem; align-items: flex-start;
+    background: var(--bg-raised); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1rem 1.2rem; box-shadow: var(--shadow);
+  }
+  .prio-n {
+    counter-increment: prio;
+    flex-shrink: 0; width: 1.85rem; height: 1.85rem; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 700;
+  }
+  .prio-n::before { content: counter(prio); }
+  .prio-txt { font-size: 0.91rem; line-height: 1.65; color: var(--text-dim); }
+  .prio-txt b { color: var(--text); font-weight: 600; display: block; margin-bottom: 0.15rem; font-size: 0.96rem; }
+
+  /* ---------- Questions ---------- */
+  .q-list { counter-reset: q; margin: 1rem 0 0; padding: 0; list-style: none; }
+  .q-list li {
+    counter-increment: q; position: relative; padding: 0.55rem 0 0.55rem 2.2rem;
+    font-size: 0.93rem; line-height: 1.65; color: var(--text);
+    border-bottom: 1px dashed var(--border);
+  }
+  .q-list li:last-child { border-bottom: none; }
+  .q-list li::before {
+    content: "Q" counter(q); position: absolute; left: 0; top: 0.55rem;
+    font-size: 0.72rem; font-weight: 700; color: var(--warn);
+    background: var(--warn-bg); border-radius: 5px; padding: 0.1rem 0.35rem;
+  }
+
+  footer {
+    max-width: 64rem; margin: 3rem auto 0; padding: 1.75rem clamp(1.25rem, 5vw, 4rem) 0;
+    border-top: 1px solid var(--border);
+    color: var(--text-faint); font-size: 0.82rem; line-height: 1.7;
+  }
+  footer a { color: var(--accent-text); }
+</style>
+
+<div class="masthead">
+  <div class="masthead-inner">
+    <div class="eyebrow"><span class="dot"></span>Audit kiến trúc</div>
+    <h1>Agent của zalo-agent đã đúng chuẩn production chưa?</h1>
+    <p class="lede">
+      Đối chiếu code thật với định nghĩa agent của <b>Anthropic</b>, <b>OpenAI</b>, <b>12-Factor Agents</b>,
+      và với source <b>hermes-agent</b>. Kết luận ngắn: vòng lặp agent <b>đúng chuẩn</b>, phần chịu lỗi
+      <b>trên trung bình rõ rệt</b>, còn thiếu <b>đo lường</b> và <b>một chỗ sai định nghĩa</b>.
+    </p>
+    <div class="meta-row">
+      <span class="meta-chip">Ngày <b>02/08/2026</b></span>
+      <span class="meta-chip">Nhánh <b>main @ c467731</b></span>
+      <span class="meta-chip">Đọc <b>src/agent/</b> + <b>src/conversation/</b> + <b>src/zalo/</b></span>
+      <span class="meta-chip">Tham chiếu <b>hermes-agent/agent/</b> (114k dòng)</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="verdict">
+    <div class="v-card ok">
+      <p class="v-q">Đúng định nghĩa agent chưa?</p>
+      <p class="v-a">Rồi, về bản chất vòng lặp</p>
+      <p class="v-body">
+        Theo Anthropic, agent là hệ mà LLM <b>tự điều khiển tiến trình và tool của chính nó</b> (khác
+        workflow: đi theo đường code định sẵn). <code>agent-loop.ts</code> đúng vậy - không có đường code
+        nào ép thứ tự tool.
+      </p>
+    </div>
+    <div class="v-card warn">
+      <p class="v-q">Đã production-grade chưa?</p>
+      <p class="v-a">Một nửa</p>
+      <p class="v-body">
+        <b>Chịu lỗi + chống injection</b>: trên mức trung bình rõ rệt, có những nhánh chỉ xuất hiện sau khi
+        đã đau thật. <b>Đo lường + chống lãng phí</b>: chưa có eval, chưa có loop guardrail, đếm ngữ cảnh
+        nhầm đơn vị.
+      </p>
+    </div>
+    <div class="v-card danger">
+      <p class="v-q">Sai định nghĩa ở đâu?</p>
+      <p class="v-a">Đúng 1 chỗ</p>
+      <p class="v-body">
+        <b>Trục agent không có quyền gì với tool.</b> <code>disabled_tools</code> chỉ nằm ở bảng
+        <code>accounts</code>, nên có N agent mà chỉ điều khiển được một trục.
+        <b style="display:block;margin-top:0.4rem">Mục 8/A đã được đính chính ngày 02/08 - đọc phần đó
+        trước khi làm.</b>
+      </p>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <p class="toc-title">Nội dung</p>
+    <ol>
+      <li><a href="#s1"><span class="n">1</span><span>Định nghĩa: agent khác workflow ở chỗ nào</span></a></li>
+      <li><a href="#s2"><span class="n">2</span><span>Context engineering - phần làm tốt bất ngờ</span></a></li>
+      <li><a href="#s3"><span class="n">3</span><span>Guardrails - đối chiếu mô hình phân lớp</span></a></li>
+      <li><a href="#s4"><span class="n">4</span><span>Chịu lỗi - chỗ trên mức trung bình</span></a></li>
+      <li><a href="#s5"><span class="n">5</span><span>Đối chiếu 12-Factor Agents</span></a></li>
+      <li><a href="#s6"><span class="n">6</span><span>Hermes có gì mà mình chưa có</span></a></li>
+      <li><a href="#s7"><span class="n">7</span><span>Chênh lệch với hình dạng agent hiện đại</span></a></li>
+      <li><a href="#s8"><span class="n">8</span><span>Danh sách khoảng cách xếp hạng</span></a></li>
+      <li><a href="#s9"><span class="n">9</span><span>Chốt lại + câu hỏi treo</span></a></li>
+    </ol>
+  </nav>
+
+  <!-- ============ 1 ============ -->
+  <section class="phase" id="s1">
+    <div class="phase-head"><span class="phase-num">01</span><h2>Định nghĩa: agent khác workflow ở chỗ nào</h2></div>
+    <p class="phase-sub">
+      Anthropic tách rạch ròi hai thứ mà người ta hay gọi chung là "agent". Phân biệt này quyết định
+      mình đang xây cái gì.
+    </p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:8rem">Khái niệm</th><th>Định nghĩa</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="k">Workflow</td>
+            <td>LLM + tool được điều phối qua <b>đường code định sẵn</b>. Dễ đoán, hợp việc đã rõ các bước.</td>
+          </tr>
+          <tr>
+            <td class="k">Agent</td>
+            <td>LLM <b>tự điều khiển tiến trình và cách dùng tool của chính nó</b>, giữ quyền quyết định làm thế nào để xong việc.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="body">
+      Vòng lặp agent theo Anthropic: nhận lệnh <span class="mono">-&gt;</span> lập kế hoạch
+      <span class="mono">-&gt;</span> gọi tool <span class="mono">-&gt;</span> nhận kết quả từ môi trường
+      <span class="mono">-&gt;</span> tự đánh giá tiến độ <span class="mono">-&gt;</span> lặp tới khi xong
+      hoặc chạm điều kiện dừng.
+    </p>
+    <p class="body">
+      OpenAI định nghĩa gọn hơn: agent là hệ tự hoàn thành một quy trình nhiều bước thay người dùng, có ra
+      quyết định, gọi tool, và <b>phục hồi được khi hỏng</b>. Ba thành phần bắt buộc:
+    </p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:9rem">Thành phần</th><th>Vai trò</th><th style="width:11rem">zalo-agent</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Model</td><td>Bộ não suy luận</td><td><span class="pill ok">Có</span> đặt riêng được theo agent</td></tr>
+          <tr><td class="k">Tools</td><td>Tay chân: thu thập ngữ cảnh hoặc tác động ra ngoài</td><td><span class="pill warn">Có, nhưng gắn nhầm chỗ</span></td></tr>
+          <tr><td class="k">Instructions</td><td>Luật hành xử và ranh giới</td><td><span class="pill ok">Có</span> phân lớp rõ ràng</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note good">
+      <span class="ic">&#10003;</span>
+      <span>
+        <b>Kết luận:</b> <code>agent-loop.ts</code> là agent thật, không phải workflow.
+        <code>generateText</code> + <code>stopWhen: stepCountIs(n)</code> + <code>tools</code> - model tự
+        chọn tool nào, chạy mấy bước, khi nào dừng.
+      </span>
+    </div>
+  </section>
+
+  <!-- ============ 2 ============ -->
+  <section class="phase" id="s2">
+    <div class="phase-head"><span class="phase-num">02</span><h2>Context engineering - phần làm tốt bất ngờ</h2></div>
+    <p class="phase-sub">
+      Anthropic gọi đây là kỷ luật "chọn tập token tối ưu tại mỗi lần suy luận", và nêu 3 kỹ thuật cho tác
+      vụ dài hơi. Mình đã có 2 trong 3.
+    </p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:15rem">Kỹ thuật Anthropic</th><th style="width:7rem">Trạng thái</th><th>Ở đâu trong code</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="k">Compaction<br><span style="font-weight:400;color:var(--text-faint);font-size:0.85em">gộp hội thoại cũ thành tóm tắt</span></td>
+            <td><span class="pill ok">Có</span></td>
+            <td><code>thread-summarizer.ts</code> - rolling summary, fire-and-forget sau khi đã trả lời, lỗi summary không phá lượt chat</td>
+          </tr>
+          <tr>
+            <td class="k">Structured note-taking<br><span style="font-weight:400;color:var(--text-faint);font-size:0.85em">agent tự ghi chú ra ngoài</span></td>
+            <td><span class="pill ok">Có</span></td>
+            <td><code>save_memory</code> + bảng <code>memories</code>, kèm <b>quy tắc privacy bất đối xứng</b> (fact học ở DM không bao giờ chảy ra group)</td>
+          </tr>
+          <tr>
+            <td class="k">Sub-agent<br><span style="font-weight:400;color:var(--text-faint);font-size:0.85em">agent con, ngữ cảnh sạch</span></td>
+            <td><span class="pill no">Chưa</span></td>
+            <td>-</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Mấy điểm đúng chuẩn mà nhiều bản triển khai bỏ qua</h3>
+    <ul class="plain">
+      <li><b>System prompt chia khối rõ ràng</b> (<code>persona-prompt.ts</code>): persona nền, ngày, khả năng, luật từng tool, persona riêng, tóm tắt, trí nhớ, bối cảnh. Đúng khuyến nghị "tổ chức theo section".</li>
+      <li><b>Chỉ đưa NGÀY, không đưa GIỜ</b> vào prompt - giờ đổi mỗi phút sẽ vỡ prompt cache mỗi phút. Chi tiết này ít người nghĩ tới.</li>
+      <li><b>Mục "khả năng" sinh từ ĐÚNG bộ lọc dựng schema</b> - <code>listAvailableTools</code> dùng chung cho cả <code>buildAgentTools</code> lẫn <code>buildSystemPrompt</code>. Chặn hẳn lớp bug "prompt hứa một tool mà model không hề nhận được".</li>
+      <li><b>Cắt output tool</b> (<code>WEB_FETCH_MAX_CHARS=15000</code>) - đúng nguyên tắc token efficiency.</li>
+      <li><b>Tool bị tắt biến mất khỏi schema</b>, không phải "có nhưng trả lỗi" - vừa tiết kiệm token mô tả vừa chặn injection dụ gọi.</li>
+    </ul>
+  </section>
+
+  <!-- ============ 3 ============ -->
+  <section class="phase" id="s3">
+    <div class="phase-head"><span class="phase-num">03</span><h2>Guardrails - đối chiếu mô hình phân lớp của OpenAI</h2></div>
+    <p class="phase-sub">
+      OpenAI nói rõ: một lớp guardrail không đủ, phải xếp <b>nhiều lớp chuyên biệt</b> chồng lên nhau.
+    </p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:14rem">Lớp guardrail</th><th style="width:7rem">Trạng thái</th><th>Chi tiết</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Lọc đầu vào</td><td><span class="pill ok">Có</span></td><td>allowlist + @mention lọc <b>trước</b> khi gọi LLM (không tốn token)</td></tr>
+          <tr><td class="k">Chống prompt injection</td><td><span class="pill ok">Mạnh</span></td><td><code>wrap-untrusted-content.ts</code> bọc nội dung web trong <code>&lt;noi_dung_ngoai&gt;</code>, <b>khử luôn tên thẻ trong nội dung</b> để trang web không đóng ranh giới sớm. Cộng nhãn <code>[chưa xác minh]</code> cho người ngoài allowlist trong history</td></tr>
+          <tr><td class="k">PII / bảo mật dữ liệu</td><td><span class="pill warn">Một phần</span></td><td>Quy tắc privacy bất đối xứng của memory; chưa có redact chủ động</td></tr>
+          <tr><td class="k">Đánh giá rủi ro tool</td><td><span class="pill ok">Có</span></td><td><code>group: read | action</code> + <code>runsInScheduledTurn</code></td></tr>
+          <tr><td class="k">Rules-based</td><td><span class="pill ok">Có</span></td><td>SSRF guard (<code>private-address-guard.ts</code>), rate limit theo thread, trần gửi chủ động/ngày (bảng bền)</td></tr>
+          <tr><td class="k">Kiểm tra đầu ra</td><td><span class="pill no">Chưa</span></td><td>Text model trả về đi thẳng xuống Zalo</td></tr>
+          <tr><td class="k">Human-in-the-loop</td><td><span class="pill no">Chưa</span></td><td>-</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note info">
+      <span class="ic">&#8505;</span>
+      <span>
+        Cấm tool tài chính là một lựa chọn <b>phạm vi</b>, không phải guardrail - nhưng là lựa chọn đúng cho
+        bot đọc tin người lạ.
+      </span>
+    </div>
+  </section>
+
+  <!-- ============ 4 ============ -->
+  <section class="phase" id="s4">
+    <div class="phase-head"><span class="phase-num">04</span><h2>Chịu lỗi - chỗ trên mức trung bình</h2></div>
+    <p class="phase-sub">
+      Mấy nhánh này hiếm thấy ở bản tự viết. Chúng thường chỉ xuất hiện sau khi đã bị đau thật ở production.
+    </p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:16rem">Cơ chế</th><th>Vì sao cần</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="k">Lượt chốt khi hết step<br><code>runWrapUp</code></td>
+            <td>Chạm trần step thì gọi lại model <b>không cấp tool</b>, ép nó viết câu trả lời từ dữ liệu đã thu được. Không có nhánh này thì người dùng nhận đúng câu tường thuật nội bộ ("Đủ 2 nguồn - giờ đối chiếu") làm câu trả lời.</td>
+          </tr>
+          <tr>
+            <td class="k">Nhận diện completion rỗng<br><code>isEmptyRouterCompletion</code></td>
+            <td>Router trả HTTP 200 + 0 token + 0 tool call. SDK coi là <b>thành công</b> nên <code>maxRetries</code> không cứu được.</td>
+          </tr>
+          <tr>
+            <td class="k">Fallback khi provider từ chối ảnh</td>
+            <td>Bắt 4xx, ghi nhớ model mù, dựng lại input không pixel, thử lại 1 lần.</td>
+          </tr>
+          <tr>
+            <td class="k">Trace sống sót qua throw</td>
+            <td>Mảng <code>trace</code> do <b>caller</b> sở hữu, agent-loop chỉ push. Lượt chạy tốt 5 step rồi step 6 gặp 500 vẫn còn đủ manh mối.</td>
+          </tr>
+          <tr>
+            <td class="k">Log cả <code>tool-error</code></td>
+            <td>Tool ném exception <b>không bao giờ</b> lọt vào <code>toolResults</code> (đo thật với <code>ai@7.0.37</code>). Không log riêng thì lỗi tool không để lại dấu vết nào.</td>
+          </tr>
+          <tr>
+            <td class="k">Sanitizing fetch</td>
+            <td>Cắt đuôi <code>data: [DONE]</code> mà 9Router dính vào body JSON non-streaming - không cắt thì cả lượt chết dù token đã tốn.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 5 ============ -->
+  <section class="phase" id="s5">
+    <div class="phase-head"><span class="phase-num">05</span><h2>Đối chiếu 12-Factor Agents</h2></div>
+    <p class="phase-sub">
+      Bộ nguyên tắc của HumanLayer, hướng vào tính vận hành được của agent trong sản phẩm thật.
+    </p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:3rem">#</th><th style="width:18rem">Factor</th><th style="width:8rem">Trạng thái</th><th>Ghi chú</th></tr></thead>
+        <tbody>
+          <tr><td class="k">1</td><td class="k">NL -&gt; tool call</td><td><span class="pill ok">Đủ</span></td><td></td></tr>
+          <tr><td class="k">2</td><td class="k">Tự sở hữu prompt</td><td><span class="pill ok">Đủ</span></td><td>Viết tay, không framework</td></tr>
+          <tr><td class="k">3</td><td class="k">Tự sở hữu context window</td><td><span class="pill ok">Đủ</span></td><td><code>buildTurnMessages</code> dựng tay từng phần</td></tr>
+          <tr><td class="k">4</td><td class="k">Tool là structured output</td><td><span class="pill ok">Đủ</span></td><td></td></tr>
+          <tr><td class="k">5</td><td class="k">Gộp execution + business state</td><td><span class="pill ok">Đủ</span></td><td>SQLite là cả hai</td></tr>
+          <tr><td class="k">6</td><td class="k">Launch / pause / resume</td><td><span class="pill warn">Một phần</span></td><td>Scheduler có job, nhưng lượt agent không dừng/tiếp được</td></tr>
+          <tr><td class="k">7</td><td class="k">Gọi người qua tool call</td><td><span class="pill no">Thiếu</span></td><td>Không có human-in-the-loop</td></tr>
+          <tr><td class="k">8</td><td class="k">Tự sở hữu control flow</td><td><span class="pill ok">Đủ</span></td><td></td></tr>
+          <tr><td class="k">9</td><td class="k">Nén lỗi vào context</td><td><span class="pill warn">Một phần</span></td><td>Lỗi tool quay lại model qua SDK, nhưng không phân loại</td></tr>
+          <tr><td class="k">10</td><td class="k">Agent nhỏ, tập trung</td><td><span class="pill warn">Một phần</span></td><td>Một agent, chưa có agent con</td></tr>
+          <tr><td class="k">11</td><td class="k">Kích hoạt từ mọi nơi</td><td><span class="pill warn">Một phần</span></td><td>Zalo + scheduler; chưa có webhook/API</td></tr>
+          <tr><td class="k">12</td><td class="k">Agent là stateless reducer</td><td><span class="pill no">Thiếu</span></td><td><code>runAgentTurn</code> tự đọc DB (<code>getRecentMessages</code>, <code>getMemoriesForContext</code>) thay vì nhận state từ ngoài</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 6 ============ -->
+  <section class="phase" id="s6">
+    <div class="phase-head"><span class="phase-num">06</span><h2>Hermes có gì mà zalo-agent chưa có</h2></div>
+    <p class="phase-sub">
+      Đọc <code>hermes-agent/agent/</code> (114k dòng Python). Lọc ra thứ <b>đáng học</b>, bỏ thứ chỉ hợp
+      agent coding.
+    </p>
+
+    <h3><code>tool_guardrails.py</code> (479 dòng) - đáng học nhất</h3>
+    <p class="body">Chống vòng lặp tool ở mức <b>chữ ký lệnh gọi</b>:</p>
+    <ul class="plain">
+      <li><code>ToolCallSignature</code> = tên tool + <b>hash JSON args đã chuẩn hóa</b> (sort key, compact) - nhận diện được "gọi y hệt lần trước".</li>
+      <li>Ba bộ đếm riêng:
+        <ul class="plain" style="margin-top:0.3rem">
+          <li><code>exact_failure</code> - đúng tool + đúng args + lại lỗi. Cảnh báo sau <b>2</b>, chặn sau <b>5</b>.</li>
+          <li><code>same_tool_failure</code> - cùng tool lỗi với args khác nhau. Cảnh báo <b>3</b>, dừng <b>8</b>.</li>
+          <li><code>idempotent_no_progress</code> - tool <b>chỉ đọc</b> trả về <b>cùng kết quả</b> lặp lại. Cảnh báo <b>2</b>, chặn <b>5</b>.</li>
+        </ul>
+      </li>
+      <li>Chia sẵn <code>IDEMPOTENT_TOOL_NAMES</code> vs <code>MUTATING_TOOL_NAMES</code> - chỉ tool đọc mới áp luật no-progress được (ghi 2 lần khác nhau là hợp lệ).</li>
+      <li>Bộ điều khiển <b>thuần, không side effect</b>: <code>before_call</code>/<code>after_call</code> trả về quyết định (<code>allow</code>/<code>warn</code>/<code>block</code>/<code>halt</code>), runtime tự quyết biến nó thành warning, tool result giả, hay dừng lượt.</li>
+      <li>Mặc định <code>warnings_enabled=True</code>, <code>hard_stop_enabled=False</code> - phiên tương tác chỉ bị nhắc nhẹ, chặn cứng phải bật tường minh.</li>
+    </ul>
+
+    <div class="note bad">
+      <span class="ic">&#9888;</span>
+      <span>
+        <b>zalo-agent hiện chỉ có <code>stepCountIs(8)</code>.</b> Model gọi <code>web_fetch</code> cùng một
+        URL lỗi 5 lần liên tiếp thì đốt 5/8 step, không ai chặn, người dùng ngồi đợi.
+      </span>
+    </div>
+
+    <h3><code>context_engine.py</code> (489 dòng)</h3>
+    <p class="body">
+      Context engine cắm rời được, vòng đời rõ: <code>on_session_start</code>
+      <span class="mono">-&gt;</span> <code>update_from_response(usage)</code>
+      <span class="mono">-&gt;</span> <code>should_compress()</code>
+      <span class="mono">-&gt;</span> <code>compress()</code>
+      <span class="mono">-&gt;</span> <code>on_session_end</code>.
+    </p>
+    <p class="body">
+      Điểm mấu chốt: <b>quyết định nén dựa trên usage token THẬT trả về từ API</b>, không phải đếm số tin.
+      zalo-agent đang đếm <b>20 tin</b> (<code>HISTORY_CONTEXT_LIMIT</code>), mà một tin Zalo có thể dài tùy ý.
+    </p>
+    <p class="body">
+      Thêm <code>sanitize_memory_context()</code>: redact + cắt đầu-đuôi (giữ 4000 ký tự đầu, 1500 cuối) khi
+      ngữ cảnh memory vượt 6000 ký tự - <b>cắt giữa chứ không cắt đuôi</b>, vì phần cuối thường là thứ mới nhất.
+    </p>
+
+    <h3>Còn lại</h3>
+    <ul class="plain">
+      <li><code>iteration_budget.py</code> (62 dòng) - bộ đếm lượt lặp có khóa, <b>có <code>refund()</code></b>. Mỗi agent con có ngân sách độc lập.</li>
+      <li><code>error_classifier.py</code> (1699 dòng) - phân loại lỗi provider để quyết định retry / đổi model / bỏ cuộc. zalo-agent retry mù <code>maxRetries: 2</code> + 2 nhánh đặc thù: hết quota, context tràn, và mạng chập đang bị xử lý y như nhau.</li>
+      <li><code>memory_manager.py</code> - <b>chỉ cho phép MỘT memory provider ngoài tại một thời điểm</b>, chặn phình schema tool và backend trí nhớ đá nhau. Kèm <code>normalize_tool_schema()</code> xử lý ca schema bị bọc 2 lần khiến DeepSeek trả 400 và <b>hỏng cả toolset</b>.</li>
+    </ul>
+
+    <div class="note info">
+      <span class="ic">&#8505;</span>
+      <span>
+        <b>Cái Hermes có mà mình KHÔNG nên lấy:</b> <code>auxiliary_client.py</code> 8255 dòng,
+        <code>conversation_loop.py</code> 6645 dòng, MoA loop, LSP, browser provider, credential pool.
+        Hermes là agent coding đa nền tảng - độ phức tạp đó không mang lại gì cho bot Zalo cá nhân.
+        Giữ nguyên quyết định "tự viết agent loop, không dùng framework".
+      </span>
+    </div>
+  </section>
+
+  <!-- ============ 7 ============ -->
+  <section class="phase" id="s7">
+    <div class="phase-head"><span class="phase-num">07</span><h2>Chênh lệch với hình dạng agent hiện đại</h2></div>
+    <p class="phase-sub">
+      Ảnh ChatGPT Agent Builder cho thấy một Agent hiện đại <b>sở hữu</b> toàn bộ cấu hình của nó.
+    </p>
+
+    <pre class="diagram">Agent (ChatGPT Agent Builder)
+ |
+ +-- Channels        ChatGPT, Slack, API
+ +-- Apps / Tools    Browse apps
+ +-- Skills          Add skill
+ +-- Files           Upload files -> knowledge base
+ +-- Memory
+ +-- Instructions</pre>
+
+    <p class="body">zalo-agent hiện tại:</p>
+
+    <pre class="diagram">Account (Zalo credential)              Agent (bảng `agents`)
+ |                                      |
+ +-- allowlist                          +-- persona
+ +-- <span class="hl">disabledTools  &lt;-- TOOL Ở ĐÂY</span>      +-- modelProvider / modelName
+ +-- autoReact, typing...               +-- maxSteps
+ +-- agent_id  ----------------------&gt;  +-- reasoningEffort</pre>
+
+    <p class="body"><b>Đây là chênh lệch cấu trúc lớn nhất.</b> Xác nhận bằng code:</p>
+    <ul class="plain">
+      <li><code>disabled_tools</code> là cột của bảng <code>accounts</code> - <code>database.ts:249</code></li>
+      <li><code>agent_id</code> cũng ở <code>accounts</code> - <code>database.ts:74</code></li>
+      <li><code>agent-routes.ts</code> không hề có trường tools</li>
+    </ul>
+
+    <h3>Hệ quả thật</h3>
+    <ul class="plain">
+      <li>Đổi agent của một account <span class="mono">-&gt;</span> <b>toolset không đổi theo</b>.</li>
+      <li>Hai account dùng chung một agent <span class="mono">-&gt;</span> <b>hai toolset khác nhau</b>.</li>
+      <li>Không dựng được "Trợ lý bán hàng" (chỉ <code>web_search</code> + <code>create_excel_file</code>) và "Trợ lý kỹ thuật" (đủ tool) rồi gắn/tháo trên cùng một nick.</li>
+    </ul>
+
+    <div class="note bad">
+      <span class="ic">&#9888;</span>
+      <span>
+        Theo cả OpenAI lẫn Anthropic, <b>Agent = instructions + tools + model</b>. Tool là thuộc tính của
+        agent, không phải của kênh. Thiếu thêm: <b>Files/knowledge base</b> cho agent (không có RAG), và
+        <b>memory gắn theo agent</b> (memory hiện gắn theo account + subject).
+      </span>
+    </div>
+  </section>
+
+  <!-- ============ 8 ============ -->
+  <section class="phase" id="s8">
+    <div class="phase-head"><span class="phase-num">08</span><h2>Danh sách khoảng cách, xếp theo mức đáng làm</h2></div>
+    <p class="phase-sub">Chín khoảng cách, kèm lý do đáng làm và độ khó ước lượng.</p>
+
+    <div class="gap">
+      <div class="gap-head"><span class="gap-id">A</span><span class="gap-title">Trục agent không có quyền gì với tool</span><span class="pill no">Điều khiển thiếu một trục</span><span class="pill warn">Khó: trung bình</span></div>
+      <div class="gap-body">
+        <p>Chặn hẳn use case nhiều persona trên một nick.</p>
+        <p><b>Việc phải làm:</b> thêm cột <code>agents.allowed_tools</code> rồi <b>giao</b> với <code>accounts.disabled_tools</code> trong <code>listAvailableTools</code>, thêm UI.</p>
+        <div class="note bad" style="margin:0.8rem 0 0">
+          <span class="ic">&#9998;</span>
+          <span>
+            <b>Đã đính chính (02/08).</b> Mục này ban đầu viết "tool là thuộc tính của agent, không phải
+            của kênh" và đề xuất <b>chuyển</b> cột sang bảng <code>agents</code>. <b>Sai.</b> Đọc
+            <code>goclaw/internal/tools/policy.go:208</code> thì cả agent lẫn group (kênh) đều thu hẹp
+            toolset qua một chuỗi giao nhau; còn Hermes gắn tool <b>chỉ theo nền tảng</b>
+            (<code>platform_toolsets</code>) y như mình. Vấn đề thật: mình có nhiều agent nhưng trục
+            agent không có tí quyền nào. Cách sửa là <b>thêm một lớp giao</b>, không phải chuyển.
+            Chi tiết: <code>thiet-ke-man-hinh-tao-agent.html</code> mục 00.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="gap">
+      <div class="gap-head"><span class="gap-id">B</span><span class="gap-title">Không có loop guardrail</span><span class="pill no">Đốt tài nguyên</span><span class="pill warn">Khó: trung bình</span></div>
+      <div class="gap-body">
+        <p>Tool lỗi lặp đốt hết step, người dùng đợi vô ích. Có mẫu sẵn ở Hermes.</p>
+        <p><b>Việc phải làm:</b> module thuần (không side effect) + nối vào <code>onStepFinish</code>.</p>
+      </div>
+    </div>
+
+    <div class="gap">
+      <div class="gap-head"><span class="gap-id">C</span><span class="gap-title">Không có eval harness</span><span class="pill no">Bay mù</span><span class="pill warn">Khó: trung bình</span></div>
+      <div class="gap-body">
+        <p>92 test file đều là unit test hành vi code, không có case "input này thì mong đợi gọi tool nào / trả lời chứa gì". Sửa persona hay mô tả tool là bay mù, không biết có làm tệ đi không.</p>
+        <p><b>Việc phải làm:</b> bộ case + model giả (đã có seam <code>resolveModel</code> trong <code>AgentTurnParams</code>).</p>
+      </div>
+    </div>
+
+    <div class="gap">
+      <div class="gap-head"><span class="gap-id">D</span><span class="gap-title">Ngân sách theo TIN, không theo TOKEN</span><span class="pill warn">Đo nhầm đơn vị</span><span class="pill ok">Khó: nhỏ</span></div>
+      <div class="gap-body">
+        <p>20 tin dài + 8 step tool có thể tràn context mà không ai đo.</p>
+        <p><b>Việc phải làm:</b> đọc <code>usage</code> đã có sẵn trong <code>result</code>.</p>
+      </div>
+    </div>
+
+    <div class="gap">
+      <div class="gap-head"><span class="gap-id">E</span><span class="gap-title">Không có kiểm tra đầu ra</span><span class="pill warn">Guardrail hở</span><span class="pill ok">Khó: nhỏ</span></div>
+      <div class="gap-body">
+        <p>Text model đi thẳng xuống Zalo. Không chặn được rò system prompt hay markdown lọt lưới.</p>
+      </div>
+    </div>
+
+    <div class="gap">
+      <div class="gap-head"><span class="gap-id">F</span><span class="gap-title">Không có human-in-the-loop</span><span class="pill warn">12-factor #7</span><span class="pill warn">Khó: trung bình</span></div>
+      <div class="gap-body">
+        <p>Tool gửi file / vẽ ảnh / tag member không có bước xác nhận.</p>
+        <p><b>Việc phải làm:</b> cần đường chờ phản hồi (lượt agent hiện chạy một mạch tới xong).</p>
+      </div>
+    </div>
+
+    <div class="gap">
+      <div class="gap-head"><span class="gap-id">G</span><span class="gap-title">Không phân loại lỗi provider</span><span class="pill warn">Retry mù</span><span class="pill ok">Khó: nhỏ</span></div>
+      <div class="gap-body">
+        <p>Hết quota, context tràn, mạng chập đang bị xử lý như nhau.</p>
+        <p><b>Việc phải làm:</b> bảng ánh xạ. Không cần 1699 dòng như Hermes.</p>
+      </div>
+    </div>
+
+    <div class="gap">
+      <div class="gap-head"><span class="gap-id">H</span><span class="gap-title">Không có agent con</span><span class="pill warn">Có thể chưa cần</span><span class="pill no">Khó: lớn</span></div>
+      <div class="gap-body">
+        <p>Anthropic khuyến nghị cho research song song. Với bot cá nhân thì đây là "chưa cần" chứ chưa chắc là "thiếu".</p>
+      </div>
+    </div>
+
+    <div class="gap">
+      <div class="gap-head"><span class="gap-id">I</span><span class="gap-title">Agent không có knowledge base</span><span class="pill warn">Cần RAG</span><span class="pill no">Khó: lớn</span></div>
+      <div class="gap-body">
+        <p>Ảnh mẫu có "Upload files". Cần hạ tầng RAG (chunk, embed, truy hồi) - đợt riêng.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9 ============ -->
+  <section class="phase" id="s9">
+    <div class="phase-head"><span class="phase-num">09</span><h2>Chốt lại</h2></div>
+
+    <p class="body">
+      <b>Đã đúng chuẩn agent chưa?</b> Rồi, về bản chất vòng lặp. Đây là agent thật theo đúng định nghĩa
+      Anthropic: model tự điều khiển tiến trình và tool của nó, có điều kiện dừng, có phản hồi từ môi trường.
+    </p>
+    <p class="body">
+      <b>Đã production chưa?</b> Phần chịu lỗi và chống injection thì trên mức trung bình rõ rệt - lượt chốt
+      không cấp tool, nhận diện completion rỗng, fallback ảnh, trace sống qua throw, khử tên thẻ trong nội
+      dung web. Mấy thứ này thường chỉ xuất hiện sau khi đã bị đau thật ở production.
+    </p>
+
+    <h3>Ba việc còn thiếu, theo đúng thứ tự</h3>
+    <div class="prio">
+      <div class="prio-item">
+        <div class="prio-n"></div>
+        <div class="prio-txt"><b>Eval harness (C)</b>Không có thì mọi cải tiến sau này đều là đoán. Đây là nền cho hai việc còn lại.</div>
+      </div>
+      <div class="prio-item">
+        <div class="prio-n"></div>
+        <div class="prio-txt"><b>Loop guardrail (B)</b>Lỗ hổng đốt tài nguyên duy nhất còn hở trong vòng lặp.</div>
+      </div>
+      <div class="prio-item">
+        <div class="prio-n"></div>
+        <div class="prio-txt"><b>Ngân sách token thật (D)</b>Hiện đang đếm nhầm đơn vị. <code>usage</code> đã có sẵn, chỉ là chưa dùng.</div>
+      </div>
+    </div>
+
+    <div class="note bad" style="margin-top:1.5rem">
+      <span class="ic">&#9888;</span>
+      <span>
+        <b>Sai định nghĩa ở đâu?</b> Đúng một chỗ: <b>agent không sở hữu tool của chính nó</b> (A).
+        Nếu mục tiêu là "đúng cấu trúc chuẩn của một agent" thì sửa cái này trước.
+      </span>
+    </div>
+
+    <h3>Câu hỏi còn treo</h3>
+    <ol class="q-list">
+      <li>Mục tiêu ưu tiên là <b>đúng định nghĩa agent</b> (làm A trước) hay <b>an toàn vận hành</b> (làm C + B + D trước)?</li>
+      <li>Agent con (H) và knowledge base (I) có nằm trong phạm vi bot Zalo cá nhân không, hay để ngoài như đã loại "gửi tin hàng loạt"?</li>
+      <li>Human-in-the-loop (F) muốn hình dạng nào - bot hỏi lại trong chat, hay nút duyệt trên dashboard?</li>
+    </ol>
+  </section>
+
+</div>
+
+<footer>
+  Soạn từ code thật trong <code>src/agent/</code>, <code>src/conversation/</code>, <code>src/zalo/</code>,
+  <code>src/config/</code> tại <code>main @ c467731</code>, đối chiếu với
+  <code>D:\source-code\zalo-agent-references\hermes-agent\agent\</code>.
+  Nguồn lý thuyết:
+  <a href="https://www.anthropic.com/engineering/building-effective-agents">Anthropic - Building Effective Agents</a>,
+  <a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Anthropic - Effective Context Engineering</a>,
+  <a href="https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf">OpenAI - A Practical Guide to Building Agents</a>,
+  <a href="https://github.com/humanlayer/12-factor-agents">12-Factor Agents</a>.
+  Bản markdown đầy đủ: <code>research-01-dinh-nghia-agent-va-doi-chieu.md</code> cùng thư mục.
+</footer>
