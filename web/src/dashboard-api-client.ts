@@ -88,6 +88,12 @@ export const api = {
     request<{ ok: true }>("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) }),
   logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST" }),
   me: () => request<{ ok: true }>("/api/auth/me"),
+  // Đổi xong server cấp cookie mới ngay trong response - không phải đăng nhập lại
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: true }>("/api/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
 
   overview: () => request<OverviewData>("/api/overview"),
 
@@ -332,9 +338,12 @@ export type TuningDef = {
   | { kind: "number"; min: number; max: number; unit?: string }
   | { kind: "boolean" }
   | { kind: "enum"; options: string[] }
+  // Danh sách chọn dựng ở trình duyệt bằng Intl.supportedValuesOf("timeZone")
+  // thay vì gửi 418 tên zone qua JSON mỗi lần mở trang
+  | { kind: "timezone" }
 );
 
-export type TuningGroup = { id: string; title: string; hint: string };
+export type TuningGroup = { id: string; title: string; hint: string; navHint: string };
 
 export type TuningValue = { key: string; value: number | boolean | string; fromEnv: boolean };
 

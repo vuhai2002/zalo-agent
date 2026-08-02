@@ -9,6 +9,7 @@ import {
   IconBrain,
   IconChat,
   IconClose,
+  IconGear,
   IconGrid,
   IconLogout,
   IconSignal,
@@ -43,7 +44,9 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
       { to: "/trace", label: "Trace agent", icon: IconCpu },
       { to: "/logs", label: "Logs", icon: IconDatabase },
       { to: "/providers", label: "Providers", icon: IconSliders },
-      { to: "/tuning", label: "Cấu hình", icon: IconSliders },
+      // Bánh răng, KHÔNG dùng lại IconSliders của Providers - hai mục nằm sát
+      // nhau mà cùng một hình thì mắt phải đọc chữ mới phân biệt được
+      { to: "/tuning", label: "Cấu hình", icon: IconGear },
     ],
   },
 ];

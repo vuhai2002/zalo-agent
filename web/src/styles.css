@@ -3,11 +3,14 @@
 /*
  * Design tokens - trích từ GoClaw dashboard thật (card trắng border 0.67px
  * radius 12, nền off-white, không shadow) nhưng đổi hệ màu: neutral warm ->
- * cool, primary cam -> xanh Zalo #0068FF. Font Be Vietnam Pro (thiết kế cho
- * tiếng Việt, hợp brand Zalo).
+ * cool, primary cam -> xanh Zalo #0068FF.
+ *
+ * Font Plus Jakarta Sans: dáng tròn, hình học, chữ số cao đều - gọn và hiện
+ * đại hơn Be Vietnam Pro dùng trước đây ở dashboard này. Có đủ dấu tiếng Việt
+ * (Latin Extended) nên không phải lo chữ có dấu rơi về font hệ thống.
  */
 @theme {
-  --font-sans: "Be Vietnam Pro", system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
 
   --color-zalo-50: #eaf2ff;
   --color-zalo-100: #d6e6ff;
@@ -26,6 +29,10 @@
 body {
   @apply bg-canvas font-sans text-ink antialiased;
   font-size: 15px;
+  /* Plus Jakarta Sans ở weight 400 mảnh hơn Be Vietnam Pro dùng trước đây -
+     nâng nền lên 500 để chữ thường không bị mỏng, các chỗ đặt font-medium/
+     semibold tường minh vẫn đè lên được */
+  font-weight: 500;
 }
 
 /*

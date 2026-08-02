@@ -129,6 +129,12 @@ export const IconChevronDown = (p: IconProps) => (
   </svg>
 );
 
+export const IconChevronRight = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m9.5 6 6 6-6 6" />
+  </svg>
+);
+
 export const IconCheck = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="m5 12.5 4.5 4.5L19 7" />
@@ -174,5 +180,44 @@ export const IconWarning = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M10.3 3.9 2.6 17.2a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
     <path d="M12 9v4.5M12 17h.01" />
+  </svg>
+);
+
+export const IconGear = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="3.2" />
+    <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 8.8a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z" />
+  </svg>
+);
+
+export const IconGlobe = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M3.5 12h17" />
+    <ellipse cx="12" cy="12" rx="3.7" ry="8.5" />
+  </svg>
+);
+
+export const IconFileText = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M7 3.5h6.5L18 8v11.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" />
+    <path d="M13.5 3.5V8H18" />
+    <path d="M8.5 12.5h7M8.5 16h5" />
+  </svg>
+);
+
+export const IconImage = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+    <circle cx="8.7" cy="9.7" r="1.7" />
+    <path d="M4 17.5 9 12l3.5 3.5L17 11l3 3.5" />
+  </svg>
+);
+
+export const IconLock = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="5.5" y="10.5" width="13" height="9" rx="2" />
+    <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+    <circle cx="12" cy="15" r="1.2" fill="currentColor" stroke="none" />
   </svg>
 );
