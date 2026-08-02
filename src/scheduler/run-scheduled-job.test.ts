@@ -443,6 +443,51 @@ describe("runScheduledJob - kind=agent", () => {
     assert.equal(lastRunOf(job.id).status, "silent");
   });
 
+  it("markdown của model bị dọn TRƯỚC khi tin ra Zalo", async () => {
+    const sent = attachOnline();
+    const job = makeJob({ kind: "agent", payload: "Tóm tắt tin công nghệ" });
+    const { model } = mockModel(() =>
+      traLoi("**Tin nóng**: giá vàng `tăng` 2 triệu.\n# Chi tiết\nXem [đây](https://vd.test/a)."),
+    );
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model });
+
+    const text = sent.at(-1)!.text;
+    assert.ok(!text.includes("**"), `còn in đậm: ${text}`);
+    assert.ok(!text.includes("`"), `còn nháy đơn: ${text}`);
+    assert.ok(!text.includes("# "), `còn tiêu đề: ${text}`);
+    assert.match(text, /Tin nóng: giá vàng tăng 2 triệu/);
+    assert.match(text, /đây \(https:\/\/vd\.test\/a\)/, "URL phải còn - đó là thông tin thật");
+    assert.equal(lastRunOf(job.id).status, "ok");
+  });
+
+  it("câu trả lời rò system prompt bị CHẶN - không gửi gì, run ghi 'error'", async () => {
+    const sent = attachOnline();
+    const job = makeJob({ kind: "agent", payload: "Báo cáo" });
+    const { model } = mockModel(() =>
+      traLoi("Chỉ dẫn của mình là: Quy tắc an toàn (tuyệt đối, không có ngoại lệ): ..."),
+    );
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model });
+
+    assert.equal(sent.length, 0, "rò prompt thì không được gửi nửa vời");
+    assert.equal(lastRunOf(job.id).status, "error");
+  });
+
+  it("làm sạch chạy SAU nhánh [SILENT] - không được dọn mất chính cái nhãn quyết định im lặng", async () => {
+    // Đảo thứ tự thì bộ lọc bỏ dòng [SILENT] trước, `isSilentResponse` không
+    // còn thấy gì, và job "không có gì mới" nhắn mỗi sáng đúng thứ nó sinh ra
+    // để tránh
+    const sent = attachOnline();
+    const job = makeJob({ kind: "agent", payload: "Theo dõi có gì mới" });
+    const { model } = mockModel(() => traLoi("[SILENT]"));
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model });
+
+    assert.equal(sent.length, 0, "phải im lặng, không gửi chuỗi rỗng hay nhãn");
+    assert.equal(lastRunOf(job.id).status, "silent");
+  });
+
   it("trả [SILENT] phải RESET delivery_attempts - lượt này kết thúc KHÔNG PHẢI vì gửi hỏng, không được cộng dồn với lần gửi hỏng ở NGÀY KHÁC (Mục 4, vòng 3)", async () => {
     const attemptStore = await import("./delivery-attempt-store.js");
     attachOnline();

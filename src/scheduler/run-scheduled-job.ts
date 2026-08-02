@@ -27,6 +27,7 @@ import { buildSyntheticMessage, withLateLabel } from "./scheduled-job-prompt.js"
 import { blockedByGuard, sendAndConclude } from "./scheduled-job-send.js";
 import type { ScheduledJob } from "./scheduled-job-store.js";
 import { isSilentResponse } from "./silent-sentinel.js";
+import { lamSachTraLoi } from "../zalo/sanitize-reply-text.js";
 
 const log = createLogger("run-scheduled-job");
 
@@ -144,9 +145,32 @@ async function runAgentJob(
         return;
       }
 
+      // Làm sạch SAU nhánh [SILENT] ở trên: chạy trước thì bộ lọc bỏ mất chính
+      // cái nhãn mà nhánh đó dựa vào để quyết im lặng, và job "không có gì mới"
+      // sẽ nhắn mỗi sáng đúng thứ nó sinh ra để tránh.
+      const sach = lamSachTraLoi(text);
+      if (sach.chan) {
+        // Lượt theo lịch KHÔNG nhắn câu lỗi (job hỏng thì im - đúng nếp nhánh
+        // catch bên dưới), nhưng phải chốt run 'error' để dashboard thấy
+        log.error({ jobId: job.id, dauText: text.slice(0, 200) }, "Chặn câu trả lời rò system prompt");
+        conclude(job, runId, { status: "error", turnId, detail: "Câu trả lời rò system prompt - đã chặn." });
+        return;
+      }
+      if (sach.daSua.length > 0) {
+        log.warn({ jobId: job.id, daSua: sach.daSua }, "Đã làm sạch câu trả lời của job trước khi gửi");
+      }
+      if (!sach.text.trim()) {
+        conclude(job, runId, { status: "silent", turnId, detail: "Không còn nội dung sau khi làm sạch." });
+        return;
+      }
+
       if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor, turnId)) return;
 
-      const finalText = options.late ? withLateLabel(text, options.scheduledFor, timeZone) : text;
+      // Nhãn "nhắc trễ" ghép SAU khi làm sạch: nó là chữ của mình, không phải
+      // của model, nên không có gì để lọc và cũng không được để lọt qua bộ lọc
+      const finalText = options.late
+        ? withLateLabel(sach.text, options.scheduledFor, timeZone)
+        : sach.text;
       await sendAndConclude(job, target, runId, timeZone, finalText, options.scheduledFor, turnId);
     } catch (err) {
       // Lượt ném lỗi (provider chết, timeout...) vẫn phải chốt token đã tốn +

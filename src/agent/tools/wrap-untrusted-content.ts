@@ -19,7 +19,9 @@
  * prompt injection thành hành động thật.
  */
 
-const THE = "noi_dung_ngoai";
+// Tên thẻ dùng chung với bộ canh rò prompt ở `zalo/sanitize-reply-text.ts` -
+// hai bên phải khớp từng ký tự, nên chỉ có MỘT chỗ khai
+import { THE_NOI_DUNG_NGOAI as THE } from "../prompt-leak-markers.js";
 
 /** Bắt cả thẻ mở lẫn thẻ đóng, không phân biệt hoa thường */
 const TEN_THE_RE = new RegExp(THE, "gi");

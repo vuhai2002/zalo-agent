@@ -33,9 +33,9 @@ theo 7 khoảng cách A-G trong `reports/audit-agent-chuan-production.html`.
 | 01 | [Tách trang Agent + tạo nhanh](phase-01-tach-trang-agent-va-tao-nhanh.md) | nền UI | Xong (1130f6c) |
 | 02 | [Công cụ theo agent](phase-02-cong-cu-theo-agent.md) | A | Xong (93fa8c4) |
 | 03 | [Ngân sách token thật](phase-03-ngan-sach-token-that.md) | D | Xong (0b6718f + 849ad43) |
-| 04 | [Chặn vòng lặp tool](phase-04-chan-vong-lap-tool.md) | B | Chưa làm |
-| 05 | [Phân loại lỗi provider](phase-05-phan-loai-loi-provider.md) | G | Chưa làm |
-| 06 | [Kiểm tra đầu ra](phase-06-kiem-tra-dau-ra.md) | E | Chưa làm |
+| 04 | [Chặn vòng lặp tool](phase-04-chan-vong-lap-tool.md) | B | Xong (83595e8 + 2a401ce) |
+| 05 | [Phân loại lỗi provider](phase-05-phan-loai-loi-provider.md) | G | Xong (4a1a825) |
+| 06 | [Kiểm tra đầu ra](phase-06-kiem-tra-dau-ra.md) | E | Xong |
 | 07 | [Bộ eval model thật](phase-07-bo-eval-model-that.md) | C | Chưa làm |
 | 08 | [Luật hỏi lại](phase-08-luat-hoi-lai.md) | F | Chưa làm |
 

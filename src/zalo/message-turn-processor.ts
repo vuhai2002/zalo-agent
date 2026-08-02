@@ -1,5 +1,5 @@
 import type { API } from "zca-js";
-import { runAgentTurn } from "../agent/agent-loop.js";
+import { runAgentTurn, type AgentTurnParams } from "../agent/agent-loop.js";
 import { phanLoaiLoiProvider } from "../agent/provider-error-classifier.js";
 import type { StepTrace } from "../agent/agent-step-trace.js";
 import type { AccountConfig } from "../config/account-store.js";
@@ -12,7 +12,8 @@ import { createLogger } from "../shared/logger.js";
 import { runInTurnLogContext } from "../shared/turn-log-context.js";
 import { sendSeenReceipt } from "./message-receipts.js";
 import { toZaloReaction } from "./reaction-icons.js";
-import { notifyTechnicalError, sendReplyInParts, type ReplyTarget } from "./send-reply-in-parts.js";
+import { deliverChatReply } from "./deliver-chat-reply.js";
+import { notifyTechnicalError, type ReplyTarget } from "./send-reply-in-parts.js";
 import { startTypingIndicator } from "./typing-indicator.js";
 import { describeForHistory, type ParsedMessage } from "./zalo-message-parser.js";
 
@@ -49,11 +50,16 @@ export async function processBatch(
   config: AccountConfig,
   api: API,
   batch: ParsedMessage[],
+  /**
+   * Chỉ để TEST tiêm model giả - đúng seam `run-scheduled-job.ts` đang dùng.
+   * Chạy thật thì bỏ trống và `runAgentTurn` tự phân giải như cũ.
+   */
+  options: { resolveModel?: AgentTurnParams["resolveModel"] } = {},
 ): Promise<void> {
   const latest = batch[batch.length - 1]!;
   const turnId = openAgentTurn(config.id, latest.threadId);
   return runInTurnLogContext({ accountId: config.id, threadId: latest.threadId, turnId }, () =>
-    xuLyLuot(config, api, batch, turnId),
+    xuLyLuot(config, api, batch, turnId, options),
   );
 }
 
@@ -62,6 +68,7 @@ async function xuLyLuot(
   api: API,
   batch: ParsedMessage[],
   turnId: number,
+  options: { resolveModel?: AgentTurnParams["resolveModel"] },
 ): Promise<void> {
   const latest = batch[batch.length - 1]!;
   const threadKey = `${config.id}:${latest.threadId}`;
@@ -125,7 +132,13 @@ async function xuLyLuot(
 
     // Chạy agent TRƯỚC khi ghi history: runAgentTurn tự đọc history cũ và tự
     // ghép batch hiện tại vào input - ghi trước sẽ khiến tin mới lặp 2 lần.
-    const result = await runAgentTurn({ api, account: config, batch, trace });
+    const result = await runAgentTurn({
+      api,
+      account: config,
+      batch,
+      trace,
+      resolveModel: options.resolveModel,
+    });
     finishAgentTurn(turnId, result.usage);
     // Trace lưu ở đây chứ không trong agent-loop: chỗ này vốn đã là nơi chốt
     // usage của lượt, gom một mối cho dễ tìm.
@@ -138,22 +151,12 @@ async function xuLyLuot(
       return;
     }
 
-    // Tin dài bị Zalo chặn (error_code 118) nên phải cắt thành nhiều đoạn
-    const reply = await sendReplyInParts(replyTarget, result.text);
-
-    // Chỉ ghi phần ĐÃ gửi được: history phải khớp với cái người dùng nhìn thấy
-    if (reply.deliveredText) {
-      appendMessage(config.id, latest.threadId, {
-        role: "assistant",
-        content: reply.deliveredText,
-      });
-    }
-
-    // Gửi dở giữa chừng cũng phải nói, đừng để người ta ngồi đợi nốt phần sau
-    if (reply.error) {
-      await notifyTechnicalError(replyTarget);
-      return;
-    }
+    // Làm sạch + gửi + ghi history gói trong `deliverChatReply`. Lớp làm sạch
+    // đặt ở tầng caller chứ không trong `sendReplyInParts`: hàm đó còn phục vụ
+    // scheduler, mà lượt theo lịch có luật `[SILENT]` riêng - lọc chung sẽ phá
+    // logic đó.
+    const giao = await deliverChatReply(replyTarget, config.id, latest.threadId, result.text);
+    if (giao.hong) return;
 
     // Memory lớp 2: gộp tin cũ vào summary - fire-and-forget sau khi đã trả lời,
     // maybeSummarizeThread tự nuốt lỗi nên không cần catch thêm
