@@ -25,8 +25,27 @@ export const THE_NOI_DUNG_NGOAI = "noi_dung_ngoai";
 /** Tiêu đề mục an toàn trong `BASE_PERSONA` */
 export const TIEU_DE_QUY_TAC_AN_TOAN = "Quy tắc an toàn (tuyệt đối, không có ngoại lệ):";
 
-/** Mở đầu mục liệt kê tool, do `persona-prompt.ts` sinh theo từng lượt */
+/**
+ * Mở đầu mục liệt kê tool, do `persona-prompt.ts` sinh theo từng lượt.
+ *
+ * CHỈ là mảnh để ghép, KHÔNG dùng làm dấu hiệu canh rò - xem `DAU_HIEU_RO_PROMPT`.
+ */
 export const TIEU_DE_KHA_NANG = "Khả năng của bạn lúc này";
+
+/**
+ * Hai câu ĐẦY ĐỦ mà `persona-prompt.ts` thật sự sinh ra từ `TIEU_DE_KHA_NANG`.
+ *
+ * Phải canh bằng câu đầy đủ chứ không phải riêng `TIEU_DE_KHA_NANG`: chuỗi ngắn
+ * đó là tiếng Việt thường ngày, và persona chỉ xưng tên KHI biết tên nên bot vẫn
+ * gọi "bạn" rất nhiều. "Khả năng của bạn lúc này đã đủ để thi B1 rồi ạ" là câu
+ * trả lời hoàn toàn hợp lệ mà lại trúng dấu hiệu - hậu quả nặng và không tự
+ * khỏi: người dùng mất HẲN câu trả lời, hỏi lại vẫn y hệt vì model sinh lại đúng
+ * cách diễn đạt đó.
+ */
+const KHA_NANG_DAY_DU = [
+  `${TIEU_DE_KHA_NANG} (đúng những công cụ đang bật`,
+  `${TIEU_DE_KHA_NANG}: KHÔNG có công cụ nào`,
+];
 
 /**
  * Bộ dấu hiệu để KẾT LUẬN câu trả lời đã rò system prompt.
@@ -39,5 +58,5 @@ export const TIEU_DE_KHA_NANG = "Khả năng của bạn lúc này";
 export const DAU_HIEU_RO_PROMPT: readonly string[] = [
   `<${THE_NOI_DUNG_NGOAI}`,
   TIEU_DE_QUY_TAC_AN_TOAN,
-  TIEU_DE_KHA_NANG,
+  ...KHA_NANG_DAY_DU,
 ];

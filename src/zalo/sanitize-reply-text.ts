@@ -1,5 +1,5 @@
 import { DAU_HIEU_RO_PROMPT } from "../agent/prompt-leak-markers.js";
-import { isSilentResponse } from "../scheduler/silent-sentinel.js";
+import { laDongSentinel } from "../scheduler/silent-sentinel.js";
 
 /**
  * Lớp làm sạch CUỐI CÙNG trước khi chữ của model xuống Zalo - mảnh còn thiếu
@@ -20,6 +20,17 @@ import { isSilentResponse } from "../scheduler/silent-sentinel.js";
  * Cũng bỏ qua `> trích dẫn` và danh sách đánh số - hai thứ đó đọc vẫn tự nhiên
  * trên Zalo.
  *
+ * HAI LUẬT SỐNG CÒN của mọi biểu thức trong file này:
+ *
+ *   1. KHÔNG ĐƯỢC NUỐT CHỮ. Hàm này chạm vào MỌI câu trả lời của bot, nên một
+ *      biểu thức ăn tham làm mất nội dung còn tệ hơn nhiều so với việc để lọt
+ *      vài ký tự định dạng. Vòng rà soát đầu đã bắt được hai ca nuốt trắng.
+ *   2. PHẢI TUYẾN TÍNH. Bot đọc tin của người lạ, mà một tin soạn khéo khiến
+ *      model nhại lại chuỗi độc là đủ để biểu thức bậc hai treo cả tiến trình -
+ *      process này một luồng phục vụ mọi account, vòng tick scheduler lẫn HTTP
+ *      dashboard. Nên MỖI biểu thức chỉ có MỘT lượng từ mở trên cùng một lớp ký
+ *      tự; phần kiểm thêm làm bằng code, không bằng backtrack.
+ *
  * Module THUẦN: không env, không logger, không DB. `daSua` trả ra ngoài để
  * caller ghi log - sửa chữ của model rồi im lặng là tự bịt mắt mình lúc chẩn
  * đoán.
@@ -35,17 +46,51 @@ export type KetQuaLamSach = {
 };
 
 /**
- * KHỐI code trước INLINE code.
+ * Ký tự thay chỗ cho khối code trong lúc xử lý.
  *
- * Làm ngược lại thì ba dấu nháy của khối bị bộ inline ăn mất hai cái đầu, phần
- * còn lại thành nháy lẻ và nội dung bên trong khối bị cắt loạn.
- *
- * Giữ NỘI DUNG, bỏ hàng rào và nhãn ngôn ngữ (```js).
+ * Dùng ký tự NUL: model không sinh ra nó, và không biểu thức nào trong file này
+ * đụng tới. Nhờ vậy nội dung bên trong khối code đi qua các bước markdown mà
+ * không bị đụng - trước đây `boKhoiCode` gỡ hàng rào NGAY nên `# Tính tổng`
+ * trong đoạn Python bị `boTieuDe` cắt mất dấu thăng và code trả về sai cú pháp.
  */
-function boKhoiCode(text: string, daSua: string[]): string {
-  const sau = text.replace(/```[^\n`]*\n?([\s\S]*?)```/g, (_, than: string) => than.trim());
-  if (sau !== text) daSua.push("khối code");
-  return sau;
+const MOC_KHOI = "\u0000";
+
+type KhoiDaTach = { than: string; khoi: string[] };
+
+/**
+ * Tách khối code ra khỏi thân, thay bằng mốc.
+ *
+ * Hai dạng, tách hẳn hai biểu thức:
+ *
+ *   - Nhiều dòng: nhãn ngôn ngữ (```` ```js ````) chỉ hợp lệ khi có xuống dòng
+ *     NGAY SAU nó. Bắt buộc `\n` là vế chữa lỗi nuốt trắng: bản đầu để
+ *     `[^\n`]*\n?` nên với fence cùng dòng, phần đó ăn luôn cả thân, nhóm bắt
+ *     rỗng, và ``Chạy ```pnpm dev``` là xong`` ra thành `Chạy  là xong`.
+ *   - Cùng dòng: giữ nguyên nội dung, chỉ bỏ hàng rào.
+ *
+ * Bắt buộc `\n` cũng khử luôn nhánh bậc hai: `[^\n`]*` không vượt được dòng đầu
+ * nên không còn đường backtrack chồng lên `[\s\S]*?`.
+ */
+function tachKhoiCode(text: string, daSua: string[]): KhoiDaTach {
+  const khoi: string[] = [];
+  const giu = (than: string): string => {
+    khoi.push(than);
+    return `${MOC_KHOI}${khoi.length - 1}${MOC_KHOI}`;
+  };
+
+  let than = text.replace(/```[ \t]*[A-Za-z0-9+#._-]*[ \t]*\r?\n([\s\S]*?)```/g, (_, ben: string) =>
+    giu(ben.replace(/\s+$/, "")),
+  );
+  than = than.replace(/```([^`\n]+)```/g, (_, ben: string) => giu(ben));
+
+  if (khoi.length > 0) daSua.push("khối code");
+  return { than, khoi };
+}
+
+/** Trả nội dung khối code về đúng chỗ, sau khi mọi bước markdown đã chạy xong */
+function traKhoiCodeVe(text: string, khoi: string[]): string {
+  if (khoi.length === 0) return text;
+  return text.replace(new RegExp(`${MOC_KHOI}(\\d+)${MOC_KHOI}`, "g"), (nguyenVan, i: string) => khoi[Number(i)] ?? nguyenVan);
 }
 
 function boInlineCode(text: string, daSua: string[]): string {
@@ -65,11 +110,47 @@ function boTieuDe(text: string, daSua: string[]): string {
  * `[chữ](url)` -> `chữ (url)`. Giữ URL vì đó là thông tin THẬT người dùng cần -
  * bỏ luôn là làm mất nội dung, không phải làm sạch.
  *
+ * MỘT lượng từ cho phần trong ngoặc, tách bằng code. Bản đầu dùng
+ * `([^)\s]+)[^)]*` - vừa bậc hai (hai lượng từ chồng miền), vừa VỨT TRẮNG phần
+ * đuôi vì `[^)]*` không nằm trong nhóm nào.
+ *
+ * ĐÒI phần trong ngoặc TRÔNG NHƯ một địa chỉ. Cú pháp `[...](...)` xuất hiện
+ * đầy trong văn bản thường mà không hề là liên kết, và đổi nó đi là làm hỏng
+ * chữ thật:
+ *
+ *   `Mã lô [A12](hàng nhập) đã về kho`  -> phải giữ NGUYÊN
+ *   `Gọi handlers[0](event) là được`    -> phải giữ NGUYÊN
+ *
+ * Cái giá: liên kết dùng đường dẫn tương đối (`[tài liệu](docs/a.md)`) không
+ * được đổi. Chấp nhận - để nguyên thì vẫn đọc được, còn đổi nhầm chữ thật thì
+ * không cứu lại được.
+ *
  * `![alt](url)` (ảnh) cũng vào đây, dấu `!` bị nuốt cùng.
  */
+const DIA_CHI_RE = /^(https?:\/\/|www\.|mailto:|tel:|ftp:\/\/|\/)/i;
+
+/**
+ * KẸP TRẦN cho hai lượng từ là bắt buộc, không phải cho gọn.
+ *
+ * `\[([^\]\n]*)\]` không giới hạn thì mỗi dấu `[` mở đầu một lượt quét tới cuối
+ * dòng rồi thất bại - O(n^2) trên chuỗi toàn dấu mở. Đo thật: 51.200 dấu `[`
+ * mất 1,26 giây, 102.400 mất 5,8 giây (đủ treo cả tiến trình một luồng này).
+ * Kẹp trần biến nó thành O(n * trần).
+ *
+ * Con số chọn rộng rãi so với thực tế: chữ hiển thị của liên kết dài quá 200 ký
+ * tự thì không còn là nhãn, và URL dài quá 500 thì cắt bớt cũng chẳng ai bấm.
+ * Vượt trần thì chuỗi giữ NGUYÊN - không đổi còn hơn đổi sai.
+ */
+const LIEN_KET_RE = /!?\[([^\]\n]{0,200})\]\(([^)\n]{0,500})\)/g;
+
 function boLienKet(text: string, daSua: string[]): string {
-  const sau = text.replace(/!?\[([^\]\n]*)\]\(([^)\s]+)[^)]*\)/g, (_, chu: string, url: string) =>
-    chu.trim() ? `${chu} (${url})` : url,
+  const sau = text.replace(
+    LIEN_KET_RE,
+    (nguyenVan, chu: string, trong: string) => {
+      const noi = trong.trim();
+      if (!DIA_CHI_RE.test(noi)) return nguyenVan;
+      return chu.trim() ? `${chu} (${noi})` : noi;
+    },
   );
   if (sau !== text) daSua.push("liên kết");
   return sau;
@@ -78,9 +159,13 @@ function boLienKet(text: string, daSua: string[]): string {
 /**
  * `**đậm**` -> `đậm`. Chạy TRƯỚC phần nghiêng, nếu không thì bộ nghiêng ăn một
  * dấu sao mỗi bên và để lại hai dấu lẻ.
+ *
+ * Vế `(?<![\w*])` ở dấu MỞ là bắt buộc, cùng lý do với phần nghiêng: thiếu nó
+ * thì `2**3**2 = 512` (luỹ thừa Python) ra `232`. Không thêm vế tương ứng ở dấu
+ * ĐÓNG để `**Giá**là 45k` vẫn dọn được.
  */
 function boDam(text: string, daSua: string[]): string {
-  const sau = text.replace(/\*\*(?!\s)([^*\n]+?)(?<!\s)\*\*/g, "$1");
+  const sau = text.replace(/(?<![\w*])\*\*(?!\s)([^*\n]+?)(?<!\s)\*\*/g, "$1");
   if (sau !== text) daSua.push("in đậm");
   return sau;
 }
@@ -115,33 +200,42 @@ function boNghieng(text: string, daSua: string[]): string {
  * phải đoán đâu là tiêu đề đâu là dữ liệu, đúng kiểu "làm quá" mà phase này
  * tránh.
  *
- * An toàn: chỉ khớp dòng CHỈ gồm gạch đứng, gạch ngang, hai chấm và khoảng
- * trắng, và phải có ít nhất hai gạch ngang liền nhau. Không câu tiếng Việt nào
- * có hình dạng đó.
+ * MỘT lượng từ, điều kiện "có ít nhất hai gạch ngang liền nhau" kiểm bằng code.
+ * Bản đầu viết `[ \t:|-]*--[ \t:|-]*` - hai lượng từ trên lớp ký tự CÓ CHỨA `-`
+ * kẹp giữa là `--`, cho O(n^2): đo thật 25.600 dấu gạch mất 1,4 giây, và model
+ * hoàn toàn nhại lại được chuỗi đó nếu người lạ soạn tin bảo nó nhại.
  */
 function boDongPhanCachBang(text: string, daSua: string[]): string {
-  const sau = text.replace(/^[ \t]*\|[ \t:|-]*--[ \t:|-]*\|?[ \t]*$\n?/gm, "");
+  const sau = text.replace(/^[ \t]*\|[-:| \t]*$\r?\n?/gm, (dong) => (dong.includes("--") ? "" : dong));
   if (sau !== text) daSua.push("dòng kẻ bảng");
   return sau;
 }
 
 /**
- * Bỏ dòng `[SILENT]` lọt vào lượt chat THƯỜNG.
+ * Bỏ dòng CHỈ chứa nhãn `[SILENT]` lọt vào lượt chat THƯỜNG.
  *
- * Sentinel chỉ có nghĩa ở lượt theo lịch; lọt xuống Zalo là người dùng nhận một
- * nhãn nội bộ không hiểu gì. Dùng lại `isSilentResponse` để nhận biết thay vì
- * viết biểu thức thứ hai - hai bộ nhận dạng cho cùng một token là sớm muộn cũng
- * lệch nhau.
+ * Dùng `laDongSentinel` (cấp DÒNG), KHÔNG dùng `isSilentResponse` (cấp CẢ CÂU
+ * TRẢ LỜI). Bản đầu dùng nhầm hàm cấp câu để lọc từng dòng, mà hàm đó có luật
+ * "mở đầu bằng [SILENT] thì nuốt cả câu" - nên "[SILENT] là nhãn nội bộ, dùng
+ * để bot im lặng ạ" (câu trả lời hợp lệ khi người dùng hỏi về chính cái nhãn)
+ * bị vứt sạch, người nhắn ngồi im không nhận gì.
  */
 function boSentinel(text: string, daSua: string[]): string {
-  if (!isSilentResponse(text)) return text;
-  const giuLai = text
-    .split(/\r?\n/)
-    .filter((dong) => !isSilentResponse(dong))
-    .join("\n")
-    .trim();
+  if (!text.includes("[")) return text;
+  const dong = text.split(/\r?\n/);
+
+  // Lọc MỘT lần rồi suy ra "có đụng gì không" từ độ dài, thay vì gọi vị từ ở hai
+  // chỗ (`some` rồi `filter`). Hai lời gọi là hai chỗ phải sửa cùng lúc, mà đổi
+  // lệch một cái thì hành vi phân kỳ âm thầm.
+  const giu = dong.filter((d) => !laDongSentinel(d));
+  if (giu.length === dong.length) return text;
   daSua.push("nhãn [SILENT]");
-  return giuLai;
+  // Bỏ dòng RỖNG ở hai đầu (nhãn đi kèm một dòng trắng là chuyện thường), chứ
+  // KHÔNG `.trim()` cả chuỗi - trim cả chuỗi thì ăn luôn khoảng trắng đầu dòng
+  // nội dung, mà mọi bước khác trong file này đều không đụng tới khoảng trắng.
+  while (giu.length > 0 && giu[0]!.trim() === "") giu.shift();
+  while (giu.length > 0 && giu[giu.length - 1]!.trim() === "") giu.pop();
+  return giu.join("\n");
 }
 
 /** Câu trả lời có mẩu chữ đặc trưng của system prompt không */
@@ -162,8 +256,12 @@ export function lamSachTraLoi(text: string): KetQuaLamSach {
   }
 
   const daSua: string[] = [];
-  let ra = boKhoiCode(text, daSua);
-  ra = boInlineCode(ra, daSua);
+
+  // Khối code ra khỏi thân TRƯỚC mọi bước khác, trả về SAU cùng - nội dung bên
+  // trong khối là code, không phải văn bản để dọn định dạng
+  const { than, khoi } = tachKhoiCode(text, daSua);
+
+  let ra = boInlineCode(than, daSua);
   ra = boLienKet(ra, daSua);
   ra = boTieuDe(ra, daSua);
   ra = boDam(ra, daSua);
@@ -171,5 +269,5 @@ export function lamSachTraLoi(text: string): KetQuaLamSach {
   ra = boDongPhanCachBang(ra, daSua);
   ra = boSentinel(ra, daSua);
 
-  return { text: ra, daSua, chan: false };
+  return { text: traKhoiCodeVe(ra, khoi), daSua, chan: false };
 }

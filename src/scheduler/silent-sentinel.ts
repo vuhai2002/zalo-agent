@@ -22,6 +22,19 @@ function isExactToken(line: string): boolean {
 }
 
 /**
+ * Dòng này có phải CHỈ là nhãn sentinel không.
+ *
+ * Khác hẳn `isSilentResponse` bên dưới về CẤP ĐỘ: hàm kia phán xét CẢ câu trả
+ * lời (nên có luật "mở đầu bằng [SILENT] thì nuốt cả câu"), hàm này chỉ nhìn
+ * MỘT dòng. Dùng nhầm cấp là mất trắng nội dung: đem `isSilentResponse` đi lọc
+ * từng dòng thì "[SILENT] là nhãn nội bộ, dùng để bot im lặng ạ" - một câu trả
+ * lời hợp lệ khi người dùng hỏi về chính cái nhãn - bị vứt sạch.
+ */
+export function laDongSentinel(line: string): boolean {
+  return isExactToken(line);
+}
+
+/**
  * Có nên NUỐT (không gửi) câu trả lời này không. Nhận khi:
  * - Toàn bộ câu trả lời (sau trim) chỉ là "[SILENT]"
  * - "[SILENT]" đứng RIÊNG ở dòng đầu hoặc dòng cuối (dòng khác có nội dung vẫn được -

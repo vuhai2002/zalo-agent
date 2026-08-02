@@ -443,6 +443,17 @@ describe("runScheduledJob - kind=agent", () => {
     assert.equal(lastRunOf(job.id).status, "silent");
   });
 
+  it("payload của job kind='message' cũng được dọn markdown", async () => {
+    // `payload` là chữ MODEL viết lúc đặt lịch qua tool schedule_task, gửi
+    // nguyên văn lúc tới giờ - trước đây nó đi vòng qua lớp làm sạch hoàn toàn
+    const sent = attachOnline();
+    const job = makeJob({ kind: "message", payload: "**Nhắc**: họp lúc `9h` nhé" });
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt! });
+
+    assert.equal(sent.at(-1)!.text, "Nhắc: họp lúc 9h nhé");
+  });
+
   it("markdown của model bị dọn TRƯỚC khi tin ra Zalo", async () => {
     const sent = attachOnline();
     const job = makeJob({ kind: "agent", payload: "Tóm tắt tin công nghệ" });
@@ -477,10 +488,14 @@ describe("runScheduledJob - kind=agent", () => {
   it("làm sạch chạy SAU nhánh [SILENT] - không được dọn mất chính cái nhãn quyết định im lặng", async () => {
     // Đảo thứ tự thì bộ lọc bỏ dòng [SILENT] trước, `isSilentResponse` không
     // còn thấy gì, và job "không có gì mới" nhắn mỗi sáng đúng thứ nó sinh ra
-    // để tránh
+    // để tránh.
+    //
+    // Đầu vào PHẢI có nội dung kèm nhãn. Bản đầu dùng "[SILENT]" trơ trọi nên
+    // ca này RỖNG: làm sạch trước cho chuỗi rỗng, rơi vào nhánh `!text` và vẫn
+    // kết luận silent - đảo thứ tự mà test vẫn xanh (đã đo).
     const sent = attachOnline();
     const job = makeJob({ kind: "agent", payload: "Theo dõi có gì mới" });
-    const { model } = mockModel(() => traLoi("[SILENT]"));
+    const { model } = mockModel(() => traLoi("Chưa có tin gì mới.\n[SILENT]"));
 
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model });
 

@@ -97,7 +97,21 @@ async function runMessageJob(
 ): Promise<void> {
   if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor)) return;
 
-  const text = options.late ? withLateLabel(job.payload, options.scheduledFor, timeZone) : job.payload;
+  // `payload` là chữ MODEL viết lúc đặt lịch (qua tool `schedule_task`), gửi
+  // nguyên văn lúc tới giờ - nên nó cũng phải qua lớp làm sạch, không thì
+  // markdown lọt xuống Zalo y như trước khi có lớp này.
+  //
+  // KHÔNG xét nhánh `chan` ở đây: payload đã nằm trong DB từ lúc đặt lịch, chặn
+  // lúc này là giết một lịch hẹn đã hứa mà người dùng không hiểu vì sao. Rò
+  // prompt trong payload cũng chỉ là chữ tĩnh, không phải model đang tự khai
+  // system prompt của lượt này.
+  const sach = lamSachTraLoi(job.payload);
+  const noiDung = sach.chan ? job.payload : sach.text || job.payload;
+  if (sach.daSua.length > 0) {
+    log.warn({ jobId: job.id, daSua: sach.daSua }, "Đã làm sạch payload lịch hẹn trước khi gửi");
+  }
+
+  const text = options.late ? withLateLabel(noiDung, options.scheduledFor, timeZone) : noiDung;
   await sendAndConclude(job, target, runId, timeZone, text, options.scheduledFor);
 }
 
@@ -151,7 +165,16 @@ async function runAgentJob(
       const sach = lamSachTraLoi(text);
       if (sach.chan) {
         // Lượt theo lịch KHÔNG nhắn câu lỗi (job hỏng thì im - đúng nếp nhánh
-        // catch bên dưới), nhưng phải chốt run 'error' để dashboard thấy
+        // catch bên dưới), nhưng phải chốt run 'error' để dashboard thấy.
+        //
+        // CỐ Ý dùng `conclude` (có `markRun`) chứ không `concludeBlockedNotRun`,
+        // dù việc này tiêu suất chạy của job `once`. Lý do: rò prompt KHÔNG phải
+        // sự cố thoáng qua như account rớt phiên - nó do chính payload của job
+        // dẫn model tới đó, nên lượt sau gần như chắc chắn rò lại.
+        // `concludeBlockedNotRun` phục hồi `next_run_at` về đúng mốc cũ, mà mốc
+        // cũ thì đã quá hạn - job `once` sẽ due lại ngay tick sau và quay vòng
+        // vô tận. Thà chốt lỗi một lần rồi để người dùng nhìn thấy trên dashboard
+        // mà sửa payload.
         log.error({ jobId: job.id, dauText: text.slice(0, 200) }, "Chặn câu trả lời rò system prompt");
         conclude(job, runId, { status: "error", turnId, detail: "Câu trả lời rò system prompt - đã chặn." });
         return;

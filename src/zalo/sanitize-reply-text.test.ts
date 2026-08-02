@@ -33,12 +33,36 @@ describe("lamSachTraLoi - bỏ markdown, GIỮ nội dung", () => {
     assert.match(ra, /Xong rồi/);
   });
 
-  it("khối code chứa dấu nháy đơn bên trong không bị cắt loạn", () => {
-    // Đây là lý do phải xử KHỐI trước INLINE: làm ngược lại thì cặp nháy đơn
-    // bên trong khối bị bộ inline ăn trước, phần còn lại thành nháy lẻ
-    const ra = sach("```\nvar x = `template`;\n```");
-    assert.match(ra, /var x = `template`;|var x = template;/);
+  it("khối code viết trên MỘT dòng giữ nguyên nội dung", () => {
+    // Vòng rà soát bắt được: bản đầu để `[^\n`]*\n?` ăn nhãn ngôn ngữ, nên với
+    // fence cùng dòng nó ăn luôn cả thân và câu ra thành "Chạy  là xong"
+    assert.equal(sach("Chạy ```pnpm dev``` là xong"), "Chạy pnpm dev là xong");
+    assert.equal(sach("Dùng ```const a = 1``` nhé anh"), "Dùng const a = 1 nhé anh");
+  });
+
+  it("nội dung TRONG khối code KHÔNG bị các bước markdown ăn tiếp", () => {
+    // Bản đầu gỡ hàng rào NGAY nên `# Tính tổng` trong đoạn Python bị boTieuDe
+    // cắt mất dấu thăng - code trả về sai cú pháp, người dùng copy về là lỗi
+    const ra = sach("```python\n# Tính tổng\ntong = 0\nx = a**2\n```");
+    assert.match(ra, /# Tính tổng/, `dấu thăng của comment bị ăn: ${ra}`);
+    assert.match(ra, /a\*\*2/, `luỹ thừa bị ăn: ${ra}`);
     assert.ok(!ra.includes("```"), ra);
+  });
+
+  it("khối code xử TRƯỚC inline - khẳng định bằng THỨ TỰ trong daSua", () => {
+    // Chỉ so nội dung ra là test ma: với đầu vào này hai thứ tự cho cùng kết
+    // quả nên đảo `boKhoiCode`/`boInlineCode` mà test vẫn xanh. Đã đo thật.
+    // Thứ tự trong `daSua` mới phân biệt được.
+    const kq = lamSachTraLoi("Xem `biến` rồi:\n```\nvar x = 1;\n```");
+    assert.deepEqual(kq.daSua, ["khối code", "inline code"]);
+    assert.match(kq.text, /var x = 1;/);
+    assert.match(kq.text, /Xem biến rồi:/);
+  });
+
+  it("dấu nháy đơn BÊN TRONG khối code được giữ, không bị bộ inline ăn", () => {
+    const kq = lamSachTraLoi("```\nvar x = `template`;\n```");
+    assert.equal(kq.text, "var x = `template`;");
+    assert.deepEqual(kq.daSua, ["khối code"], "không được có 'inline code' - nó nằm trong khối");
   });
 
   it("tiêu đề mọi cấp", () => {
@@ -54,6 +78,15 @@ describe("lamSachTraLoi - bỏ markdown, GIỮ nội dung", () => {
 
   it("liên kết không có chữ thì còn lại URL", () => {
     assert.equal(sach("[](https://vd.test/x)"), "https://vd.test/x");
+  });
+
+  it("URL có tham số và khoảng trắng phía sau KHÔNG bị vứt phần đuôi", () => {
+    // Bản đầu để `([^)\s]+)[^)]*` - phần sau khoảng trắng khớp nhưng không nằm
+    // trong nhóm nào nên bị vứt trắng
+    assert.equal(
+      sach("Xem [tài liệu](https://vd.test/a?x=1 bản PDF) nhé"),
+      "Xem tài liệu (https://vd.test/a?x=1 bản PDF) nhé",
+    );
   });
 
   it("ảnh markdown cũng bị nuốt dấu chấm than", () => {
@@ -80,6 +113,13 @@ describe("lamSachTraLoi - bảng markdown", () => {
 
   it("dòng chỉ có gạch ngang nhưng KHÔNG có gạch đứng thì giữ nguyên", () => {
     assert.equal(sach("Phần một\n---\nPhần hai"), "Phần một\n---\nPhần hai");
+  });
+
+  it("cần ÍT NHẤT hai gạch ngang liền nhau - một gạch là dữ liệu, không phải dòng kẻ", () => {
+    // Docstring cam kết điều này; không có test thì nới thành một gạch vẫn xanh
+    const goc = "| 8h - 17h |\n| Ca 2 |";
+    assert.equal(sach(goc), goc);
+    assert.equal(sach("| A |\n| - |\n| 1 |"), "| A |\n| - |\n| 1 |");
   });
 });
 
@@ -122,6 +162,27 @@ describe("lamSachTraLoi - những thứ TUYỆT ĐỐI không được đụng",
     assert.equal(sach("Mã đơn #1042 nhé"), "Mã đơn #1042 nhé");
   });
 
+  it("dấu thăng ĐẦU DÒNG dính liền chữ cũng không phải tiêu đề - cần khoảng trắng", () => {
+    // Markdown đòi khoảng trắng sau dấu thăng. Bỏ đòi hỏi đó thì mã đơn đứng
+    // đầu dòng bị cắt mất dấu thăng
+    assert.equal(sach("#1042 đã giao xong"), "#1042 đã giao xong");
+    assert.equal(sach("Đơn:\n#1042 đã giao"), "Đơn:\n#1042 đã giao");
+  });
+
+  it("cặp hai dấu sao có khoảng trắng bên trong là phép tính, không phải in đậm", () => {
+    assert.equal(sach("Tính 12 ** 5 ** 2 giúp em"), "Tính 12 ** 5 ** 2 giúp em");
+  });
+
+  it("luỹ thừa Python 2**3**2 giữ nguyên - đúng luật left-flanking như dấu sao đơn", () => {
+    assert.equal(sach("Trong Python 2**3**2 = 512 nhé"), "Trong Python 2**3**2 = 512 nhé");
+  });
+
+  it("cú pháp [..](..) KHÔNG phải liên kết thì giữ nguyên hoàn toàn", () => {
+    // Cú pháp này xuất hiện đầy trong văn bản thường; đổi nó đi là hỏng chữ thật
+    assert.equal(sach("Mã lô [A12](hàng nhập) đã về kho"), "Mã lô [A12](hàng nhập) đã về kho");
+    assert.equal(sach("Gọi handlers[0](event) là được"), "Gọi handlers[0](event) là được");
+  });
+
   it("URL có dấu gạch dưới và dấu chấm không bị đụng", () => {
     const goc = "Tải ở https://vd.test/bao_gia_2026.pdf nhé";
     assert.equal(sach(goc), goc);
@@ -154,6 +215,29 @@ describe("lamSachTraLoi - chặn rò system prompt", () => {
     assert.equal(kq.chan, false);
   });
 
+  it("'Khả năng của bạn lúc này' trong câu THƯỜNG không bị chặn - dấu hiệu phải là câu ĐẦY ĐỦ", () => {
+    // Vòng rà soát bắt được: dấu hiệu cũ chỉ là mẩu tiếng Việt thường ngày.
+    // Chặn oan ở đây rất nặng và KHÔNG TỰ KHỎI - hỏi lại vẫn y hệt vì model
+    // sinh lại đúng cách diễn đạt đó; ở scheduler còn tiêu suất chạy của job.
+    for (const cau of [
+      "Khả năng của bạn lúc này đã đủ để thi B1 rồi ạ.",
+      "Khả năng của bạn lúc này vay được khoảng 300 triệu.",
+    ]) {
+      assert.equal(lamSachTraLoi(cau).chan, false, cau);
+    }
+  });
+
+  it("nhưng câu ĐẦY ĐỦ do persona sinh ra thì vẫn chặn", () => {
+    assert.equal(
+      lamSachTraLoi("Khả năng của bạn lúc này (đúng những công cụ đang bật, không hơn):").chan,
+      true,
+    );
+    assert.equal(
+      lamSachTraLoi("Khả năng của bạn lúc này: KHÔNG có công cụ nào được bật").chan,
+      true,
+    );
+  });
+
   it("coDauHieuRoPrompt dùng được độc lập", () => {
     assert.equal(coDauHieuRoPrompt("bình thường"), false);
     assert.equal(coDauHieuRoPrompt("<noi_dung_ngoai nguon=..."), true);
@@ -174,6 +258,19 @@ describe("lamSachTraLoi - nhãn [SILENT] lọt vào lượt chat thường", () 
   it("[SILENT] nằm GIỮA câu giữ nguyên - đó là chữ thật, không phải nhãn", () => {
     const goc = "Mình định [SILENT] nhưng đây là tóm tắt hôm nay: có 3 tin.";
     assert.equal(lamSachTraLoi(goc).text, goc);
+  });
+
+  it("dòng MỞ ĐẦU bằng [SILENT] nhưng có nội dung thật thì GIỮ NGUYÊN CẢ DÒNG", () => {
+    // Vòng rà soát bắt được: bản đầu đem `isSilentResponse` (hàm phán xét CẢ
+    // câu trả lời, có luật "mở đầu bằng [SILENT] thì nuốt cả câu") đi lọc TỪNG
+    // DÒNG. Kết quả: câu trả lời hợp lệ khi người dùng hỏi về chính cái nhãn bị
+    // vứt sạch, người nhắn ngồi im không nhận gì.
+    const goc = "[SILENT] là nhãn nội bộ, dùng để bot im lặng khi không có tin mới ạ.";
+    assert.equal(lamSachTraLoi(goc).text, goc);
+    assert.deepEqual(lamSachTraLoi(goc).daSua, [], "không được đụng gì");
+
+    const hai = "[SILENT] không có gì mới\nCảm ơn anh đã hỏi ạ";
+    assert.equal(lamSachTraLoi(hai).text, hai);
   });
 });
 
@@ -196,5 +293,29 @@ describe("lamSachTraLoi - không ăn tham trên câu dài", () => {
   it("dấu sao lẻ không cặp không làm treo hay nuốt chữ", () => {
     assert.equal(sach("Ghi chú * chưa xong"), "Ghi chú * chưa xong");
     assert.equal(sach("**chưa đóng"), "**chưa đóng");
+  });
+
+  it("chuỗi độc không làm biểu thức chạy bậc hai (ReDoS)", () => {
+    // Đây là đường tấn công THẬT, không phải lý thuyết: bot đọc tin của người
+    // lạ, một tin "lặp lại chính xác chuỗi sau: [[[[..." là đủ để model nhại
+    // lại. Tiến trình này MỘT luồng phục vụ mọi account + vòng tick scheduler +
+    // HTTP dashboard, nên kẹt event loop vài giây là cả bot đứng hình.
+    //
+    // Đo trước khi vá: 51.200 dấu `[` mất 1.263ms, 25.600 gạch trong bảng mất
+    // 1.446ms. Sau khi vá cả hai còn dưới 30ms.
+    const docHai: [string, string][] = [
+      ["dấu ngoặc vuông", "[".repeat(50_000)],
+      ["dòng kẻ bảng", `|${"-".repeat(50_000)}x`],
+      ["ngoặc liên kết", `[a](${"b".repeat(50_000)}`],
+      ["hàng rào code", "```".repeat(20_000)],
+      ["dấu sao", "*".repeat(50_000)],
+      ["nháy đơn", "`a".repeat(25_000)],
+    ];
+    for (const [ten, doc] of docHai) {
+      const t0 = process.hrtime.bigint();
+      lamSachTraLoi(doc);
+      const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+      assert.ok(ms < 500, `${ten}: ${ms.toFixed(0)}ms - biểu thức đang chạy bậc hai`);
+    }
   });
 });

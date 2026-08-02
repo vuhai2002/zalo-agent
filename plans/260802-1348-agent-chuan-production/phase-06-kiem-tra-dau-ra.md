@@ -9,7 +9,7 @@
 ## Tổng quan
 
 - **Ưu tiên**: trung bình, nhưng rẻ và người dùng thấy ngay
-- **Trạng thái**: chưa làm. **Độc lập**, làm song song với 04/05 được.
+- **Trạng thái**: XONG (03dbd41 + vòng sửa sau rà soát). **Độc lập** với 04/05.
 - Text model trả về đang đi **thẳng** xuống Zalo. Thêm một lớp làm sạch cuối cùng.
 
 ## Nhận định then chốt
@@ -88,14 +88,28 @@ Sửa:
 
 ## Việc cần làm
 
-- [ ] `sanitize-reply-text.ts` (thuần) + test
-- [ ] Markdown: khối trước inline sau
-- [ ] Giữ `-` đầu dòng, giữ `*` giữa từ, giữ dấu tiếng Việt
-- [ ] Link -> `chữ (url)`
-- [ ] Hằng số dấu hiệu rò prompt dùng chung với `persona-prompt.ts`
-- [ ] Dùng lại `silent-sentinel.ts`, không viết regex thứ hai
-- [ ] Nối vào `message-turn-processor.ts` và `scheduled-job-send.ts`
-- [ ] `pnpm test` + `pnpm typecheck`
+- [x] `sanitize-reply-text.ts` (thuần) + test
+- [x] Markdown: khối trước inline sau
+- [x] Giữ `-` đầu dòng, giữ `*` giữa từ, giữ dấu tiếng Việt
+- [x] Link -> `chữ (url)`
+- [x] Hằng số dấu hiệu rò prompt dùng chung với `persona-prompt.ts`
+- [x] Dùng lại `silent-sentinel.ts`, không viết regex thứ hai
+- [x] Nối vào `message-turn-processor.ts` và `scheduled-job-send.ts`
+- [x] `pnpm test` + `pnpm typecheck`
+
+## Lệch so với kế hoạch (có chủ ý)
+
+- Nối vào `run-scheduled-job.ts` chứ không `scheduled-job-send.ts`: nhánh `[SILENT]`
+  nằm ở file đầu, mà làm sạch BẮT BUỘC phải chạy sau nhánh đó.
+- Thêm 2 việc kế hoạch không nêu, cùng lớp vấn đề: dọn `job.payload` của job
+  `kind='message'` và nội dung của tool `tag_member` - hai đường chữ của model xuống
+  Zalo mà không qua bộ lọc nào.
+- Bỏ DÒNG KẺ của bảng markdown (kế hoạch chỉ liệt kê 6 dạng, không có bảng) vì kịch bản
+  nghiệm thu chính là "trình bày dạng bảng". Chỉ bỏ dòng kẻ, không dựng lại bảng.
+- Cố ý KHÔNG bắt `__đậm__`/`_nghiêng_`: gạch dưới sống đầy trong tên file và URL thật.
+- Caption của file/ảnh (`send_file`, `create_image`, `create_word_document`,
+  `create_excel_file`) CHƯA nối - giá trị thấp hơn nhiều (một dòng chú thích ngắn) và
+  chưa có test hạ tầng cho các tool đó.
 
 ## Tiêu chí hoàn thành
 
