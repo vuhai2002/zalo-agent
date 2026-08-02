@@ -12,8 +12,7 @@
  * lồng 2 lần `runOnThreadChain` cho CÙNG threadKey và tự deadlock).
  */
 
-import { env } from "../config/env.js";
-import { getTuning } from "../config/runtime-tuning-settings.js";
+import { botTimeZone, getTuning } from "../config/runtime-tuning-settings.js";
 import { db } from "../conversation/database.js";
 import { createLogger } from "../shared/logger.js";
 import { resetDeliveryAttempts } from "./delivery-attempt-store.js";
@@ -184,7 +183,7 @@ function processDueJob(job: ScheduledJob, now: Date): void {
     }
     lastPreflightReason.delete(job.id); // qua được rồi - xoá dấu vết lần chặn trước (nếu có)
 
-    const schedule = scheduleOf(job, env.BOT_TIMEZONE);
+    const schedule = scheduleOf(job, botTimeZone());
     // 'once' dùng `run_at` (mốc GỐC, không bao giờ bị ghi đè) để tính độ trễ +
     // nhãn "nhắc trễ" - `next_run_at` có thể đã bị trần ngày đẩy sang giờ khác
     // hoặc gửi-hỏng phục hồi, dùng nó sẽ MẤT nhãn cho job vừa bị hoãn cả đêm.
@@ -215,7 +214,7 @@ function processDueJob(job: ScheduledJob, now: Date): void {
     // Lọc SỚM trần ngày TRƯỚC dispatch (Mục 1) - THUẦN ĐỌC, không giữ chỗ
     // (giành chỗ THẬT xảy ra sát lúc gửi, xem blockedByGuard). Thiếu bước này
     // job chạm trần bị đốt lại nguyên 1 lượt LLM mỗi 30 giây tới hết ngày.
-    const timeZone = job.timezone || env.BOT_TIMEZONE;
+    const timeZone = job.timezone || botTimeZone();
     const cap = checkProactiveDailyCap(job.accountId, job.threadId, timeZone, now);
     if (!cap.ok) {
       // Không await (luật cứng của cả tick) - hàm này tự cam kết không bao

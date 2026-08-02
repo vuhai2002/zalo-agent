@@ -24,6 +24,13 @@ export type TuningGroup = {
   title: string;
   /** Câu giải thích nhóm này ảnh hưởng tới cái gì */
   hint: string;
+  /**
+   * Câu dẫn ngắn hiện ở nav trái. TÁCH khỏi `hint` vì hai chỗ cần độ dài khác
+   * hẳn nhau: nav là ô hẹp (2 dòng là hết chỗ), panel chi tiết có cả chiều
+   * ngang để giải thích cho đủ ý. Dùng chung một câu thì hoặc nav bị cắt chữ,
+   * hoặc panel cụt lủn.
+   */
+  navHint: string;
 };
 
 export type TuningDef = {
@@ -34,20 +41,79 @@ export type TuningDef = {
   | { kind: "number"; min: number; max: number; unit?: string }
   | { kind: "boolean" }
   | { kind: "enum"; options: readonly string[] }
+  // Danh sách chọn quá dài để nhét vào `enum` (418 tên timezone IANA) nên
+  // KHÔNG gửi options qua JSON - trình duyệt tự dựng bằng
+  // `Intl.supportedValuesOf("timeZone")`, đúng bộ dữ liệu server cũng dùng để
+  // kiểm hợp lệ. Gõ tay tên zone là đường sai chính tả rồi lệch giờ âm thầm.
+  | { kind: "timezone" }
 );
 
 export const TUNING_GROUPS: TuningGroup[] = [
-  { id: "luot", title: "Lượt trả lời", hint: "Bot được phép làm bao nhiêu, trong bao lâu, nghĩ kỹ tới đâu" },
-  { id: "ngu-canh", title: "Ngữ cảnh và trí nhớ", hint: "Bot nhớ lại bao nhiêu trước khi trả lời" },
-  { id: "web", title: "Tra cứu web", hint: "Số nguồn và lượng chữ đọc từ mỗi trang" },
-  { id: "file", title: "Tạo file Word/Excel", hint: "Trần kích thước file và số file mỗi giờ" },
-  { id: "anh", title: "Vẽ ảnh", hint: "Số ảnh mỗi giờ và thời gian chờ nhà cung cấp" },
-  { id: "gui-tin", title: "Gửi tin trên Zalo", hint: "Cách bot chia tin và giãn nhịp gửi cho tự nhiên" },
-  { id: "don-dep", title: "Trace và dọn dẹp", hint: "Ghi lại bao nhiêu, giữ trong bao lâu" },
-  { id: "lich-hen", title: "Lịch hẹn", hint: "Bot tự nhắn theo lịch: tần suất quét, trần chống spam, giữ log bao lâu" },
+  {
+    id: "chung",
+    title: "Chung",
+    navHint: "Múi giờ, mật khẩu, đặt lại",
+    hint: "Múi giờ bot dùng để hiểu thời gian, mật khẩu đăng nhập dashboard và nút đặt lại toàn bộ cấu hình.",
+  },
+  {
+    id: "luot",
+    title: "Lượt trả lời",
+    navHint: "Giới hạn số lượt trả lời",
+    hint: "Bot được phép làm bao nhiêu, trong bao lâu, nghĩ kỹ tới đâu.",
+  },
+  {
+    id: "ngu-canh",
+    title: "Ngữ cảnh & Trí nhớ",
+    navHint: "Quản lý ngữ cảnh hội thoại",
+    hint: "Bot nhớ lại bao nhiêu trước khi trả lời.",
+  },
+  {
+    id: "web",
+    title: "Tra cứu web",
+    navHint: "Thiết lập tìm kiếm thông tin",
+    hint: "Số nguồn và lượng chữ đọc từ mỗi trang.",
+  },
+  {
+    id: "file",
+    title: "Tạo file Word/Excel",
+    navHint: "Xuất dữ liệu & báo cáo",
+    hint: "Trần kích thước file và số file mỗi giờ.",
+  },
+  {
+    id: "anh",
+    title: "Vẽ ảnh",
+    navHint: "Tạo và chỉnh sửa hình ảnh",
+    hint: "Số ảnh mỗi giờ và thời gian chờ nhà cung cấp.",
+  },
+  {
+    id: "gui-tin",
+    title: "Gửi tin trên Zalo",
+    navHint: "Cấu hình gửi tin nhắn",
+    hint: "Cách bot chia tin và giãn nhịp gửi cho tự nhiên.",
+  },
+  {
+    id: "don-dep",
+    title: "Trace và dọn dẹp",
+    navHint: "Nhật ký & lưu trữ",
+    hint: "Ghi lại bao nhiêu, giữ trong bao lâu.",
+  },
+  {
+    id: "lich-hen",
+    title: "Lịch hẹn",
+    navHint: "Quản lý lịch hẹn",
+    hint: "Bot tự nhắn theo lịch: tần suất quét, trần chống spam, giữ log bao lâu.",
+  },
 ];
 
 const TUNING_BY_KEY = {
+  // --- Chung ---
+  BOT_TIMEZONE: {
+    kind: "timezone",
+    group: "chung",
+    label: "Múi giờ của bot",
+    hint: 'Bot sẽ hiểu "hôm nay", "3 giờ chiều" theo múi giờ bạn chọn. Sai múi giờ có thể dẫn đến nhắc lịch sai thời gian.',
+  },
+
   // --- Lượt trả lời ---
   LLM_MAX_STEPS: {
     kind: "number",
@@ -82,6 +148,12 @@ const TUNING_BY_KEY = {
     label: "Mức suy nghĩ mặc định",
     hint: "Không bật thì bot lướt qua dữ liệu dài mà không nghĩ từng bước - đã dính thật ở vụ dò vé số: dữ liệu đã có trong ngữ cảnh mà bot vẫn bảo chưa lấy được. Từng agent đặt riêng được, để trống là theo mức này.",
     options: ["off", "low", "medium", "high", "xhigh"],
+  },
+  LLM_CACHE_SESSION_ENABLED: {
+    kind: "boolean",
+    group: "luot",
+    label: "Bật prompt cache theo phiên",
+    hint: "Gửi kèm mã phiên ổn định theo cuộc trò chuyện để router tái dùng phần đầu prompt, rẻ hơn nhiều. Chỉ tắt khi router đổi quy ước hoặc cần mỗi lượt hoàn toàn độc lập.",
   },
 
   // --- Ngữ cảnh và trí nhớ ---
@@ -226,8 +298,22 @@ const TUNING_BY_KEY = {
     max: 1_800_000,
     unit: "ms",
   },
+  IMAGE_GEN_QUALITY: {
+    kind: "enum",
+    group: "anh",
+    label: "Mức chi tiết khi vẽ",
+    hint: 'Đo A/B cùng prompt: "Cao" ra ảnh giàu chi tiết hơn hẳn mà không chậm hơn, đổi lại nhà cung cấp thường tính phí cao hơn. Hạ xuống "Vừa" nếu thấy tốn. Hai mức cuối là của dòng dall-e.',
+    options: ["auto", "low", "medium", "high", "standard", "hd"],
+  },
 
   // --- Gửi tin ---
+  ZALO_IMAGE_QUALITY: {
+    kind: "enum",
+    group: "gui-tin",
+    label: "Cỡ ảnh tải về từ Zalo",
+    hint: "Ảnh người dùng gửi được tải ở cỡ này để bot xem. Nét nhất thì đắt gấp mấy lần token, nhỏ nhất thì rẻ nhưng hay mất chữ số trên giấy tờ.",
+    options: ["thumb", "normal", "hd"],
+  },
   ZALO_MAX_MESSAGE_CHARS: {
     kind: "number",
     group: "gui-tin",

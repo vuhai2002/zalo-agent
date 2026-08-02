@@ -7,6 +7,7 @@ import {
   type TuningValue,
 } from "../../config/runtime-tuning-settings.js";
 import { TUNING_DEFS, TUNING_GROUPS, type TuningKey } from "../../config/tuning-definitions.js";
+import { isValidTimezone } from "../../shared/current-datetime.js";
 import { createLogger } from "../../shared/logger.js";
 
 const log = createLogger("tuning-routes");
@@ -57,6 +58,10 @@ export const tuningRoutes = new Hono()
         loi.push(`${def.label}: phải là true hoặc false`);
       } else if (def.kind === "enum" && !def.options.includes(String(value))) {
         loi.push(`${def.label}: chỉ nhận ${def.options.join(", ")}`);
+      } else if (def.kind === "timezone" && !isValidTimezone(String(value))) {
+        // Zone hỏng lọt vào DB thì luxon rơi về UTC ÂM THẦM - lịch hẹn lệch 7
+        // tiếng mà không có lỗi nào chỉ ra nguyên nhân. Chặn ngay tại cửa.
+        loi.push(`${def.label}: "${String(value)}" không phải tên timezone IANA hợp lệ (vd Asia/Ho_Chi_Minh)`);
       }
     }
     if (loi.length > 0) return c.json({ error: loi.join("\n") }, 400);

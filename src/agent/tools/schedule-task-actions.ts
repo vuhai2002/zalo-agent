@@ -1,5 +1,4 @@
-import { env } from "../../config/env.js";
-import { getTuning } from "../../config/runtime-tuning-settings.js";
+import { botTimeZone, getTuning } from "../../config/runtime-tuning-settings.js";
 import { parseSchedule, type ParsedSchedule } from "../../scheduler/schedule-parser.js";
 import {
   createJob,
@@ -43,7 +42,7 @@ function isAllowedToCreate(ctx: ToolContext): boolean {
  */
 function describeSchedule(job: ScheduledJob): string {
   if (!job.nextRunAt) return "không còn lần chạy nào sắp tới";
-  const p = getDateTimeParts(env.BOT_TIMEZONE, new Date(job.nextRunAt));
+  const p = getDateTimeParts(botTimeZone(), new Date(job.nextRunAt));
   const mocKe = `lần kế tiếp ${p.time} ngày ${p.date} (giờ Việt Nam)`;
   if (job.scheduleKind === "once") return `chạy 1 lần lúc ${p.time} ngày ${p.date} (giờ Việt Nam)`;
   if (job.scheduleKind === "every") return `lặp mỗi ${job.everyMinutes} phút, ${mocKe}`;
@@ -61,7 +60,7 @@ export function doCreate(ctx: ToolContext, input: CreateScheduleTaskInput): stri
   }
 
   const parsed = parseSchedule(input.schedule, {
-    timeZone: env.BOT_TIMEZONE,
+    timeZone: botTimeZone(),
     minIntervalMinutes: getTuning("SCHEDULER_MIN_INTERVAL_MINUTES"),
   });
   if (!parsed.ok) return parsed.error;
@@ -109,7 +108,7 @@ export function doUpdate(ctx: ToolContext, input: UpdateScheduleTaskInput): stri
   let schedule: ParsedSchedule | undefined;
   if (input.schedule) {
     const parsed = parseSchedule(input.schedule, {
-      timeZone: env.BOT_TIMEZONE,
+      timeZone: botTimeZone(),
       minIntervalMinutes: getTuning("SCHEDULER_MIN_INTERVAL_MINUTES"),
     });
     if (!parsed.ok) return parsed.error;

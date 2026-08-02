@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { env } from "../../config/env.js";
+import { botTimeZone } from "../../config/runtime-tuning-settings.js";
 import { getDateTimeParts } from "../../shared/current-datetime.js";
 
 /**
@@ -14,7 +14,7 @@ export function createGetDatetimeTool() {
       "Lấy ngày giờ hiện tại chính xác (ngày, giờ phút, thứ trong tuần, múi giờ). Dùng khi cần giờ hiện tại, tính khoảng cách thời gian, hoặc trả lời câu hỏi về hôm nay/ngày mai. Thứ trong tuần trong kết quả là chính xác tuyệt đối - dùng nguyên văn, không tự suy lại từ ngày.",
     inputSchema: z.object({}),
     execute: async () => {
-      const p = getDateTimeParts(env.BOT_TIMEZONE);
+      const p = getDateTimeParts(botTimeZone());
       return `Bây giờ là ${p.time} ${p.weekday}, ngày ${p.date} (múi giờ ${p.timezone}).`;
     },
   });

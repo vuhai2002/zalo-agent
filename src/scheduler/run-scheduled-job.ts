@@ -14,7 +14,7 @@ import type { StepTrace } from "../agent/agent-step-trace.js";
 import { saveTurnTrace } from "../agent/agent-trace-store.js";
 import type { resolveLanguageModel } from "../agent/llm-provider.js";
 import { getAccount, type AccountConfig } from "../config/account-store.js";
-import { env } from "../config/env.js";
+import { botTimeZone } from "../config/runtime-tuning-settings.js";
 import { finishAgentTurn, openAgentTurn } from "../conversation/usage-store.js";
 import { createLogger } from "../shared/logger.js";
 import { runInTurnLogContext } from "../shared/turn-log-context.js";
@@ -59,7 +59,7 @@ export async function runScheduledJob(job: ScheduledJob, options: RunScheduledJo
 }
 
 async function dispatch(job: ScheduledJob, options: RunScheduledJobOptions, runId: number): Promise<void> {
-  const timeZone = job.timezone || env.BOT_TIMEZONE;
+  const timeZone = job.timezone || botTimeZone();
   // Account KHÔNG CHẠY thì dừng NGAY - trước cả khi mở lượt agent, tránh tốn
   // token cho một lượt chắc chắn không gửi được gì. `scheduler-loop.ts` đã
   // kiểm phần này TRƯỚC clear-before-dispatch nên nhánh này giờ chỉ còn là

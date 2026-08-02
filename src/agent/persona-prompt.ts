@@ -1,6 +1,6 @@
 import type { AccountConfig } from "../config/account-store.js";
 import type { AgentProfile } from "../config/agent-store.js";
-import { env } from "../config/env.js";
+import { botTimeZone } from "../config/runtime-tuning-settings.js";
 import type { MemoryContext } from "../conversation/memory-store.js";
 import { currentDateLine } from "../shared/current-datetime.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
@@ -55,7 +55,7 @@ export function buildSystemPrompt(
 ): string {
   // Chỉ ngày + thứ, không có giờ - giờ đổi mỗi phút sẽ vỡ prompt cache mỗi phút.
   // Không có dòng này model đoán ngày từ training data và trả lời sai.
-  const sections = [BASE_PERSONA, currentDateLine(env.BOT_TIMEZONE)];
+  const sections = [BASE_PERSONA, currentDateLine(botTimeZone())];
 
   if (account) {
     // Một lần lọc dùng cho CẢ mục "Khả năng" lẫn các khối luật: hai nơi tự lọc

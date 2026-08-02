@@ -1,6 +1,6 @@
 import type { API } from "zca-js";
 import { getAccount } from "../config/account-store.js";
-import { env } from "../config/env.js";
+import { getTuning } from "../config/runtime-tuning-settings.js";
 import { recordContactActivity } from "../conversation/contact-store.js";
 import { appendMessage, setMessageImages } from "../conversation/history-store.js";
 import { imagePathsOf, persistBatchImages } from "../conversation/media-store.js";
@@ -33,7 +33,7 @@ export function routeIncomingMessage(
   const config = getAccount(accountId);
   if (!config) return;
 
-  const msg = parseIncomingMessage(config.id, selfId, raw, env.ZALO_IMAGE_QUALITY);
+  const msg = parseIncomingMessage(config.id, selfId, raw, getTuning("ZALO_IMAGE_QUALITY"));
 
   // Chạy TRƯỚC mọi nhánh return bên dưới: tin thiếu threadId bị bỏ qua lặng lẽ
   // ở ngay dòng dưới, không cảnh báo ở đây thì không còn chỗ nào biết

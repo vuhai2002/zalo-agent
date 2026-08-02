@@ -1,7 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
-import { env } from "../config/env.js";
 import { getEffectiveLlmSettings } from "../config/runtime-llm-settings.js";
 import { createLogger } from "../shared/logger.js";
 import { cacheSessionHeaders } from "./cache-session-id.js";
@@ -57,7 +56,7 @@ export function resolveLanguageModel(
   }
 
   const sessionHeaders = thread
-    ? cacheSessionHeaders(env.LLM_CACHE_SESSION_ENABLED, thread.accountId, thread.threadId)
+    ? cacheSessionHeaders(getTuning("LLM_CACHE_SESSION_ENABLED"), thread.accountId, thread.threadId)
     : {};
 
   switch (settings.provider) {

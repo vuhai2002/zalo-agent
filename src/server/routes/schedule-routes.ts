@@ -2,8 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { MAX_NAME_CHARS, MAX_PAYLOAD_CHARS, scheduleInputSchema } from "../../agent/tools/schedule-task-tool-schema.js";
 import { getAccount } from "../../config/account-store.js";
-import { env } from "../../config/env.js";
-import { getTuning } from "../../config/runtime-tuning-settings.js";
+import { botTimeZone, getTuning } from "../../config/runtime-tuning-settings.js";
 import { findThreadStatus } from "../../conversation/thread-store.js";
 import { hasRunningRun, listRuns } from "../../scheduler/job-run-log-store.js";
 import { runScheduledJobTrial } from "../../scheduler/run-scheduled-job-trial.js";
@@ -54,14 +53,14 @@ const patchSchema = z.object({
 
 /** Tham số parseSchedule dùng chung cho create/update - đúng cấu hình tool đang dùng */
 function scheduleParseParams() {
-  return { timeZone: env.BOT_TIMEZONE, minIntervalMinutes: getTuning("SCHEDULER_MIN_INTERVAL_MINUTES") };
+  return { timeZone: botTimeZone(), minIntervalMinutes: getTuning("SCHEDULER_MIN_INTERVAL_MINUTES") };
 }
 
 export const scheduleRoutes = new Hono()
 
   .get("/", (c) => {
     const accountId = c.req.query("accountId") ?? "";
-    return c.json({ items: listJobsForAccount(accountId), timezone: env.BOT_TIMEZONE });
+    return c.json({ items: listJobsForAccount(accountId), timezone: botTimeZone() });
   })
 
   .post("/", async (c) => {
@@ -91,7 +90,7 @@ export const scheduleRoutes = new Hono()
       createdBy: "dashboard",
     });
     log.info({ jobId: job.id, accountId: job.accountId }, "Tạo lịch hẹn từ dashboard");
-    return c.json({ job, timezone: env.BOT_TIMEZONE }, 201);
+    return c.json({ job, timezone: botTimeZone() }, 201);
   })
 
   .patch("/:id", async (c) => {
@@ -123,7 +122,7 @@ export const scheduleRoutes = new Hono()
     }
     if (enabled !== undefined) setEnabled(accountId, threadId, id, enabled);
 
-    return c.json({ job: getJob(accountId, threadId, id)!, timezone: env.BOT_TIMEZONE });
+    return c.json({ job: getJob(accountId, threadId, id)!, timezone: botTimeZone() });
   })
 
   .delete("/:id", (c) => {

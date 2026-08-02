@@ -1,4 +1,3 @@
-import { env } from "../config/env.js";
 import { getImageSettings, isImageGenConfigured, type ImageGenSettings } from "../config/runtime-image-settings.js";
 import { readImageFromSseStream } from "./read-image-sse-stream.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
@@ -88,7 +87,7 @@ export async function generateImage(
     output_format: outputFormat,
     // Không gửi thì nhà cung cấp tự chọn mức thấp hơn. Đo A/B cùng prompt:
     // "high" ra ảnh giàu chi tiết hơn hẳn mà không chậm hơn.
-    quality: env.IMAGE_GEN_QUALITY,
+    quality: getTuning("IMAGE_GEN_QUALITY"),
   };
   if (params.transparentBackground) body.background = "transparent";
   if (params.refImage) {

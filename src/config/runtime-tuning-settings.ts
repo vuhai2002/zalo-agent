@@ -1,4 +1,5 @@
 import { db } from "../conversation/database.js";
+import { isValidTimezone } from "../shared/current-datetime.js";
 import { env } from "./env.js";
 import { TUNING_DEFS, type TuningKey } from "./tuning-definitions.js";
 
@@ -41,9 +42,25 @@ export function getTuning<K extends TuningKey>(key: K): (typeof env)[K] {
   if (def.kind === "enum") {
     return (def.options.includes(raw) ? raw : fallback) as (typeof env)[K];
   }
+  // Kiểm lại lúc ĐỌC chứ không chỉ lúc ghi. Một zone hỏng lọt vào DB (sửa tay,
+  // hoặc bản cũ ghi trước khi có kiểm) mà cứ thế trả ra thì luxon rơi về UTC
+  // âm thầm - lịch hẹn lệch 7 tiếng mà không ai thấy lỗi ở đâu.
+  if (def.kind === "timezone") {
+    return (isValidTimezone(raw) ? raw : fallback) as (typeof env)[K];
+  }
   const num = Number(raw);
   if (!Number.isFinite(num) || num < def.min || num > def.max) return fallback;
   return num as (typeof env)[K];
+}
+
+/**
+ * Múi giờ đang hiệu lực. Có hàm riêng vì đây là tham số bị đọc ở nhiều chỗ
+ * nhất (18 điểm gọi): để mỗi nơi tự `getTuning("BOT_TIMEZONE")` thì sớm muộn
+ * có chỗ quên và tiếp tục đọc `env` - lúc đó dashboard đổi múi giờ mà một nửa
+ * hệ thống vẫn chạy theo giờ cũ, kiểu lệch âm thầm rất khó truy.
+ */
+export function botTimeZone(): string {
+  return getTuning("BOT_TIMEZONE");
 }
 
 export type TuningValue = number | boolean | string;

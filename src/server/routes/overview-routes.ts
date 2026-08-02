@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { listAccounts } from "../../config/account-store.js";
-import { env } from "../../config/env.js";
+import { botTimeZone } from "../../config/runtime-tuning-settings.js";
 import { getDailyUsage } from "../../conversation/usage-store.js";
 import { startOfDayUtc, todayKey } from "../../shared/zone-time.js";
 import { getRunningAccounts } from "../../zalo/account-manager.js";
@@ -24,14 +24,14 @@ export const overviewRoutes = new Hono().get("/", (c) => {
     online: runningById.has(a.id),
   }));
 
-  const startOfToday = startOfDayUtc(env.BOT_TIMEZONE);
+  const startOfToday = startOfDayUtc(botTimeZone());
   // Đầu ngày VN, lùi 7 ngày - không phải "168 giờ trước" (mốc đó cắt ngang một
   // ngày VN, làm ngày xa nhất trong biểu đồ hụt vài tiếng dữ liệu).
-  const since = startOfDayUtc(env.BOT_TIMEZONE, new Date(Date.now() - SEVEN_DAYS_MS));
+  const since = startOfDayUtc(botTimeZone(), new Date(Date.now() - SEVEN_DAYS_MS));
 
   const usageByAccount = accounts.map((a) => ({
     accountId: a.id,
-    daily: getDailyUsage(a.id, since, env.BOT_TIMEZONE),
+    daily: getDailyUsage(a.id, since, botTimeZone()),
   }));
   const statsByAccount = accounts.map((a) => ({
     accountId: a.id,
@@ -43,7 +43,7 @@ export const overviewRoutes = new Hono().get("/", (c) => {
     usageByAccount,
     statsByAccount,
     system: getSystemInfo(),
-    todayKey: todayKey(env.BOT_TIMEZONE),
-    timezone: env.BOT_TIMEZONE,
+    todayKey: todayKey(botTimeZone()),
+    timezone: botTimeZone(),
   });
 });
