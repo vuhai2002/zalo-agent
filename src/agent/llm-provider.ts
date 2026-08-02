@@ -79,7 +79,15 @@ export function resolveLanguageModel(
   const settings = { ...base, ...doiProviderAnToan(base, override) };
   if (!settings.apiKey) {
     throw new Error(
-      "Chưa cấu hình LLM API key - đặt LLM_API_KEY trong .env hoặc nhập ở trang Providers trên dashboard",
+      "Chưa cấu hình LLM API key - nhập ở trang Providers trên dashboard (hoặc LLM_API_KEY trong .env)",
+    );
+  }
+  // Cùng nếp với API key: thiếu model thì báo ở ĐÂY chứ không chết lúc boot.
+  // Không có nhánh này thì provider nhận model rỗng và người dùng nhận một lỗi
+  // HTTP khó hiểu từ router thay vì câu nói rõ mình cần làm gì.
+  if (!settings.model) {
+    throw new Error(
+      "Chưa cấu hình model - nhập ở trang Providers trên dashboard (hoặc LLM_MODEL trong .env)",
     );
   }
 

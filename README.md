@@ -29,7 +29,7 @@ Bot AI thường trú trên Zalo (tài khoản cá nhân, multi-account): nhận
 ```bash
 corepack enable
 pnpm install
-copy .env.example .env             # điền LLM_API_KEY, CREDENTIALS_ENCRYPTION_KEY
+copy .env.example .env             # chỉ CREDENTIALS_ENCRYPTION_KEY là bắt buộc
 copy config\accounts.example.json config\accounts.json
 ```
 
@@ -38,6 +38,10 @@ Tạo khóa mã hóa cookie:
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
+
+Đặt thêm `DASHBOARD_PASSWORD` để đăng nhập lần đầu (không đặt = dashboard tắt).
+Nhà cung cấp LLM, model, API key và 46 tham số còn lại nhập thẳng trên dashboard -
+`.env` chỉ là lớp dự phòng cho lần chạy đầu và cho deploy headless.
 
 ## Chạy
 

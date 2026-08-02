@@ -25,10 +25,16 @@ const envSchema = z.object({
 
   LLM_PROVIDER: z.enum(["openai-compatible", "anthropic"]).default("openai-compatible"),
   LLM_BASE_URL: z.preprocess(emptyToUndefined, z.string().startsWith("http").optional()),
-  // Để trống được: key có thể nhập ở trang Providers trên dashboard (lưu DB, mã
-  // hóa). Thiếu cả 2 nơi thì lượt agent lỗi với thông báo rõ, không chết lúc boot.
+  // Để trống được: key và tên model đều nhập được ở trang Providers trên
+  // dashboard (lưu DB, key thì mã hóa). Thiếu cả 2 nơi thì lượt agent lỗi với
+  // thông báo rõ, KHÔNG chết lúc boot - phải vào được dashboard mới nhập được,
+  // mà chết lúc boot thì không có dashboard nào để vào.
   LLM_API_KEY: z.string().default(""),
-  LLM_MODEL: z.string().min(1),
+  // Trước đây là `.min(1)`, tức BẮT BUỘC. Nhưng model là thứ người ta đổi
+  // thường xuyên nhất trên dashboard, nên bắt buộc trong env vừa thừa vừa gây
+  // hiểu nhầm: giá trị cũ nằm lại trong `.env` mà DB đang gánh, người đọc file
+  // tưởng đó là model đang chạy. Cùng nếp với LLM_API_KEY.
+  LLM_MODEL: z.string().default(""),
   LLM_MAX_STEPS: z.coerce.number().int().min(1).max(30).default(8),
   // Trần token cho phần INPUT của một lần gọi model. Trước khi có nó, ngữ cảnh
   // chỉ bị chặn bằng SỐ TIN (HISTORY_CONTEXT_LIMIT) - mà một tin Zalo dài tùy
@@ -268,10 +274,13 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 
-if (env.LLM_PROVIDER === "openai-compatible" && !env.LLM_BASE_URL) {
-  console.error("LLM_BASE_URL là bắt buộc khi LLM_PROVIDER=openai-compatible");
-  process.exit(1);
-}
+// KHÔNG chặn boot khi thiếu LLM_BASE_URL, dù provider mặc định cần nó.
+//
+// Base URL nhập được ở trang Providers (lưu DB, và DB ĐÈ env), nên chặn ở đây
+// là chặn đúng người vừa cài xong và chưa kịp vào dashboard - mà không vào
+// được dashboard thì không có đường nào nhập. `resolveLanguageModel` đã ném lỗi
+// nói rõ ở lượt agent đầu tiên, sau khi đã hợp nhất DB với env, nên chỗ đó mới
+// là nơi biết đủ để phán xét.
 
 if (env.SEND_DELAY_MAX_MS < env.SEND_DELAY_MIN_MS) {
   console.error("SEND_DELAY_MAX_MS phải >= SEND_DELAY_MIN_MS");

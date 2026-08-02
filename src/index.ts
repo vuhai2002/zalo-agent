@@ -19,10 +19,14 @@ logger.info(
 
 // Thiếu API key không chặn boot (nhập được ở dashboard) nhưng phải nói rõ, nếu
 // không thì im lặng tới lúc có tin nhắn đầu tiên mới lộ ra
-if (!getEffectiveLlmSettings().apiKey) {
-  logger.warn(
-    "Chưa có LLM API key - bot sẽ không trả lời được. Đặt LLM_API_KEY trong .env hoặc nhập ở trang Providers.",
-  );
+{
+  const llm = getEffectiveLlmSettings();
+  const thieu = [!llm.apiKey && "API key", !llm.model && "model"].filter(Boolean);
+  if (thieu.length > 0) {
+    logger.warn(
+      `Chưa cấu hình LLM (thiếu ${thieu.join(" và ")}) - bot sẽ không trả lời được. Nhập ở trang Providers trên dashboard.`,
+    );
+  }
 }
 
 let shuttingDown = false;
