@@ -41,6 +41,17 @@ export type KetQuaLoiTool = {
  * Dùng ở MỌI nhánh hỏng của mọi tool. Nhánh thành công vẫn trả chuỗi trần như
  * cũ - không có gì phải đánh dấu, và giữ nguyên thì lượt chạy tốt không đổi
  * chút nào so với trước.
+ *
+ * KẾT QUẢ RỖNG là hỏng hay thành công? Luật: rỗng mà CHẮC CHẮN thì là thành
+ * công, rỗng mà KHÔNG PHÂN BIỆT ĐƯỢC với hỏng thì là hỏng.
+ *
+ *   - `schedule_task list` không có lịch nào -> chuỗi trần. Store trả lời dứt
+ *     khoát: thread này không có job. Gọi lại cũng vẫn vậy, và đó là câu trả lời
+ *     đúng cho người dùng.
+ *   - `web_search` không có kết quả -> `ketQuaLoi`. Chuỗi provider nuốt lỗi rồi
+ *     trả mảng rỗng, nên "rỗng" ở đây vừa có thể là không có gì thật, vừa có thể
+ *     là mọi dịch vụ tìm kiếm đang chết. Không phân biệt được thì phải tính là
+ *     hỏng - gọi lại 8 từ khóa vẫn rỗng là vòng lặp cần chặn.
  */
 export function ketQuaLoi(thongDiep: string): KetQuaLoiTool {
   return { ok: false, loi: thongDiep };
@@ -50,8 +61,16 @@ export function ketQuaLoi(thongDiep: string): KetQuaLoiTool {
  * Kết quả này có phải nhánh hỏng không.
  *
  * Chỉ nhìn HÌNH DẠNG. Không dò chữ, không đoán theo tên tool.
+ *
+ * Kiểm CẢ `loi` chứ không chỉ `ok`: repo có sẵn 4 type khác cùng hình dạng
+ * `{ok:false, ...}` nhưng khác tên trường - `LimitCheck` và `RateCheck` dùng
+ * `reason`, `parseSchedule` dùng `error`. Chỉ kiểm `ok` thì một chỗ lỡ tay
+ * `return limit` (thay vì `ketQuaLoi(limit.reason)`) vẫn lọt: guard đếm đúng
+ * nên không test guard nào đỏ, mà model thì nhận một object có câu hướng dẫn
+ * nằm ở khóa nó không được dặn đọc.
  */
-export function laKetQuaLoi(ketQua: unknown): boolean {
+export function laKetQuaLoi(ketQua: unknown): ketQua is KetQuaLoiTool {
   if (!ketQua || typeof ketQua !== "object" || Array.isArray(ketQua)) return false;
-  return (ketQua as { ok?: unknown }).ok === false;
+  const o = ketQua as { ok?: unknown; loi?: unknown };
+  return o.ok === false && typeof o.loi === "string";
 }

@@ -1,4 +1,5 @@
 import { bamNgan, chuanHoaJson, chuKyLenhGoi } from "./tool-call-signature.js";
+import { canhBaoTu, type NguongGuard } from "./tool-loop-guard-thresholds.js";
 import { laKetQuaLoi } from "./tools/tool-failure-result.js";
 
 /**
@@ -24,9 +25,14 @@ import { laKetQuaLoi } from "./tools/tool-failure-result.js";
  * báo hay điều kiện dừng.
  */
 
-// Re-export: chữ ký là một phần của hợp đồng module này, người đọc không cần
-// biết nó nằm ở file nào
+// Re-export: chữ ký và ngưỡng đều là một phần hợp đồng của module này, người
+// đọc không cần biết chúng nằm ở file nào
 export { chuKyLenhGoi } from "./tool-call-signature.js";
+export {
+  canhBaoTu,
+  nguongTheoTranStep,
+  type NguongGuard,
+} from "./tool-loop-guard-thresholds.js";
 
 export type MucQuyetDinh = "cho-qua" | "canh-bao" | "chan";
 
@@ -40,15 +46,6 @@ export type QuyetDinh = {
 };
 
 const CHO_QUA: QuyetDinh = { muc: "cho-qua", ma: "", thongDiep: "", tool: "", soLan: 0 };
-
-export type NguongGuard = {
-  /** Cùng tool + cùng tham số + lại lỗi */
-  chanLoiGiongHet: number;
-  /** Cùng tool lỗi, tham số khác nhau */
-  chanCungToolLoi: number;
-  /** Tool đọc trả cùng kết quả lặp lại */
-  chanKhongTienTrien: number;
-};
 
 /**
  * Hình dạng TỐI THIỂU của một step mà guard cần đọc - khai theo cấu trúc chứ
@@ -110,7 +107,11 @@ export class ToolLoopGuard {
     let nang = CHO_QUA;
     const nhan = (q: QuyetDinh) => {
       if (q.muc === "chan" && !this.quyetDinhChan) this.quyetDinhChan = q;
-      if (q.muc === "chan" || (q.muc === "canh-bao" && nang.muc === "cho-qua")) nang = q;
+      // Giữ cái ĐẦU ở cả hai chỗ. Bản trước lấy cái đầu cho `quyetDinhChan`
+      // nhưng cái CUỐI cho giá trị trả về, nên một step có hai tool cùng chạm
+      // ngưỡng sẽ cho hai dòng log chỉ hai tool khác nhau về cùng một sự kiện -
+      // đúng loại lệch làm mất thời gian lúc truy lỗi.
+      if (nang.muc === "cho-qua" || (q.muc === "chan" && nang.muc === "canh-bao")) nang = q;
     };
 
     for (const p of buoc.content ?? []) {
@@ -202,36 +203,4 @@ export class ToolLoopGuard {
     }
     return CHO_QUA;
   }
-}
-
-/**
- * Ngưỡng cảnh báo suy ra từ ngưỡng chặn thay vì thêm 3 biến cấu hình nữa.
- * Tối thiểu 2 để lần lỗi ĐẦU không bao giờ bị cảnh báo - lỗi một lần là chuyện
- * thường, chưa phải vòng lặp.
- */
-export function canhBaoTu(nguongChan: number): number {
-  return Math.max(2, Math.floor(nguongChan / 2));
-}
-
-/**
- * Kẹp ngưỡng xuống dưới trần step, vì một ngưỡng cao bằng trần step là ngưỡng
- * KHÔNG BAO GIỜ tới lượt.
- *
- * Ba số mặc định (5/8/5) bê nguyên từ `tool_guardrails.py` của Hermes - nhưng bê
- * thiếu ngữ cảnh: ở Hermes `max_iterations` mặc định là **90**, nên 8 chỉ là 9%
- * ngân sách. Ở đây `LLM_MAX_STEPS` mặc định là **8**, nên ngưỡng 8 đứng đúng
- * bằng trần: mỗi step một lệnh gọi thì `stepCountIs` luôn dừng trước, bộ đếm
- * chạm 8 là chuyện không thể xảy ra.
- *
- * Kẹp ở đây chứ không hạ mặc định trong env: người đặt `LLM_MAX_STEPS=30` vẫn
- * được đúng ba con số của Hermes, còn người để mặc định thì guard vẫn nổ được.
- * Sàn 2 để không kẹp xuống 1 - chặn ngay lần lỗi đầu là quá tay.
- */
-export function nguongTheoTranStep(nguong: NguongGuard, tranStep: number): NguongGuard {
-  const kep = (n: number) => Math.max(2, Math.min(n, tranStep - 1));
-  return {
-    chanLoiGiongHet: kep(nguong.chanLoiGiongHet),
-    chanCungToolLoi: kep(nguong.chanCungToolLoi),
-    chanKhongTienTrien: kep(nguong.chanKhongTienTrien),
-  };
 }

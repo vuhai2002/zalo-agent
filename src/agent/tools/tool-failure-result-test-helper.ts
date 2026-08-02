@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { laKetQuaLoi, type KetQuaLoiTool } from "./tool-failure-result.js";
+import { laKetQuaLoi } from "./tool-failure-result.js";
 
 /**
  * Trợ giúp cho test của các tool. KHÔNG dùng ở code chạy thật.
@@ -21,7 +21,7 @@ export function loiCuaTool(ketQua: unknown): string {
     laKetQuaLoi(ketQua),
     `Mong nhánh hỏng có đánh dấu (ketQuaLoi), nhận: ${JSON.stringify(ketQua)?.slice(0, 200)}`,
   );
-  return (ketQua as KetQuaLoiTool).loi;
+  return ketQua.loi;
 }
 
 /**

@@ -30,12 +30,13 @@ import { giayChoLai, maHttpCua, phanLoaiLoiProvider } from "./provider-error-cla
 import {
   canLuotChot,
   hitStepLimit,
+  nhanLyDoDung,
   isEmptyRouterCompletion,
   vuotTranToken,
 } from "./agent-loop-conditions.js";
 
 // Re-export để test và mọi call site cũ vẫn import từ "agent-loop.js" như trước
-export { canLuotChot, hitStepLimit, isEmptyRouterCompletion, vuotTranToken };
+export { canLuotChot, hitStepLimit, isEmptyRouterCompletion, nhanLyDoDung, vuotTranToken };
 
 const log = createLogger("agent-loop");
 
@@ -470,7 +471,7 @@ export async function runAgentTurn({
       {
         steps: result.steps.length,
         maxSteps: tranStep,
-        lyDo: chan ? `guard chặn (${chan.ma})` : hetStep ? "hết step" : "chạm trần token",
+        lyDo: nhanLyDoDung({ maGuardChan: chan?.ma, hetStep }),
         // Giữ nguyên câu của guard: nó đã nói rõ tool nào, bao nhiêu lần
         guard: chan?.thongDiep,
       },

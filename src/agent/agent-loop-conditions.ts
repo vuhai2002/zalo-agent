@@ -89,3 +89,20 @@ export function vuotTranToken(tranToken: number) {
     return nangNhat >= tranToken;
   };
 }
+
+/**
+ * Nhãn lý do vòng lặp dừng, cho dòng log mà người ta đọc để hiểu vì sao lượt cụt.
+ *
+ * Tách thành hàm thuần vì bản trước viết thẳng trong log và viết NHỊ PHÂN từ hồi
+ * chỉ có hai điều kiện dừng (`hết step` : `chạm trần token`). Guard thêm vào sau
+ * thành điều kiện thứ ba, nên mọi lần guard chặn đều bị ghi nhầm là chạm trần
+ * token - chẩn đoán sai ngay ở manh mối đầu tiên. Ở đây thì sai lệch kiểu đó
+ * kiểm được bằng test, không cần bắt log.
+ *
+ * Guard xét TRƯỚC: guard chặn thì vòng dừng vì guard, kể cả khi số step tình cờ
+ * cũng vừa chạm trần.
+ */
+export function nhanLyDoDung(input: { maGuardChan?: string | null; hetStep: boolean }): string {
+  if (input.maGuardChan) return `guard chặn (${input.maGuardChan})`;
+  return input.hetStep ? "hết step" : "chạm trần token";
+}

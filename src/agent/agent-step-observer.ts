@@ -1,6 +1,7 @@
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { createLogger } from "../shared/logger.js";
 import { summarizeStep, type RawStep, type StepTrace } from "./agent-step-trace.js";
+import { laKetQuaLoi } from "./tools/tool-failure-result.js";
 import type { ToolLoopGuard } from "./tool-loop-guard.js";
 
 const log = createLogger("agent-loop");
@@ -20,7 +21,13 @@ export function forLog(value: unknown, max: number): string {
   // `JSON.stringify(undefined)` trả về undefined chứ không phải chuỗi - đọc
   // `.length` của nó là TypeError. SDK có đặt `input: void 0` cho tool do
   // provider tự chạy.
-  const text = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
+  // Nhánh hỏng hiện CÂU thay vì vỏ JSON: vỏ vừa khó đọc vừa ăn mất ~20 ký tự
+  // trong trần 300, mà phần bị cắt lại chính là phần nói vì sao hỏng.
+  const text = laKetQuaLoi(value)
+    ? `LỖI: ${value.loi}`
+    : typeof value === "string"
+      ? value
+      : (JSON.stringify(value) ?? String(value));
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 

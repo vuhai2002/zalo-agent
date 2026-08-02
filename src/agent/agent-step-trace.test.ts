@@ -165,3 +165,36 @@ describe("summarizeStep - lỗi tool", () => {
     assert.equal(t.toolResults.length, 1);
   });
 });
+
+describe("summarizeStep - nhánh HỎNG của tool hiện câu, không hiện vỏ JSON", () => {
+  it("kết quả đánh dấu hỏng ra câu đọc được trên trang Trace", () => {
+    // Để JSON.stringify xử thì ô này ra {"ok":false,"loi":"...\"bao-gia.pdf\"..."}
+    // với ngoặc kép escape hai lần - đúng ô người vận hành mở ra để hiểu vì sao
+    // bot trả lời kém
+    const t = summarizeStep(
+      {
+        toolResults: [
+          {
+            toolName: "send_file",
+            output: { ok: false, loi: 'Không có file "bao-gia.pdf" trong kho shared-files' },
+          },
+        ],
+      },
+      500,
+      1,
+    );
+    const out = t.toolResults[0]!.output;
+    assert.ok(!out.includes('\\"'), `không được escape ngoặc kép: ${out}`);
+    assert.ok(!out.includes('{"ok"'), `không được lộ vỏ JSON: ${out}`);
+    assert.match(out, /Không có file "bao-gia\.pdf"/);
+  });
+
+  it("object thường KHÔNG bị nhận nhầm - vẫn ra JSON như cũ", () => {
+    const t = summarizeStep(
+      { toolResults: [{ toolName: "x", output: { ok: false, reason: "khác tên trường" } }] },
+      500,
+      1,
+    );
+    assert.match(t.toolResults[0]!.output, /^\{"ok"/);
+  });
+});

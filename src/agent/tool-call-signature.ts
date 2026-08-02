@@ -12,23 +12,31 @@ import { createHash } from "node:crypto";
 /**
  * JSON chuẩn hóa: khóa sắp thứ tự ở MỌI cấp, không khoảng trắng.
  *
- * KHÔNG ĐƯỢC PHÉP NÉM. Hàm này chạy trong `onStepFinish`, mà `notify()` của
+ * TRÁNH NÉM HẾT MỨC. Hàm này chạy trong `onStepFinish`, mà `notify()` của
  * ai@7.0.37 gọi callback trong `try { ... } catch (e) {}` - một catch RỖNG (đọc
  * ở `node_modules/ai/dist/index.js`). Ném ở đây không làm lượt đỏ lên: nó bị
  * nuốt sạch, guard ngừng đếm và trace ngừng ghi từ step đó trở đi, còn nhìn từ
  * ngoài thì mọi thứ vẫn xanh. Hỏng im lặng khó truy hơn hỏng ồn ào nhiều.
  *
- * Ba đường ném/sai đã bịt, đều là đầu vào hợp lệ chứ không phải ca bịa:
+ * Ba đường đã bịt - nói thẳng là chúng CHƯA tới được bằng dữ liệu thật của repo
+ * (input tool đã qua Zod, không schema nào dùng `z.date()`/`z.bigint()`; output
+ * tool chỉ là `string | KetQuaLoiTool`). Bịt vì rẻ và vì hàm này là hạ tầng
+ * chung, không phải vì đã quan sát thấy:
  *
  *   - `bigint`: `JSON.stringify` ném TypeError thẳng.
  *   - Tham chiếu vòng: đệ quy không đáy, tràn stack.
  *   - Object KHÔNG THUẦN (Date, Map, Set): `Object.entries` trả rỗng nên mọi
  *     giá trị loại đó băm ra `{}` giống hệt nhau - hai lệnh gọi khác nhau bị
  *     coi là trùng, guard chặn oan. Date đi qua `toJSON` nên giữ được mốc giờ.
+ *
+ * CÒN đường ném chưa bịt, và đây mới là đường tới được: `input` của phần
+ * `tool-error` là JSON THÔ do model sinh, chưa qua Zod - lồng sâu vài chục nghìn
+ * cấp là `RangeError`. Cũng còn getter tự ném và `toJSON` tự ném (không tới được
+ * bằng dữ liệu thật). Cả ba do `try/catch` bao ngoài trong `taoQuanSatStep` bắt,
+ * hậu quả gói lại thành mất trace của đúng step đó kèm một dòng ERROR.
  */
 export function chuanHoaJson(v: unknown, dangDuyet = new WeakSet<object>()): string {
   if (typeof v === "bigint") return JSON.stringify(`${v}n`);
-  if (typeof v === "function" || typeof v === "symbol") return "null";
   if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "null";
 
   if (dangDuyet.has(v)) return '"[vòng]"';

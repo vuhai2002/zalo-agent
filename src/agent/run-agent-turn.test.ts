@@ -437,6 +437,50 @@ describe("runAgentTurn - chạm trần step", () => {
     }
   });
 
+  it("ngưỡng guard bị KẸP theo trần step - ngưỡng vượt trần vẫn phải nổ được", async () => {
+    // `nguongTheoTranStep` có unit test riêng, nhưng việc nó có được GỌI hay
+    // không thì không ai canh - mà đó đúng là hình dạng của bug gốc: hàm viết
+    // đúng, không ai nối. Ca này đo DÂY NỐI ở `agent-loop.ts`.
+    //
+    // Trần step 4, ngưỡng cùng-tool 9 (vượt trần). Không kẹp thì bộ đếm không
+    // bao giờ chạm 9: model đốt trọn 4 step rồi mới dừng vì hết step. Kẹp thì
+    // ngưỡng thành 3 và guard chặn ở step 3.
+    let n = 0;
+    const goiSendFileKhac = () => ({
+      content: [
+        {
+          type: "tool-call" as const,
+          toolCallId: `c${++n}`,
+          toolName: "send_file",
+          // Tham số KHÁC nhau mỗi lần -> chỉ bộ đếm cùng-tool với tới được
+          input: JSON.stringify({ source: `khong-co-${n}.pdf` }),
+        },
+      ],
+      finishReason: "tool-calls" as const,
+      usage: CO_TOKEN,
+      warnings: [],
+    });
+
+    tuning.setTuning("LLM_MAX_STEPS", 4);
+    tuning.setTuning("TOOL_LOOP_SAME_TOOL_BLOCK", 9);
+    tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", 30);
+    tuning.setTuning("TOOL_LOOP_NO_PROGRESS_BLOCK", 30);
+    try {
+      const { calls } = await chayLuot([goiSendFileKhac, goiSendFileKhac, goiSendFileKhac, () => traLoi("chốt")]);
+      assert.equal(
+        calls.length,
+        4,
+        `guard phải chặn ở step 3 (+1 lượt chốt). ${calls.length} lần gọi nghĩa là ngưỡng 9 KHÔNG bị kẹp xuống dưới trần 4 nên không bao giờ tới lượt`,
+      );
+      assert.equal(calls.at(-1)!.tools?.length ?? 0, 0, "lần cuối phải là lượt chốt");
+    } finally {
+      tuning.setTuning("TOOL_LOOP_NO_PROGRESS_BLOCK", null);
+      tuning.setTuning("TOOL_LOOP_SAME_ARGS_BLOCK", null);
+      tuning.setTuning("TOOL_LOOP_SAME_TOOL_BLOCK", null);
+      tuning.setTuning("LLM_MAX_STEPS", null);
+    }
+  });
+
   it("lần chạy MỚI trong cùng lượt xóa sạch bộ đếm guard - không mang tội của lần trước sang", async () => {
     // `datLai()` chỉ được gọi ở 4 chỗ trong agent-loop và chưa chỗ nào có test ở
     // tầng vòng lặp. Quên nó đi thì lượt nào phải dựng lại (tràn ngữ cảnh, bị

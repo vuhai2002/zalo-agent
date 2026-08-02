@@ -131,3 +131,27 @@ describe("vuotTranToken - điều kiện dừng theo usage THẬT", () => {
     assert.equal(loop.vuotTranToken(10_000)({ steps: [] }), false);
   });
 });
+
+describe("nhanLyDoDung - nhãn phải kể ĐÚNG một trong ba điều kiện dừng", () => {
+  it("guard chặn thì nói là guard, kèm mã để lọc log", () => {
+    assert.equal(
+      loop.nhanLyDoDung({ maGuardChan: "cung-tool-loi", hetStep: false }),
+      "guard chặn (cung-tool-loi)",
+    );
+  });
+
+  it("guard chặn THẮNG cả khi số step tình cờ cũng vừa chạm trần", () => {
+    // Bản nhị phân cũ ghi "hết step" ở đây - đúng một nửa, mà nửa bị mất lại là
+    // nửa nói vì sao lượt cụt
+    assert.equal(
+      loop.nhanLyDoDung({ maGuardChan: "loi-giong-het", hetStep: true }),
+      "guard chặn (loi-giong-het)",
+    );
+  });
+
+  it("không có guard thì phân biệt hết step với chạm trần token", () => {
+    assert.equal(loop.nhanLyDoDung({ maGuardChan: null, hetStep: true }), "hết step");
+    assert.equal(loop.nhanLyDoDung({ maGuardChan: null, hetStep: false }), "chạm trần token");
+    assert.equal(loop.nhanLyDoDung({ hetStep: false }), "chạm trần token");
+  });
+});

@@ -16,6 +16,9 @@
  * thành reasoning part nên chỗ này chỉ việc đọc `reasoningText`.
  */
 
+// Module THUẦN (0 import), không phá tính thuần của file này
+import { laKetQuaLoi } from "./tools/tool-failure-result.js";
+
 /**
  * Hình dạng tối thiểu mình cần từ StepResult. Tự khai thay vì import type của
  * SDK: giữ module thuần, và test dựng được step giả mà không cần cả bộ generic.
@@ -70,9 +73,17 @@ function cat(value: string, maxChars: number): string {
   return `${value.slice(0, maxChars)}... (${value.length} ký tự)`;
 }
 
-/** JSON.stringify an toàn: input tool có thể chứa vòng lặp hoặc BigInt */
+/**
+ * JSON.stringify an toàn: input tool có thể chứa vòng lặp hoặc BigInt.
+ *
+ * Nhánh hỏng của tool có quy ước riêng (`{ok:false,loi}`) - hiện CÂU chứ đừng
+ * hiện cái vỏ. Để `JSON.stringify` xử thì trang Trace ra
+ * `{"ok":false,"loi":"Không đọc được trang \"x\"..."}` với ngoặc kép escape hai
+ * lần, đúng cái ô mà người vận hành mở ra để hiểu vì sao bot trả lời kém.
+ */
 function thanhChuoi(value: unknown): string {
   if (typeof value === "string") return value;
+  if (laKetQuaLoi(value)) return `LỖI: ${value.loi}`;
   try {
     return JSON.stringify(value) ?? String(value);
   } catch {
