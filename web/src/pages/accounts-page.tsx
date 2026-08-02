@@ -67,7 +67,7 @@ export function AccountsPage() {
       />
 
       {notice && (
-        <p className={`mb-4 text-[13px] ${notice.tone === "red" ? "text-red-600" : "text-amber-600"}`}>
+        <p className={`mb-4 text-[13px] ${notice.tone === "red" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
           {notice.text}
         </p>
       )}
@@ -103,7 +103,7 @@ export function AccountsPage() {
                 <button
                   onClick={() => toggleEnabled(acc)}
                   className={`relative h-5 w-9 rounded-full transition-colors ${
-                    acc.enabled ? "bg-zalo-500" : "bg-slate-300"
+                    acc.enabled ? "bg-zalo-500" : "bg-slate-300 dark:bg-slate-600"
                   }`}
                   title={acc.enabled ? "Đang bật - bấm để tắt" : "Đang tắt - bấm để bật"}
                 >
@@ -127,7 +127,7 @@ export function AccountsPage() {
                 </button>
                 <button
                   onClick={() => remove(acc)}
-                  className="rounded-lg px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50"
+                  className="rounded-lg px-3 py-1.5 text-[13px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40"
                 >
                   Xóa
                 </button>

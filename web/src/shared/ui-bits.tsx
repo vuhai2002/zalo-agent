@@ -13,7 +13,7 @@ import { IconSearch } from "./dashboard-icons";
 export function ToggleKnob({ on }: { on: boolean }) {
   return (
     <span
-      className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-zalo-500" : "bg-slate-300"}`}
+      className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-zalo-500" : "bg-slate-300 dark:bg-slate-600"}`}
     >
       <span
         className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${on ? "left-[18px]" : "left-0.5"}`}
@@ -33,10 +33,10 @@ export function Badge({
 }) {
   const tones = {
     blue: { chip: "bg-zalo-50 text-zalo-700 border-zalo-100", dot: "bg-zalo-500" },
-    gray: { chip: "bg-tile text-ink-soft border-line", dot: "bg-slate-400" },
-    green: { chip: "bg-emerald-50 text-emerald-700 border-emerald-100", dot: "bg-emerald-500" },
-    red: { chip: "bg-red-50 text-red-700 border-red-100", dot: "bg-red-500" },
-    amber: { chip: "bg-amber-50 text-amber-700 border-amber-100", dot: "bg-amber-500" },
+    gray: { chip: "bg-tile text-ink-soft border-line", dot: "bg-slate-400 dark:bg-slate-500" },
+    green: { chip: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-100 dark:border-emerald-900/50", dot: "bg-emerald-500" },
+    red: { chip: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-100 dark:border-red-900/50", dot: "bg-red-500" },
+    amber: { chip: "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-100 dark:border-amber-900/50", dot: "bg-amber-500" },
   }[tone];
   return (
     <span
@@ -148,7 +148,7 @@ export function InfoTile({
 }) {
   return (
     <div className="gc-tile flex items-center gap-3">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white text-ink-soft">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-surface text-ink-soft">
         <Icon size={16} />
       </span>
       <div className="min-w-0">
@@ -169,7 +169,7 @@ export function Pager({
   onPage: (p: number) => void;
 }) {
   const btn =
-    "rounded-lg border border-line bg-white px-3 py-1.5 text-[13px] font-medium text-ink disabled:opacity-40 hover:bg-tile";
+    "rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink disabled:opacity-40 hover:bg-tile";
   return (
     <div className="flex items-center gap-2">
       <button className={btn} disabled={page === 0} onClick={() => onPage(page - 1)}>

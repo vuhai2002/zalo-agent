@@ -68,7 +68,7 @@ export function QrLoginModal({
         <div className="mb-1 font-semibold text-ink">Login QR - {account.label}</div>
         <p className="mb-4 text-[13px] text-ink-soft">{STATUS_TEXT[state.status]}</p>
 
-        <div className="mx-auto mb-4 flex h-56 w-56 items-center justify-center rounded-xl border border-line bg-white">
+        <div className="mx-auto mb-4 flex h-56 w-56 items-center justify-center rounded-xl border border-line bg-surface">
           {state.qrDataUri && state.status === "waiting_scan" ? (
             <img src={state.qrDataUri} alt="Mã QR đăng nhập Zalo" className="h-52 w-52" />
           ) : state.status === "success" ? (
@@ -82,7 +82,7 @@ export function QrLoginModal({
           )}
         </div>
 
-        {state.error && <p className="mb-3 text-[13px] text-red-600">{state.error}</p>}
+        {state.error && <p className="mb-3 text-[13px] text-red-600 dark:text-red-400">{state.error}</p>}
 
         <div className="flex justify-center gap-3">
           {failed && (

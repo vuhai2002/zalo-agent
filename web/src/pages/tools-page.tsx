@@ -107,7 +107,7 @@ export function ToolsPage() {
               options={accounts.map((a) => ({
                 value: a.id,
                 label: a.label,
-                dotClass: a.running ? "bg-emerald-500" : "bg-slate-300",
+                dotClass: a.running ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600",
               }))}
             />
           ) : undefined
@@ -115,7 +115,7 @@ export function ToolsPage() {
       />
 
       {error && (
-        <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-[13px] text-red-700">
+        <div className="mb-4 rounded-xl border border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 px-4 py-2.5 text-[13px] text-red-700 dark:text-red-300">
           {error}
         </div>
       )}
@@ -172,7 +172,7 @@ export function ToolsPage() {
                       </div>
                       <p className="mt-0.5 text-[12px] leading-[1.6] text-ink-soft">{tool.description}</p>
                       {!tool.available && tool.unavailableHint && (
-                        <p className="mt-1 text-[12px] leading-[1.6] text-amber-700">{tool.unavailableHint}</p>
+                        <p className="mt-1 text-[12px] leading-[1.6] text-amber-700 dark:text-amber-300">{tool.unavailableHint}</p>
                       )}
                     </div>
 

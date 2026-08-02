@@ -38,7 +38,7 @@ export function SessionDetailDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-lg flex-col border-l border-line bg-white"
+        className="flex h-full w-full max-w-lg flex-col border-l border-line bg-surface"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
@@ -99,7 +99,7 @@ export function SessionDetailDrawer({
           {hasOlder && (
             <button
               onClick={loadOlder}
-              className="mx-auto block rounded-full border border-line bg-white px-4 py-1 text-[12px] text-ink-soft hover:bg-tile"
+              className="mx-auto block rounded-full border border-line bg-surface px-4 py-1 text-[12px] text-ink-soft hover:bg-tile"
             >
               Tải tin cũ hơn
             </button>
@@ -110,7 +110,7 @@ export function SessionDetailDrawer({
                 className={`max-w-[80%] rounded-2xl px-4 py-2 text-[14px] ${
                   m.role === "assistant"
                     ? "rounded-br-md bg-zalo-500 text-white"
-                    : "rounded-bl-md border border-line bg-white text-ink"
+                    : "rounded-bl-md border border-line bg-surface text-ink"
                 }`}
               >
                 {m.role === "user" && m.senderName && (

@@ -15,6 +15,24 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      Gắn class .dark TRƯỚC khi React render. Để việc này cho useEffect thì
+      trang vẽ xong một khung sáng rồi mới tối lại - mắt thấy rõ cú nháy trắng
+      mỗi lần tải. Script inline, chạy đồng bộ, cố ý đặt trước bundle.
+    -->
+    <script>
+      (function () {
+        try {
+          var luu = localStorage.getItem("zalo-agent-theme");
+          var toi = luu
+            ? luu === "dark"
+            : window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (toi) document.documentElement.classList.add("dark");
+        } catch (e) {
+          /* localStorage bị chặn (chế độ riêng tư): cứ để giao diện sáng */
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

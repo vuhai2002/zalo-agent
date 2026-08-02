@@ -16,7 +16,9 @@ import { LogsPage } from "./pages/logs-page";
 import { TracePage } from "./pages/trace-page";
 import { TuningPage } from "./pages/tuning-page";
 import { ToolsPage } from "./pages/tools-page";
+import { anhNen } from "./shared/background-image";
 import { IconMenu } from "./shared/dashboard-icons";
+import { useTheme } from "./shared/use-theme";
 
 /**
  * Khung chính sau đăng nhập. Không có "account đang chọn" toàn cục - các trang
@@ -28,6 +30,8 @@ function DashboardShell() {
   const [accounts, setAccounts] = useState<AccountInfo[]>([]);
   const [checked, setChecked] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Chỉ cần ĐỌC theme ở đây để chọn ảnh nền - nút chuyển nằm trong SidebarNav
+  const { theme } = useTheme();
 
   useEffect(() => {
     api
@@ -57,7 +61,7 @@ function DashboardShell() {
 
       <div className="flex min-w-0 flex-1 flex-col lg:h-screen lg:overflow-hidden">
         {/* Topbar chỉ ở mobile - desktop đã có sidebar cố định */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/90 px-4 py-3 backdrop-blur lg:hidden">
           <button
             onClick={() => setMenuOpen(true)}
             aria-label="Mở menu"
@@ -87,7 +91,7 @@ function DashboardShell() {
         */}
         <main
           className="min-w-0 flex-1 bg-canvas bg-cover bg-fixed bg-center px-4 py-5 sm:px-6 lg:overflow-y-auto lg:px-8 lg:py-7"
-          style={{ backgroundImage: "url(/dashboard-background.webp)" }}
+          style={{ backgroundImage: `url(${anhNen(theme)})` }}
         >
           <Routes>
             <Route path="/" element={<OverviewPage />} />

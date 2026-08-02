@@ -164,7 +164,7 @@ export function ToolChainSettingsModal({
           />
 
           {blocked && (
-            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-800">
+            <div className="rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/40 px-4 py-2.5 text-[13px] text-amber-800 dark:text-amber-200">
               Nhập API key Brave trước rồi mới bật được bậc này.
             </div>
           )}
@@ -189,7 +189,7 @@ export function ToolChainSettingsModal({
       )}
 
       {error && (
-        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-[13px] text-red-700">
+        <div className="rounded-xl border border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 px-4 py-2.5 text-[13px] text-red-700 dark:text-red-300">
           {error}
         </div>
       )}

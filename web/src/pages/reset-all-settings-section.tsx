@@ -60,13 +60,13 @@ export function ResetAllSettingsSection({
             hưởng. Hành động này không thể hoàn tác.
             {soODaDoi === 0 && " Hiện chưa có tham số nào được chỉnh."}
           </p>
-          {xong && <p className="mt-2 text-[13px] text-emerald-600">{xong}</p>}
+          {xong && <p className="mt-2 text-[13px] text-emerald-600 dark:text-emerald-400">{xong}</p>}
         </div>
         <button
           type="button"
           onClick={() => void datLai()}
           disabled={dangChay || soODaDoi === 0}
-          className="shrink-0 rounded-xl border border-line bg-white px-4 py-2.5 text-[13px] font-semibold text-ink hover:bg-tile disabled:opacity-50"
+          className="shrink-0 rounded-xl border border-line bg-surface px-4 py-2.5 text-[13px] font-semibold text-ink hover:bg-tile disabled:opacity-50"
         >
           {dangChay ? "Đang đặt lại..." : soODaDoi > 0 ? `Đặt lại (${soODaDoi})` : "Đặt lại"}
         </button>

@@ -60,7 +60,7 @@ export function SelectMenu({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className={`flex w-full items-center gap-2 rounded-lg border bg-white px-2.5 py-2 text-left text-[13px] text-ink transition-colors hover:bg-tile/50 ${
+        className={`flex w-full items-center gap-2 rounded-lg border bg-surface px-2.5 py-2 text-left text-[13px] text-ink transition-colors hover:bg-tile/50 ${
           open ? "border-zalo-500 ring-2 ring-zalo-100" : "border-line"
         }`}
       >
@@ -80,7 +80,7 @@ export function SelectMenu({
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 overflow-hidden rounded-xl border border-line bg-white py-1 shadow-lg shadow-ink/5"
+          className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-lg shadow-ink/5"
         >
           {options.map((opt) => {
             const active = opt.value === value;

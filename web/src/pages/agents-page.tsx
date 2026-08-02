@@ -49,7 +49,7 @@ export function AgentsPage() {
         }
       />
 
-      {error && <p className="mb-4 text-[13px] text-red-600">{error}</p>}
+      {error && <p className="mb-4 text-[13px] text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {agents.map((agent) => (
@@ -88,7 +88,7 @@ export function AgentsPage() {
                 {!agent.isDefault && (
                   <button
                     onClick={() => remove(agent)}
-                    className="rounded-lg px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50"
+                    className="rounded-lg px-3 py-1.5 text-[13px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40"
                   >
                     Xóa
                   </button>

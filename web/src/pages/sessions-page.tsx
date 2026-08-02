@@ -104,7 +104,7 @@ export function SessionsPage({ accounts }: { accounts: AccountInfo[] }) {
               <button
                 onClick={() => toggleBot(t)}
                 className={`relative h-5 w-9 rounded-full transition-colors ${
-                  t.botEnabled ? "bg-zalo-500" : "bg-slate-300"
+                  t.botEnabled ? "bg-zalo-500" : "bg-slate-300 dark:bg-slate-600"
                 }`}
                 title={t.botEnabled ? "Bot đang bật - bấm để tắt" : "Bot đang tắt - bấm để bật"}
               >

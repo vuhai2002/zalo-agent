@@ -166,14 +166,14 @@ export function TuningField({
         />
       )}
 
-      {phase === "error" && loi && <p className="mt-2 text-[12px] text-red-600">{loi}</p>}
+      {phase === "error" && loi && <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{loi}</p>}
     </div>
   );
 }
 
 function TrangThaiLuu({ phase }: { phase: Phase }) {
   if (phase === "saving") return <span className="text-[11px] text-ink-soft">Đang lưu...</span>;
-  if (phase === "saved") return <span className="text-[11px] text-emerald-600">Đã lưu</span>;
+  if (phase === "saved") return <span className="text-[11px] text-emerald-600 dark:text-emerald-400">Đã lưu</span>;
   return null;
 }
 

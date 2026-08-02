@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Bật dark mode theo class `.dark` trên <html> thay vì chỉ nghe media query:
+   người dùng phải TỰ CHỌN được sáng/tối bất kể hệ điều hành đang đặt gì. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
  * Design tokens - trích từ GoClaw dashboard thật (card trắng border 0.67px
  * radius 12, nền off-white, không shadow) nhưng đổi hệ màu: neutral warm ->
@@ -20,10 +24,36 @@
   --color-zalo-700: #0043ab;
 
   --color-canvas: #f6f8fb;      /* nền trang */
+  --color-surface: #ffffff;     /* nền card/panel - KHÔNG dùng bg-white trực tiếp */
   --color-ink: #1c2433;         /* chữ chính */
   --color-ink-soft: #67748b;    /* chữ phụ */
   --color-line: #e4e8ef;        /* border card */
   --color-tile: #eef1f6;        /* nền tile/hover */
+}
+
+/*
+ * Chế độ tối: ĐỊNH NGHĨA LẠI đúng bộ token ở trên, không đụng tới component.
+ * Nhờ vậy `bg-surface`, `text-ink`, `border-line`... trong mọi file tự đổi
+ * theo, không phải rắc `dark:` khắp nơi rồi sót chỗ này chỗ kia.
+ *
+ * Tông xanh đêm (không phải xám trung tính) để hợp ảnh nền dark và giữ đúng
+ * chất Zalo. Nền card sáng hơn nền trang một bậc - đó là thứ tạo ra chiều sâu
+ * khi không có bóng đổ.
+ */
+.dark {
+  --color-zalo-50: #16233a;     /* nền nhạt cho mục đang chọn */
+  --color-zalo-100: #1e3357;
+  --color-zalo-200: #2a4573;
+  --color-zalo-500: #3b82f6;    /* sáng hơn bản light để nổi trên nền tối */
+  --color-zalo-600: #60a5fa;
+  --color-zalo-700: #93c5fd;    /* chữ trên nền zalo-50 tối */
+
+  --color-canvas: #0a1020;
+  --color-surface: #111a2e;
+  --color-ink: #e8edf5;
+  --color-ink-soft: #94a3b8;
+  --color-line: #1f2c47;
+  --color-tile: #18243c;
 }
 
 body {
@@ -48,11 +78,11 @@ summary,
 
 /* Trong @layer components để utility (pl-9...) vẫn override được khi cần */
 @layer components {
-  /* Card chuẩn mẫu: trắng, border mảnh, radius 12, KHÔNG shadow.
+  /* Card chuẩn mẫu: border mảnh, radius 12, KHÔNG shadow.
      Hơi trong + blur nhẹ để ảnh nền của trang lộ ra sau card thay vì bị che
      kín - đục hoàn toàn thì nền chỉ còn thấy ở mép, phí công đặt nền. */
   .gc-card {
-    @apply rounded-xl border border-line bg-white/95 backdrop-blur-sm;
+    @apply rounded-xl border border-line bg-surface/95 backdrop-blur-sm;
   }
 
   /* Tile nhỏ trong panel (System Health): nền muted mờ */
@@ -61,6 +91,6 @@ summary,
   }
 
   .gc-input {
-    @apply rounded-lg border border-line bg-white px-3 py-2 text-[15px] text-ink outline-none placeholder:text-ink-soft/60 focus:border-zalo-500 focus:ring-2 focus:ring-zalo-100;
+    @apply rounded-lg border border-line bg-surface px-3 py-2 text-[15px] text-ink outline-none placeholder:text-ink-soft/60 focus:border-zalo-500 focus:ring-2 focus:ring-zalo-100;
   }
 }

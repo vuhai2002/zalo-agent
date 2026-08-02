@@ -76,7 +76,7 @@ export function MemoryPage({ accounts }: { accounts: AccountInfo[] }) {
             </td>
             <td className="px-4 py-3 text-ink-soft">{formatTime(m.createdAt)}</td>
             <td className="px-4 py-3">
-              <button onClick={() => remove(m)} className="text-[13px] text-red-600 hover:underline">
+              <button onClick={() => remove(m)} className="text-[13px] text-red-600 dark:text-red-400 hover:underline">
                 Xóa
               </button>
             </td>

@@ -41,7 +41,7 @@ export function ScheduleRunHistoryDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-lg flex-col border-l border-line bg-white"
+        className="flex h-full w-full max-w-lg flex-col border-l border-line bg-surface"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">

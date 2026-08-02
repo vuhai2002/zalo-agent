@@ -208,8 +208,8 @@ export function VisionSettingsModal({
         <div
           className={`rounded-xl border px-4 py-2.5 text-[13px] ${
             status.tone === "green"
-              ? "border-emerald-100 bg-emerald-50 text-emerald-700"
-              : "border-red-100 bg-red-50 text-red-700"
+              ? "border-emerald-100 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+              : "border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300"
           }`}
         >
           {status.text}

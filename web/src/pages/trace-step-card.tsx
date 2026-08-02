@@ -52,7 +52,7 @@ function KhoiChu({ nhan, noiDung, mau }: { nhan: string; noiDung: string; mau?: 
 
 export function TraceStepCard({ step }: { step: TraceStep }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-3.5">
+    <div className="rounded-xl border border-line bg-surface p-3.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded bg-zalo-50 px-1.5 py-0.5 text-[11px] font-medium text-zalo-700">
           Step {step.stepNumber}
@@ -61,7 +61,7 @@ export function TraceStepCard({ step }: { step: TraceStep }) {
             step chỉ làm nhiễu. Thấy nhãn này tức là step đánh số lại từ đầu,
             không phải model đang lặp. */}
         {step.attempt > 1 && (
-          <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+          <span className="rounded bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">
             chạy lại lần {step.attempt}
           </span>
         )}
@@ -77,12 +77,12 @@ export function TraceStepCard({ step }: { step: TraceStep }) {
       </div>
 
       {step.warnings.length > 0 && (
-        <div className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-800">
+        <div className="mt-2 rounded-lg border border-amber-100 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/40 px-3 py-2">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-800 dark:text-amber-200">
             Cảnh báo từ nhà cung cấp
           </div>
           {step.warnings.map((w, i) => (
-            <div key={i} className="text-[12px] text-amber-900">
+            <div key={i} className="text-[12px] text-amber-900 dark:text-amber-200">
               {w}
             </div>
           ))}
@@ -93,12 +93,12 @@ export function TraceStepCard({ step }: { step: TraceStep }) {
           rồi mới xuống chi tiết. Trước khi có khối này, step tool lỗi hiện
           "Gọi tool" rồi cụt - nhìn y hệt lượt đang chạy dở. */}
       {step.toolErrors.length > 0 && (
-        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-red-800">
+        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/40 px-3 py-2">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-red-800 dark:text-red-200">
             Tool chạy lỗi
           </div>
           {step.toolErrors.map((e, i) => (
-            <div key={i} className="text-[12px] leading-[1.6] text-red-900">
+            <div key={i} className="text-[12px] leading-[1.6] text-red-900 dark:text-red-200">
               <span className="font-medium">{e.name}</span>: {e.error}
             </div>
           ))}

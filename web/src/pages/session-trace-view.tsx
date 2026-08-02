@@ -42,7 +42,7 @@ export function SessionTraceView({ accountId, threadId }: { accountId: string; t
           <button
             type="button"
             onClick={() => moLuot(t.id)}
-            className="flex w-full items-center justify-between rounded-xl border border-line bg-white px-4 py-2.5 text-left hover:bg-tile"
+            className="flex w-full items-center justify-between rounded-xl border border-line bg-surface px-4 py-2.5 text-left hover:bg-tile"
           >
             <div>
               <div className="text-[13px] font-medium text-ink">

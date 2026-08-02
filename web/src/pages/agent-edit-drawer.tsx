@@ -65,7 +65,7 @@ export function AgentEditDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-md flex-col border-l border-line bg-white"
+        className="flex h-full w-full max-w-md flex-col border-l border-line bg-surface"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
@@ -178,7 +178,7 @@ export function AgentEditDrawer({
             dò bảng nên để mức cao; trò chuyện thường để vừa là đủ.
           </p>
 
-          {error && <p className="text-[13px] text-red-600">{error}</p>}
+          {error && <p className="text-[13px] text-red-600 dark:text-red-400">{error}</p>}
         </div>
 
         <div className="border-t border-line px-5 py-4">

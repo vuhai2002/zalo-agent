@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../dashboard-api-client";
+import { anhNen } from "../shared/background-image";
 import { SecretInput } from "../shared/secret-input";
+import { useTheme } from "../shared/use-theme";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const { theme } = useTheme();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,7 +31,7 @@ export function LoginPage() {
   return (
     <div
       className="flex min-h-[100dvh] items-center justify-center bg-canvas bg-cover bg-center px-4"
-      style={{ backgroundImage: "url(/dashboard-background.webp)" }}
+      style={{ backgroundImage: `url(${anhNen(theme)})` }}
     >
       <form onSubmit={submit} className="gc-card w-full max-w-sm p-8">
         <div className="mb-6 flex flex-col items-center gap-1">
@@ -45,7 +48,7 @@ export function LoginPage() {
 
         <label className="mb-1.5 block text-[13px] font-medium text-ink">Mật khẩu dashboard</label>
         <SecretInput value={password} onChange={setPassword} autoFocus className="mb-3" />
-        {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
+        {error && <p className="mb-3 text-[13px] text-red-600 dark:text-red-400">{error}</p>}
 
         <button
           type="submit"

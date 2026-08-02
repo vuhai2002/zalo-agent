@@ -127,7 +127,7 @@ export function ProvidersPage() {
         </div>
 
         {status && (
-          <p className={`text-[13px] ${status.tone === "green" ? "text-emerald-600" : "text-red-600"}`}>
+          <p className={`text-[13px] ${status.tone === "green" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
             {status.text}
           </p>
         )}
@@ -143,7 +143,7 @@ export function ProvidersPage() {
           <button
             onClick={test}
             disabled={busy}
-            className="rounded-lg border border-line bg-white px-4 py-2 text-[14px] font-medium text-ink hover:bg-tile disabled:opacity-50"
+            className="rounded-lg border border-line bg-surface px-4 py-2 text-[14px] font-medium text-ink hover:bg-tile disabled:opacity-50"
           >
             Test kết nối
           </button>
@@ -151,7 +151,7 @@ export function ProvidersPage() {
             <button
               onClick={reset}
               disabled={busy}
-              className="ml-auto rounded-lg px-4 py-2 text-[14px] text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="ml-auto rounded-lg px-4 py-2 text-[14px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40 disabled:opacity-50"
             >
               Xóa override (về .env)
             </button>

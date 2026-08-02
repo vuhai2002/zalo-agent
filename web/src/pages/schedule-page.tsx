@@ -90,7 +90,7 @@ export function SchedulePage({ accounts }: { accounts: AccountInfo[] }) {
       )}
 
       {notice && (
-        <p className={`mb-4 text-[13px] ${notice.tone === "red" ? "text-red-600" : "text-amber-600"}`}>{notice.text}</p>
+        <p className={`mb-4 text-[13px] ${notice.tone === "red" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>{notice.text}</p>
       )}
 
       <div className="space-y-3">

@@ -12,10 +12,13 @@ import {
   IconGear,
   IconGrid,
   IconLogout,
+  IconMoon,
   IconSignal,
   IconSliders,
+  IconSun,
   IconUsers,
 } from "../shared/dashboard-icons";
+import { useTheme } from "../shared/use-theme";
 
 /**
  * Sidebar theo mẫu GoClaw. Từ lg trở lên: cột cố định trong layout.
@@ -63,6 +66,8 @@ export function SidebarNav({
   mobileOpen: boolean;
   onCloseMobile: () => void;
 }) {
+  const { theme, toggle } = useTheme();
+
   return (
     <>
       {/* Backdrop chỉ tồn tại ở mobile khi drawer mở */}
@@ -75,7 +80,7 @@ export function SidebarNav({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:z-auto lg:w-60 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-surface transition-transform duration-200 lg:static lg:z-auto lg:w-60 lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -134,16 +139,26 @@ export function SidebarNav({
 
         <div className="flex items-center justify-between border-t border-line px-4 py-3">
           <span className="flex items-center gap-2 text-[12px] text-ink-soft">
-            <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-slate-300"}`} />
+            <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`} />
             {online ? "Connected" : "Offline"} · v0.1.0
           </span>
-          <button
-            onClick={onLogout}
-            title="Đăng xuất"
-            className="rounded-lg p-1.5 text-ink-soft hover:bg-tile hover:text-ink"
-          >
-            <IconLogout size={16} />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={toggle}
+              title={theme === "dark" ? "Đang tối - bấm để chuyển sáng" : "Đang sáng - bấm để chuyển tối"}
+              aria-label="Đổi giao diện sáng/tối"
+              className="rounded-lg p-1.5 text-ink-soft hover:bg-tile hover:text-ink"
+            >
+              {theme === "dark" ? <IconSun size={16} /> : <IconMoon size={16} />}
+            </button>
+            <button
+              onClick={onLogout}
+              title="Đăng xuất"
+              className="rounded-lg p-1.5 text-ink-soft hover:bg-tile hover:text-ink"
+            >
+              <IconLogout size={16} />
+            </button>
+          </div>
         </div>
       </aside>
     </>

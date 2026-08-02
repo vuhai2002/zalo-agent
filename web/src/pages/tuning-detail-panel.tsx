@@ -42,7 +42,7 @@ export function TuningDetailPanel({
       {/* Hơi trong (95%) để thấy được ảnh nền phía sau, kèm blur nhẹ cho chữ
           không bị hoa văn nền làm khó đọc - card đục hoàn toàn thì ảnh nền chỉ
           còn thấy ở mép trang, phí công đặt nền */}
-      <div className="rounded-2xl border border-line bg-white/95 p-6 backdrop-blur-sm">
+      <div className="rounded-2xl border border-line bg-surface/95 p-6 backdrop-blur-sm">
         {/* Tiêu đề KHÔNG lặp lại icon của nhóm: icon đã có ngay bên trái ở nav,
             lặp lần nữa cách đó vài chục pixel chỉ thêm nhiễu chứ không thêm tin */}
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
@@ -54,7 +54,7 @@ export function TuningDetailPanel({
             <button
               type="button"
               onClick={onResetGroup}
-              className="shrink-0 rounded-lg border border-line bg-white px-3 py-1.5 text-[13px] text-ink-soft hover:bg-tile"
+              className="shrink-0 rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] text-ink-soft hover:bg-tile"
             >
               Đặt lại nhóm này
             </button>

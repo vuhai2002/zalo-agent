@@ -27,7 +27,7 @@ export function AccountFilter({
         ...accounts.map((a) => ({
           value: a.id,
           label: a.label,
-          dotClass: a.online ? "bg-emerald-500" : "bg-slate-300",
+          dotClass: a.online ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600",
         })),
       ]}
     />

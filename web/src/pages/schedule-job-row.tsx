@@ -118,13 +118,13 @@ export function ScheduleJobRow({
       </div>
 
       {canShowError && (
-        <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[12px] leading-[1.6] text-red-700">
+        <div className="rounded-lg border border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-[12px] leading-[1.6] text-red-700 dark:text-red-300">
           {job.lastError}
         </div>
       )}
 
       {runResult && (
-        <div className="rounded-lg border border-line bg-white px-3 py-2 text-[12px] leading-[1.6] text-ink-soft">
+        <div className="rounded-lg border border-line bg-surface px-3 py-2 text-[12px] leading-[1.6] text-ink-soft">
           {runResult}
         </div>
       )}
@@ -133,7 +133,7 @@ export function ScheduleJobRow({
         <button
           onClick={onToggle}
           disabled={toggleDisabled}
-          className={`relative h-5 w-9 rounded-full transition-colors ${job.enabled ? "bg-zalo-500" : "bg-slate-300"} ${toggleDisabled ? "cursor-not-allowed opacity-50" : ""}`}
+          className={`relative h-5 w-9 rounded-full transition-colors ${job.enabled ? "bg-zalo-500" : "bg-slate-300 dark:bg-slate-600"} ${toggleDisabled ? "cursor-not-allowed opacity-50" : ""}`}
           title={
             toggleDisabled
               ? "Lịch này không còn mốc chạy nào - bật lại cũng không chạy nữa. Bấm Sửa để đặt lịch mới."
@@ -149,23 +149,23 @@ export function ScheduleJobRow({
         <button
           onClick={handleRun}
           disabled={running}
-          className="rounded-lg border border-line bg-white px-3 py-1.5 text-[13px] font-medium text-zalo-600 hover:bg-zalo-50 disabled:opacity-50"
+          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-zalo-600 hover:bg-zalo-50 disabled:opacity-50"
         >
           {running ? "Đang chạy..." : "Chạy thử ngay"}
         </button>
         <button
           onClick={onHistory}
-          className="rounded-lg border border-line bg-white px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-tile"
+          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-tile"
         >
           Lịch sử
         </button>
         <button
           onClick={onEdit}
-          className="rounded-lg border border-line bg-white px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-tile"
+          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-tile"
         >
           Sửa
         </button>
-        <button onClick={onDelete} className="rounded-lg px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50">
+        <button onClick={onDelete} className="rounded-lg px-3 py-1.5 text-[13px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40">
           Xóa
         </button>
       </div>

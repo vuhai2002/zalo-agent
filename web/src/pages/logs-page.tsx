@@ -16,8 +16,8 @@ import { SelectMenu } from "../shared/select-menu";
 
 /** Nhãn + màu theo mức pino (10 trace, 20 debug, 30 info, 40 warn, 50 error) */
 function nhanMuc(level: number): { text: string; lop: string } {
-  if (level >= 50) return { text: "ERROR", lop: "bg-red-50 text-red-700 border-red-100" };
-  if (level >= 40) return { text: "WARN", lop: "bg-amber-50 text-amber-800 border-amber-100" };
+  if (level >= 50) return { text: "ERROR", lop: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-100 dark:border-red-900/50" };
+  if (level >= 40) return { text: "WARN", lop: "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-amber-100 dark:border-amber-900/50" };
   if (level >= 30) return { text: "INFO", lop: "bg-sky-50 text-sky-700 border-sky-100" };
   return { text: "DEBUG", lop: "bg-tile text-ink-soft border-line" };
 }
@@ -114,12 +114,12 @@ export function LogsPage() {
       />
 
       {tat && (
-        <div className="mb-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-800">
+        <div className="mb-4 rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/40 px-4 py-2.5 text-[13px] text-amber-800 dark:text-amber-200">
           {goiY || "Ghi log ra file đang tắt"}
         </div>
       )}
       {loi && (
-        <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-[13px] text-red-700">
+        <div className="mb-4 rounded-xl border border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 px-4 py-2.5 text-[13px] text-red-700 dark:text-red-300">
           {loi}
         </div>
       )}
@@ -150,13 +150,13 @@ export function LogsPage() {
           type="button"
           onClick={() => void nap()}
           disabled={dangTai}
-          className="rounded-lg border border-line bg-white px-4 py-2 text-[13px] font-medium text-ink hover:bg-tile disabled:opacity-50"
+          className="rounded-lg border border-line bg-surface px-4 py-2 text-[13px] font-medium text-ink hover:bg-tile disabled:opacity-50"
         >
           {dangTai ? "Đang tải..." : "Tải lại"}
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-line bg-white">
+      <div className="overflow-hidden rounded-2xl border border-line bg-surface">
         {entries.map((e, i) => (
           <DongLog key={i} e={e} />
         ))}
