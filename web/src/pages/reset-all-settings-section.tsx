@@ -55,7 +55,7 @@ export function ResetAllSettingsSection({
             <IconWarning size={16} className="text-amber-500" />
             Đặt lại toàn bộ cấu hình
           </div>
-          <p className="mt-1 text-[13px] leading-[1.6] text-ink-soft">
+          <p className="mt-2 max-w-3xl text-[13px] leading-[1.7] text-ink-soft">
             Trả mọi tham số ở tất cả các nhóm về giá trị trong file .env. Mật khẩu dashboard không bị ảnh
             hưởng. Hành động này không thể hoàn tác.
             {soODaDoi === 0 && " Hiện chưa có tham số nào được chỉnh."}

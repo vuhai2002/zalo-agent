@@ -48,7 +48,7 @@ export function TuningDetailPanel({
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-[19px] font-semibold text-ink">{group.title}</h2>
-            <p className="mt-1 text-[13px] leading-[1.6] text-ink-soft">{group.hint}</p>
+            <p className="mt-1.5 max-w-3xl text-[13px] leading-[1.7] text-ink-soft">{group.hint}</p>
           </div>
           {coDoiKhoiEnv && (
             <button
@@ -70,7 +70,7 @@ export function TuningDetailPanel({
           // khối - đây là danh sách thiết lập liền mạch, không phải các thẻ rời
           <div className="divide-y divide-line">
             {keys.map((k) => (
-              <div key={k} className="py-4 first:pt-0">
+              <div key={k} className="py-5 first:pt-0">
                 <TuningField name={k} def={defs[k]!} tuningValue={values[k]!} onSave={onSaveOne} />
               </div>
             ))}
@@ -78,7 +78,7 @@ export function TuningDetailPanel({
                 sách tham số, nên "phần tử đầu" của chúng vẫn cần đệm trên -
                 bỏ đệm làm nó dính sát vào đường kẻ phía trên */}
             {extra?.map((muc, i) => (
-              <div key={i} className={keys.length === 0 && i === 0 ? "py-4 pt-0" : "py-4"}>
+              <div key={i} className={keys.length === 0 && i === 0 ? "py-5 pt-0" : "py-5"}>
                 {muc}
               </div>
             ))}

@@ -80,7 +80,7 @@ export function TuningField({
     // Bọc mỗi tham số trong một khối xám là kiểu "khối lồng khối", nhìn nặng và
     // chia trang thành nhiều ô con không cần thiết.
     <div className="py-1">
-      <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         <label htmlFor={id} className="text-[15px] font-semibold text-ink">
           {def.label}
         </label>
@@ -101,7 +101,7 @@ export function TuningField({
         <TrangThaiLuu phase={phase} />
       </div>
 
-      {def.hint && <p className="mb-3 text-[13px] leading-[1.6] text-ink-soft">{def.hint}</p>}
+      {def.hint && <p className="mb-4 max-w-3xl text-[13px] leading-[1.7] text-ink-soft">{def.hint}</p>}
 
       {def.kind === "number" && (
         <div className="flex items-center gap-2">

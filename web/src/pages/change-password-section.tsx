@@ -52,12 +52,12 @@ export function ChangePasswordSection() {
 
   return (
     <section>
-      <div className="mb-3">
+      <div className="mb-4">
         <div className="flex items-center gap-2 text-[15px] font-semibold text-ink">
           <IconLock size={16} className="text-ink-soft" />
           Mật khẩu dashboard
         </div>
-        <p className="mt-1 text-[13px] leading-[1.6] text-ink-soft">
+        <p className="mt-1.5 max-w-3xl text-[13px] leading-[1.7] text-ink-soft">
           Đổi mật khẩu đăng nhập trang này. Đổi xong, mọi thiết bị khác đang đăng nhập sẽ bị đăng xuất.
         </p>
       </div>
@@ -75,7 +75,7 @@ export function ChangePasswordSection() {
 
       <div className="max-w-2xl">
         <label className="block">
-          <span className="mb-1.5 block text-[13px] font-medium text-ink">Mật khẩu hiện tại</span>
+          <span className="mb-2 block text-[13px] font-medium text-ink">Mật khẩu hiện tại</span>
           {/* Ô này để MỘT MÌNH một hàng: nó xác minh danh tính, khác vai với cặp
               "mật khẩu mới" bên dưới - xếp chung hàng làm ba ô trông như một bộ */}
           <SecretInput
@@ -90,12 +90,12 @@ export function ChangePasswordSection() {
             sát để mắt so được, thay vì cuộn dọc qua ba ô rời rạc */}
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-1.5 block text-[13px] font-medium text-ink">Mật khẩu mới</span>
+            <span className="mb-2 block text-[13px] font-medium text-ink">Mật khẩu mới</span>
             <SecretInput value={moi} onChange={setMoi} placeholder="Nhập mật khẩu mới" />
-            <span className="mt-1.5 block text-[12px] text-ink-soft">Tối thiểu 8 ký tự.</span>
+            <span className="mt-2 block text-[12px] text-ink-soft">Tối thiểu 8 ký tự.</span>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-[13px] font-medium text-ink">Nhập lại mật khẩu mới</span>
+            <span className="mb-2 block text-[13px] font-medium text-ink">Nhập lại mật khẩu mới</span>
             <SecretInput value={nhapLai} onChange={setNhapLai} placeholder="Nhập lại mật khẩu mới" />
           </label>
         </div>
@@ -104,7 +104,7 @@ export function ChangePasswordSection() {
           type="button"
           onClick={() => void doiMatKhau()}
           disabled={dangGui || chuaDu}
-          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-zalo-500 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-zalo-600 disabled:opacity-50"
+          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-zalo-500 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-zalo-600 disabled:opacity-50"
         >
           <IconLock size={15} />
           {dangGui ? "Đang đổi..." : "Đổi mật khẩu"}
