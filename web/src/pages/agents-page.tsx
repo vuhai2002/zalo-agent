@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { ManagedAgent } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { IconBot } from "../shared/dashboard-icons";
-import { AgentEditDrawer } from "./agent-edit-drawer";
+import { AgentCreateModal } from "./agent-create-modal";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { Badge } from "../shared/ui-bits";
 
-/** Trang Agents theo mẫu GoClaw: card não (icon, tên, persona preview), tạo/sửa/xóa */
+/**
+ * Danh sách agent. Tạo mở modal 2 ô (nhanh), sửa mở trang riêng `/agents/:id`
+ * (đủ chỗ cho model, công cụ, ngân sách token) - xem
+ * `plans/260802-1348-agent-chuan-production/phase-01-*`.
+ */
 export function AgentsPage() {
+  const navigate = useNavigate();
   const [agents, setAgents] = useState<ManagedAgent[]>([]);
-  const [editing, setEditing] = useState<ManagedAgent | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -82,7 +87,7 @@ export function AgentsPage() {
               </span>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setEditing(agent)}
+                  onClick={() => navigate(`/agents/${encodeURIComponent(agent.id)}`)}
                   className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-tile"
                 >
                   Sửa
@@ -101,18 +106,12 @@ export function AgentsPage() {
         ))}
       </div>
 
-      {(editing || creating) && (
-        <AgentEditDrawer
-          agent={editing}
-          onClose={() => {
-            setEditing(null);
-            setCreating(false);
-          }}
-          onSaved={() => {
-            setEditing(null);
-            setCreating(false);
-            void reload();
-          }}
+      {creating && (
+        <AgentCreateModal
+          onClose={() => setCreating(false)}
+          // Tạo xong đi thẳng vào trang sửa: ai muốn chỉnh tiếp thì đã ở đúng
+          // chỗ, ai không thì đóng lại là xong
+          onCreated={(id) => navigate(`/agents/${encodeURIComponent(id)}`)}
         />
       )}
 

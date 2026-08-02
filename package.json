@@ -12,7 +12,7 @@
     "dev:web": "vite web",
     "start": "tsx src/index.ts",
     "zalo-login": "tsx scripts/login-account.ts",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "test": "node --import tsx --test \"src/**/*.test.ts\" \"web/src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "build": "tsc",
     "build:web": "vite build web"

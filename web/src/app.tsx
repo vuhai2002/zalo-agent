@@ -4,6 +4,7 @@ import type { AccountInfo } from "./dashboard-api-client";
 import { api } from "./dashboard-api-client";
 import { SidebarNav } from "./layout/sidebar-nav";
 import { AccountsPage } from "./pages/accounts-page";
+import { AgentDetailPage } from "./pages/agent-detail-page";
 import { AgentsPage } from "./pages/agents-page";
 import { ContactsPage } from "./pages/contacts-page";
 import { LoginPage } from "./pages/login-page";
@@ -101,6 +102,7 @@ function DashboardShell() {
             <Route path="/memory" element={<MemoryPage accounts={accounts} />} />
             <Route path="/accounts" element={<AccountsPage />} />
             <Route path="/agents" element={<AgentsPage />} />
+            <Route path="/agents/:id" element={<AgentDetailPage />} />
             <Route path="/tools" element={<ToolsPage />} />
             <Route path="/trace" element={<TracePage />} />
             <Route path="/tuning" element={<TuningPage />} />
