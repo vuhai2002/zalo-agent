@@ -9,7 +9,7 @@
 ## Tổng quan
 
 - **Ưu tiên**: cao - đang đo nhầm đơn vị
-- **Trạng thái**: chưa làm. Phụ thuộc phase 01 (cần ô Trần context trên trang sửa).
+- **Trạng thái**: XONG (commit 0b6718f, sửa tiếp ở 849ad43)
 - Chuyển từ đếm **số tin** sang đếm **token**, và cắt bớt ngữ cảnh trước khi tràn.
 
 ## Nhận định then chốt
@@ -20,8 +20,11 @@
   (`agent/context_engine.py`: `update_from_response(usage)` -> `should_compress()`).
 - **Trần phụ thuộc model, mà model đặt theo agent** - nên ô này phải nằm ở agent, không
   phải chỉ ở Cấu hình chung. Vẫn giữ nếp "để trống = theo Cấu hình chung" như `maxSteps`.
-- **Có sẵn dữ liệu để hiệu chỉnh.** Bảng `agent_turns` đã ghi `inputTokens` thật của từng
-  lượt. Đừng chọn hằng số ký-tự-trên-token bằng cảm tính khi có số đo thật.
+- ~~**Có sẵn dữ liệu để hiệu chỉnh** từ `agent_turns`~~ - **SAI, đã kiểm chứng**: cột đó là
+  `totalUsage` (TỔNG qua mọi step), không phải kích thước một lần gọi; prompt cache đang
+  bật; bảng không lưu số ký tự đầu vào. Hiệu chỉnh được bằng cách khác: đo trực tiếp bằng
+  bảng BPE của OpenAI lúc phát triển (tiếng Việt 3,1-3,8 ký tự/token với họ o200k nhưng
+  chỉ 2,1-2,2 với họ cl100k), cộng log ước lượng cạnh số thật ở mọi lượt.
 - **Ảnh mới là thứ nặng nhất**, không phải chữ. Cắt ảnh trước khi cắt tin.
 - `stopWhen` nhận `Arrayable<StopCondition>` với `StopCondition = (o:{steps}) => boolean`
   (đã tra `node_modules/ai/dist/index.d.ts:1757`). Chặn phình **trong** một lượt bằng một
@@ -84,7 +87,9 @@ Tạo:
    kê cắt những gì. Thứ tự: ảnh cũ nhất trước, rồi tin cũ nhất. **Không bao giờ cắt** tin
    của lượt hiện tại (batch mới) - cắt vào đó là mất chính câu người dùng vừa hỏi.
 4. Cắt ở `agent-turn-content.ts` sau khi `buildTurnMessages` dựng xong, trước khi trả về.
-   Ngưỡng cắt để `0.7` trần (chừa chỗ cho output + tool result trong lượt).
+   Hệ số 0.7 phải nằm trong MỘT hàm dùng chung (`nganSachAnToan`) cho cả cắt trước lượt,
+   điều kiện dừng giữa lượt, LẪN lượt chốt - ba chỗ tự nhân hệ số riêng là hai nửa của
+   cùng một tính năng hiểu con số theo hai nghĩa khác nhau (đã dính thật).
 5. Điều kiện dừng mới trong `agent-loop.ts`: cộng dồn `usage` các step, vượt trần thì trả
    `true`. Ghép `stopWhen: [stepCountIs(maxSteps), vuotTranToken(tran)]`.
 6. **Kiểm lại nhánh chốt.** `hitStepLimit` đang nhận biết chạm trần bằng *(đủ step + step
@@ -101,16 +106,16 @@ Tạo:
 
 ## Việc cần làm
 
-- [ ] Đo tỉ lệ ký tự/token thật từ `agent_turns`, ghi vào comment
-- [ ] `token-estimate.ts` (thuần) + test
-- [ ] `trim-context-to-budget.ts` + test 5 nhánh ở bước 9
-- [ ] Migration `agents.context_window` + `AgentProfile.contextWindow`
-- [ ] Env `LLM_CONTEXT_WINDOW` đủ 3 nơi + `tuning-definitions.ts`
-- [ ] Nối cắt vào `agent-turn-content.ts`
-- [ ] Điều kiện dừng theo token + **mở rộng nhánh lượt chốt**
-- [ ] Log ước lượng vs thật
-- [ ] Ô Trần context trên trang sửa agent
-- [ ] `pnpm test` + `pnpm typecheck`
+- [x] Đo tỉ lệ ký tự/token thật từ `agent_turns`, ghi vào comment
+- [x] `token-estimate.ts` (thuần) + test
+- [x] `trim-context-to-budget.ts` + test 5 nhánh ở bước 9
+- [x] Migration `agents.context_window` + `AgentProfile.contextWindow`
+- [x] Env `LLM_CONTEXT_WINDOW` đủ 3 nơi + `tuning-definitions.ts`
+- [x] Nối cắt vào `agent-turn-content.ts`
+- [x] Điều kiện dừng theo token + **mở rộng nhánh lượt chốt**
+- [x] Log ước lượng vs thật
+- [x] Ô Trần context trên trang sửa agent
+- [x] `pnpm test` + `pnpm typecheck`
 
 ## Tiêu chí hoàn thành
 

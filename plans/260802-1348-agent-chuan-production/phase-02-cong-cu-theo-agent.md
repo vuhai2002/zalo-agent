@@ -11,7 +11,7 @@
 ## Tổng quan
 
 - **Ưu tiên**: cao nhất trong 7 khoảng cách - đây là chỗ sai cấu trúc duy nhất
-- **Trạng thái**: chưa làm. Phụ thuộc phase 01.
+- **Trạng thái**: XONG (commit 93fa8c4)
 - Thêm một lớp lọc tool ở tầng agent, **giao** với lớp account đã có.
 
 ## Nhận định then chốt
@@ -74,7 +74,8 @@ Sửa:
 - `src/agent/persona-prompt.ts:68` - truyền `{agent, account}`
 - `src/agent/agent-loop.ts:192,197` - đã có sẵn biến `agent`, truyền xuống
 - `src/server/routes/agent-routes.ts` - `patchSchema` thêm `disabledTools`
-- `src/scheduler/run-scheduled-job.ts` - nơi nào dựng `ToolContext` thì bổ sung `agent`
+- ~~`src/scheduler/run-scheduled-job.ts`~~ - **không cần sửa**: file đó KHÔNG dựng
+  `ToolContext`, nó gọi `runAgentTurn` và agent được resolve bên trong `agent-loop.ts`
 - `web/src/pages/agent-detail-page.tsx` - thêm nhóm Công cụ
 
 Tạo:
@@ -101,21 +102,21 @@ Test phải sửa:
    đúng `TOOL_KEYS` như `account-routes.ts:46` để key lạ bị chặn ở biên.
 8. UI `agent-tools-section.tsx`: gọi `/api/tools` lấy catalog (đã trả `key/label/description/group/available`).
    Mỗi dòng một tick. Tool `available: false` hiện mờ kèm `unavailableHint`.
-9. Dưới danh sách ghi một dòng: *"Công cụ bot thật sự dùng được là phần giao với công cụ
-   đang bật của từng tài khoản (trang Tài khoản)."*
+9. Dưới danh sách ghi một dòng nói rõ phép giao. Địa chỉ đúng là **trang Tools** -
+   công tắc tool per-account nằm ở đó, KHÔNG phải trang Accounts.
 10. `pnpm test` + `pnpm typecheck`.
 
 ## Việc cần làm
 
-- [ ] Migration `agents.disabled_tools`
-- [ ] `AgentProfile.disabledTools` + đọc/ghi trong `agent-store.ts`
-- [ ] Đổi chữ ký `listAvailableTools` + sửa hết call site
-- [ ] `ToolContext.agent` + truyền từ `agent-loop.ts` và scheduler
-- [ ] Mở rộng bất biến persona == schema cho lớp agent
-- [ ] Test: agent tắt / account tắt / cả hai / không bên nào
-- [ ] `patchSchema.disabledTools` dùng `TOOL_KEYS`
-- [ ] `agent-tools-section.tsx` + dòng giải thích phép giao
-- [ ] `pnpm test` + `pnpm typecheck` sạch
+- [x] Migration `agents.disabled_tools`
+- [x] `AgentProfile.disabledTools` + đọc/ghi trong `agent-store.ts`
+- [x] Đổi chữ ký `listAvailableTools` + sửa hết call site
+- [x] `ToolContext.agent` + truyền từ `agent-loop.ts` và scheduler
+- [x] Mở rộng bất biến persona == schema cho lớp agent
+- [x] Test: agent tắt / account tắt / cả hai / không bên nào
+- [x] `patchSchema.disabledTools` dùng `TOOL_KEYS`
+- [x] `agent-tools-section.tsx` + dòng giải thích phép giao
+- [x] `pnpm test` + `pnpm typecheck` sạch
 
 ## Tiêu chí hoàn thành
 
@@ -130,7 +131,7 @@ Test phải sửa:
 | Rủi ro | Giảm thiểu |
 |---|---|
 | Sót một call site `listAvailableTools`, prompt và schema lệch nhau | Đổi chữ ký (không thêm tham số optional) để TypeScript bắt buộc sửa hết; bất biến ở `persona-prompt.test.ts` canh vòng hai |
-| Scheduler dựng `ToolContext` thiếu `agent` | `agent` để **bắt buộc** trong type, không optional |
+| ~~Scheduler dựng `ToolContext` thiếu `agent`~~ | Không xảy ra - scheduler không dựng `ToolContext`. Nhưng `agent` vẫn để **bắt buộc** trong type để call site tương lai không quên |
 | Người dùng tắt hết tool ở agent rồi tưởng bot hỏng | `toolCapabilitySection` đã có nhánh "KHÔNG có công cụ nào được bật" - kiểm lại nhánh đó còn chạy |
 
 ## An ninh

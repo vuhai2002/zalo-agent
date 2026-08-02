@@ -30,9 +30,9 @@ theo 7 khoảng cách A-G trong `reports/audit-agent-chuan-production.html`.
 
 | # | Phase | Gap | Trạng thái |
 |---|---|---|---|
-| 01 | [Tách trang Agent + tạo nhanh](phase-01-tach-trang-agent-va-tao-nhanh.md) | nền UI | Chưa làm |
-| 02 | [Công cụ theo agent](phase-02-cong-cu-theo-agent.md) | A | Chưa làm |
-| 03 | [Ngân sách token thật](phase-03-ngan-sach-token-that.md) | D | Chưa làm |
+| 01 | [Tách trang Agent + tạo nhanh](phase-01-tach-trang-agent-va-tao-nhanh.md) | nền UI | Xong (1130f6c) |
+| 02 | [Công cụ theo agent](phase-02-cong-cu-theo-agent.md) | A | Xong (93fa8c4) |
+| 03 | [Ngân sách token thật](phase-03-ngan-sach-token-that.md) | D | Xong (0b6718f + 849ad43) |
 | 04 | [Chặn vòng lặp tool](phase-04-chan-vong-lap-tool.md) | B | Chưa làm |
 | 05 | [Phân loại lỗi provider](phase-05-phan-loai-loi-provider.md) | G | Chưa làm |
 | 06 | [Kiểm tra đầu ra](phase-06-kiem-tra-dau-ra.md) | E | Chưa làm |

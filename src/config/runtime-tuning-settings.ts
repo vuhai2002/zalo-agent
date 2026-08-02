@@ -106,6 +106,17 @@ const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => s
         : null,
   },
   {
+    // Bot chỉ dùng tới 70% trần context (chừa chỗ cho phần model viết ra và cho
+    // kết quả tool cộng dồn - xem `nganSachAnToan`). Trần mà không lớn hơn hẳn
+    // phần model được phép viết ra thì phần chừa đó đã bị output ăn sạch trước
+    // khi có chữ nào của ngữ cảnh.
+    keys: ["LLM_CONTEXT_WINDOW", "LLM_MAX_OUTPUT_TOKENS"],
+    check: (so) =>
+      so("LLM_CONTEXT_WINDOW") * 0.3 <= so("LLM_MAX_OUTPUT_TOKENS")
+        ? "Trần token mỗi lần gọi quá thấp so với trần token bot viết ra: bot chừa 30% trần cho phần viết ra và cho kết quả công cụ, nên trần này phải lớn hơn khoảng 3,4 lần trần token viết ra."
+        : null,
+  },
+  {
     // Bot viết cả nội dung file vào lệnh gọi công cụ nên trần ký tự tài liệu
     // phải nằm gọn trong trần token. Ước lượng thô 4 ký tự/token, chừa biên cho
     // phần suy nghĩ và câu trả lời.

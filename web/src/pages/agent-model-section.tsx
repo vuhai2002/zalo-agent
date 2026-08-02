@@ -55,6 +55,9 @@ export function AgentModelSection({
   const nhanChung = chung ? `${chung.provider} / ${chung.model}` : "theo trang Providers";
   const loiSoBuoc = kiemSoBuoc(form.maxSteps);
   const loiTran = kiemTranContext(form.contextWindow);
+  // Giá trị đang lưu không nằm trong danh sách hợp lệ (và không phải rỗng)
+  const laGiaTriLa =
+    form.modelProvider !== "" && !NHA_CUNG_CAP.some((p) => p.value === form.modelProvider);
 
   return (
     <AgentFormSection
@@ -90,6 +93,14 @@ export function AgentModelSection({
                 {chung !== null && chung.provider !== p.value ? " - cần API key riêng" : ""}
               </option>
             ))}
+            {/* Giá trị lạ nằm sẵn trong DB (ai đó sửa tay từ trước) phải có một
+                option khớp, nếu không `<select>` render TRỐNG: người dùng thấy ô
+                rỗng, `coDoi` vẫn false nên không sửa được, mà sửa ô khác rồi Lưu
+                thì giá trị lạ bị gửi lại và server trả 400 - kẹt hẳn, không lưu
+                được gì cho tới khi sửa DB tay. */}
+            {laGiaTriLa && (
+              <option value={form.modelProvider}>{form.modelProvider} - giá trị lạ, nên đổi lại</option>
+            )}
           </select>
           {chung && form.modelProvider !== "" && form.modelProvider !== chung.provider && (
             <p className="mt-2 max-w-3xl text-[12px] leading-[1.6] text-amber-600 dark:text-amber-400">

@@ -1,9 +1,15 @@
 /**
  * Các vị từ THUẦN quyết định vòng lặp agent dừng lúc nào và lượt kết thúc ra sao.
  *
- * Tách khỏi `agent-loop.ts` vì file đó đã vượt ngưỡng 200 dòng, và vì đây là
- * phần duy nhất trong vòng lặp test được mà không cần model, không cần DB,
- * không cần mạng. `agent-loop.ts` re-export lại để mọi nơi import như cũ.
+ * Tách khỏi `agent-loop.ts` vì đây là phần duy nhất trong vòng lặp test được mà
+ * không cần model, không cần DB, không cần mạng - gom lại một chỗ thì đọc ra
+ * ngay đâu là logic thuần, đâu là phần phải chạy thật.
+ *
+ * KHÔNG phải để đưa `agent-loop.ts` xuống dưới 200 dòng: file đó vẫn 434 dòng
+ * (gấp hơn 2 lần ngưỡng). Phần còn lại của nó là một vòng lặp liền mạch với các
+ * nhánh chịu lỗi đan vào nhau, cắt tiếp chỉ làm khó đọc hơn.
+ *
+ * `agent-loop.ts` re-export lại để mọi nơi import như cũ.
  */
 
 /**

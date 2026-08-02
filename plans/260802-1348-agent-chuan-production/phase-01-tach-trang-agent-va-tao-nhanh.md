@@ -9,7 +9,7 @@
 ## Tổng quan
 
 - **Ưu tiên**: cao - chặn phase 02 và 03
-- **Trạng thái**: chưa làm
+- **Trạng thái**: XONG (commit 1130f6c)
 - Tách form tạo/sửa agent làm hai. Tạo = modal 2 ô, ID tự sinh từ tên. Sửa = trang riêng
   `/agents/:id` chia nhóm, đủ chỗ cho các trường của phase 02-03. Vá luôn lỗi
   `modelProvider` bị giấu.
@@ -33,7 +33,9 @@ Chức năng:
 - Tạo xong điều hướng thẳng vào `/agents/:id`.
 - Trang `/agents/:id` chia nhóm: Danh tính / Chỉ dẫn / Model. (Nhóm Công cụ do phase 02 thêm.)
 - Trang sửa có select **Provider**: `Theo Providers chung` / `openai-compatible` / `anthropic`.
-- Trường Model nâng thành dropdown lấy danh sách từ trang Providers, vẫn cho tự gõ.
+- ~~Trường Model nâng thành dropdown lấy danh sách từ trang Providers~~ **KHÔNG LÀM**:
+  trang Providers cũng chỉ có MỘT ô text, không giữ danh sách model nào - dựng dropdown ở
+  đây sẽ là danh sách bịa. Thay bằng: lấy model chung thật làm gợi ý trong ô.
 
 Phi chức năng:
 - Mỗi file mới < 200 dòng.
@@ -83,22 +85,22 @@ Xóa: `web/src/pages/agent-edit-drawer.tsx` (sau cùng).
 5. Tách 2 section, khung trang chỉ lo tải/lưu/báo lỗi.
 6. Thêm select Provider vào `agent-model-section.tsx`, gửi `modelProvider` trong patch.
    Giá trị rỗng gửi lên `null` (bỏ override) - `patchSchema` đã nhận `.nullable()`.
-7. Model thành dropdown: lấy danh sách model từ nguồn trang Providers đang dùng; luôn có
-   mục đầu `Theo Providers chung` và mục cuối `Tự gõ...`.
+7. ~~Model thành dropdown~~ - bỏ, xem mục Yêu cầu. Giữ ô gõ tự do, đặt model chung thật
+   làm placeholder.
 8. Chuyển `agents-page.tsx` sang dùng modal + `useNavigate`, xóa `agent-edit-drawer.tsx`.
 9. `pnpm typecheck` + `pnpm build:web`.
 
 ## Việc cần làm
 
-- [ ] `slugify-vietnamese.ts` + test (có `đ`, có dấu, ký tự lạ, rỗng)
-- [ ] `agent-create-modal.tsx` (tự sinh ID, ngừng khi sửa tay, bắt lỗi 409)
-- [ ] Route `/agents/:id`
-- [ ] `agent-detail-page.tsx` + 2 section
-- [ ] Select Provider (vá lỗi bị giấu)
-- [ ] Model thành dropdown
-- [ ] `agents-page.tsx` chuyển sang modal + điều hướng
-- [ ] Xóa `agent-edit-drawer.tsx`
-- [ ] `pnpm typecheck` + `pnpm build:web` sạch
+- [x] `slugify-vietnamese.ts` + test (có `đ`, có dấu, ký tự lạ, rỗng)
+- [x] `agent-create-modal.tsx` (tự sinh ID, ngừng khi sửa tay, bắt lỗi 409)
+- [x] Route `/agents/:id`
+- [x] `agent-detail-page.tsx` + 2 section
+- [x] Select Provider (vá lỗi bị giấu)
+- [~] Model thành dropdown - **bỏ có lý do**, xem mục Yêu cầu
+- [x] `agents-page.tsx` chuyển sang modal + điều hướng
+- [x] Xóa `agent-edit-drawer.tsx`
+- [x] `pnpm typecheck` + `pnpm build:web` sạch
 
 ## Tiêu chí hoàn thành
 

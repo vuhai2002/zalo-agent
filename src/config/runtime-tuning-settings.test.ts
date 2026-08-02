@@ -111,6 +111,19 @@ describe("validateTuning - ràng buộc chéo", () => {
     assert.ok(loi.some((l) => /tài liệu/.test(l)));
   });
 
+  it("trần context quá thấp so với trần token viết ra thì chặn", () => {
+    // Bot chỉ dùng tới 70% trần context; 30% còn lại phải đủ chứa phần model
+    // viết ra. Đặt trần context ở mức tối thiểu 4.000 trong khi output tối đa
+    // 16.384 là cấu hình tự mâu thuẫn - phần chừa đã bị output ăn sạch.
+    const loi = tuning.validateTuning({ LLM_CONTEXT_WINDOW: 4_000, LLM_MAX_OUTPUT_TOKENS: 16_384 });
+    assert.ok(loi.some((l) => /viết ra/.test(l)), `phải chặn, nhận: ${JSON.stringify(loi)}`);
+  });
+
+  it("mặc định 128.000 với 16.384 thì hợp lệ - đối chứng cho ca trên", () => {
+    const loi = tuning.validateTuning({ LLM_CONTEXT_WINDOW: 128_000, LLM_MAX_OUTPUT_TOKENS: 16_384 });
+    assert.deepEqual(loi, [], "cấu hình mặc định không được báo lỗi");
+  });
+
   it("bộ mặc định KHI PHÁT HÀNH hợp lệ - không tự chặn chính mình", () => {
     // Ghi thẳng giá trị mặc định của schema env chứ không đọc env: môi trường
     // test cố tình hạ LLM_MAX_OUTPUT_TOKENS xuống 2048 cho nhẹ, đọc env ở đây

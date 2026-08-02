@@ -8,6 +8,34 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ## [Chưa phát hành]
 
+### Thêm
+
+- Agent tự khai được bộ công cụ của mình (`agents.disabled_tools`), GIAO với bộ
+  công cụ của tài khoản Zalo. Công cụ dùng được là phần không bên nào tắt - agent
+  khai năng lực, tài khoản áp chính sách, không bên nào bật ngược lại được bên
+  kia. Nhờ vậy dựng được nhiều vai khác bộ công cụ trên cùng một nick.
+- Ngân sách token thật cho ngữ cảnh (`LLM_CONTEXT_WINDOW`, đặt riêng được cho
+  từng agent). Trước nay chỉ chặn bằng SỐ TIN, mà một tin Zalo dài tùy ý. Vượt
+  ngân sách thì bot bỏ bớt ảnh cũ trước, rồi mới bỏ tin cũ; thêm điều kiện dừng
+  giữa lượt theo usage thật.
+- Trang sửa agent riêng (`/agents/:id`) chia nhóm Danh tính / Model / Công cụ.
+  Màn tạo agent rút còn hai ô, ID tự sinh từ tên.
+
+### Sửa
+
+- Ô chọn nhà cung cấp của agent gửi API key của router thẳng sang endpoint của
+  bên khác: `resolveLanguageModel` chỉ đổi provider và model, còn key luôn lấy
+  từ cấu hình chung. Vừa lộ khóa sang bên thứ ba vừa làm bot câm vì 401. Nay
+  override nhà cung cấp lệch bị bỏ qua ngay tại chỗ dựng client.
+- Trang Tools hiện trạng thái ngược với bộ công cụ model thật nhận (công tắc ở
+  đó chỉ nói lớp tài khoản).
+- Rời trang sửa agent khi còn thay đổi chưa lưu thì mất trắng, không hỏi.
+- Gõ nhầm một chữ vào ô số bước làm mất âm thầm giới hạn bước của agent.
+
+### Đổi
+
+- `pnpm test` quét cả `web/src` - cây này trước đó không có test nào.
+
 ## [0.1.0] - 2026-08-02
 
 Bản đầu tiên được đánh số. Gom toàn bộ những gì đã làm từ đầu dự án.

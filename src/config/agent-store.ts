@@ -123,7 +123,15 @@ export function updateAgent(
 ): AgentProfile | null {
   const current = getAgent(id);
   if (!current) return null;
-  const next = { ...current, ...patch };
+  // Bỏ key có giá trị `undefined` TRƯỚC khi trộn: `Partial<>` cho phép truyền
+  // `undefined` tường minh mà vẫn qua được typecheck, và lúc đó `next.x` thành
+  // undefined -> node:sqlite ném "Provided value cannot be bound to SQLite
+  // parameter". Zod ở biên API đã loại key vắng mặt nên đường route không dính,
+  // nhưng call site nội bộ thì không có ai đỡ.
+  const patchSach = Object.fromEntries(
+    Object.entries(patch).filter(([, v]) => v !== undefined),
+  ) as typeof patch;
+  const next = { ...current, ...patchSach };
   db.prepare(
     `UPDATE agents SET icon = ?, name = ?, persona = ?, model_provider = ?, model_name = ?, max_steps = ?,
                        reasoning_effort = ?, disabled_tools = ?, context_window = ?

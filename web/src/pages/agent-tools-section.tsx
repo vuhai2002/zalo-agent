@@ -29,13 +29,20 @@ export function AgentToolsSection({
   onChange: (disabledTools: string[]) => void;
 }) {
   const [tools, setTools] = useState<ToolCatalogItem[] | null>(null);
+  const [loi, setLoi] = useState("");
 
   useEffect(() => {
     let huy = false;
     api
       .tools()
       .then((d) => !huy && setTools(d.items))
-      .catch(() => !huy && setTools([]));
+      // Tải hỏng mà chỉ set mảng rỗng thì màn hình hiện "0/0 công cụ" và đọc ra
+      // "agent này không có công cụ nào" - sai hẳn nghĩa. Phải nói là chưa tải được.
+      .catch((e: Error) => {
+        if (huy) return;
+        setTools([]);
+        setLoi(e.message || "Không tải được danh sách công cụ");
+      });
     return () => {
       huy = true;
     };
@@ -54,6 +61,17 @@ export function AgentToolsSection({
     return (
       <AgentFormSection title="Công cụ">
         <div className="py-5 first:pt-0 text-[13px] text-ink-soft">Đang tải danh sách công cụ...</div>
+      </AgentFormSection>
+    );
+  }
+
+  if (loi) {
+    return (
+      <AgentFormSection title="Công cụ">
+        <div className="py-5 first:pt-0 text-[13px] text-red-600 dark:text-red-400">
+          Chưa tải được danh sách công cụ: {loi}. Tải lại trang để thử lại - phần công cụ đang lưu của
+          agent KHÔNG bị đụng tới.
+        </div>
       </AgentFormSection>
     );
   }
