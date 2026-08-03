@@ -1,9 +1,7 @@
-import { useEffect, useState } from "react";
-import type { ProviderSettings } from "../dashboard-api-client";
-import { api, ApiError } from "../dashboard-api-client";
 import { SecretInput } from "../shared/secret-input";
 import { SelectMenu } from "../shared/select-menu";
-import { useConfirmDialog } from "../shared/confirm-dialog";
+import { BASE_URL_PRESETS, timPreset, TU_NHAP } from "./llm-base-url-presets";
+import { useProviderForm } from "./use-provider-form";
 
 /**
  * Form nhà cung cấp LLM. Trước đây là một trang riêng trên sidebar; giờ là nội
@@ -14,82 +12,8 @@ import { useConfirmDialog } from "../shared/confirm-dialog";
  * còn của nhà cũ là bot gọi sai suốt quãng giữa.
  */
 export function ProvidersSection() {
-  const [settings, setSettings] = useState<ProviderSettings | null>(null);
-  const [form, setForm] = useState({ provider: "openai-compatible", baseUrl: "", model: "", apiKey: "" });
-  const [status, setStatus] = useState<{ tone: "green" | "red"; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const { confirm, confirmDialog } = useConfirmDialog();
-
-  const load = () =>
-    api.provider().then((s) => {
-      setSettings(s);
-      setForm({ provider: s.provider, baseUrl: s.baseUrl, model: s.model, apiKey: "" });
-    });
-
-  useEffect(() => {
-    load().catch(() => setSettings(null));
-  }, []);
-
-  async function save() {
-    setBusy(true);
-    setStatus(null);
-    try {
-      await api.updateProvider({
-        provider: form.provider as ProviderSettings["provider"],
-        baseUrl: form.baseUrl || undefined,
-        model: form.model,
-        apiKey: form.apiKey || undefined,
-      });
-      await load();
-      setStatus({ tone: "green", text: "Đã lưu - áp dụng từ lượt agent kế tiếp, không cần restart" });
-    } catch (err) {
-      setStatus({ tone: "red", text: err instanceof ApiError ? err.message : "Lưu thất bại" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function test() {
-    setBusy(true);
-    setStatus(null);
-    const result = await api.testProvider().catch((err) => ({
-      ok: false as const,
-      error: err instanceof ApiError ? err.message : "Không gọi được",
-      reply: undefined,
-    }));
-    setStatus(
-      result.ok
-        ? { tone: "green", text: `Kết nối ok - model trả lời: "${result.reply}"` }
-        : { tone: "red", text: `Kết nối lỗi: ${result.error}` },
-    );
-    setBusy(false);
-  }
-
-  async function reset() {
-    // Hành động PHÁ HỦY: `clearLlmSettings` xóa cả API key. Từ khi .env rút còn
-    // 9 biến, phần LLM ở đó thường trống - nên không có bản dự phòng nào để
-    // "quay về", bấm nhầm là bot câm ngay lượt sau. Mọi hành động phá hủy khác
-    // trong dashboard đều hỏi trước; chỗ này trước đó thì không.
-    const ok = await confirm({
-      title: "Xóa toàn bộ cấu hình LLM?",
-      message:
-        "API key, base URL và tên model đã lưu sẽ bị xóa. Nếu máy chủ không đặt sẵn cấu hình LLM bằng biến môi trường thì bot ngừng trả lời cho tới khi bạn nhập lại.",
-    });
-    if (!ok) return;
-
-    setBusy(true);
-    try {
-      await api.clearProvider();
-      await load();
-      setStatus({ tone: "green", text: "Đã xóa cấu hình LLM đã lưu" });
-    } catch (err) {
-      // Thiếu `finally` là lỗi cũ ở đúng hàm này: request hỏng thì `busy` kẹt
-      // `true` và cả ba nút Lưu/Test/Xóa không bấm được nữa cho tới khi F5
-      setStatus({ tone: "red", text: err instanceof ApiError ? err.message : "Xóa thất bại" });
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { settings, form, setForm, status, busy, save, test, reset, confirmDialog } =
+    useProviderForm();
 
   if (!settings) return <p className="text-[13px] text-ink-soft">Đang tải...</p>;
 
@@ -102,30 +26,59 @@ export function ProvidersSection() {
           .env hết gánh cấu hình LLM thì nó gần như luôn bật, không nói thêm gì. */}
       <div className="space-y-4">
         <div>
-          <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-provider">Provider</label>
+          {/* "Kiểu kết nối" chứ không phải "Provider": ô này chọn GIAO THỨC,
+              không chọn hãng. Mọi hãng nói giao thức OpenAI (DeepSeek, Gemini,
+              Kimi, Qwen, OpenRouter, Ollama...) đều đi nhánh trên; nhánh dưới
+              chỉ dành cho API gốc của Anthropic vốn có hình dạng khác hẳn. */}
+          <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-provider">
+            Kiểu kết nối
+          </label>
           <SelectMenu
             id="pv-provider"
             size="md"
             value={form.provider}
             options={[
-              { value: "openai-compatible", label: "OpenAI-compatible (router proxy)" },
-              { value: "anthropic", label: "Anthropic (gọi thẳng)" },
+              { value: "openai-compatible", label: "OpenAI-compatible" },
+              { value: "anthropic", label: "Anthropic" },
             ]}
             onChange={(provider) => setForm({ ...form, provider })}
           />
         </div>
 
         {form.provider === "openai-compatible" && (
-          <div>
-            <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-base-url">Base URL</label>
-            <input
-              id="pv-base-url"
-              className="gc-input w-full"
-              value={form.baseUrl}
-              onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
-              placeholder="https://api.example.com/v1"
-            />
-          </div>
+          <>
+            <div>
+              <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-preset">
+                Chọn nhanh
+              </label>
+              {/* Chỉ ĐIỀN HỘ base URL rồi thôi - không đụng model hay key, vì
+                  mỗi hãng một bộ tên model và người dùng vẫn phải tự dán key.
+                  Base URL đang nhập khớp mục nào thì danh sách hiện đúng mục đó,
+                  không khớp thì về "Tự nhập" (trường hợp router riêng). */}
+              <SelectMenu
+                id="pv-preset"
+                size="md"
+                value={timPreset(form.baseUrl)}
+                placeholder="Tự nhập"
+                options={[
+                  { value: TU_NHAP, label: "Tự nhập" },
+                  ...BASE_URL_PRESETS.map((p) => ({ value: p.baseUrl, label: p.label, hint: p.baseUrl })),
+                ]}
+                onChange={(baseUrl) => baseUrl && setForm({ ...form, baseUrl })}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-base-url">Base URL</label>
+              <input
+                id="pv-base-url"
+                className="gc-input w-full"
+                value={form.baseUrl}
+                onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
+                placeholder="https://api.example.com/v1"
+              />
+            </div>
+          </>
         )}
 
         <div>
