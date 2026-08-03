@@ -73,6 +73,7 @@ async function main(): Promise<void> {
   const { TECHNICAL_ERROR_REPLY, LOI_THEO_LOAI } = await import(
     "../src/zalo/send-reply-in-parts.js"
   );
+  const { STEP_LIMIT_REPLY } = await import("../src/agent/agent-loop.js");
 
   accountStore.createAccount({ id: ACC, label: "Eval" });
   agentStore.createAgent({ id: AGENT, name: "Agent eval" });
@@ -143,7 +144,11 @@ async function main(): Promise<void> {
         phatHienLuotHong({
           tokens: luot?.totalTokens ?? 0,
           traLoi,
-          cauLoiHeThong: [TECHNICAL_ERROR_REPLY, ...Object.values(LOI_THEO_LOAI)],
+          // STEP_LIMIT_REPLY là câu bot trả khi vòng lặp cụt VÀ lượt chốt
+          // cũng chết - thiếu nó thì case chỉ kiểm định dạng sẽ ĐẠT trong khi
+          // lượt vừa thất bại hoàn toàn và tiêu tiền thật (token > 0 nên vế
+          // thứ hai của `phatHienLuotHong` cũng không bắt được)
+          cauLoiHeThong: [TECHNICAL_ERROR_REPLY, STEP_LIMIT_REPLY, ...Object.values(LOI_THEO_LOAI)],
         });
 
       const cham = chamCase(c, { toolDaGoi, traLoi, loiChay: hong });

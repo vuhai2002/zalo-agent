@@ -23,9 +23,12 @@ const NHAN_NHOM: Record<string, { title: string; hint: string }> = {
  */
 export function AgentToolsSection({
   disabledTools,
+  soTaiKhoan,
   onChange,
 }: {
   disabledTools: string[];
+  /** Số tài khoản Zalo đang gắn agent này - mỗi tài khoản còn một lớp tắt riêng */
+  soTaiKhoan: number;
   onChange: (disabledTools: string[]) => void;
 }) {
   const [tools, setTools] = useState<ToolCatalogItem[] | null>(null);
@@ -81,7 +84,14 @@ export function AgentToolsSection({
   return (
     <AgentFormSection
       title="Công cụ"
-      hint={`Agent này được phép dùng ${soBat}/${tools.length} công cụ. Đây mới là NĂNG LỰC của agent - công cụ bot thật sự dùng được là phần giao với công cụ đang bật của từng tài khoản Zalo ở trang Tools.`}
+      hint={
+        `Agent này được phép dùng ${soBat}/${tools.length} công cụ. Đây mới là NĂNG LỰC của agent - ` +
+        `công cụ bot THẬT SỰ dùng được là phần GIAO với công cụ đang bật của từng tài khoản Zalo. ` +
+        (soTaiKhoan > 0
+          ? `Agent này đang gắn ${soTaiKhoan} tài khoản, mỗi tài khoản có lớp tắt riêng ở trang Tools - `
+            + `tick ở đây không bảo đảm bot dùng được.`
+          : `Chưa tài khoản nào gắn agent này nên phần tick ở đây chưa có tác dụng thực tế.`)
+      }
     >
       {(["read", "action"] as const).map((nhom) => {
         const cua = tools.filter((t) => t.group === nhom);

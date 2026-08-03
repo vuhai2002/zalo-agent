@@ -10,9 +10,13 @@ type Phase = "idle" | "saving" | "saved" | "error";
  * rời ô hoặc bấm Enter (gõ xong mới gọi API, tránh lưu "1" giữa lúc đang gõ
  * "16384"); bật/tắt và menu chọn lưu NGAY lúc đổi vì không có trạng thái dở.
  *
- * Chỗ đáng chú ý về mặt nhìn: ô đang lấy giá trị từ `.env` trông y hệt ô đã
- * chỉnh, nên phải có nhãn phân biệt - nếu không người dùng đọc số trên màn hình
- * rồi tưởng mình đã đặt nó, trong khi sửa `.env` vẫn đổi được.
+ * Chỗ đáng chú ý về mặt nhìn: ô CHƯA ai chỉnh trông y hệt ô đã chỉnh, nên phải
+ * có nhãn phân biệt - nếu không người dùng đọc số trên màn hình rồi tưởng mình
+ * đã đặt nó.
+ *
+ * Nhãn ghi "mặc định", KHÔNG ghi ".env": cờ `fromEnv` chỉ có nghĩa "chưa có giá
+ * trị đè trong DB", mà từ khi .env rút còn 13 biến thì phần lớn tham số ở đây
+ * không hề nằm trong file đó - chúng lấy `.default()` của schema.
  */
 export function TuningField({
   name,
@@ -23,7 +27,7 @@ export function TuningField({
   name: string;
   def: TuningDef;
   tuningValue: TuningValue;
-  /** `value: null` = trả về giá trị .env. Trả lỗi thì ô không được coi là đã lưu. */
+  /** `value: null` = xóa giá trị đè, về mặc định. Trả lỗi thì ô không được coi là đã lưu. */
   onSave: (key: string, value: number | boolean | string | null) => Promise<SaveResult>;
 }) {
   const id = `tuning-${name}`;
@@ -85,8 +89,13 @@ export function TuningField({
           {def.label}
         </label>
         {fromEnv ? (
-          <span className="rounded-full bg-zalo-50 px-2 py-0.5 text-[11px] font-medium text-zalo-600">
-            .env
+          // Chữ "mặc định" chứ KHÔNG phải ".env": cờ `fromEnv` thật ra chỉ nói
+          // "chưa có giá trị đè trong DB". Từ khi .env rút còn 13 biến thì
+          // 41/46 tham số của trang này KHÔNG hề có mặt trong file đó - giá trị
+          // đến từ `.default()` của schema. Chip cũ khiến người dùng mở .env đi
+          // tìm một dòng không tồn tại.
+          <span className="rounded-full bg-zalo-50 dark:bg-zalo-950/40 px-2 py-0.5 text-[11px] font-medium text-zalo-600 dark:text-zalo-300">
+            mặc định
           </span>
         ) : (
           <button

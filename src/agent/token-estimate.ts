@@ -39,7 +39,7 @@ import type { ModelMessage } from "ai";
  * hụt đó, nhưng đây là chỗ phải theo dõi qua log `uocLuong.lechPhanTram` chứ
  * không phải hằng số đã yên.
  */
-const KY_TU_MOI_TOKEN = 2.5;
+export const KY_TU_MOI_TOKEN = 2.5;
 
 /**
  * Chi phí mỗi ảnh, tính bằng token - theo CỠ ẢNH ĐANG CẤU HÌNH.

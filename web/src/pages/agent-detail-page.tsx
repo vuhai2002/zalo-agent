@@ -179,6 +179,7 @@ export function AgentDetailPage() {
         <AgentModelSection form={form} chung={chung} onChange={doi} />
         <AgentToolsSection
           disabledTools={form.disabledTools}
+          soTaiKhoan={agent.accountCount}
           onChange={(disabledTools) => doi({ disabledTools })}
         />
       </div>

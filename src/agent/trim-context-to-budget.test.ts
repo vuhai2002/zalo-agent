@@ -121,3 +121,87 @@ describe("catNguCanhTheoNganSach", () => {
     }
   });
 });
+
+/** Cặp tool-call / tool-result đúng hình dạng AI SDK */
+const capTool = (id: string, coDai: number): ModelMessage[] => [
+  {
+    role: "assistant",
+    content: [{ type: "tool-call", toolCallId: id, toolName: "web_fetch", input: { url: `https://${id}.vn` } }],
+  } as ModelMessage,
+  {
+    role: "tool",
+    content: [{ type: "tool-result", toolCallId: id, toolName: "web_fetch", output: { type: "text", value: chu(coDai) } }],
+  } as ModelMessage,
+];
+
+describe("catNguCanhTheoNganSach - KHÔNG để lại tool-result mồ côi", () => {
+  it("cắt giữa một cặp tool thì bỏ luôn phần tool-result lẻ ở đầu", () => {
+    // Vòng cắt đi theo CHỈ SỐ, không biết ràng buộc assistant(tool-call) phải
+    // đi liền tool(tool-result). Dừng ngay sau khi bỏ một assistant là mảng còn
+    // lại mở đầu bằng tool-result không có lệnh gọi tương ứng -> provider trả
+    // 400 và lượt chốt chết sau khi đã đốt trọn số bước.
+    const ds: ModelMessage[] = [
+      tinChu(40_000),
+      ...capTool("c1", 100_000),
+      ...capTool("c2", 100_000),
+      tinChu(50),
+    ];
+    const { tinNhan } = catNguCanhTheoNganSach({
+      tinNhan: ds,
+      tranToken: 40_000,
+      soTinBaoVeCuoi: 1,
+      coAnh: "normal",
+    });
+    assert.notEqual(tinNhan[0]?.role, "tool", `tool-result mồ côi dẫn đầu: ${tinNhan[0]?.role}`);
+  });
+
+  it("mảng CHỈ còn tool-result sau khi cắt thì không trả mảng mở đầu bằng tool", () => {
+    const ds: ModelMessage[] = [tinChu(80_000), ...capTool("c1", 200_000)];
+    const { tinNhan } = catNguCanhTheoNganSach({
+      tinNhan: ds,
+      tranToken: 1_000,
+      soTinBaoVeCuoi: 1,
+      coAnh: "normal",
+    });
+    assert.notEqual(tinNhan[0]?.role, "tool");
+  });
+
+  it("mảng không có tin tool nào thì không đụng gì (đường buildTurnMessages)", () => {
+    const ds = [tinChu(100_000), tinChu(100_000), tinChu(50)];
+    const { tinNhan } = catNguCanhTheoNganSach({
+      tinNhan: ds,
+      tranToken: 20_000,
+      soTinBaoVeCuoi: 1,
+      coAnh: "normal",
+    });
+    assert.ok(tinNhan.length > 0);
+    assert.equal(tinNhan.at(-1), ds.at(-1), "tin cuối phải còn nguyên");
+  });
+});
+
+describe("catNguCanhTheoNganSach - kẹp soTinBaoVeCuoi tối thiểu 1", () => {
+  it("truyền 0 thì VẪN giữ tin cuối - không bao giờ trả mảng rỗng", () => {
+    // Docstring nói rõ đây là lý do phép kẹp `Math.max(1, ...)` tồn tại, nhưng
+    // trước đó không test nào truyền 0: bỏ phép kẹp mà 10/10 vẫn xanh.
+    const ds = [tinChu(100_000), tinChu(100_000), tinChu(100_000)];
+    const { tinNhan } = catNguCanhTheoNganSach({
+      tinNhan: ds,
+      tranToken: 100,
+      soTinBaoVeCuoi: 0,
+      coAnh: "normal",
+    });
+    assert.equal(tinNhan.length, 1, "phải còn đúng tin cuối");
+    assert.equal(tinNhan[0], ds.at(-1));
+  });
+
+  it("truyền số ÂM cũng vậy", () => {
+    const ds = [tinChu(100_000), tinChu(100_000)];
+    const { tinNhan } = catNguCanhTheoNganSach({
+      tinNhan: ds,
+      tranToken: 100,
+      soTinBaoVeCuoi: -5,
+      coAnh: "normal",
+    });
+    assert.equal(tinNhan.length, 1);
+  });
+});

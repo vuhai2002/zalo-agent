@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
+import { traceLuotHong } from "./failed-turn-trace.js";
 import type { StepTrace } from "./agent-step-trace.js";
 
 let dataDir: string;
@@ -236,5 +237,37 @@ describe("saveTurnTrace - lỗi tool", () => {
     const turnId = ghiLuot("thread-cu", 1);
     store.saveTurnTrace(turnId, [buoc(1)]);
     assert.deepEqual(store.getTurnTrace(turnId)[0]!.toolErrors, []);
+  });
+});
+
+describe("lượt hỏng trước khi chạy step nào vẫn lên được trang Trace", () => {
+  it("có trace tổng hợp thì lên danh sách VÀ bấm vào đọc được lý do", () => {
+    // INNER JOIN sang agent_steps là CỐ Ý (ca ngay trên canh điều đó). Nên cách
+    // để lượt chết ngay lần gọi đầu không biến mất là cho nó CÓ trace, chứ không
+    // phải nới JOIN - nới thì chỉ đổi "biến mất" thành "bấm vào rỗng".
+    const id = ghiLuot();
+    store.saveTurnTrace(id, [
+      traceLuotHong({ loai: "loi-provider", loai_loi: "cau_hinh", thongDiep: "Chưa cấu hình model" }),
+    ]);
+
+    const luot = store.getRecentTurnsAllThreads(10);
+    assert.ok(luot.some((l) => l.id === id), "lượt hỏng phải lên danh sách");
+
+    const buoc = store.getTurnTrace(id);
+    assert.equal(buoc.length, 1);
+    assert.equal(buoc[0]!.finishReason, "error:cau_hinh");
+    assert.match(buoc[0]!.text, /Chưa cấu hình model/);
+  });
+
+  it("ba loại lượt hỏng phân biệt được bằng finishReason", () => {
+    // Trước đây cả ba chỉ để lại một dòng log; trên UI nhìn y hệt nhau (hoặc
+    // y hệt một lượt thành công, với ca chặn rò prompt).
+    const ma = [
+      traceLuotHong({ loai: "loi-provider", loai_loi: "auth", thongDiep: "x" }).finishReason,
+      traceLuotHong({ loai: "guard-chan", ma: "loi-giong-het", thongDiep: "y" }).finishReason,
+      traceLuotHong({ loai: "chan-ro-prompt" }).finishReason,
+    ];
+    assert.deepEqual(ma, ["error:auth", "blocked:loi-giong-het", "blocked:prompt-leak"]);
+    assert.equal(new Set(ma).size, 3);
   });
 });

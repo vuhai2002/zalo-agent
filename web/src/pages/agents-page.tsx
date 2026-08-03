@@ -95,7 +95,7 @@ export function AgentsPage() {
                 {!agent.isDefault && (
                   <button
                     onClick={() => remove(agent)}
-                    className="rounded-lg px-3 py-1.5 text-[13px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40"
+                    className="rounded-lg px-3 py-1.5 text-[13px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                   >
                     Xóa
                   </button>

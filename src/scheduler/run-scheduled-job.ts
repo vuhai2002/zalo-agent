@@ -27,6 +27,7 @@ import { buildSyntheticMessage, withLateLabel } from "./scheduled-job-prompt.js"
 import { blockedByGuard, sendAndConclude } from "./scheduled-job-send.js";
 import type { ScheduledJob } from "./scheduled-job-store.js";
 import { isSilentResponse } from "./silent-sentinel.js";
+import { phanLoaiLoiProvider } from "../agent/provider-error-classifier.js";
 import { lamSachTraLoi } from "../zalo/sanitize-reply-text.js";
 
 const log = createLogger("run-scheduled-job");
@@ -52,6 +53,23 @@ export async function runScheduledJob(job: ScheduledJob, options: RunScheduledJo
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.error({ jobId: job.id, err }, "Lỗi không lường trước khi chạy job lịch hẹn");
+
+    // Bot CHƯA CẤU HÌNH XONG là trạng thái riêng, không phải "gửi hỏng".
+    //
+    // Từ khi `.env` chỉ còn một biến bắt buộc, bot khởi động được khi chưa nhập
+    // API key/model - và ở trạng thái đó `resolveLanguageModel` ném mỗi lượt.
+    // Đi vào `concludeDeliveryFailed` thì mỗi tick cộng một `delivery_attempts`,
+    // tới lần thứ ba là `markRun` và job `once` MẤT SUẤT CHẠY VĨNH VIỄN - chỉ vì
+    // người dùng chưa kịp vào dashboard nhập key.
+    //
+    // Cùng luật với "account chưa chạy": giữ nguyên suất, phục hồi `next_run_at`,
+    // không đếm là gửi hỏng. Bất biến đã chốt: một lời nhắc chưa từng gửi được
+    // thì không bao giờ được coi là đã chạy.
+    if (phanLoaiLoiProvider(err) === "cau_hinh") {
+      concludeBlockedNotRun(job, runId, "Bot chưa cấu hình xong LLM - chưa chạy được.", options.scheduledFor);
+      return;
+    }
+
     // Lưới đỡ NGOÀI CÙNG - không biết chắc đã gửi được gì chưa lúc lỗi bắn ra
     // tới đây, coi như "chưa gửi được" (Finding 1): đếm vào delivery_attempts
     // thay vì markRun ngay, tránh giết job chỉ vì 1 lỗi bất ngờ thoáng qua.
@@ -97,21 +115,48 @@ async function runMessageJob(
 ): Promise<void> {
   if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor)) return;
 
-  // `payload` là chữ MODEL viết lúc đặt lịch (qua tool `schedule_task`), gửi
-  // nguyên văn lúc tới giờ - nên nó cũng phải qua lớp làm sạch, không thì
-  // markdown lọt xuống Zalo y như trước khi có lớp này.
+  // `payload` là chữ MODEL viết lúc đặt lịch (qua tool `schedule_task`), và
+  // lượt đặt lịch đó hoàn toàn có thể đã đọc nội dung web hay tin của người lạ.
+  // Gửi nguyên văn lúc tới giờ nghĩa là nó phải qua lớp làm sạch như mọi chữ
+  // khác của model.
   //
-  // KHÔNG xét nhánh `chan` ở đây: payload đã nằm trong DB từ lúc đặt lịch, chặn
-  // lúc này là giết một lịch hẹn đã hứa mà người dùng không hiểu vì sao. Rò
-  // prompt trong payload cũng chỉ là chữ tĩnh, không phải model đang tự khai
-  // system prompt của lượt này.
+  // TUYỆT ĐỐI KHÔNG lùi về bản THÔ khi bộ lọc bắn. Bản trước viết
+  // `sach.chan ? job.payload : sach.text || job.payload` - tức đúng lúc bộ canh
+  // phát hiện rò system prompt thì lại gửi ĐÚNG chuỗi đó xuống Zalo, biến đường
+  // này thành lối duy nhất trong repo đẩy được chữ dạng system prompt ra ngoài.
+  //
+  // Theo đúng nếp `redact_sensitive_text` của Hermes (`cron/scheduler.py`):
+  // "Redact secrets from both stdout and stderr BEFORE ANY RETURN PATH", và khi
+  // chính bộ lọc hỏng thì họ trả `"[REDACTED - redaction failed]"` chứ không bao
+  // giờ trả chuỗi gốc. Ở đây tương đương: bị chặn thì KHÔNG gửi.
+  //
+  // Không gửi KHÁC với giết lịch hẹn: `concludeBlockedNotRun` giữ nguyên suất
+  // chạy và phục hồi `next_run_at` cho job `once`, nên người dùng sửa lại nội
+  // dung là lịch chạy tiếp - đúng bất biến "một lời nhắc chưa từng gửi được thì
+  // không bao giờ được coi là đã chạy".
   const sach = lamSachTraLoi(job.payload);
-  const noiDung = sach.chan ? job.payload : sach.text || job.payload;
+  if (sach.chan || !sach.text.trim()) {
+    log.error(
+      { jobId: job.id, chan: sach.chan, dauText: job.payload.slice(0, 200) },
+      "Nội dung lịch hẹn không qua được lớp làm sạch - KHÔNG gửi",
+    );
+    concludeBlockedNotRun(
+      job,
+      runId,
+      sach.chan
+        ? "Nội dung lịch hẹn có dấu hiệu lộ chỉ dẫn nội bộ - đã chặn, chưa gửi."
+        : "Nội dung lịch hẹn rỗng sau khi làm sạch - chưa gửi.",
+      options.scheduledFor,
+    );
+    return;
+  }
   if (sach.daSua.length > 0) {
     log.warn({ jobId: job.id, daSua: sach.daSua }, "Đã làm sạch payload lịch hẹn trước khi gửi");
   }
 
-  const text = options.late ? withLateLabel(noiDung, options.scheduledFor, timeZone) : noiDung;
+  const text = options.late
+    ? withLateLabel(sach.text, options.scheduledFor, timeZone)
+    : sach.text;
   await sendAndConclude(job, target, runId, timeZone, text, options.scheduledFor);
 }
 

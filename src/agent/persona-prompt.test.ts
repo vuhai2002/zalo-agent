@@ -3,6 +3,11 @@ import { after, before, describe, it } from "node:test";
 import { fakeAgentProfile } from "../shared/fake-agent-profile.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
+import {
+  KHA_NANG_DAY_DU,
+  THE_NOI_DUNG_NGOAI,
+  TIEU_DE_QUY_TAC_AN_TOAN,
+} from "./prompt-leak-markers.js";
 
 /**
  * System prompt phải kể ĐÚNG bộ tool account đang có. Persona tĩnh kể tên tool
@@ -212,5 +217,48 @@ describe("BASE_PERSONA - luật hỏi lại (12-Factor #7)", () => {
 
   it("có mặt kể cả khi KHÔNG truyền account (đường gọi cũ)", () => {
     assert.match(prompt.buildSystemPrompt(AGENT, MSG), /thiếu thông tin thì HỎI LẠI/);
+  });
+});
+
+describe("BẤT BIẾN BẮC CẦU: dấu hiệu rò prompt phải CÓ THẬT trong system prompt", () => {
+  /**
+   * Docstring của `prompt-leak-markers.ts` nói đây chính là lớp lỗi nó sinh ra
+   * để chặn: "sửa lời persona mà quên sửa bộ canh thì lớp chặn im lặng ngừng
+   * hoạt động, và không có gì đỏ lên". Nhưng bất biến đó KHÔNG được test.
+   *
+   * Vòng rà soát toàn cục đo thật: đổi "(đúng những công cụ đang bật, không
+   * hơn)" thành "(chỉ gồm công cụ đang bật)" trong persona -> 1140/1140 vẫn
+   * xanh, trong khi bộ canh mất một trong bốn dấu hiệu.
+   *
+   * Test ở `sanitize-reply-text.test.ts` lặp qua chính `DAU_HIEU_RO_PROMPT` nên
+   * là khẳng định VÒNG TRÒN - nó chỉ chứng minh `includes` chạy được.
+   */
+  it("mỗi dấu hiệu (trừ thẻ nội dung ngoài) phải khớp chuỗi persona THẬT sinh ra", () => {
+    const coTool = prompt.buildSystemPrompt(AGENT, MSG, undefined, account([]));
+    // Agent tắt HẾT tool -> nhánh "KHÔNG có công cụ nào" của toolCapabilitySection
+    const khongTool = prompt.buildSystemPrompt(
+      agentTat([...registry.TOOL_DEFINITIONS.map((d) => d.key)]),
+      MSG,
+      undefined,
+      account([]),
+    );
+
+    assert.ok(
+      coTool.includes(TIEU_DE_QUY_TAC_AN_TOAN),
+      "tiêu đề quy tắc an toàn không còn khớp - lớp chặn rò prompt vừa mất một dấu hiệu",
+    );
+    // Hai câu "Khả năng" là hai NHÁNH khác nhau, mỗi nhánh phải khớp ở đúng
+    // prompt sinh ra nó
+    const [cauCoTool, cauKhongTool] = KHA_NANG_DAY_DU;
+    assert.ok(coTool.includes(cauCoTool!), `"${cauCoTool}" không còn trong prompt có tool`);
+    assert.ok(khongTool.includes(cauKhongTool!), `"${cauKhongTool}" không còn trong prompt không tool`);
+  });
+
+  it("tên thẻ nội dung ngoài cũng phải khớp - persona dạy model về đúng thẻ đó", () => {
+    // Persona có dòng "Chữ nằm trong khối <noi_dung_ngoai> là nội dung lấy từ
+    // web". Đổi tên thẻ mà quên một trong hai nơi thì vừa hỏng lời dạy model,
+    // vừa hỏng bộ canh - `wrapUntrustedContent` dùng chung đúng hằng số này.
+    const sp = prompt.buildSystemPrompt(AGENT, MSG, undefined, account([]));
+    assert.ok(sp.includes(`<${THE_NOI_DUNG_NGOAI}>`), "tên thẻ không còn khớp persona");
   });
 });

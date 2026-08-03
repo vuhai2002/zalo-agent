@@ -4,6 +4,7 @@ import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { IconSliders } from "../shared/dashboard-icons";
 import { SecretInput } from "../shared/secret-input";
+import { useConfirmDialog } from "../shared/confirm-dialog";
 import { Badge } from "../shared/ui-bits";
 
 export function ProvidersPage() {
@@ -11,6 +12,7 @@ export function ProvidersPage() {
   const [form, setForm] = useState({ provider: "openai-compatible", baseUrl: "", model: "", apiKey: "" });
   const [status, setStatus] = useState<{ tone: "green" | "red"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const load = () =>
     api.provider().then((s) => {
@@ -58,11 +60,29 @@ export function ProvidersPage() {
   }
 
   async function reset() {
+    // Hành động PHÁ HỦY: `clearLlmSettings` xóa cả API key. Từ khi .env rút còn
+    // 13 biến, phần LLM ở đó thường trống - nên không có bản dự phòng nào để
+    // "quay về", bấm nhầm là bot câm ngay lượt sau. Mọi hành động phá hủy khác
+    // trong dashboard đều hỏi trước; chỗ này trước đó thì không.
+    const ok = await confirm({
+      title: "Xóa toàn bộ cấu hình LLM?",
+      message:
+        "API key, base URL và tên model đã lưu sẽ bị xóa. Nếu .env không có sẵn giá trị thay thế thì bot ngừng trả lời cho tới khi bạn nhập lại.",
+    });
+    if (!ok) return;
+
     setBusy(true);
-    await api.clearProvider();
-    await load();
-    setStatus({ tone: "green", text: "Đã xóa override - quay về cấu hình trong .env" });
-    setBusy(false);
+    try {
+      await api.clearProvider();
+      await load();
+      setStatus({ tone: "green", text: "Đã xóa cấu hình LLM đã lưu" });
+    } catch (err) {
+      // Thiếu `finally` là lỗi cũ ở đúng hàm này: request hỏng thì `busy` kẹt
+      // `true` và cả ba nút Lưu/Test/Xóa không bấm được nữa cho tới khi F5
+      setStatus({ tone: "red", text: err instanceof ApiError ? err.message : "Xóa thất bại" });
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!settings) return <p className="text-ink-soft">Đang tải...</p>;
@@ -72,7 +92,7 @@ export function ProvidersPage() {
       <PageHeader
         icon={IconSliders}
         title="Providers"
-        subtitle="Cấu hình LLM runtime - đè lên .env, áp dụng ngay không cần restart bot"
+        subtitle="Nguồn cấu hình LLM chính - áp dụng ngay, không cần khởi động lại bot"
         aside={settings.hasOverride ? <Badge tone="blue">Đang dùng override</Badge> : undefined}
       />
 
@@ -153,13 +173,14 @@ export function ProvidersPage() {
             <button
               onClick={reset}
               disabled={busy}
-              className="ml-auto rounded-lg px-4 py-2 text-[14px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40 disabled:opacity-50"
+              className="ml-auto rounded-lg px-4 py-2 text-[14px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50"
             >
-              Xóa override (về .env)
+              Xóa cấu hình LLM
             </button>
           )}
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }

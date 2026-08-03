@@ -7,6 +7,8 @@ import { appendMessage } from "../conversation/history-store.js";
 import { imagePathsOf, persistBatchImages } from "../conversation/media-store.js";
 import { maybeSummarizeThread } from "../conversation/thread-summarizer.js";
 import { saveTurnTrace } from "../agent/agent-trace-store.js";
+import { traceLuotHong } from "../agent/failed-turn-trace.js";
+import { forLog } from "../agent/agent-step-observer.js";
 import { finishAgentTurn, openAgentTurn } from "../conversation/usage-store.js";
 import { createLogger } from "../shared/logger.js";
 import { runInTurnLogContext } from "../shared/turn-log-context.js";
@@ -181,15 +183,25 @@ async function xuLyLuot(
     // `finishAgentTurn` ở trên (lưu trace, ghi history, gửi tin) đều có thể ném
     // vì DB hoặc mạng, và lúc đó lượt ĐÃ chạy xong, đã tiêu token thật.
     // `run-scheduled-job.ts` đã có đúng lá chắn này; đường chat thì chưa.
+    // Phân loại để chọn ĐÚNG câu báo. Một câu cho mọi thứ khiến "bot sai cấu
+    // hình" (chờ bao lâu cũng không tự hết) đọc y hệt "mạng chập vài giây".
+    const loaiLoi = phanLoaiLoiProvider(err);
+
     if (!turnFinished) {
-      if (trace.length > 0) saveTurnTrace(turnId, trace);
+      // Lượt chết TRƯỚC khi chạy được step nào (sai khóa, router 404, chưa cấu
+      // hình) không có dòng `agent_steps` nào, mà `getRecentTurnsAllThreads`
+      // INNER JOIN sang bảng đó - nên nó BIẾN MẤT khỏi trang Trace, đúng ca hỏng
+      // phổ biến nhất của bản cài mới. Ghi một bước tổng hợp để lượt vừa lên
+      // được danh sách vừa có thứ để đọc khi bấm vào.
+      const buoc =
+        trace.length > 0
+          ? trace
+          : [traceLuotHong({ loai: "loi-provider", loai_loi: loaiLoi, thongDiep: forLog(err, 300) })];
+      saveTurnTrace(turnId, buoc);
       // Token thì KHÔNG biết - lỗi ném ra từ giữa lượt không mang theo usage -
       // nên để 0 và đọc số step trên trang Trace.
       finishAgentTurn(turnId, { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: trace.length });
     }
-    // Phân loại để chọn ĐÚNG câu báo. Một câu cho mọi thứ khiến "bot sai cấu
-    // hình" (chờ bao lâu cũng không tự hết) đọc y hệt "mạng chập vài giây".
-    const loaiLoi = phanLoaiLoiProvider(err);
     log.error({ err, loaiLoi, steps: trace.length }, "Lỗi xử lý lượt tin nhắn");
     // Báo cho người nhắn thay vì im lặng bỏ treo. KHÔNG ghi câu này vào history:
     // nó là thông báo hệ thống, để lại chỉ khiến lượt sau model neo vào tiền lệ hỏng.

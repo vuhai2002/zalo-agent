@@ -13,13 +13,95 @@ import { decodeHtmlEntities } from "./html-entities.js";
  * Trang render bằng JS sẽ ra ít text - chấp nhận, đó là giới hạn đã biết.
  */
 
+/** Block không bao giờ là nội dung */
+const THE_KHONG_NOI_DUNG = [
+  "script",
+  "style",
+  "noscript",
+  "svg",
+  "header",
+  "head",
+  "nav",
+  "footer",
+  "aside",
+  "form",
+  "select",
+  "iframe",
+  "template",
+];
+
+/** Ký tự ngay sau tên thẻ phải KHÔNG phải chữ/số - thay cho `\b` của regex */
+function ketThucTenThe(html: string, sau: number): boolean {
+  const c = html[sau];
+  return c === undefined || !/[A-Za-z0-9]/.test(c);
+}
+
 /**
- * Block không bao giờ là nội dung. Thứ tự "header|head" quan trọng: alternation
- * chọn nhánh đầu khớp trước, để "head" đứng trước thì "<header>" bị khớp dở
- * thành "<head" + phần thừa và regex không đóng được đúng thẻ.
+ * Bỏ một loại thẻ và toàn bộ nội dung bên trong, QUÉT TUYẾN TÍNH.
+ *
+ * Bản trước dùng regex `<(script|style|...)\b[\s\S]*?<\/\1\s*>`. Mỗi thẻ mở
+ * KHÔNG đóng khiến `[\s\S]*?` quét tới hết tài liệu rồi thất bại - O(K x n) với
+ * K là số thẻ mở. `web-fetch-tool.ts` cho phép trang 3 MB, và người lạ chỉ cần
+ * gửi một link trỏ về server của họ để model gọi `web_fetch`.
+ *
+ * Đo thật trên trang toàn `<script>` không đóng:
+ *
+ *     256 KB     474 ms
+ *     1 MB     7.107 ms
+ *     3 MB    63.310 ms   (đúng trần MAX_HTML_BYTES)
+ *
+ * Tiến trình này MỘT luồng phục vụ mọi account, vòng tick scheduler và cả HTTP
+ * dashboard - hơn một phút đứng hình là cả bot chết.
+ *
+ * Kẹp trần lượng từ (cách vá quen thuộc) KHÔNG đủ ở đây: vẫn còn O(K x trần),
+ * mà K với trang 3 MB lên tới hàng chục nghìn. Nên đổi hẳn thuật toán.
+ *
+ * Mấu chốt để TUYẾN TÍNH: con trỏ chỉ tiến, và khi không tìm thấy thẻ đóng thì
+ * DỪNG HẲN loại thẻ đó - `indexOf` vừa quét tới cuối chuỗi rồi, nên chắc chắn
+ * phía sau cũng không còn thẻ đóng nào. Tổng công: mỗi loại thẻ một lượt quét.
+ *
+ * Thẻ mở không có thẻ đóng thì GIỮ NGUYÊN, `stripHtmlTags` dọn sau - thiên về
+ * giữ nhầm hơn xóa nhầm, cùng hướng an toàn với `removeLinkDenseLists`.
  */
-const NON_CONTENT_BLOCKS =
-  /<(script|style|noscript|svg|header|head|nav|footer|aside|form|select|iframe|template)\b[\s\S]*?<\/\1\s*>/gi;
+function boTheKhongNoiDung(html: string, ten: string): string {
+  const thap = html.toLowerCase();
+  const mo = `<${ten}`;
+  const dong = `</${ten}`;
+
+  let ra = "";
+  let cat = 0; // đã ghi ra tới đâu
+  let tim = 0; // tìm thẻ mở từ đâu
+
+  for (;;) {
+    const iMo = thap.indexOf(mo, tim);
+    if (iMo === -1) break;
+    if (!ketThucTenThe(thap, iMo + mo.length)) {
+      // "<header>" khi đang tìm "<head" - bỏ qua, tìm tiếp từ ngay sau
+      tim = iMo + mo.length;
+      continue;
+    }
+
+    const iDong = thap.indexOf(dong, iMo + mo.length);
+    // Không còn thẻ đóng nào phía sau -> dừng hẳn loại thẻ này. ĐÂY là chỗ
+    // biến thuật toán từ bậc hai thành tuyến tính.
+    if (iDong === -1) break;
+
+    const iHet = thap.indexOf(">", iDong);
+    if (iHet === -1) break;
+
+    ra += html.slice(cat, iMo);
+    cat = iHet + 1;
+    tim = cat;
+  }
+
+  return cat === 0 ? html : ra + html.slice(cat);
+}
+
+function boMoiTheKhongNoiDung(html: string): string {
+  let ra = html;
+  for (const ten of THE_KHONG_NOI_DUNG) ra = boTheKhongNoiDung(ra, ten);
+  return ra;
+}
 
 /**
  * Bóc thẻ HTML + giải mã entity (số lẫn tên - xem html-entities.ts).
@@ -94,7 +176,7 @@ function collapseMultilineTags(html: string): string {
 
 export function htmlToReadableText(html: string): string {
   const withoutBlocks = removeLinkDenseLists(
-    collapseMultilineTags(html).replace(NON_CONTENT_BLOCKS, " "),
+    boMoiTheKhongNoiDung(collapseMultilineTags(html)),
   );
 
   // Giữ cấu trúc đoạn: thẻ block phổ biến thành xuống dòng trước khi bóc thẻ

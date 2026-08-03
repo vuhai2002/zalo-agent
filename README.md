@@ -63,7 +63,7 @@ Bản đang chạy hiện ở chân sidebar dashboard. Bản mới nhất xem �
 Custom -> Releases** trên repo để được báo khi có bản mới.
 
 ```bash
-git fetch --tags && git checkout v0.2.0   # hoặc git pull nếu bám theo main
+git pull                                  # hoặc git checkout <tag> nếu bám theo bản phát hành
 pnpm install
 pnpm build:web                            # thiếu bước này dashboard vẫn là bản cũ
 ```

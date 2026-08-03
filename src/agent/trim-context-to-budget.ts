@@ -104,6 +104,23 @@ export function catNguCanhTheoNganSach(input: {
     // với `moBaoVe` gốc nên vẫn đếm đúng số tin đã bỏ
   }
 
+  // Bỏ tin `tool` MỒ CÔI ở đầu mảng.
+  //
+  // Vòng trên cắt theo CHỈ SỐ, không biết gì về ràng buộc `assistant(tool-call)`
+  // phải đi liền `tool(tool-result)`. Chỉ cần nó dừng ngay sau khi bỏ một tin
+  // assistant là mảng còn lại mở đầu bằng một tool-result không có lệnh gọi
+  // tương ứng - OpenAI trả 400 "messages with role 'tool' must be a response to
+  // a preceeding message with 'tool_calls'", Anthropic trả 400 "unexpected
+  // tool_result block". Đo thật: 42/48 tổ hợp thăm dò rơi vào đúng hình dạng đó
+  // (assistant nặng vì text dài + tool-call, còn tool-result thì nhẹ).
+  //
+  // Đường này chỉ với tới được qua lượt chốt (`runWrapUp`) - mảng của
+  // `buildTurnMessages` không có tin `tool` nào.
+  while (ds.length > 0 && ds[0]!.role === "tool") {
+    ds = ds.slice(1);
+    soTinBo++;
+  }
+
   // Cắt hết mức vẫn vượt: trả về vùng bảo vệ chứ KHÔNG trả mảng rỗng. Lượt vẫn
   // nên chạy với đúng câu người dùng vừa hỏi, thà tràn còn hơn gửi rỗng.
   //

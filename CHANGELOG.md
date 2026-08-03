@@ -84,7 +84,7 @@ Bản đầu tiên được đánh số. Gom toàn bộ những gì đã làm t�
   cao nhất: chặn lịch lặp quá dày lúc TẠO, và trần tin chủ động mỗi ngày lúc GỬI
 - **Dashboard web**: xem hội thoại, contacts, trí nhớ, trace từng bước của agent,
   log hệ thống, bật/tắt bot theo cuộc trò chuyện, đổi nhà cung cấp LLM
-- **Trang Cấu hình**: 31 tham số trước đây chỉ sửa được trong `.env` rồi khởi
+- **Trang Cấu hình**: 46 tham số trước đây chỉ sửa được trong `.env` rồi khởi
   động lại, giờ chỉnh trực tiếp và có hiệu lực ngay
 - **Đổi mật khẩu dashboard** từ web, lưu dạng hash; đổi xong thu hồi mọi phiên
   đăng nhập khác

@@ -156,3 +156,73 @@ describe("extractHtmlTitle", () => {
     assert.equal(extractHtmlTitle("<p>không có title</p>"), "");
   });
 });
+
+describe("boMoiTheKhongNoiDung - tuyến tính, không ReDoS", () => {
+  it("trang 3 MB toàn thẻ mở KHÔNG đóng phải xong dưới 1 giây", () => {
+    // Đây là đường tấn công THẬT: người lạ gửi link trỏ về server của họ, model
+    // gọi web_fetch, `MAX_HTML_BYTES` cho tới 3 MB. Tiến trình một luồng phục vụ
+    // mọi account + tick scheduler + HTTP dashboard.
+    //
+    // Bản regex `<(script|...)\b[\s\S]*?<\/\1\s*>` đo được: 256 KB = 474 ms,
+    // 1 MB = 7,1 giây, 3 MB = 63,3 GIÂY. Sau khi đổi sang quét tuyến tính: 73 ms.
+    const don = "<script>" + "a".repeat(50);
+    const html = don.repeat(Math.floor((3 * 1024 * 1024) / don.length));
+
+    const t0 = process.hrtime.bigint();
+    htmlToReadableText(html);
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    assert.ok(ms < 1000, `${ms.toFixed(0)}ms - thuật toán đang chạy bậc hai`);
+  });
+
+  it("tuyến tính: gấp đôi đầu vào thì KHÔNG gấp bốn thời gian", () => {
+    const don = "<style>" + "b".repeat(40);
+    const do1 = (n: number) => {
+      const html = don.repeat(Math.floor(n / don.length));
+      const t0 = process.hrtime.bigint();
+      htmlToReadableText(html);
+      return Number(process.hrtime.bigint() - t0) / 1e6;
+    };
+    do1(200_000); // làm nóng, bỏ số đo đầu
+    const nho = Math.max(do1(400_000), 1);
+    const to = do1(800_000);
+    assert.ok(to / nho < 3, `gấp đôi đầu vào -> gấp ${(to / nho).toFixed(1)} lần thời gian`);
+  });
+});
+
+describe("boMoiTheKhongNoiDung - hành vi giữ nguyên như bản regex", () => {
+  it("bỏ thẻ và toàn bộ nội dung bên trong", () => {
+    const ra = htmlToReadableText("<p>Giữ lại</p><script>var x = 1;</script><p>Cũng giữ</p>");
+    assert.match(ra, /Giữ lại/);
+    assert.match(ra, /Cũng giữ/);
+    assert.ok(!ra.includes("var x"), ra);
+  });
+
+  it("<header> KHÔNG bị nhận nhầm thành <head> - đúng bẫy mà thứ tự trong regex cũ né", () => {
+    // Regex cũ dựa vào thứ tự alternation "header|head"; bản mới kiểm ký tự
+    // ngay sau tên thẻ. Cả hai phải cho cùng kết quả.
+    const ra = htmlToReadableText("<header>Menu trên</header><p>Nội dung thật</p>");
+    assert.match(ra, /Nội dung thật/);
+    assert.ok(!ra.includes("Menu trên"), ra);
+  });
+
+  it("thẻ mở KHÔNG có thẻ đóng thì giữ phần chữ, không nuốt cả trang", () => {
+    // Thiên về giữ nhầm hơn xóa nhầm - cùng hướng an toàn với removeLinkDenseLists
+    const ra = htmlToReadableText("<p>Trước</p><script>chưa đóng<p>Sau vẫn phải còn</p>");
+    assert.match(ra, /Trước/);
+    assert.match(ra, /Sau vẫn phải còn/);
+  });
+
+  it("nhiều thẻ cùng loại, có thẻ đóng đầy đủ", () => {
+    const ra = htmlToReadableText("<p>A</p><nav>menu1</nav><p>B</p><nav>menu2</nav><p>C</p>");
+    assert.match(ra, /A/);
+    assert.match(ra, /B/);
+    assert.match(ra, /C/);
+    assert.ok(!ra.includes("menu1") && !ra.includes("menu2"), ra);
+  });
+
+  it("thẻ đóng viết hoa và có khoảng trắng", () => {
+    const ra = htmlToReadableText("<p>Giữ</p><SCRIPT>bỏ đi</SCRIPT >");
+    assert.match(ra, /Giữ/);
+    assert.ok(!ra.includes("bỏ đi"), ra);
+  });
+});

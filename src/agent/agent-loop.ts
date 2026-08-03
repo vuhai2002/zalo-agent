@@ -51,7 +51,7 @@ const ROUTER_DOWN_REPLY = TECHNICAL_ERROR_REPLY;
  * Dùng khi hết step VÀ lượt chốt cũng không ra chữ. Nói thật là chưa xong thay
  * vì im lặng hoặc gửi câu tường thuật nội bộ - người nhắn còn biết mà hỏi lại.
  */
-const STEP_LIMIT_REPLY =
+export const STEP_LIMIT_REPLY =
   "Mình tra hơi nhiều bước mà vẫn chưa gom đủ để trả lời cho chắc. Anh/chị hỏi lại gọn hơn một chút giúp mình nhé, ví dụ chỉ một mục hoặc một nguồn thôi.";
 
 export type AgentTurnParams = {
@@ -254,14 +254,32 @@ export async function runAgentTurn({
     // `messages` lẫn toàn bộ `daLam` (tool call + tool result của mọi step) cộng
     // thêm lời nhắc. Chốt xong lại 400 thì mất trắng công của cả lượt.
     //
-    // Bảo vệ 2 tin cuối: lời nhắc chốt, và tin của lượt hiện tại đứng ngay
-    // trước nó trong `daLam` - bỏ một trong hai là hỏng chính mục đích lượt chốt.
-    const { tinNhan: tinChot, daCat: daCatChot } = catNguCanhTheoNganSach({
-      tinNhan: [...messages, ...daLam, nhacChot],
-      tranToken: nganSachAnToan(tranToken),
-      soTinBaoVeCuoi: 2,
+    // TÁCH HẲN câu hỏi ra khỏi vùng bị cắt, không dựa vào `soTinBaoVeCuoi`.
+    //
+    // Bản trước truyền `[...messages, ...daLam, nhacChot]` với
+    // `soTinBaoVeCuoi: 2` kèm chú thích "tin của lượt hiện tại đứng ngay trước
+    // nhacChot" - SAI về cấu trúc. Câu hỏi nằm ở cuối `messages`, tức đứng
+    // trước TOÀN BỘ `daLam`; hai tin được bảo vệ thật ra là `nhacChot` và một
+    // tin tool của step cuối. Mà vòng cắt bỏ tin từ ĐẦU mảng đi tới, nên thứ tự
+    // bị bỏ là: history -> CÂU HỎI CỦA NGƯỜI DÙNG -> các cặp tool.
+    //
+    // Đo thật trên lượt nặng (20 tin history + 8 cặp tool với kết quả 100k ký
+    // tự): cắt còn 5 tin và KHÔNG còn câu hỏi. Model nhận lệnh "trả lời NGAY
+    // BÂY GIỜ" mà không biết người dùng hỏi gì - đúng thứ lượt chốt sinh ra để
+    // tránh. Và ca này chỉ nổ ở lượt nặng, tức đúng lúc vừa đốt hết 8 step.
+    const cauHoi = messages[messages.length - 1];
+    const truocCauHoi = messages.slice(0, -1);
+    const chuaChoSan =
+      uocLuongTokenTinNhan(cauHoi ? [cauHoi, nhacChot] : [nhacChot], TOKEN_MOI_ANH_THEO_CO[getTuning("ZALO_IMAGE_QUALITY")]);
+
+    const { tinNhan: phanCatDuoc, daCat: daCatChot } = catNguCanhTheoNganSach({
+      tinNhan: [...truocCauHoi, ...daLam],
+      // Chừa sẵn chỗ cho hai tin không bao giờ bị cắt
+      tranToken: Math.max(0, nganSachAnToan(tranToken) - chuaChoSan),
+      soTinBaoVeCuoi: 1,
       coAnh: getTuning("ZALO_IMAGE_QUALITY"),
     });
+    const tinChot = [...phanCatDuoc, ...(cauHoi ? [cauHoi] : []), nhacChot];
     if (daCatChot) log.warn({ ...daCatChot }, "Đã cắt bớt ngữ cảnh cho lượt chốt");
 
     const r = await generateText({

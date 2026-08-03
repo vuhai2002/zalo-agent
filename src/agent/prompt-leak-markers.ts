@@ -42,7 +42,7 @@ export const TIEU_DE_KHA_NANG = "Khả năng của bạn lúc này";
  * khỏi: người dùng mất HẲN câu trả lời, hỏi lại vẫn y hệt vì model sinh lại đúng
  * cách diễn đạt đó.
  */
-const KHA_NANG_DAY_DU = [
+export const KHA_NANG_DAY_DU = [
   `${TIEU_DE_KHA_NANG} (đúng những công cụ đang bật`,
   `${TIEU_DE_KHA_NANG}: KHÔNG có công cụ nào`,
 ];
