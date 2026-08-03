@@ -70,7 +70,7 @@ export function TuningDetailPanel({
           // khối - đây là danh sách thiết lập liền mạch, không phải các thẻ rời
           <div className="divide-y divide-line">
             {keys.map((k) => (
-              <div key={k} className="py-5 first:pt-0">
+              <div key={k} className="py-4 first:pt-0">
                 <TuningField name={k} def={defs[k]!} tuningValue={values[k]!} onSave={onSaveOne} />
               </div>
             ))}

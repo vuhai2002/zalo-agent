@@ -65,11 +65,25 @@ export function botTimeZone(): string {
 
 export type TuningValue = number | boolean | string;
 
-/** Toàn bộ giá trị hiệu lực + cái nào đang lấy từ env (để giao diện nói rõ) */
-export function listTuning(): { key: string; value: TuningValue; fromEnv: boolean }[] {
+/**
+ * Toàn bộ giá trị hiệu lực + cái nào đang lấy từ env (để giao diện nói rõ).
+ *
+ * `macDinh` = giá trị KHI KHÔNG CÓ dòng đè nào, tức `.env` nếu người deploy có
+ * đặt, còn không thì `.default()` của schema. Trình duyệt cần nó để biết lúc
+ * nào nên gửi `null` (xóa dòng đè) thay vì ghi một giá trị trùng y hệt mặc
+ * định. Thiếu nó thì bật/tắt một công tắc rồi bật lại vẫn để lại dòng đè, và
+ * giao diện báo "đã chỉnh" mãi dù giá trị không khác gì mặc định.
+ */
+export function listTuning(): {
+  key: string;
+  value: TuningValue;
+  macDinh: TuningValue;
+  fromEnv: boolean;
+}[] {
   return Object.keys(TUNING_DEFS).map((key) => ({
     key,
     value: getTuning(key as TuningKey) as TuningValue,
+    macDinh: env[key as TuningKey] as TuningValue,
     fromEnv: readRaw(key as TuningKey) === undefined,
   }));
 }

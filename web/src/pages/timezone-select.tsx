@@ -29,7 +29,7 @@ export function TimezoneSelect({
     // Icon quả cầu nằm TRONG ô: nhãn zone là chuỗi kỹ thuật ("Asia/Ho_Chi_Minh")
     // nên cần một dấu hiệu thị giác cho biết ô này nói về múi giờ, không phải
     // một ô chọn bất kỳ
-    <div className="w-full max-w-md">
+    <div className="w-full">
       <SelectMenu
         id={id}
         size="md"

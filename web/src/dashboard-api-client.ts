@@ -371,7 +371,13 @@ export type TuningDef = {
 
 export type TuningGroup = { id: string; title: string; hint: string; navHint: string };
 
-export type TuningValue = { key: string; value: number | boolean | string; fromEnv: boolean };
+export type TuningValue = {
+  key: string;
+  value: number | boolean | string;
+  /** Giá trị khi KHÔNG có dòng đè - dùng để biết lúc nào nên xóa dòng đè thay vì ghi trùng */
+  macDinh: number | boolean | string;
+  fromEnv: boolean;
+};
 
 export type ManagedAgent = {
   id: string;

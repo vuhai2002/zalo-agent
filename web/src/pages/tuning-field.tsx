@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { TuningDef, TuningValue } from "../dashboard-api-client";
 import { IconUndo } from "../shared/dashboard-icons";
-import { SelectMenu } from "../shared/select-menu";
-import { TimezoneSelect } from "./timezone-select";
+import { giaTriGuiDi } from "./tuning-commit-value";
+import { TuningFieldControl } from "./tuning-field-control";
 
 type SaveResult = { ok: true } | { ok: false; error: string };
 type Phase = "idle" | "saving" | "saved" | "error";
@@ -33,7 +33,7 @@ export function TuningField({
   onSave: (key: string, value: number | boolean | string | null) => Promise<SaveResult>;
 }) {
   const id = `tuning-${name}`;
-  const { value, fromEnv } = tuningValue;
+  const { value, macDinh, fromEnv } = tuningValue;
   const [phase, setPhase] = useState<Phase>("idle");
   const [loi, setLoi] = useState("");
   // Chỉ number/text cần bản nháp cục bộ - boolean/enum lưu ngay nên không có
@@ -50,7 +50,9 @@ export function TuningField({
   async function commit(v: number | boolean | string | null) {
     setPhase("saving");
     setLoi("");
-    const res = await onSave(name, v);
+    // `null` đi thẳng (nút "Về mặc định"); giá trị người dùng chọn thì đi qua
+    // `giaTriGuiDi` để chọn đúng mặc định cũng thành xóa dòng đè - xem file đó.
+    const res = await onSave(name, v === null ? null : giaTriGuiDi(v, macDinh));
     if (res.ok) {
       setPhase("saved");
       window.setTimeout(() => setPhase((p) => (p === "saved" ? "idle" : p)), 1400);
@@ -82,12 +84,17 @@ export function TuningField({
   const dangLuu = phase === "saving";
 
   return (
-    // FLAT: không nền, không viền - chỉ chữ và ô nhập trên nền trắng của panel.
-    // Bọc mỗi tham số trong một khối xám là kiểu "khối lồng khối", nhìn nặng và
-    // chia trang thành nhiều ô con không cần thiết.
-    <div className="py-1">
-      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <label htmlFor={id} className="text-[15px] font-semibold text-ink">
+    // NẰM NGANG như từng dòng ở trang Tools: chữ bên trái, ô nhập bên phải.
+    // Bản dọc trước đó (nhãn -> mô tả -> ô nhập, mỗi tham số một khối) đẩy trang
+    // dài gấp đôi và không lướt nhanh được: mắt phải đi zigzag để nối nhãn với
+    // giá trị của nó. Xếp ngang thì mọi giá trị nằm trên cùng một cột.
+    //
+    // Màn hẹp thì đổ dọc lại (`flex-col` mặc định) - nhồi ô nhập vào cạnh đoạn
+    // mô tả dài trên điện thoại là bóp cả hai bên.
+    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-6">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <label htmlFor={id} className="text-[14px] font-medium text-ink">
           {def.label}
         </label>
         {fromEnv ? (
@@ -103,83 +110,47 @@ export function TuningField({
           // Viền + nền + icon chứ KHÔNG phải chữ gạch chân chấm: bản cũ đọc ra
           // như một chú thích, người dùng không nhận ra bấm được. Cao đúng bằng
           // chip "mặc định" để dòng tiêu đề không nhảy khi đổi trạng thái.
+          //
+          // Tông HỔ PHÁCH chứ không xám trung tính: hai trạng thái phải phân
+          // biệt được từ xa khi lướt cả trang. Xanh = đang theo mặc định, hổ
+          // phách = bạn đã chỉnh ô này - cùng bảng màu với các cảnh báo nhẹ
+          // khác trong dashboard, không phải đỏ vì đây không phải lỗi.
+          //
+          // `leading-none` trên chữ: không có nó thì icon 12px bị chiều cao
+          // dòng mặc định đẩy lệch so với chữ, nhìn như chưa canh.
           <button
             type="button"
             onClick={() => void commit(null)}
             disabled={dangLuu}
             title="Xóa giá trị bạn đã đặt, quay lại giá trị mặc định"
-            className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-soft transition-colors hover:border-zalo-200 hover:bg-zalo-50 hover:text-zalo-600 disabled:opacity-50 dark:hover:border-zalo-800 dark:hover:bg-zalo-950/40 dark:hover:text-zalo-300"
+            className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 transition-colors hover:border-amber-300 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/70"
           >
-            <IconUndo size={12} />
-            Về mặc định
+            <IconUndo size={12} className="shrink-0" />
+            <span className="leading-none">Về mặc định</span>
           </button>
         )}
         <TrangThaiLuu phase={phase} />
+        </div>
+
+        {def.hint && <p className="mt-0.5 text-[12px] leading-[1.6] text-ink-soft">{def.hint}</p>}
+        {phase === "error" && loi && (
+          <p className="mt-1 text-[12px] text-red-600 dark:text-red-400">{loi}</p>
+        )}
       </div>
 
-      {def.hint && <p className="mb-4 max-w-3xl text-[13px] leading-[1.7] text-ink-soft">{def.hint}</p>}
-
-      {def.kind === "number" && (
-        <div className="flex items-center gap-2">
-          <input
-            id={id}
-            type="number"
-            className="gc-input w-40"
-            min={def.min}
-            max={def.max}
-            value={nhap}
-            disabled={dangLuu}
-            onChange={(e) => {
-              setNhap(e.target.value);
-              if (phase === "error") setPhase("idle");
-            }}
-            onBlur={commitNumberDraft}
-            onKeyDown={(e) => e.key === "Enter" && commitNumberDraft()}
-          />
-          {def.unit && <span className="text-[13px] text-ink-soft">{def.unit}</span>}
-          <span className="text-[12px] text-ink-soft/70">
-            ({def.min.toLocaleString("vi-VN")} - {def.max.toLocaleString("vi-VN")})
-          </span>
-        </div>
-      )}
-
-      {def.kind === "boolean" && (
-        <label className="flex w-fit cursor-pointer items-center gap-2 text-[13px] text-ink">
-          <input
-            id={id}
-            type="checkbox"
-            className="h-4 w-4 cursor-pointer accent-ink"
-            checked={Boolean(value)}
-            disabled={dangLuu}
-            onChange={(e) => void commit(e.target.checked)}
-          />
-          {value ? "Đang bật" : "Đang tắt"}
-        </label>
-      )}
-
-      {def.kind === "enum" && (
-        <div className="w-40">
-          <SelectMenu
-            id={id}
-            size="md"
-            value={String(value)}
-            disabled={dangLuu}
-            options={def.options.map((o) => ({ value: o, label: NHAN_MUC[o] ?? o }))}
-            onChange={(v) => void commit(v)}
-          />
-        </div>
-      )}
-
-      {def.kind === "timezone" && (
-        <TimezoneSelect
-          id={id}
-          value={String(value)}
-          disabled={dangLuu}
-          onChange={(v) => void commit(v)}
-        />
-      )}
-
-      {phase === "error" && loi && <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{loi}</p>}
+      <TuningFieldControl
+        def={def}
+        id={id}
+        value={value}
+        nhap={nhap}
+        dangLuu={dangLuu}
+        onNhap={(v) => {
+          setNhap(v);
+          if (phase === "error") setPhase("idle");
+        }}
+        onCommit={(v) => void commit(v)}
+        onCommitNumber={commitNumberDraft}
+      />
     </div>
   );
 }
@@ -189,12 +160,3 @@ function TrangThaiLuu({ phase }: { phase: Phase }) {
   if (phase === "saved") return <span className="text-[11px] text-emerald-600 dark:text-emerald-400">Đã lưu</span>;
   return null;
 }
-
-/** Nhãn tiếng Việt cho mức suy nghĩ - "xhigh" trên màn hình thì không ai đoán được */
-const NHAN_MUC: Record<string, string> = {
-  off: "Tắt",
-  low: "Thấp",
-  medium: "Vừa",
-  high: "Cao",
-  xhigh: "Rất cao",
-};
