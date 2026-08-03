@@ -182,9 +182,15 @@ describe("boMoiTheKhongNoiDung - tuyến tính, không ReDoS", () => {
       htmlToReadableText(html);
       return Number(process.hrtime.bigint() - t0) / 1e6;
     };
+    // Lấy MIN của nhiều vòng chứ không đo một phát: nhiễu (GC, scheduler) chỉ
+    // cộng thêm thời gian chứ không bao giờ trừ đi, nên min là số đo sạch nhất.
+    // Đo một phát từng bị đỏ oan - tỉ số thật 1,9-2,3x nhưng một lần xui lên 3,3x.
+    const minCua = (n: number) => Math.min(...Array.from({ length: 5 }, () => do1(n)));
+
     do1(200_000); // làm nóng, bỏ số đo đầu
-    const nho = Math.max(do1(400_000), 1);
-    const to = do1(800_000);
+    const nho = minCua(400_000);
+    const to = minCua(800_000);
+    // Tuyến tính ~2x, bậc hai ~4x, bản regex cũ đo được ~15x.
     assert.ok(to / nho < 3, `gấp đôi đầu vào -> gấp ${(to / nho).toFixed(1)} lần thời gian`);
   });
 });
