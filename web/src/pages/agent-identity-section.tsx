@@ -79,7 +79,7 @@ export function AgentIdentitySection({
             className="gc-input min-h-48 w-full resize-y leading-relaxed"
             value={form.persona}
             onChange={(e) => onChange({ persona: e.target.value })}
-            placeholder="Bạn là trợ lý tư vấn khóa học, xưng 'em' với khách..."
+            placeholder="Bạn là trợ lý chăm sóc khách hàng, xưng 'em' với khách..."
             maxLength={8000}
           />
           <p className="mt-2 text-[12px] text-ink-soft">

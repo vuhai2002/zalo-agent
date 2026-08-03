@@ -143,7 +143,7 @@ export function VisionSettingsModal({
         <ModalField
           id="vision-mode"
           label="Chế độ"
-          hint='Tự phát hiện chỉ đúng với 9Router - endpoint khác nên tự chọn "Có"/"Không".'
+          hint='Tự phát hiện cần endpoint khai báo capabilities.vision ở /models. Endpoint OpenAI chuẩn không có field này, nên hãy tự chọn "Có"/"Không".'
         >
           <select
             id="vision-mode"

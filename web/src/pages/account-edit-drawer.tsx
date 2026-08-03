@@ -115,7 +115,7 @@ export function AccountEditDrawer({
                 className="gc-input w-full"
                 value={form.id}
                 onChange={(e) => setForm({ ...form, id: e.target.value })}
-                placeholder="vd: acc-tu-van"
+                placeholder="vd: acc-cham-soc"
               />
             </div>
           )}
@@ -126,7 +126,7 @@ export function AccountEditDrawer({
               className="gc-input w-full"
               value={form.label}
               onChange={(e) => setForm({ ...form, label: e.target.value })}
-              placeholder="vd: Nick tư vấn CES"
+              placeholder="vd: Nick chăm sóc khách hàng"
             />
           </div>
 
@@ -211,7 +211,7 @@ export function AccountEditDrawer({
                 className="gc-input min-h-24 w-full resize-y"
                 value={form.allowlistIds}
                 onChange={(e) => setForm({ ...form, allowlistIds: e.target.value })}
-                placeholder={"Mỗi dòng 1 user ID\n8771577400486544398"}
+                placeholder={"Mỗi dòng 1 user ID\n1234567890123456789"}
               />
             )}
           </div>

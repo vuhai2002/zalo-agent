@@ -141,7 +141,7 @@ export function ImageSettingsModal({
               className="gc-input w-full"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://9router.example.com"
+              placeholder="https://api.example.com"
             />
           </ModalField>
 
@@ -155,7 +155,7 @@ export function ImageSettingsModal({
               className="gc-input w-full"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="cx/gpt-5.5-image"
+              placeholder="gpt-5.5-image"
             />
           </ModalField>
 

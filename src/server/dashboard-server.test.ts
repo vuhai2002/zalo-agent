@@ -196,11 +196,11 @@ describe("dashboard-server", () => {
 
     const rename = await authed("/api/accounts/acc-tu-van", {
       method: "PATCH",
-      body: JSON.stringify({ label: "Nick tư vấn CES" }),
+      body: JSON.stringify({ label: "Nick chăm sóc khách hàng" }),
       headers: { "content-type": "application/json" },
     });
     const renamed = (await rename.json()) as { account: { label: string; agentId: string } };
-    assert.equal(renamed.account.label, "Nick tư vấn CES");
+    assert.equal(renamed.account.label, "Nick chăm sóc khách hàng");
     assert.equal(renamed.account.agentId, "tu-van");
   });
 

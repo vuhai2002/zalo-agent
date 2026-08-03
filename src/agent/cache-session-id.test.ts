@@ -10,8 +10,8 @@ import {
 
 describe("cacheSessionId", () => {
   it("ỔN ĐỊNH: cùng thread luôn ra cùng khóa - đây là điều kiện để cache trúng", () => {
-    const first = cacheSessionId("acc-chinh", "8771577400486544398");
-    const second = cacheSessionId("acc-chinh", "8771577400486544398");
+    const first = cacheSessionId("acc-chinh", "1234567890123456789");
+    const second = cacheSessionId("acc-chinh", "1234567890123456789");
     assert.equal(first, second);
   });
 
@@ -22,7 +22,7 @@ describe("cacheSessionId", () => {
   });
 
   it("không rò thread id thật ra header (thread id là định danh người dùng)", () => {
-    const threadId = "8771577400486544398";
+    const threadId = "1234567890123456789";
     const key = cacheSessionId("acc-chinh", threadId);
     assert.ok(!key.includes(threadId), "khóa không được chứa thread id nguyên văn");
     assert.ok(!key.includes("acc-chinh"), "khóa không được chứa account id nguyên văn");

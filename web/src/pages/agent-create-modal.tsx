@@ -129,7 +129,7 @@ export function AgentCreateModal({
                 // bị kèm chữ đỏ "đã tồn tại", đọc ra vô nghĩa.
                 setLoiId("");
               }}
-              placeholder="vd: Tư Vấn Khóa Học"
+              placeholder="vd: Chăm Sóc Khách Hàng"
               maxLength={100}
             />
           </div>
@@ -159,7 +159,7 @@ export function AgentCreateModal({
             className="gc-input min-h-28 w-full resize-y leading-relaxed"
             value={persona}
             onChange={(e) => setPersona(e.target.value)}
-            placeholder="Bạn là trợ lý tư vấn khóa học, xưng 'em' với khách..."
+            placeholder="Bạn là trợ lý chăm sóc khách hàng, xưng 'em' với khách..."
             maxLength={8000}
           />
         </div>

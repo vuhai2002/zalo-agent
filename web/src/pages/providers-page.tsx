@@ -118,7 +118,7 @@ export function ProvidersPage() {
               className="gc-input w-full"
               value={form.baseUrl}
               onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
-              placeholder="https://router.example.com/v1"
+              placeholder="https://api.example.com/v1"
             />
           </div>
         )}

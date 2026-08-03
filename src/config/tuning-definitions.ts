@@ -146,7 +146,7 @@ const TUNING_BY_KEY = {
     kind: "enum",
     group: "luot",
     label: "Mức suy nghĩ mặc định",
-    hint: "Không bật thì bot lướt qua dữ liệu dài mà không nghĩ từng bước - đã dính thật ở vụ dò vé số: dữ liệu đã có trong ngữ cảnh mà bot vẫn bảo chưa lấy được. Từng agent đặt riêng được, để trống là theo mức này.",
+    hint: "Không bật thì bot lướt qua dữ liệu dài mà không nghĩ từng bước - đã gặp thật: dữ liệu đã có sẵn trong ngữ cảnh mà bot vẫn bảo chưa lấy được. Từng agent đặt riêng được, để trống là theo mức này.",
     options: ["off", "low", "medium", "high", "xhigh"],
   },
   TOOL_LOOP_SAME_ARGS_BLOCK: {
@@ -253,7 +253,7 @@ const TUNING_BY_KEY = {
     kind: "number",
     group: "web",
     label: "Trần chữ đọc từ mỗi trang",
-    hint: "Cắt bớt trang quá dài. Đặt thấp quá thì phần cần tìm nằm sau chỗ cắt - đã dính thật: bảng kết quả xổ số nằm sau ký tự thứ 8.300.",
+    hint: "Cắt bớt trang quá dài. Đặt thấp quá thì phần cần tìm nằm sau chỗ cắt - đã gặp thật: bảng dữ liệu cần đọc nằm sau ký tự thứ 8.300.",
     min: 2000,
     max: 100_000,
     unit: "ký tự",

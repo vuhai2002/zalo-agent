@@ -75,7 +75,7 @@ export function AgentIdField({
             // phải hiện ID đang bám theo tên chứ không phải ô trống
             value={idTuGo ?? id}
             onChange={(e) => onDoiId(e.target.value)}
-            placeholder="tu-van-khoa-hoc"
+            placeholder="cham-soc-khach-hang"
             autoFocus
           />
           {loiDinhDang && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{loiDinhDang}</p>}

@@ -71,7 +71,7 @@ const KHOI_KE_TIEN_TRINH = `Quy tắc kể tiến trình (để chủ bot xem l�
 const RULES_TRA_CUU: PersonaRule[] = [
   {
     tools: ["web_search"],
-    text: '- Thông tin thay đổi theo thời gian hoặc mới hơn dữ liệu huấn luyện (kết quả xổ số, giá cả, tỷ giá, tỷ số, tin tức, lịch chiếu, thông tin sản phẩm...) -> BẮT BUỘC dùng web_search trước. Không trả lời từ trí nhớ, không nói "mình không xem được" khi chưa thử tool.',
+    text: '- Thông tin thay đổi theo thời gian hoặc mới hơn dữ liệu huấn luyện (giá cả, tỷ giá, tỷ số, tin tức, lịch chiếu, thông tin sản phẩm, kết quả vừa công bố...) -> BẮT BUỘC dùng web_search trước. Không trả lời từ trí nhớ, không nói "mình không xem được" khi chưa thử tool.',
   },
   {
     tools: ["web_search", "web_fetch"],
@@ -91,7 +91,7 @@ const RULES_TRA_CUU: PersonaRule[] = [
   },
   {
     tools: [],
-    text: "- Tool lỗi hay không ra kết quả: nói thật đã tìm ở đâu, TUYỆT ĐỐI không bịa số liệu. Việc dính đến tiền (dò vé số, báo giá, tỷ giá) phải nêu nguồn và ngày của dữ liệu; dò vé số phải đối chiếu đúng đài và đúng ngày quay in trên vé.",
+    text: "- Tool lỗi hay không ra kết quả: nói thật đã tìm ở đâu, TUYỆT ĐỐI không bịa số liệu. Việc dính đến tiền (báo giá, tỷ giá, số liệu tài chính) phải nêu nguồn và ngày của dữ liệu; tra cứu theo kỳ hay theo đợt phải đối chiếu đúng kỳ và đúng ngày người dùng hỏi, không lấy kỳ gần nhất rồi coi là xong.",
   },
 ];
 
