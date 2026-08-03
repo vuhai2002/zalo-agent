@@ -23,8 +23,6 @@ export function tuAgent(a: Omit<ManagedAgent, "accountCount">): AgentDetailForm 
     icon: a.icon,
     name: a.name,
     persona: a.persona,
-    modelProvider: a.modelProvider ?? "",
-    modelName: a.modelName ?? "",
     // Chuỗi rỗng = "theo cấu hình chung"; gửi lên thành null
     maxSteps: a.maxSteps == null ? "" : String(a.maxSteps),
     reasoningEffort: a.reasoningEffort ?? "",
@@ -41,8 +39,13 @@ export function thanhPatch(form: AgentDetailForm) {
     icon: form.icon,
     name: form.name.trim(),
     persona: form.persona,
-    modelProvider: form.modelProvider === "" ? null : form.modelProvider,
-    modelName: form.modelName.trim() === "" ? null : form.modelName.trim(),
+    // LUÔN null: hai ô này đã gỡ khỏi giao diện (xem agent-model-section.tsx),
+    // agent luôn dùng nhà cung cấp và model của cấu hình chung. Gửi null thay
+    // vì bỏ qua trường, để bản ghi cũ còn giá trị được dọn ngay lần Lưu kế
+    // tiếp - bỏ qua thì nó nằm lại trong DB, vẫn tác động bot mà không còn ô
+    // nào sửa được.
+    modelProvider: null,
+    modelName: null,
     maxSteps: soBuoc === "" ? null : Number(soBuoc),
     reasoningEffort: form.reasoningEffort === "" ? null : (form.reasoningEffort as ReasoningEffort),
     disabledTools: form.disabledTools,

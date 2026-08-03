@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { ManagedAgent, ProviderSettings } from "../dashboard-api-client";
+import type { ManagedAgent } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { useConfirmDialog } from "../shared/confirm-dialog";
@@ -24,7 +24,6 @@ export function AgentDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const [agent, setAgent] = useState<ManagedAgent | null>(null);
-  const [chung, setChung] = useState<ProviderSettings | null>(null);
   const [form, setForm] = useState<AgentDetailForm | null>(null);
   const [dangTai, setDangTai] = useState(true);
   const [loi, setLoi] = useState("");
@@ -46,7 +45,6 @@ export function AgentDetailPage() {
       })
       .catch(() => !huy && setAgent(null))
       .finally(() => !huy && setDangTai(false));
-    api.provider().then((s) => !huy && setChung(s)).catch(() => undefined);
     return () => {
       huy = true;
     };
@@ -170,13 +168,22 @@ export function AgentDetailPage() {
       )}
 
       <div className="space-y-5">
-        <AgentIdentitySection
-          id={agent.id}
-          isDefault={agent.isDefault}
-          form={form}
-          onChange={doi}
-        />
-        <AgentModelSection form={form} chung={chung} onChange={doi} />
+        {/* Danh tính bên trái, Model bên phải - hai nhóm ngắn, xếp dọc nối
+            nhau thì trang dài ra mà nửa màn hình bên phải bỏ trống.
+            KHÔNG `items-start`: để mặc định `stretch` cho hai thẻ cao BẰNG NHAU,
+            mép dưới thẳng hàng. Thẻ nào ít nội dung hơn thì thừa khoảng trắng,
+            đổi lại hai khối không so le. Dưới xl về một cột, nửa màn quá hẹp. */}
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          <AgentIdentitySection
+            id={agent.id}
+            isDefault={agent.isDefault}
+            form={form}
+            onChange={doi}
+          />
+          <AgentModelSection form={form} onChange={doi} />
+        </div>
+        {/* Công cụ chiếm trọn bề ngang: 13 dòng, mỗi dòng có mô tả riêng - nhét
+            vào nửa màn là mô tả vỡ dòng liên tục */}
         <AgentToolsSection
           disabledTools={form.disabledTools}
           soTaiKhoan={agent.accountCount}

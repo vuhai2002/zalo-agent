@@ -1,13 +1,9 @@
-import type { ProviderSettings, ReasoningEffort } from "../dashboard-api-client";
+import type { ReasoningEffort } from "../dashboard-api-client";
 import { kiemSoBuoc, kiemTranContext } from "./agent-field-validators";
 import { SelectMenu } from "../shared/select-menu";
 import { AgentFormField, AgentFormRow, AgentFormSection } from "./agent-form-field";
 
 export type AgentModelForm = {
-  /** "" = theo Providers chung */
-  modelProvider: "" | "openai-compatible" | "anthropic";
-  /** "" = theo Providers chung */
-  modelName: string;
   /** "" = theo Cấu hình chung */
   maxSteps: string;
   /** "" = theo Cấu hình chung */
@@ -15,11 +11,6 @@ export type AgentModelForm = {
   /** "" = theo Cấu hình chung */
   contextWindow: string;
 };
-
-const NHA_CUNG_CAP = [
-  { value: "openai-compatible" as const, label: "openai-compatible (router)" },
-  { value: "anthropic" as const, label: "anthropic (gọi thẳng)" },
-];
 
 const MUC_SUY_NGHI: { value: "" | ReasoningEffort; label: string }[] = [
   { value: "", label: "Theo Cấu hình chung" },
@@ -33,109 +24,44 @@ const MUC_SUY_NGHI: { value: "" | ReasoningEffort; label: string }[] = [
 /**
  * Nhóm "Model" của trang sửa agent.
  *
- * Mọi trường ở đây đều mang nghĩa "để trống = theo cấu hình chung", đúng nếp
- * `maxSteps`/`reasoningEffort` đã có từ trước. Nên chỗ nào cũng phải nói được
- * "chung" ĐANG là gì - `chung` truyền vào chính là để hiện con số thật thay vì
- * bắt người dùng mở tab Providers ra đối chiếu.
+ * Cả ba trường đều mang nghĩa "để trống = theo cấu hình chung", nên placeholder
+ * của mỗi ô ghi thẳng "theo Cấu hình" thay vì để trống trơn - nhìn ô rỗng mà
+ * không biết nó đang chạy theo cái gì là câu hỏi hay gặp nhất ở màn này.
  *
- * Trường Model cố ý vẫn là ô gõ tự do: trang Providers không giữ danh sách model
- * nào (cũng là một ô text), nên dựng dropdown ở đây sẽ là danh sách bịa. Thay vào
- * đó lấy model chung làm placeholder - vừa thật vừa trả lời đúng câu người dùng
- * hay hỏi ("bỏ trống thì nó chạy model gì?").
+ * Nhà cung cấp và tên model KHÔNG còn đặt riêng được ở đây - xem lý do ở khối
+ * chú thích trong phần thân.
  */
 export function AgentModelSection({
   form,
-  chung,
   onChange,
 }: {
   form: AgentModelForm;
-  /** Cấu hình Providers đang hiệu lực; null khi chưa tải được */
-  chung: ProviderSettings | null;
   onChange: (patch: Partial<AgentModelForm>) => void;
 }) {
-  // `chung.model` rỗng khi chưa cấu hình gì (hợp lệ từ khi .env hết bắt buộc)
-  // - ghép thẳng cho ra placeholder cụt kiểu "openai-compatible / "
-  const nhanChung = chung?.model ? `${chung.provider} / ${chung.model}` : "theo trang Providers";
   const loiSoBuoc = kiemSoBuoc(form.maxSteps);
   const loiTran = kiemTranContext(form.contextWindow);
-  // Giá trị đang lưu không nằm trong danh sách hợp lệ (và không phải rỗng)
-  const laGiaTriLa =
-    form.modelProvider !== "" && !NHA_CUNG_CAP.some((p) => p.value === form.modelProvider);
-
   return (
     <AgentFormSection
       title="Model"
-      hint="Để trống mọi ô ở đây thì agent chạy đúng cấu hình chung. Chỉ đặt riêng khi agent này cần model hoặc mức suy nghĩ khác phần còn lại."
+      hint="Để trống mọi ô ở đây thì agent chạy đúng cấu hình chung. Chỉ đặt riêng khi agent này cần giới hạn hoặc mức suy nghĩ khác phần còn lại. Nhà cung cấp và tên model luôn lấy từ trang Cấu hình."
     >
-      <AgentFormRow>
-        <AgentFormField
-          label="Nhà cung cấp"
-          htmlFor="ag-d-provider"
-          hint="Đổi được nhà cung cấp thì mới có ý nghĩa khi agent có API key riêng - hiện chưa có, key và base URL vẫn lấy từ trang Providers cho mọi agent."
-        >
-          <div className="w-full max-w-sm">
-            <SelectMenu
-              id="ag-d-provider"
-              size="md"
-              value={form.modelProvider}
-              onChange={(v) => onChange({ modelProvider: v as AgentModelForm["modelProvider"] })}
-              options={[
-                { value: "", label: `Theo Providers chung${chung ? ` (${chung.provider})` : ""}` },
-                // Khóa mọi lựa chọn KHÁC nhà cung cấp chung. `resolveLanguageModel`
-                // (llm-provider.ts) chỉ override `provider` và `model`, còn `apiKey`
-                // luôn lấy từ cấu hình chung - chọn lệch nghĩa là gửi key của router
-                // thẳng sang api.anthropic.com. Vừa rò credential sang bên thứ ba
-                // vừa làm bot câm (401 -> mọi lượt trả câu xin lỗi chung).
-                //
-                // Vẫn hiện ra chứ không ẩn, để người dùng thấy được và xoá được một
-                // giá trị cũ lỡ nằm sẵn trong DB.
-                ...NHA_CUNG_CAP.map((p) => {
-                  const khoa = chung !== null && chung.provider !== p.value;
-                  return {
-                    value: p.value,
-                    label: khoa ? `${p.label} - cần API key riêng` : p.label,
-                    disabled: khoa,
-                  };
-                }),
-                // Giá trị lạ nằm sẵn trong DB (ai đó sửa tay từ trước) phải có một
-                // mục khớp, nếu không ô chọn render TRỐNG: người dùng thấy ô rỗng,
-                // `coDoi` vẫn false nên không sửa được, mà sửa ô khác rồi Lưu thì
-                // giá trị lạ bị gửi lại và server trả 400 - kẹt hẳn, không lưu được
-                // gì cho tới khi sửa DB tay.
-                ...(laGiaTriLa
-                  ? [{ value: form.modelProvider, label: `${form.modelProvider} - giá trị lạ, nên đổi lại` }]
-                  : []),
-              ]}
-            />
-          </div>
-          {chung && form.modelProvider !== "" && form.modelProvider !== chung.provider && (
-            <p className="mt-2 max-w-3xl text-[12px] leading-[1.6] text-amber-600 dark:text-amber-400">
-              Agent này đang đặt nhà cung cấp khác cấu hình chung, mà API key vẫn là key chung. Bot sẽ BỎ QUA
-              lựa chọn này và chạy bằng cấu hình chung - đặt ở đây không có tác dụng. Chọn "Theo Providers
-              chung" cho khỏi hiểu nhầm.
-            </p>
-          )}
-        </AgentFormField>
-      </AgentFormRow>
+      {/*
+        Đã BỎ hai ô "Nhà cung cấp" và "Model".
 
-      <AgentFormRow>
-        <AgentFormField
-          label="Model"
-          htmlFor="ag-d-model"
-          hint="Tên model gửi cho nhà cung cấp. Bỏ trống là dùng model ở trang Providers."
-        >
-          <input
-            id="ag-d-model"
-            className="gc-input w-full max-w-sm"
-            value={form.modelName}
-            onChange={(e) => onChange({ modelName: e.target.value })}
-            placeholder={nhanChung}
-          />
-        </AgentFormField>
-      </AgentFormRow>
+        Nhà cung cấp: mọi lựa chọn khác cấu hình chung đều bị khóa (đổi được thì
+        mới có nghĩa khi agent có API key riêng, mà chưa có) - một ô chọn chỉ
+        chọn được đúng thứ nó đang là thì chỉ tổ chiếm chỗ.
 
+        Model: bỏ theo luôn cho khỏi nửa vời - đặt tên model riêng trong khi nhà
+        cung cấp buộc phải theo chung là đường dễ ra 400 hơn là hữu ích.
+
+        Giá trị cũ trong DB được `thanhPatch` dọn: nó luôn gửi null cho hai cột
+        này, nên lần Lưu kế tiếp là sạch. Trang danh sách agent vẫn hiện badge
+        tên model nếu còn sót, đó là chỗ duy nhất thấy được.
+      */}
       <AgentFormRow>
         <AgentFormField
+          ngang
           label="Số bước tối đa"
           htmlFor="ag-d-steps"
           hint="Một bước là một lần bot nói chuyện với model, có thể gọi nhiều công cụ cùng lúc. Bỏ trống là theo trang Cấu hình."
@@ -148,26 +74,29 @@ export function AgentModelSection({
             agent, trong khi ô vẫn hiện chữ vừa gõ. Đổi sang text thì chữ rác ở
             lại đúng chỗ và `loiSoBuoc` bắt được.
           */}
+          {/* Đơn vị cùng dòng với ô nhập, khoảng giá trị xuống dòng dưới -
+              đúng nhịp của `TuningFieldControl` bên trang Cấu hình */}
           <div className="flex items-center gap-2">
             <input
               id="ag-d-steps"
               type="text"
               inputMode="numeric"
-              className="gc-input w-40"
+              className="gc-input w-32 shrink-0"
               value={form.maxSteps}
               onChange={(e) => onChange({ maxSteps: e.target.value })}
               placeholder="theo Cấu hình"
               aria-invalid={loiSoBuoc !== ""}
             />
-            <span className="text-[13px] text-ink-soft">bước</span>
-            <span className="text-[12px] text-ink-soft/70">(1 - 30)</span>
+            <span className="whitespace-nowrap text-[13px] text-ink-soft">bước</span>
           </div>
+          <div className="mt-1 whitespace-nowrap text-[11px] text-ink-soft/70">(1 - 30)</div>
           {loiSoBuoc && <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{loiSoBuoc}</p>}
         </AgentFormField>
       </AgentFormRow>
 
       <AgentFormRow>
         <AgentFormField
+          ngang
           label="Trần token mỗi lần gọi"
           htmlFor="ag-d-ctx"
           hint="Ngữ cảnh vượt mức này thì bot tự bỏ bớt ảnh cũ trước, rồi mới bỏ tin cũ - phần bỏ đi vẫn còn trong bản tóm tắt. Đặt riêng khi agent này chạy model có cửa sổ khác. Bỏ trống là theo trang Cấu hình."
@@ -177,26 +106,27 @@ export function AgentModelSection({
               id="ag-d-ctx"
               type="text"
               inputMode="numeric"
-              className="gc-input w-40"
+              className="gc-input w-32 shrink-0"
               value={form.contextWindow}
               onChange={(e) => onChange({ contextWindow: e.target.value })}
               placeholder="theo Cấu hình"
               aria-invalid={loiTran !== ""}
             />
-            <span className="text-[13px] text-ink-soft">token</span>
-            <span className="text-[12px] text-ink-soft/70">(4.000 - 2.000.000)</span>
+            <span className="whitespace-nowrap text-[13px] text-ink-soft">token</span>
           </div>
+          <div className="mt-1 whitespace-nowrap text-[11px] text-ink-soft/70">(4.000 - 2.000.000)</div>
           {loiTran && <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{loiTran}</p>}
         </AgentFormField>
       </AgentFormRow>
 
       <AgentFormRow>
         <AgentFormField
+          ngang
           label="Mức suy nghĩ"
           htmlFor="ag-d-effort"
           hint="Nghĩ càng kỹ thì trả lời càng chắc nhưng chậm hơn và tốn token hơn. Việc đối chiếu số liệu, dò bảng nên để mức cao; trò chuyện thường để vừa là đủ."
         >
-          <div className="w-full max-w-sm">
+          <div className="w-full">
             <SelectMenu
               id="ag-d-effort"
               size="md"

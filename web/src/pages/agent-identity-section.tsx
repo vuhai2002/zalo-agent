@@ -31,17 +31,17 @@ export function AgentIdentitySection({
     >
       <AgentFormRow>
         <AgentFormField label="Icon và tên hiển thị" htmlFor="ag-d-ten">
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <input
               aria-label="Icon"
-              className="gc-input w-20 text-center text-lg"
+              className="gc-input w-16 shrink-0 text-center text-lg"
               value={form.icon}
               onChange={(e) => onChange({ icon: e.target.value })}
               maxLength={8}
             />
             <input
               id="ag-d-ten"
-              className="gc-input max-w-md flex-1"
+              className="gc-input min-w-0 flex-1"
               value={form.name}
               onChange={(e) => onChange({ name: e.target.value })}
               maxLength={100}
