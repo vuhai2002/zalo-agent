@@ -24,6 +24,7 @@ import {
   SectionCard,
   StatCard,
 } from "../shared/ui-bits";
+import { SelectMenu } from "../shared/select-menu";
 import { UsageBarChart, type UsageDay } from "./usage-bar-chart";
 
 export function OverviewPage() {
@@ -236,31 +237,26 @@ export function OverviewPage() {
 }
 
 /**
- * Chọn cửa sổ thời gian của biểu đồ. Dùng `<select>` thật thay vì tự dựng
- * dropdown: chỉ có 3 lựa chọn, và select gốc đã có sẵn bàn phím, đọc màn hình,
- * và cách hiển thị quen thuộc trên di động.
+ * Chọn cửa sổ thời gian của biểu đồ.
+ *
+ * Trước đây cố ý để `<select>` native vì chỉ có 3 lựa chọn và native sẵn có bàn
+ * phím lẫn bộ chọn quen thuộc trên di động. Đổi sang `SelectMenu` vì tính nhất
+ * quán thắng: đây là ô chọn DUY NHẤT còn lại mở ra popup của hệ điều hành, và
+ * một ô lạc điệu giữa trang thì đập vào mắt hơn là lợi ích nó giữ được.
+ * `SelectMenu` cũng đã có bàn phím và vai ARIA riêng.
  *
  * Ba mốc khớp đúng `SO_NGAY_CHO_PHEP` ở server (`overview-routes.ts`) - server
  * kẹp lại giá trị lạ nên UI không thể xin một cửa sổ mà server không cho.
  */
 function ChonKhoang({ giaTri, onChange }: { giaTri: number; onChange: (n: number) => void }) {
   return (
-    <div className="relative">
-      <IconClock
-        size={15}
-        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-soft"
-      />
-      <select
-        value={giaTri}
-        onChange={(e) => onChange(Number(e.target.value))}
-        aria-label="Khoảng thời gian của biểu đồ"
-        className="cursor-pointer rounded-lg border border-line bg-surface py-1.5 pl-8 pr-3 text-[13px] font-medium text-ink outline-none focus:border-zalo-500"
-      >
-        <option value={7}>7 ngày qua</option>
-        <option value={14}>14 ngày qua</option>
-        <option value={30}>30 ngày qua</option>
-      </select>
-    </div>
+    <SelectMenu
+      icon={IconClock}
+      ariaLabel="Khoảng thời gian của biểu đồ"
+      value={String(giaTri)}
+      options={[7, 14, 30].map((n) => ({ value: String(n), label: `${n} ngày qua` }))}
+      onChange={(v) => onChange(Number(v))}
+    />
   );
 }
 

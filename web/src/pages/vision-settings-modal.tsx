@@ -3,6 +3,7 @@ import type { VisionSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { SecretInput } from "../shared/secret-input";
+import { SelectMenu } from "../shared/select-menu";
 import { ChainStep, ModalField, modalButton, ToolModalShell } from "./tool-settings-modal-shell";
 
 /**
@@ -145,18 +146,13 @@ export function VisionSettingsModal({
           label="Chế độ"
           hint='Tự phát hiện cần endpoint khai báo capabilities.vision ở /models. Endpoint OpenAI chuẩn không có field này, nên hãy tự chọn "Có"/"Không".'
         >
-          <select
+          <SelectMenu
             id="vision-mode"
-            className="gc-input w-full"
+            size="md"
             value={mode}
-            onChange={(e) => setMode(e.target.value as VisionSettings["mode"])}
-          >
-            {(["auto", "on", "off"] as const).map((m) => (
-              <option key={m} value={m}>
-                {MODE_LABEL[m]}
-              </option>
-            ))}
-          </select>
+            options={(["auto", "on", "off"] as const).map((m) => ({ value: m, label: MODE_LABEL[m] }))}
+            onChange={(v) => setMode(v as VisionSettings["mode"])}
+          />
         </ModalField>
       </ChainStep>
 

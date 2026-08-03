@@ -4,6 +4,7 @@ import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { IconSliders } from "../shared/dashboard-icons";
 import { SecretInput } from "../shared/secret-input";
+import { SelectMenu } from "../shared/select-menu";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { Badge } from "../shared/ui-bits";
 
@@ -61,13 +62,13 @@ export function ProvidersPage() {
 
   async function reset() {
     // Hành động PHÁ HỦY: `clearLlmSettings` xóa cả API key. Từ khi .env rút còn
-    // 13 biến, phần LLM ở đó thường trống - nên không có bản dự phòng nào để
+    // 9 biến, phần LLM ở đó thường trống - nên không có bản dự phòng nào để
     // "quay về", bấm nhầm là bot câm ngay lượt sau. Mọi hành động phá hủy khác
     // trong dashboard đều hỏi trước; chỗ này trước đó thì không.
     const ok = await confirm({
       title: "Xóa toàn bộ cấu hình LLM?",
       message:
-        "API key, base URL và tên model đã lưu sẽ bị xóa. Nếu .env không có sẵn giá trị thay thế thì bot ngừng trả lời cho tới khi bạn nhập lại.",
+        "API key, base URL và tên model đã lưu sẽ bị xóa. Nếu máy chủ không đặt sẵn cấu hình LLM bằng biến môi trường thì bot ngừng trả lời cho tới khi bạn nhập lại.",
     });
     if (!ok) return;
 
@@ -99,15 +100,16 @@ export function ProvidersPage() {
       <div className="gc-card space-y-4 p-6">
         <div>
           <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-provider">Provider</label>
-          <select
+          <SelectMenu
             id="pv-provider"
-            className="gc-input w-full"
+            size="md"
             value={form.provider}
-            onChange={(e) => setForm({ ...form, provider: e.target.value })}
-          >
-            <option value="openai-compatible">OpenAI-compatible (router proxy)</option>
-            <option value="anthropic">Anthropic (gọi thẳng)</option>
-          </select>
+            options={[
+              { value: "openai-compatible", label: "OpenAI-compatible (router proxy)" },
+              { value: "anthropic", label: "Anthropic (gọi thẳng)" },
+            ]}
+            onChange={(provider) => setForm({ ...form, provider })}
+          />
         </div>
 
         {form.provider === "openai-compatible" && (

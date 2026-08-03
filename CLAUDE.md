@@ -58,7 +58,7 @@ pnpm typecheck                 # bắt buộc chạy trước khi báo hoàn th�
 ## Quy ước code
 
 - File < 200 dòng, kebab-case, tên tự mô tả.
-- Env var mới: khai schema Zod trong `src/config/env.ts` **kèm `.default()`** - `CREDENTIALS_ENCRYPTION_KEY` là biến DUY NHẤT được phép bắt buộc (nó giải mã chính những gì dashboard lưu nên không thể nằm trên dashboard). Tham số chỉnh được lúc chạy thì thêm vào `src/config/tuning-definitions.ts` là đủ - nó tự hiện trên trang Cấu hình. **Chỉ** thêm vào `.env.example` / `.env.production.example` khi biến đó phải đọc TRƯỚC lúc mở DB (log, DATA_DIR, cổng dashboard) - hai file đó cố ý chỉ còn 13 dòng, vì giá trị cũ nằm lại trong `.env` trong khi DB đang gánh đã gây hiểu nhầm thật.
+- Env var mới: khai schema Zod trong `src/config/env.ts` **kèm `.default()`** - `CREDENTIALS_ENCRYPTION_KEY` là biến DUY NHẤT được phép bắt buộc (nó giải mã chính những gì dashboard lưu nên không thể nằm trên dashboard). Tham số chỉnh được lúc chạy thì thêm vào `src/config/tuning-definitions.ts` là đủ - nó tự hiện trên trang Cấu hình. **Chỉ** thêm vào `.env.example` / `.env.production.example` khi biến đó phải đọc TRƯỚC lúc mở DB (log, DATA_DIR, cổng dashboard) - hai file đó cố ý chỉ còn 9 biến, vì giá trị cũ nằm lại trong `.env` trong khi DB đang gánh đã gây hiểu nhầm thật.
 - Thứ tự ưu tiên cấu hình ở MỌI nơi: dashboard (DB `runtime_settings`) > `.env` > `.default()` trong schema. Thiếu cấu hình LLM **không được** chặn boot: phải vào được dashboard mới nhập được.
 - Tin nhắn bị lọc (allowlist, thiếu @mention) phải bị chặn **trước** khi gọi LLM để không tốn token.
 - Chuỗi tiếng Việt giữ nguyên dấu; chỉ dùng dấu câu ASCII.

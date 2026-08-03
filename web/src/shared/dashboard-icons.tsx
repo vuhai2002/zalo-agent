@@ -234,3 +234,11 @@ export const IconLock = (p: IconProps) => (
     <circle cx="12" cy="15" r="1.2" fill="currentColor" stroke="none" />
   </svg>
 );
+
+/** Mũi tên quay ngược - dùng cho các nút đặt lại về mặc định */
+export const IconUndo = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4.5 9.5h6.5a5.5 5.5 0 1 1 0 11H7" />
+    <path d="m7.5 5.5-3 4 3 4" />
+  </svg>
+);

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { TuningDef, TuningValue } from "../dashboard-api-client";
+import { IconUndo } from "../shared/dashboard-icons";
+import { SelectMenu } from "../shared/select-menu";
 import { TimezoneSelect } from "./timezone-select";
 
 type SaveResult = { ok: true } | { ok: false; error: string };
@@ -15,7 +17,7 @@ type Phase = "idle" | "saving" | "saved" | "error";
  * đã đặt nó.
  *
  * Nhãn ghi "mặc định", KHÔNG ghi ".env": cờ `fromEnv` chỉ có nghĩa "chưa có giá
- * trị đè trong DB", mà từ khi .env rút còn 13 biến thì phần lớn tham số ở đây
+ * trị đè trong DB", mà từ khi .env rút còn 9 biến thì phần lớn tham số ở đây
  * không hề nằm trong file đó - chúng lấy `.default()` của schema.
  */
 export function TuningField({
@@ -90,21 +92,26 @@ export function TuningField({
         </label>
         {fromEnv ? (
           // Chữ "mặc định" chứ KHÔNG phải ".env": cờ `fromEnv` thật ra chỉ nói
-          // "chưa có giá trị đè trong DB". Từ khi .env rút còn 13 biến thì
-          // 41/46 tham số của trang này KHÔNG hề có mặt trong file đó - giá trị
-          // đến từ `.default()` của schema. Chip cũ khiến người dùng mở .env đi
-          // tìm một dòng không tồn tại.
+          // "chưa có giá trị đè trong DB". Từ khi .env rút còn 9 biến thì CẢ
+          // 46/46 tham số của trang này đều KHÔNG có mặt trong file đó (đếm
+          // thật) - giá trị đến từ `.default()` của schema. Chip cũ khiến người
+          // dùng mở .env đi tìm một dòng không tồn tại.
           <span className="rounded-full bg-zalo-50 dark:bg-zalo-950/40 px-2 py-0.5 text-[11px] font-medium text-zalo-600 dark:text-zalo-300">
             mặc định
           </span>
         ) : (
+          // Viền + nền + icon chứ KHÔNG phải chữ gạch chân chấm: bản cũ đọc ra
+          // như một chú thích, người dùng không nhận ra bấm được. Cao đúng bằng
+          // chip "mặc định" để dòng tiêu đề không nhảy khi đổi trạng thái.
           <button
             type="button"
             onClick={() => void commit(null)}
             disabled={dangLuu}
-            className="rounded px-1.5 py-0.5 text-[11px] text-ink-soft underline decoration-dotted hover:text-ink disabled:opacity-50"
+            title="Xóa giá trị bạn đã đặt, quay lại giá trị mặc định"
+            className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-soft transition-colors hover:border-zalo-200 hover:bg-zalo-50 hover:text-zalo-600 disabled:opacity-50 dark:hover:border-zalo-800 dark:hover:bg-zalo-950/40 dark:hover:text-zalo-300"
           >
-            trả về .env
+            <IconUndo size={12} />
+            Về mặc định
           </button>
         )}
         <TrangThaiLuu phase={phase} />
@@ -151,19 +158,16 @@ export function TuningField({
       )}
 
       {def.kind === "enum" && (
-        <select
-          id={id}
-          className="gc-input w-40 cursor-pointer"
-          value={String(value)}
-          disabled={dangLuu}
-          onChange={(e) => void commit(e.target.value)}
-        >
-          {def.options.map((o) => (
-            <option key={o} value={o}>
-              {NHAN_MUC[o] ?? o}
-            </option>
-          ))}
-        </select>
+        <div className="w-40">
+          <SelectMenu
+            id={id}
+            size="md"
+            value={String(value)}
+            disabled={dangLuu}
+            options={def.options.map((o) => ({ value: o, label: NHAN_MUC[o] ?? o }))}
+            onChange={(v) => void commit(v)}
+          />
+        </div>
       )}
 
       {def.kind === "timezone" && (

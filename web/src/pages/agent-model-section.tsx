@@ -1,5 +1,6 @@
 import type { ProviderSettings, ReasoningEffort } from "../dashboard-api-client";
 import { kiemSoBuoc, kiemTranContext } from "./agent-field-validators";
+import { SelectMenu } from "../shared/select-menu";
 import { AgentFormField, AgentFormRow, AgentFormSection } from "./agent-form-field";
 
 export type AgentModelForm = {
@@ -72,38 +73,41 @@ export function AgentModelSection({
           htmlFor="ag-d-provider"
           hint="Đổi được nhà cung cấp thì mới có ý nghĩa khi agent có API key riêng - hiện chưa có, key và base URL vẫn lấy từ trang Providers cho mọi agent."
         >
-          <select
-            id="ag-d-provider"
-            className="gc-input w-full max-w-sm cursor-pointer"
-            value={form.modelProvider}
-            onChange={(e) => onChange({ modelProvider: e.target.value as AgentModelForm["modelProvider"] })}
-          >
-            <option value="">Theo Providers chung{chung ? ` (${chung.provider})` : ""}</option>
-            {/*
-              Khóa mọi lựa chọn KHÁC nhà cung cấp chung. `resolveLanguageModel`
-              (llm-provider.ts) chỉ override `provider` và `model`, còn `apiKey`
-              luôn lấy từ cấu hình chung - chọn lệch nghĩa là gửi key của router
-              thẳng sang api.anthropic.com. Vừa rò credential sang bên thứ ba
-              vừa làm bot câm (401 -> mọi lượt trả câu xin lỗi chung).
-
-              Vẫn hiện ra chứ không ẩn, để người dùng thấy được và xoá được một
-              giá trị cũ lỡ nằm sẵn trong DB.
-            */}
-            {NHA_CUNG_CAP.map((p) => (
-              <option key={p.value} value={p.value} disabled={chung !== null && chung.provider !== p.value}>
-                {p.label}
-                {chung !== null && chung.provider !== p.value ? " - cần API key riêng" : ""}
-              </option>
-            ))}
-            {/* Giá trị lạ nằm sẵn trong DB (ai đó sửa tay từ trước) phải có một
-                option khớp, nếu không `<select>` render TRỐNG: người dùng thấy ô
-                rỗng, `coDoi` vẫn false nên không sửa được, mà sửa ô khác rồi Lưu
-                thì giá trị lạ bị gửi lại và server trả 400 - kẹt hẳn, không lưu
-                được gì cho tới khi sửa DB tay. */}
-            {laGiaTriLa && (
-              <option value={form.modelProvider}>{form.modelProvider} - giá trị lạ, nên đổi lại</option>
-            )}
-          </select>
+          <div className="w-full max-w-sm">
+            <SelectMenu
+              id="ag-d-provider"
+              size="md"
+              value={form.modelProvider}
+              onChange={(v) => onChange({ modelProvider: v as AgentModelForm["modelProvider"] })}
+              options={[
+                { value: "", label: `Theo Providers chung${chung ? ` (${chung.provider})` : ""}` },
+                // Khóa mọi lựa chọn KHÁC nhà cung cấp chung. `resolveLanguageModel`
+                // (llm-provider.ts) chỉ override `provider` và `model`, còn `apiKey`
+                // luôn lấy từ cấu hình chung - chọn lệch nghĩa là gửi key của router
+                // thẳng sang api.anthropic.com. Vừa rò credential sang bên thứ ba
+                // vừa làm bot câm (401 -> mọi lượt trả câu xin lỗi chung).
+                //
+                // Vẫn hiện ra chứ không ẩn, để người dùng thấy được và xoá được một
+                // giá trị cũ lỡ nằm sẵn trong DB.
+                ...NHA_CUNG_CAP.map((p) => {
+                  const khoa = chung !== null && chung.provider !== p.value;
+                  return {
+                    value: p.value,
+                    label: khoa ? `${p.label} - cần API key riêng` : p.label,
+                    disabled: khoa,
+                  };
+                }),
+                // Giá trị lạ nằm sẵn trong DB (ai đó sửa tay từ trước) phải có một
+                // mục khớp, nếu không ô chọn render TRỐNG: người dùng thấy ô rỗng,
+                // `coDoi` vẫn false nên không sửa được, mà sửa ô khác rồi Lưu thì
+                // giá trị lạ bị gửi lại và server trả 400 - kẹt hẳn, không lưu được
+                // gì cho tới khi sửa DB tay.
+                ...(laGiaTriLa
+                  ? [{ value: form.modelProvider, label: `${form.modelProvider} - giá trị lạ, nên đổi lại` }]
+                  : []),
+              ]}
+            />
+          </div>
           {chung && form.modelProvider !== "" && form.modelProvider !== chung.provider && (
             <p className="mt-2 max-w-3xl text-[12px] leading-[1.6] text-amber-600 dark:text-amber-400">
               Agent này đang đặt nhà cung cấp khác cấu hình chung, mà API key vẫn là key chung. Bot sẽ BỎ QUA
@@ -192,18 +196,15 @@ export function AgentModelSection({
           htmlFor="ag-d-effort"
           hint="Nghĩ càng kỹ thì trả lời càng chắc nhưng chậm hơn và tốn token hơn. Việc đối chiếu số liệu, dò bảng nên để mức cao; trò chuyện thường để vừa là đủ."
         >
-          <select
-            id="ag-d-effort"
-            className="gc-input w-full max-w-sm cursor-pointer"
-            value={form.reasoningEffort}
-            onChange={(e) => onChange({ reasoningEffort: e.target.value as AgentModelForm["reasoningEffort"] })}
-          >
-            {MUC_SUY_NGHI.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
+          <div className="w-full max-w-sm">
+            <SelectMenu
+              id="ag-d-effort"
+              size="md"
+              value={form.reasoningEffort}
+              options={MUC_SUY_NGHI.map((m) => ({ value: m.value, label: m.label }))}
+              onChange={(v) => onChange({ reasoningEffort: v as AgentModelForm["reasoningEffort"] })}
+            />
+          </div>
         </AgentFormField>
       </AgentFormRow>
     </AgentFormSection>
