@@ -14,7 +14,7 @@
     "zalo-login": "tsx scripts/login-account.ts",
     "test": "node --import tsx --test \"src/**/*.test.ts\" \"web/src/**/*.test.ts\" \"evals/**/*.test.ts\"",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "build:web": "vite build web",
     "eval": "tsx evals/run-eval.ts"
   },

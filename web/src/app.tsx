@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import type { AccountInfo } from "./dashboard-api-client";
 import { api } from "./dashboard-api-client";
+import { coCanHoiTruocKhiRoi, xinPhepRoiTrang } from "./shared/unsaved-changes-guard";
 import { SidebarNav } from "./layout/sidebar-nav";
 import { AccountsPage } from "./pages/accounts-page";
 import { AgentDetailPage } from "./pages/agent-detail-page";
@@ -45,6 +46,9 @@ function DashboardShell() {
   }, [navigate]);
 
   const logout = useCallback(async () => {
+    // Đăng xuất cũng là RỜI TRANG - trước đó nó lách qua chốt "chưa lưu", nên
+    // bấm nhầm giữa lúc đang soạn persona là mất trắng, không hỏi câu nào
+    if (!(await xinPhepRoiTrangNeuCan())) return;
     await api.logout().catch(() => undefined);
     navigate("/login");
   }, [navigate]);
@@ -70,7 +74,19 @@ function DashboardShell() {
           >
             <IconMenu size={20} />
           </button>
-          <Link to="/" className="flex items-center gap-2" title="Về trang chính">
+          {/* Logo topbar MOBILE - phải qua chốt "chưa lưu" y như logo trong
+              sidebar. Trên điện thoại đây là đường rời trang dễ chạm nhất, mà
+              trước đó nó là `Link` trần: chạm một cái là mất ô persona đang gõ. */}
+          <Link
+            to="/"
+            onClick={(e) => {
+              if (!coCanHoiTruocKhiRoi()) return;
+              e.preventDefault();
+              void xinPhepRoiTrang().then((ok) => ok && navigate("/"));
+            }}
+            className="flex items-center gap-2"
+            title="Về trang chính"
+          >
             <img
               src="/zalo-agent-icon.webp"
               alt="Zalo Agent"
@@ -114,6 +130,16 @@ function DashboardShell() {
       </div>
     </div>
   );
+}
+
+
+/**
+ * Hỏi trước khi rời trang cho các đường KHÔNG phải `<Link>` (đăng xuất).
+ * `sidebar-nav.tsx` có bản riêng vì nó phải `preventDefault` trên sự kiện click.
+ */
+async function xinPhepRoiTrangNeuCan(): Promise<boolean> {
+  if (!coCanHoiTruocKhiRoi()) return true;
+  return xinPhepRoiTrang();
 }
 
 export function App() {

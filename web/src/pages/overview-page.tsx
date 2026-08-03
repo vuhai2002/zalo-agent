@@ -100,7 +100,10 @@ export function OverviewPage() {
           label="Tin nhắn hôm nay"
           value={formatNumber(stats?.messagesToday ?? 0)}
           sub={<span className="text-[12px] text-ink-soft">/ {formatNumber(stats?.messagesTotal ?? 0)} tổng</span>}
-          series={series.map((d) => d.turns)}
+          // KHÔNG truyền `series`: dãy theo ngày chỉ có `turns` (lượt agent), mà
+          // card ngay bên cạnh đã vẽ đúng dãy đó. Vẽ lại ở đây thì hai card khác
+          // đầu đề lại có đường biểu diễn giống hệt nhau - đọc ra như thể "tin
+          // nhắn" và "lượt agent" là một.
         />
         <StatCard
           icon={IconBolt}

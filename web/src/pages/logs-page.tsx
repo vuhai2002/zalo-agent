@@ -19,7 +19,7 @@ import { SelectMenu } from "../shared/select-menu";
 function nhanMuc(level: number): { text: string; lop: string } {
   if (level >= 50) return { text: "ERROR", lop: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-100 dark:border-red-900/50" };
   if (level >= 40) return { text: "WARN", lop: "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-amber-100 dark:border-amber-900/50" };
-  if (level >= 30) return { text: "INFO", lop: "bg-sky-50 text-sky-700 border-sky-100" };
+  if (level >= 30) return { text: "INFO", lop: "bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-100 dark:border-sky-900/50" };
   return { text: "DEBUG", lop: "bg-tile text-ink-soft border-line" };
 }
 

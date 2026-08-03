@@ -105,7 +105,7 @@ export function TraceStepCard({ step }: { step: TraceStep }) {
         </div>
       )}
 
-      <KhoiChu nhan="Model suy nghĩ" noiDung={step.reasoning} mau="bg-violet-50 text-violet-900" />
+      <KhoiChu nhan="Model suy nghĩ" noiDung={step.reasoning} mau="bg-violet-50 dark:bg-violet-950/40 text-violet-900 dark:text-violet-200" />
       <KhoiChu nhan="Model nói" noiDung={step.text} />
 
       {step.toolCalls.map((c, i) => (
@@ -113,7 +113,7 @@ export function TraceStepCard({ step }: { step: TraceStep }) {
           key={`c${i}`}
           nhan={`Gọi tool: ${c.name}`}
           noiDung={c.input}
-          mau="bg-sky-50 text-sky-900"
+          mau="bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-200"
         />
       ))}
       {/* Nhánh HỎNG tô đỏ như khối "Tool chạy lỗi" ở trên. Dùng cờ `hong` do

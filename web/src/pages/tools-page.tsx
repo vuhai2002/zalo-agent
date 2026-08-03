@@ -51,6 +51,8 @@ export function ToolsPage() {
   const [settingsFor, setSettingsFor] = useState<ToolCatalogItem | null>(null);
   const [accounts, setAccounts] = useState<ManagedAccount[]>([]);
   const [agents, setAgents] = useState<ManagedAgent[]>([]);
+  /** Không đọc được danh sách agent -> trang chỉ đang hiện LỚP TÀI KHOẢN */
+  const [agentLoi, setAgentLoi] = useState(false);
   const [accountId, setAccountId] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -67,7 +69,10 @@ export function ToolsPage() {
       // Tách lỗi riêng: nhãn "agent đang tắt" là thông tin PHỤ, còn
       // /api/agents có ghi DB (ensureDefaultAgent) nên dễ lỗi hơn các endpoint
       // kia. Để nó trong Promise.all chung thì nó hỏng là mất trắng cả trang.
-      api.agentsAdmin.list().catch(() => ({ items: [] as ManagedAgent[] })),
+      // Đánh dấu HỎNG thay vì trả mảng rỗng im lặng: mảng rỗng làm nhãn "Agent
+      // đang tắt" biến mất, tức trang quay về đúng trạng thái SAI mà lớp tắt
+      // theo agent vừa sinh ra để sửa - mà không có dấu hiệu nào.
+      api.agentsAdmin.list().catch(() => null),
     ])
       .then(([toolsRes, accountsRes, visionRes, imageRes, agentsRes]) => {
         setTools(toolsRes.items);
@@ -76,7 +81,8 @@ export function ToolsPage() {
         setVision(visionRes);
         setImageGen(imageRes);
         setAccounts(accountsRes.items);
-        setAgents(agentsRes.items);
+        setAgents(agentsRes?.items ?? []);
+        setAgentLoi(agentsRes === null);
         if (accountsRes.items[0]) setAccountId(accountsRes.items[0].id);
       })
       .catch((e: Error) => setError(e.message));
@@ -100,7 +106,10 @@ export function ToolsPage() {
     const disabled = new Set(account.disabledTools);
     if (disabled.has(toolKey)) disabled.delete(toolKey);
     else disabled.add(toolKey);
-    const disabledTools = [...disabled];
+    // Lọc theo catalog vừa tải - cùng lý do với `agent-tools-section.tsx`: key
+    // tool lạ còn sót trong DB làm mọi lần lưu trả 400 và trang kẹt cứng.
+    const hopLe = new Set(tools.map((t) => t.key));
+    const disabledTools = [...disabled].filter((k) => hopLe.has(k));
 
     setSaving(toolKey);
     setError("");
@@ -121,6 +130,12 @@ export function ToolsPage() {
 
   return (
     <>
+      {agentLoi && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-[13px] leading-relaxed text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          Chưa đọc được cấu hình agent, nên trang này chỉ đang hiện lớp TÀI KHOẢN.
+          Công cụ bị agent tắt sẽ không có nhãn - tải lại trang để xem đầy đủ.
+        </div>
+      )}
       <PageHeader
         icon={IconBolt}
         title="Tools"

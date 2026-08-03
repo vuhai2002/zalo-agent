@@ -33,7 +33,7 @@ import type { ModelMessage } from "ai";
  *   họ cl100k (GPT-4):    2,1 - 2,2 ký tự/token
  *   tiếng Anh đối chứng:  4,5
  *
- * Lấy 2.5 nên ước CAO hơn thực tế 24-34% với họ o200k, nhưng vẫn HỤT 12-17%
+ * Lấy 2.5 nên ước CAO hơn thực tế (khoảng 24-52% nếu tính trên số thật) với họ o200k, nhưng vẫn HỤT 12-17%
  * với họ cl100k. Tokenizer của Anthropic không công khai nên không đo được cho
  * chính model mặc định của repo. Biên `HE_SO_AN_TOAN` (chừa 30%) nuốt được mức
  * hụt đó, nhưng đây là chỗ phải theo dõi qua log `uocLuong.lechPhanTram` chứ

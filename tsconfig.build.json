@@ -1,0 +1,20 @@
+{
+  // Config CHỈ dùng cho `pnpm build`. `tsconfig.json` giữ nguyên phạm vi rộng
+  // để `pnpm typecheck` vẫn kiểm CẢ test, fixture và bộ eval.
+  //
+  // Vì sao phải tách hai file: `exclude` của TypeScript loại file khỏi cả
+  // TYPECHECK chứ không chỉ khỏi emit. Đã thử gộp làm một - thêm một lỗi kiểu
+  // cố ý vào file test rồi chạy `tsc --noEmit` thì nó KHÔNG bắt được. Mất kiểm
+  // kiểu trên hàng chục file test là cái giá đắt hơn nhiều so với việc dist có
+  // thừa vài file.
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "**/*.test.ts",
+    // Hai file dưới đây chỉ test dùng nhưng nằm trong `src/`; helper còn
+    // `import assert from "node:assert/strict"` nên không được vào bản build.
+    "src/shared/fake-agent-profile.ts",
+    "src/agent/tools/tool-failure-result-test-helper.ts",
+    // Bộ eval chạy TAY bằng tsx, không bao giờ chạy từ `dist`
+    "evals/**"
+  ]
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { TraceStep, TraceTurn } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { formatTime } from "../shared/ui-bits";
@@ -21,14 +21,24 @@ export function SessionTraceView({ accountId, threadId }: { accountId: string; t
       .catch(() => setTurns([]));
   }, [accountId, threadId]);
 
+  // Lượt ĐANG mở, đọc được ngay lúc response về. Không dùng state `dangMo` cho
+  // việc này: closure của hàm bất đồng bộ giữ giá trị của lần render lúc bấm.
+  const luotDangMo = useRef<number | null>(null);
+
   async function moLuot(turnId: number) {
     if (dangMo === turnId) {
+      luotDangMo.current = null;
       setDangMo(null);
       return;
     }
+    luotDangMo.current = turnId;
     setDangMo(turnId);
     setDangTai(true);
     const r = await api.traceSteps(turnId).catch(() => ({ steps: [] }));
+    // Bấm lượt A rồi lượt B khi A chưa về: response A về SAU sẽ ghi đè và UI
+    // hiện step của A dưới tiêu đề của B. Trên trang chẩn đoán thì nhầm lẫn đó
+    // đắt - người đọc kết luận sai về đúng cái lượt họ đang truy.
+    if (luotDangMo.current !== turnId) return;
     setSteps(r.steps);
     setDangTai(false);
   }

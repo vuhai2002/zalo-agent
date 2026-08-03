@@ -15,6 +15,17 @@ export type UsageDay = {
  * HTML + CSS thuần, không thêm thư viện: chỉ có vài cột, một trục và mấy đường
  * lưới - kéo cả một thư viện chart vào bundle cho ngần này là không đáng.
  */
+
+/** Trên ngưỡng này thì cột quá hẹp để in số lên đầu - dựa vào `title` khi rê chuột */
+const NGUONG_HIEN_SO = 10;
+
+/** Vẽ mỗi `n` cột một nhãn ngày, đủ thưa để không chồng chữ */
+function buocNhanNgay(soCot: number): number {
+  if (soCot <= 10) return 1;
+  if (soCot <= 16) return 2;
+  return 5;
+}
+
 export function UsageBarChart({
   data,
   metric,
@@ -26,6 +37,7 @@ export function UsageBarChart({
   const giaTri = (d: UsageDay) => (metric === "turns" ? d.turns : d.inputTokens + d.outputTokens);
   const dinhTruc = tranTruc(Math.max(...data.map(giaTri), 0));
   // 5 vạch chia đều, vẽ từ trên xuống để khớp thứ tự đọc của trục
+  const buocNhan = buocNhanNgay(data.length);
   const vach = Array.from({ length: 5 }, (_, i) => Math.round((dinhTruc / 4) * (4 - i)));
   // Ngày mới nhất tô đậm hơn - đó là con số người ta nhìn trước tiên
   const chiSoMoiNhat = data.length - 1;
@@ -59,13 +71,19 @@ export function UsageBarChart({
               const noiBat = i === chiSoMoiNhat;
               return (
                 <div key={d.day} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
-                  <span
-                    className={`mb-1.5 text-[12px] font-semibold tabular-nums ${
-                      noiBat ? "text-zalo-600" : "text-ink-soft"
-                    }`}
-                  >
-                    {formatNumber(v)}
-                  </span>
+                  {/* Ẩn số trên cột khi có quá nhiều cột: ở mốc 30 ngày mỗi cột
+                      chỉ còn ~17px trên laptop 1366px, còn nhãn "1.234" cần
+                      ~36px nên chúng chồng lên nhau thành một vệt không đọc
+                      được. `title` trên cột vẫn mang đủ số khi rê chuột. */}
+                  {data.length <= NGUONG_HIEN_SO && (
+                    <span
+                      className={`mb-1.5 text-[12px] font-semibold tabular-nums ${
+                        noiBat ? "text-zalo-600" : "text-ink-soft"
+                      }`}
+                    >
+                      {formatNumber(v)}
+                    </span>
+                  )}
                   {/*
                     Cột KHÔNG chiếm hết bề ngang ô: `max-w` để lại khoảng hở hai
                     bên, nếu không các cột dính liền thành một mảng màu đặc.
@@ -93,9 +111,12 @@ export function UsageBarChart({
       <div className="mt-2 flex gap-3">
         <div className="w-10 shrink-0" />
         <div className="flex min-w-0 flex-1 gap-2 border-t border-line pt-2 sm:gap-4">
-          {data.map((d) => (
+          {data.map((d, i) => (
             <div key={d.day} className="min-w-0 flex-1 text-center text-[12px] tabular-nums text-ink-soft">
-              {d.day.slice(5)}
+              {/* Thưa nhãn ngày thay vì vẽ hết: "08-01" cần ~33px mà 30 cột
+                  trên laptop chỉ được ~17px mỗi cột. Luôn giữ nhãn CUỐI (ngày
+                  mới nhất - thứ người ta nhìn đầu tiên) rồi lùi dần theo bước. */}
+              {(data.length - 1 - i) % buocNhan === 0 ? d.day.slice(5) : ""}
             </div>
           ))}
         </div>

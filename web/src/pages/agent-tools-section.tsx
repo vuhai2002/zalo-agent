@@ -57,7 +57,13 @@ export function AgentToolsSection({
     const moi = new Set(tat);
     if (bat) moi.delete(key);
     else moi.add(key);
-    onChange([...moi].sort());
+    // LỌC theo catalog vừa tải. Biên ghi của server dùng `z.enum(TOOL_KEYS)`
+    // rất chặt, còn biên đọc thì fail-open không lọc - nên một key tool bị đổi
+    // tên hay gỡ ở bản sau vẫn nằm lại trong DB, được gửi ngược lên, và MỌI lần
+    // lưu trả 400. Lúc đó không có cách nào sửa trên giao diện: trang kẹt cứng.
+    // Lọc ở đây vừa gỡ kẹt vừa dọn DB ngay lần lưu đầu tiên.
+    const hopLe = new Set((tools ?? []).map((t) => t.key));
+    onChange([...moi].filter((k) => hopLe.has(k)).sort());
   }
 
   if (tools === null) {
@@ -79,13 +85,17 @@ export function AgentToolsSection({
     );
   }
 
-  const soBat = tools.length - tools.filter((t) => tat.has(t.key)).length;
+  // Chỉ đếm tool CÓ HẠ TẦNG. `read_image` và `create_image` khi chưa cấu hình
+  // sidecar/endpoint thì `available: false` - đếm chúng vào là hint khoe "13/13
+  // công cụ" trong khi model không hề nhận được hai cái đó.
+  const dungDuoc = tools.filter((t) => t.available !== false);
+  const soBat = dungDuoc.filter((t) => !tat.has(t.key)).length;
 
   return (
     <AgentFormSection
       title="Công cụ"
       hint={
-        `Agent này được phép dùng ${soBat}/${tools.length} công cụ. Đây mới là NĂNG LỰC của agent - ` +
+        `Agent này được phép dùng ${soBat}/${dungDuoc.length} công cụ đang có hạ tầng. Đây mới là NĂNG LỰC của agent - ` +
         `công cụ bot THẬT SỰ dùng được là phần GIAO với công cụ đang bật của từng tài khoản Zalo. ` +
         (soTaiKhoan > 0
           ? `Agent này đang gắn ${soTaiKhoan} tài khoản, mỗi tài khoản có lớp tắt riêng ở trang Tools - `

@@ -157,7 +157,7 @@ export class ToolLoopGuard {
         ma: "cung-tool-loi",
         tool: tenTool,
         soLan: nCungTool,
-        thongDiep: `${tenTool} lỗi ${nCungTool} lần liên tiếp trong một lượt.`,
+        thongDiep: `${tenTool} lỗi ${nCungTool} lần trong một lượt (cộng dồn, không tính có xen kẽ lần chạy được hay không).`,
       };
     }
     if (nGiongHet >= canhBaoTu(this.nguong.chanLoiGiongHet)) {
