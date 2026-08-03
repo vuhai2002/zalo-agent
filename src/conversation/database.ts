@@ -7,6 +7,26 @@ import { dataDir } from "../config/env.js";
 
 export const db = new DatabaseSync(path.join(dataDir, "zalo-agent.db"));
 db.exec("PRAGMA journal_mode = WAL;");
+/**
+ * `NORMAL` chứ không phải mặc định `FULL`.
+ *
+ * `node:sqlite` chạy ĐỒNG BỘ trong tiến trình một luồng, nên mỗi lần ghi là
+ * chặn cả bot: không nhận tin mới, không chạy lượt nào khác, không phục vụ
+ * dashboard. `FULL` bắt fsync ở MỌI commit, và đo thật trên máy dev:
+ *
+ *     synchronous=FULL      1.884 us / INSERT
+ *     synchronous=NORMAL       37 us / INSERT
+ *
+ * Gấp 50 lần, và mỗi lượt trả lời ghi vài dòng (tin đến, tin trả lời, usage,
+ * trace). Nhiều hội thoại nhắn cùng lúc thì các lần chặn đó cộng dồn.
+ *
+ * Đánh đổi: đi kèm WAL, `NORMAL` vẫn an toàn tuyệt đối khi tiến trình chết
+ * (crash, kill, hết bộ nhớ) - WAL còn nguyên và phục hồi đủ. Chỉ khi MẤT ĐIỆN
+ * đột ngột hay OS sập mới có thể mất vài giao dịch cuối. DB không bao giờ hỏng
+ * ở cả hai mức. Với bot chat cá nhân, mất vài tin cuối lúc cúp điện là chấp
+ * nhận được; treo cả bot 2ms mỗi lần ghi thì không.
+ */
+db.exec("PRAGMA synchronous = NORMAL;");
 
 runMigrations();
 
