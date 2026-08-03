@@ -8,6 +8,7 @@ import {
   IconGlobe,
   IconImage,
   IconMessage,
+  IconSliders,
 } from "../shared/dashboard-icons";
 
 type IconFn = (p: SVGProps<SVGSVGElement> & { size?: number }) => ReactNode;
@@ -19,15 +20,16 @@ type IconFn = (p: SVGProps<SVGSVGElement> & { size?: number }) => ReactNode;
  * icon mới không đáng để đổi shape API.
  */
 const ICON_BY_GROUP: Record<string, IconFn> = {
-  chung: IconGear,
-  luot: IconMessage,
-  "ngu-canh": IconDatabase,
+  providers: IconSliders,
+  general: IconGear,
+  turn: IconMessage,
+  context: IconDatabase,
   web: IconGlobe,
-  file: IconFileText,
-  anh: IconImage,
-  "gui-tin": IconMessage,
-  "don-dep": IconClock,
-  "lich-hen": IconClock,
+  documents: IconFileText,
+  images: IconImage,
+  sending: IconMessage,
+  logs: IconClock,
+  schedule: IconClock,
 };
 
 export function iconForGroup(groupId: string): IconFn {

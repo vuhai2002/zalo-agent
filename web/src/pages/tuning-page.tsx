@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import type { TuningDef, TuningGroup, TuningValue } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { IconGear, IconSearch } from "../shared/dashboard-icons";
 import { ChangePasswordSection } from "./change-password-section";
+import { ProvidersSection } from "./providers-section";
 import { ResetAllSettingsSection } from "./reset-all-settings-section";
 import { TuningDetailPanel } from "./tuning-detail-panel";
 import { TuningNav } from "./tuning-nav";
+import { useTimKiemTuning } from "./use-tuning-search";
 
 type SaveResult = { ok: true } | { ok: false; error: string };
 
 /** Nhóm chứa thêm mật khẩu + nút đặt lại tất cả - khớp `id` ở tuning-definitions */
-const NHOM_CHUNG = "chung";
+const NHOM_CHUNG = "general";
+/** Nhóm KHÔNG có tham số nào, nội dung là form nhà cung cấp LLM */
+const NHOM_PROVIDERS = "providers";
 
 /**
  * Trang Cấu hình: những tham số trước đây chỉ sửa được bằng cách mở `.env` rồi
@@ -19,7 +24,8 @@ const NHOM_CHUNG = "chung";
  *
  * Bố cục CHỌN-MỘT: nav trái liệt kê từng nhóm (icon + mô tả + số ô), bấm vào
  * nhóm nào thì panel phải CHỈ hiện đúng nhóm đó - không đổ hết mọi nhóm ra một
- * mạch dài như bản accordion cũ. Mặc định mở nhóm đầu tiên ("Chung").
+ * mạch dài như bản accordion cũ. Mặc định mở nhóm đầu tiên ("Nhà cung cấp LLM"
+ * - thứ phải cấu hình trước tiên, thiếu nó bot không trả lời được tin nào).
  *
  * TỰ LƯU từng ô, không có nút "Lưu" tổng: server nhận PATCH 1 tham số/lần
  * (`api.tuning.save({[key]: value})`), khác bản trước gửi cả cụm đã đổi. Ràng
@@ -32,7 +38,12 @@ export function TuningPage() {
   const [values, setValues] = useState<Record<string, TuningValue>>({});
   const [loi, setLoi] = useState("");
   const [tim, setTim] = useState("");
-  const [dangChon, setDangChon] = useState("");
+  // Nhóm đang xem nằm trên URL (`/tuning/:nhom`) chứ không phải state trong
+  // component: banner "Chưa cấu hình LLM" ở Overview phải link được THẲNG vào
+  // form nhà cung cấp, đúng lúc người dùng mới cài đang bối rối nhất. Tiện thể
+  // mọi nhóm khác cũng bookmark và chia sẻ link được.
+  const { nhom } = useParams<{ nhom?: string }>();
+  const navigate = useNavigate();
 
   useEffect(() => {
     void nap();
@@ -44,13 +55,19 @@ export function TuningPage() {
       setGroups(r.groups);
       setDefs(r.defs);
       setValues(Object.fromEntries(r.values.map((v) => [v.key, v])));
-      // Mặc định mở nhóm ĐẦU TIÊN server trả về ("Chung") - chỉ đặt lần nạp
-      // đầu, không ghi đè lựa chọn người dùng ở các lần load lại sau reset
-      setDangChon((truoc) => truoc || r.groups[0]?.id || "");
     } catch (e) {
       setLoi((e as Error).message);
     }
   }
+
+  // URL trống hoặc trỏ tới nhóm không tồn tại (gõ tay, link cũ) thì đưa về nhóm
+  // đầu tiên. `replace` để nút Back không kẹt lại ở địa chỉ hỏng.
+  const nhomHopLe = groups.some((g) => g.id === nhom);
+  useEffect(() => {
+    if (groups.length && !nhomHopLe) navigate(`/tuning/${groups[0]!.id}`, { replace: true });
+  }, [groups, nhomHopLe, navigate]);
+
+  const dangChon = nhomHopLe ? nhom! : (groups[0]?.id ?? "");
 
   const oCuaNhom = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -62,25 +79,7 @@ export function TuningPage() {
     return map;
   }, [defs]);
 
-  /**
-   * Tìm theo NHÃN tiếng Việt lẫn TÊN biến, bỏ dấu để gõ không dấu vẫn khớp.
-   * Khớp ô nào thì tự chuyển nav sang ĐÚNG nhóm chứa ô đó - người dùng gõ "trần
-   * tin" không cần biết trước nó nằm ở nhóm "Lịch hẹn".
-   */
-  const ketQuaTim = useMemo(() => {
-    const q = boDau(tim.trim());
-    if (!q) return null;
-    return Object.keys(defs).filter(
-      (k) => boDau(defs[k]!.label).includes(q) || boDau(k).includes(q) || boDau(defs[k]!.hint).includes(q),
-    );
-  }, [tim, defs]);
-
-  useEffect(() => {
-    if (ketQuaTim && ketQuaTim.length > 0) {
-      const nhomDauTien = defs[ketQuaTim[0]!]?.group;
-      if (nhomDauTien) setDangChon(nhomDauTien);
-    }
-  }, [ketQuaTim, defs]);
+  const ketQuaTim = useTimKiemTuning(defs, tim);
 
   async function luuMot(key: string, value: number | boolean | string | null): Promise<SaveResult> {
     try {
@@ -119,6 +118,22 @@ export function TuningPage() {
 
   const nhomDangXem = groups.find((g) => g.id === dangChon);
 
+  /**
+   * Khối không-phải-tham-số của từng nhóm. Bảng tra thay cho chuỗi if lồng:
+   * thêm nhóm mới chỉ là thêm một dòng, không phải sửa biểu thức điều kiện.
+   */
+  const KHOI_THEM: Record<string, () => React.ReactNode[]> = {
+    [NHOM_PROVIDERS]: () => [<ProvidersSection key="nha-cung-cap" />],
+    [NHOM_CHUNG]: () => [
+      <ChangePasswordSection key="mat-khau" />,
+      <ResetAllSettingsSection
+        key="dat-lai"
+        soODaDoi={oDaDoiToanTrang.length}
+        onResetAll={resetToanBo}
+      />,
+    ],
+  };
+
   return (
     <>
       {/* Dùng PageHeader chung như mọi trang khác - trước đây trang này tự dựng
@@ -151,7 +166,7 @@ export function TuningPage() {
       )}
 
       <div className="flex flex-col gap-5 pb-10 lg:flex-row">
-        <TuningNav groups={groups} dangChon={dangChon} onChon={setDangChon} />
+        <TuningNav groups={groups} dangChon={dangChon} onChon={(id) => navigate(`/tuning/${id}`)} />
 
         {nhomDangXem && (
           <TuningDetailPanel
@@ -162,32 +177,14 @@ export function TuningPage() {
             onSaveOne={luuMot}
             onResetGroup={() => void resetCaNhom(nhomDangXem.id)}
             extra={
-              // Mật khẩu + đặt lại toàn bộ chỉ thuộc nhóm "Chung"; đang lọc tìm
-              // kiếm thì ẩn đi - chúng không phải tham số nên không khớp từ khóa
-              // nào, để lại chỉ làm nhiễu kết quả
-              nhomDangXem.id === NHOM_CHUNG && !ketQuaTim
-                ? [
-                    <ChangePasswordSection key="mat-khau" />,
-                    <ResetAllSettingsSection
-                      key="dat-lai"
-                      soODaDoi={oDaDoiToanTrang.length}
-                      onResetAll={resetToanBo}
-                    />,
-                  ]
-                : undefined
+              // Các khối KHÔNG phải tham số, gắn thêm theo nhóm. Đang lọc tìm
+              // kiếm thì ẩn hết - chúng không khớp từ khóa nào nên để lại chỉ
+              // làm nhiễu kết quả.
+              ketQuaTim ? undefined : (KHOI_THEM[nhomDangXem.id]?.() ?? undefined)
             }
           />
         )}
       </div>
     </>
   );
-}
-
-/** Bỏ dấu tiếng Việt để tìm kiếm gõ không dấu vẫn khớp */
-function boDau(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/đ/g, "d");
 }

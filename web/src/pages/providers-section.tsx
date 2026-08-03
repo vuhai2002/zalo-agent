@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
 import type { ProviderSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
-import { PageHeader } from "../layout/page-header";
-import { IconSliders } from "../shared/dashboard-icons";
 import { SecretInput } from "../shared/secret-input";
 import { SelectMenu } from "../shared/select-menu";
 import { useConfirmDialog } from "../shared/confirm-dialog";
-import { Badge } from "../shared/ui-bits";
 
-export function ProvidersPage() {
+/**
+ * Form nhà cung cấp LLM. Trước đây là một trang riêng trên sidebar; giờ là nội
+ * dung của nhóm "providers" trong trang Cấu hình - mọi cấu hình về một chỗ.
+ *
+ * Vẫn là form có nút Lưu chứ không tách thành từng tham số tự-lưu như các ô
+ * bên cạnh: bốn giá trị này phải đi cùng nhau. Lưu Base URL mới trong khi Model
+ * còn của nhà cũ là bot gọi sai suốt quãng giữa.
+ */
+export function ProvidersSection() {
   const [settings, setSettings] = useState<ProviderSettings | null>(null);
   const [form, setForm] = useState({ provider: "openai-compatible", baseUrl: "", model: "", apiKey: "" });
   const [status, setStatus] = useState<{ tone: "green" | "red"; text: string } | null>(null);
@@ -86,18 +91,16 @@ export function ProvidersPage() {
     }
   }
 
-  if (!settings) return <p className="text-ink-soft">Đang tải...</p>;
+  if (!settings) return <p className="text-[13px] text-ink-soft">Đang tải...</p>;
 
   return (
     <div className="max-w-2xl">
-      <PageHeader
-        icon={IconSliders}
-        title="Providers"
-        subtitle="Nguồn cấu hình LLM chính - áp dụng ngay, không cần khởi động lại bot"
-        aside={settings.hasOverride ? <Badge tone="blue">Đang dùng override</Badge> : undefined}
-      />
-
-      <div className="gc-card space-y-4 p-6">
+      {/* Không còn khối viền bọc ngoài: từ khi nằm trong panel của trang Cấu
+          hình thì card lồng trong card là "khối lồng khối", cùng lý do các ô
+          tham số bên cạnh cũng phẳng. Nhãn nhóm và mô tả đã do panel in ra.
+          Cũng bỏ badge "Đang dùng override" - tiếng lóng lập trình, mà từ khi
+          .env hết gánh cấu hình LLM thì nó gần như luôn bật, không nói thêm gì. */}
+      <div className="space-y-4">
         <div>
           <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-provider">Provider</label>
           <SelectMenu

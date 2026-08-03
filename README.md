@@ -40,7 +40,7 @@ copy .env.example .env
 | `DASHBOARD_PASSWORD` | tự đặt, tối thiểu 8 ký tự - để đăng nhập dashboard lần đầu |
 
 Xong hai dòng đó là `pnpm dev` chạy được. Mọi thứ còn lại nhập trên dashboard:
-nhà cung cấp LLM + model + API key (trang **Providers**, làm trước tiên), tài khoản
+nhà cung cấp LLM + model + API key (**Cấu hình > Nhà cung cấp LLM**, làm trước tiên), tài khoản
 Zalo + quét QR (trang **Accounts**), rồi persona/công cụ của agent và 46 tham số
 vận hành. Không cần tạo `config/accounts.json` - DB là nguồn sự thật.
 

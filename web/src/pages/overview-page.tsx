@@ -88,8 +88,8 @@ export function OverviewPage() {
           </div>
           <div className="mt-1 text-[12px] leading-relaxed text-amber-800 dark:text-amber-300">
             Thiếu API key, tên model hoặc base URL.{" "}
-            <Link to="/providers" className="font-medium underline underline-offset-2">
-              Nhập ở trang Providers
+            <Link to="/tuning/providers" className="font-medium underline underline-offset-2">
+              Nhập ở trang Cấu hình
             </Link>
           </div>
         </div>

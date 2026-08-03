@@ -14,7 +14,6 @@ import {
   IconLogout,
   IconMoon,
   IconSignal,
-  IconSliders,
   IconSun,
   IconUsers,
 } from "../shared/dashboard-icons";
@@ -47,9 +46,9 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
       { to: "/tools", label: "Tools", icon: IconBolt },
       { to: "/trace", label: "Trace agent", icon: IconCpu },
       { to: "/logs", label: "Logs", icon: IconDatabase },
-      { to: "/providers", label: "Providers", icon: IconSliders },
-      // Bánh răng, KHÔNG dùng lại IconSliders của Providers - hai mục nằm sát
-      // nhau mà cùng một hình thì mắt phải đọc chữ mới phân biệt được
+      // Nhà cung cấp LLM KHÔNG còn là mục riêng: nó là một nhóm trong trang
+      // Cấu hình (/tuning/providers). Một trang chỉ chứa 4 ô mà chiếm một
+      // dòng sidebar ngang hàng với Accounts, Agents là không cân.
       { to: "/tuning", label: "Cấu hình", icon: IconGear },
     ],
   },

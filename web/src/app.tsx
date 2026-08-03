@@ -11,7 +11,6 @@ import { ContactsPage } from "./pages/contacts-page";
 import { LoginPage } from "./pages/login-page";
 import { MemoryPage } from "./pages/memory-page";
 import { OverviewPage } from "./pages/overview-page";
-import { ProvidersPage } from "./pages/providers-page";
 import { SchedulePage } from "./pages/schedule-page";
 import { SessionsPage } from "./pages/sessions-page";
 import { LogsPage } from "./pages/logs-page";
@@ -121,9 +120,12 @@ function DashboardShell() {
             <Route path="/agents/:id" element={<AgentDetailPage />} />
             <Route path="/tools" element={<ToolsPage />} />
             <Route path="/trace" element={<TracePage />} />
+            {/* Nhóm nằm trên URL để link thẳng vào được (banner "Chưa cấu hình
+                LLM" ở Overview trỏ tới /tuning/providers). Không có :nhom thì
+                TuningPage tự đưa về nhóm đầu tiên. */}
             <Route path="/tuning" element={<TuningPage />} />
+            <Route path="/tuning/:nhom" element={<TuningPage />} />
             <Route path="/logs" element={<LogsPage />} />
-            <Route path="/providers" element={<ProvidersPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
