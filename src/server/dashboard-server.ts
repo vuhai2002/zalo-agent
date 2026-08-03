@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { serve, type ServerType } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -177,12 +178,42 @@ export function buildDashboardApp(): Hono {
   // Production: serve SPA đã build (pnpm build:web). Dev thì dùng Vite (pnpm dev:web).
   // Fallback index.html cho mọi path còn lại để deep link (/sessions, /login)
   // load được khi F5 - đây là điều kiện để router dùng URL sạch, không cần hash.
-  if (fs.existsSync(path.resolve("web/dist"))) {
-    app.use("/*", setStaticCacheHeaders, serveStatic({ root: "web/dist" }));
-    app.get("*", serveStatic({ path: "web/dist/index.html" }));
+  const thuMucWeb = timThuMucWebDist();
+  if (thuMucWeb) {
+    app.use("/*", setStaticCacheHeaders, serveStatic({ root: thuMucWeb }));
+    app.get("*", serveStatic({ path: path.join(thuMucWeb, "index.html") }));
+  } else {
+    // NÓI RA thay vì im lặng. Trước đây thiếu `web/dist` thì dashboard trả 404
+    // trần cho mọi đường dẫn, không một dòng log nào - người ta ngồi đoán giữa
+    // "quên build", "sai cổng" và "sai mật khẩu".
+    log.warn(
+      "Chưa có bản build của dashboard - chạy `pnpm build:web`. API vẫn hoạt động, chỉ giao diện là chưa có.",
+    );
   }
 
   return app;
+}
+
+/**
+ * Tìm thư mục `web/dist` KHÔNG phụ thuộc thư mục đang chạy.
+ *
+ * Bản trước dùng `path.resolve("web/dist")`, tức là bám vào `process.cwd()`.
+ * Chạy bot từ thư mục khác (systemd `WorkingDirectory` khác, hay `node
+ * /opt/bot/dist/src/index.js` từ `/`) là dashboard trả 404 trần cho mọi đường
+ * dẫn mà không có dấu hiệu gì.
+ *
+ * Thử lần lượt: thư mục đang chạy, rồi các mốc suy từ vị trí CHÍNH FILE NÀY -
+ * hai độ sâu vì lúc chạy `tsx` file nằm ở `src/server/`, còn sau `pnpm build`
+ * thì ở `dist/src/server/`.
+ */
+function timThuMucWebDist(): string | null {
+  const tuFile = path.dirname(fileURLToPath(import.meta.url));
+  const ungVien = [
+    path.resolve("web/dist"),
+    path.resolve(tuFile, "../../web/dist"),
+    path.resolve(tuFile, "../../../web/dist"),
+  ];
+  return ungVien.find((d) => fs.existsSync(d)) ?? null;
 }
 
 let server: ServerType | undefined;

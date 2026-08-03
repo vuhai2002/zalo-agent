@@ -18,11 +18,15 @@ export function AgentsPage() {
   const [agents, setAgents] = useState<ManagedAgent[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  /** Nhà cung cấp chung - để biết agent nào khai provider LỆCH */
+  const [providerChung, setProviderChung] = useState<string | null>(null);
   const { confirm, confirmDialog } = useConfirmDialog();
 
   const reload = () => api.agentsAdmin.list().then((d) => setAgents(d.items)).catch(() => setAgents([]));
   useEffect(() => {
     void reload();
+    // Lỗi thì bỏ qua: đây chỉ để hiện cảnh báo, không được làm chết trang
+    void api.provider().then((p) => setProviderChung(p.provider)).catch(() => undefined);
   }, []);
 
   async function remove(agent: ManagedAgent) {
@@ -69,9 +73,20 @@ export function AgentsPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-ink">{agent.name}</span>
                   {agent.isDefault && <Badge tone="blue" dot={false}>Mặc định</Badge>}
-                  {agent.modelName && (
-                    <Badge tone="gray" dot={false}>{agent.modelName}</Badge>
-                  )}
+                  {/* Override provider LỆCH bị `doiProviderAnToan` bỏ qua ở
+                      tầng dựng client, nên badge model ở đây là NÓI DỐI: bot
+                      đang chạy model chung chứ không phải model ghi trên badge.
+                      Trang chi tiết có cảnh báo, danh sách thì trước đó không. */}
+                  {agent.modelName &&
+                    (providerChung !== null &&
+                    agent.modelProvider !== null &&
+                    agent.modelProvider !== providerChung ? (
+                      <Badge tone="amber" dot={false}>
+                        {agent.modelName} - override bị bỏ qua
+                      </Badge>
+                    ) : (
+                      <Badge tone="gray" dot={false}>{agent.modelName}</Badge>
+                    ))}
                 </div>
                 <div className="text-[12px] text-ink-soft/60">{agent.id}</div>
               </div>

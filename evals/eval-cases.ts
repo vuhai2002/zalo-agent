@@ -191,8 +191,16 @@ export const EVAL_CASES: EvalCase[] = [
     disabledTools: ["create_image", "create_word_document", "create_excel_file"],
     mongDoi: {
       kiemTraText: {
-        moTa: "không còn ký tự định dạng markdown (**, ##, ```)",
-        dat: (t) => !t.includes("**") && !/^\s*#{1,6}\s/m.test(t) && !t.includes("```"),
+        moTa: "không còn ký tự định dạng markdown (**, ##, ```) và không còn dòng kẻ bảng",
+        // Kiểm CẢ dòng kẻ bảng: `lyDo` nói đây là "cái bẫy markdown tự nhiên
+        // nhất" vì người dùng bảo lập bảng, nhưng bản đầu chỉ kiểm ba thứ kia
+        // nên không hề chạm phần bảng của lớp làm sạch - đo một thứ khác với
+        // thứ mình tuyên bố đang đo.
+        dat: (t) =>
+          !t.includes("**") &&
+          !/^\s*#{1,6}\s/m.test(t) &&
+          !t.includes("```") &&
+          !/^\s*\|[-:|\s]*--[-:|\s]*$/m.test(t),
       },
     },
   },

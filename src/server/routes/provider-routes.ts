@@ -51,7 +51,9 @@ export const providerRoutes = new Hono()
       provider: s.provider,
       baseUrl: s.baseUrl ?? "",
       model: s.model,
-      apiKeyMasked: maskApiKey(s.apiKey),
+      // Phân biệt "chưa nhập bao giờ" với "đã nhập nhưng giải mã hỏng": hai
+      // bên đều không có khóa dùng được, nhưng cách sửa khác hẳn nhau
+      apiKeyMasked: s.apiKeyHong ? "lỗi giải mã - nhập lại" : maskApiKey(s.apiKey),
       hasOverride: s.hasOverride,
     });
   })
@@ -75,7 +77,9 @@ export const providerRoutes = new Hono()
       provider: s.provider,
       baseUrl: s.baseUrl ?? "",
       model: s.model,
-      apiKeyMasked: maskApiKey(s.apiKey),
+      // Phân biệt "chưa nhập bao giờ" với "đã nhập nhưng giải mã hỏng": hai
+      // bên đều không có khóa dùng được, nhưng cách sửa khác hẳn nhau
+      apiKeyMasked: s.apiKeyHong ? "lỗi giải mã - nhập lại" : maskApiKey(s.apiKey),
       hasOverride: s.hasOverride,
     });
   })

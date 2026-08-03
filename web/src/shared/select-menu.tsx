@@ -31,7 +31,10 @@ export function SelectMenu({
   id?: string;
 }) {
   const [open, setOpen] = useState(false);
+  /** Option con trỏ bàn phím đang ở - `-1` nghĩa là chưa di chuyển lần nào */
+  const [troToi, setTroToi] = useState(-1);
   const rootRef = useRef<HTMLDivElement>(null);
+  const nutRef = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -49,6 +52,14 @@ export function SelectMenu({
     };
   }, [open]);
 
+  // Đưa focus THẬT theo con trỏ. Không có bước này thì mũi tên chỉ đổi
+  // `tabIndex` còn focus vẫn nằm ở nút mở, tức là bấm Enter không chọn được gì
+  // và trình đọc màn hình cũng không đọc option đang trỏ tới.
+  useEffect(() => {
+    if (!open || troToi < 0) return;
+    nutRef.current[troToi]?.focus();
+  }, [open, troToi]);
+
   const current = options.find((o) => o.value === value);
 
   return (
@@ -59,7 +70,19 @@ export function SelectMenu({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setTroToi(options.findIndex((o) => o.value === value));
+          setOpen((v) => !v);
+        }}
+        onKeyDown={(e) => {
+          // Mở bằng mũi tên/Enter/Space như `<select>` native. Control tự dựng
+          // mà chỉ bấm được bằng chuột thì người dùng bàn phím kẹt hẳn.
+          if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setTroToi(options.findIndex((o) => o.value === value));
+            setOpen(true);
+          }
+        }}
         className={`flex w-full items-center gap-2 rounded-lg border bg-surface px-2.5 py-2 text-left text-[13px] text-ink transition-colors hover:bg-tile/50 ${
           open ? "border-zalo-500 ring-2 ring-zalo-100" : "border-line"
         }`}
@@ -80,16 +103,31 @@ export function SelectMenu({
       {open && (
         <div
           role="listbox"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              const buoc = e.key === "ArrowDown" ? 1 : -1;
+              // Chạy vòng: xuống ở cuối thì về đầu, giống `<select>` native
+              setTroToi((cu) => (cu + buoc + options.length) % options.length);
+            } else if (e.key === "Home" || e.key === "End") {
+              e.preventDefault();
+              setTroToi(e.key === "Home" ? 0 : options.length - 1);
+            }
+          }}
           className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-lg shadow-ink/5"
         >
-          {options.map((opt) => {
+          {options.map((opt, i) => {
             const active = opt.value === value;
             return (
               <button
                 key={opt.value}
+                ref={(el) => {
+                  nutRef.current[i] = el;
+                }}
                 type="button"
                 role="option"
                 aria-selected={active}
+                tabIndex={i === troToi ? 0 : -1}
                 onClick={() => {
                   onChange(opt.value);
                   setOpen(false);

@@ -79,9 +79,14 @@ export function resolveLanguageModel(
   const base = getEffectiveLlmSettings();
   const settings = { ...base, ...doiProviderAnToan(base, override) };
   if (!settings.apiKey) {
+    // Khóa CÓ trong DB nhưng giải mã hỏng là chuyện khác hẳn "chưa nhập": nói
+    // sai bệnh thì người dùng đi nhập lại key trong khi gốc rễ là
+    // CREDENTIALS_ENCRYPTION_KEY đã đổi - và lúc đó cookie Zalo cũng hỏng theo.
     throw new LoiCauHinhLlm(
       "api_key",
-      "Chưa cấu hình LLM API key - nhập ở trang Providers trên dashboard (hoặc LLM_API_KEY trong .env)",
+      settings.apiKeyHong
+        ? "Không giải mã được LLM API key đã lưu - CREDENTIALS_ENCRYPTION_KEY có thể đã đổi so với lúc lưu. Nhập lại key ở trang Providers, và kiểm tra cả phiên đăng nhập Zalo."
+        : "Chưa cấu hình LLM API key - nhập ở trang Providers trên dashboard (hoặc LLM_API_KEY trong .env)",
     );
   }
   // Cùng nếp với API key: thiếu model thì báo ở ĐÂY chứ không chết lúc boot.
