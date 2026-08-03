@@ -33,12 +33,34 @@ export function TracePage() {
   const [openSteps, setOpenSteps] = useState<TraceStep[]>([]);
   const [openLoading, setOpenLoading] = useState(false);
 
+  /** Con trỏ trang sau; `null` = đã hết lượt, ẩn nút "Xem thêm" */
+  const [conTro, setConTro] = useState<number | null>(null);
+  const [dangTaiThem, setDangTaiThem] = useState(false);
+
   useEffect(() => {
     api
       .traceAll()
-      .then((r) => setTurns(r.turns))
+      .then((r) => {
+        setTurns(r.turns);
+        setConTro(r.nextCursor);
+      })
       .catch((e: Error) => setLoi(e.message));
   }, []);
+
+  /** Nối thêm trang lượt CŨ HƠN. Không đụng lượt đang mở ở trên. */
+  async function xemThem() {
+    if (conTro === null) return;
+    setDangTaiThem(true);
+    try {
+      const r = await api.traceAll(conTro);
+      setTurns((cu) => [...cu, ...r.turns]);
+      setConTro(r.nextCursor);
+    } catch (e) {
+      setLoi(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDangTaiThem(false);
+    }
+  }
 
   useEffect(() => {
     if (!Number.isInteger(openTurnId) || openTurnId <= 0) return;
@@ -131,6 +153,27 @@ export function TracePage() {
           </div>
         ))}
       </div>
+
+      {/* Chỉ hiện khi server nói còn lượt phía sau. Bấm là NỐI THÊM, lượt đang
+          mở ở trên không bị đóng lại. */}
+      {conTro !== null && (
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            onClick={() => void xemThem()}
+            disabled={dangTaiThem}
+            className="rounded-lg border border-line bg-surface px-4 py-2 text-[13px] font-medium text-ink hover:bg-tile disabled:opacity-50"
+          >
+            {dangTaiThem ? "Đang tải..." : "Xem thêm lượt cũ hơn"}
+          </button>
+        </div>
+      )}
+
+      {conTro === null && turns.length > 0 && (
+        <p className="mt-4 text-center text-[12px] text-ink-soft/60">
+          Đã hết lượt có trace. Trace cũ hơn bị dọn theo "Giữ trace" ở trang Cấu hình.
+        </p>
+      )}
     </>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { LogEntry } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
+import { DongLog } from "./log-row";
 import { IconDatabase } from "../shared/dashboard-icons";
 import { SelectMenu } from "../shared/select-menu";
 
@@ -15,56 +16,12 @@ import { SelectMenu } from "../shared/select-menu";
  * đủ hơn nhìn terminal.
  */
 
-/** Nhãn + màu theo mức pino (10 trace, 20 debug, 30 info, 40 warn, 50 error) */
-function nhanMuc(level: number): { text: string; lop: string } {
-  if (level >= 50) return { text: "ERROR", lop: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-100 dark:border-red-900/50" };
-  if (level >= 40) return { text: "WARN", lop: "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-amber-100 dark:border-amber-900/50" };
-  if (level >= 30) return { text: "INFO", lop: "bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-100 dark:border-sky-900/50" };
-  return { text: "DEBUG", lop: "bg-tile text-ink-soft border-line" };
-}
-
-function gioPhut(time: number): string {
-  if (!time) return "";
-  const d = new Date(time);
-  return d.toLocaleTimeString("vi-VN", { hour12: false }) + "." + String(d.getMilliseconds()).padStart(3, "0");
-}
-
-function DongLog({ e }: { e: LogEntry }) {
-  const [mo, setMo] = useState(false);
-  const muc = nhanMuc(e.level);
-  const coTruongPhu = Object.keys(e.fields).length > 0;
-
-  return (
-    <div className="border-b border-line/70 px-4 py-2 last:border-0 hover:bg-tile/50">
-      <div className="flex items-start gap-2.5">
-        <span className="shrink-0 pt-0.5 font-mono text-[11px] text-ink-soft/60">{gioPhut(e.time)}</span>
-        <span
-          className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${muc.lop}`}
-        >
-          {muc.text}
-        </span>
-        <span className="shrink-0 rounded bg-tile px-1.5 py-0.5 text-[11px] text-ink-soft">
-          {e.scope}
-        </span>
-        <span className="min-w-0 flex-1 break-words text-[13px] text-ink">{e.msg}</span>
-        {coTruongPhu && (
-          <button
-            type="button"
-            onClick={() => setMo((v) => !v)}
-            className="shrink-0 text-[11px] text-ink-soft hover:text-ink"
-          >
-            {mo ? "Thu gọn" : "Chi tiết"}
-          </button>
-        )}
-      </div>
-      {mo && coTruongPhu && (
-        <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-tile px-3 py-2 text-[11px] leading-relaxed text-ink-soft">
-          {JSON.stringify(e.fields, null, 2)}
-        </pre>
-      )}
-    </div>
-  );
-}
+/**
+ * Số dòng mỗi trang. Nhỏ hơn trần 500 của server để lần bấm "Xem thêm" phản hồi
+ * nhanh - đọc log là việc dò tìm, người dùng bấm nhiều lần chứ không ngồi đợi
+ * một cục lớn.
+ */
+const MOI_TRANG = 150;
 
 const MUC_LOC = [
   { value: "", label: "Mọi mức" },
@@ -84,21 +41,32 @@ export function LogsPage() {
   const [search, setSearch] = useState("");
   const [dangTai, setDangTai] = useState(true);
   const [loi, setLoi] = useState("");
+  /** Con trỏ trang sau; `null` = đã hết log, ẩn nút "Xem thêm" */
+  const [conTro, setConTro] = useState<string | null>(null);
+  const [dangTaiThem, setDangTaiThem] = useState(false);
 
-  async function nap() {
-    setDangTai(true);
+  /**
+   * `before` rỗng = tải lại từ đầu (đổi bộ lọc, bấm Làm mới); có `before` =
+   * NỐI THÊM trang cũ hơn. Gộp một hàm để hai đường không trôi khỏi nhau.
+   */
+  async function nap(before?: string) {
+    const noiThem = Boolean(before);
+    if (noiThem) setDangTaiThem(true);
+    else setDangTai(true);
     setLoi("");
     try {
-      const r = await api.logs({ level, scope, search, limit: 300 });
-      setEntries(r.entries);
+      const r = await api.logs({ level, scope, search, limit: MOI_TRANG, before });
+      setEntries((cu) => (noiThem ? [...cu, ...r.entries] : r.entries));
       // Danh sách scope chỉ nạp khi CHƯA lọc, không thì lọc xong ô chọn rỗng dần
-      if (!scope && !search) setScopes(r.scopes);
+      if (!noiThem && !scope && !search) setScopes(r.scopes);
+      setConTro(r.nextCursor);
       setTat(r.disabled);
       setGoiY(r.hint ?? "");
     } catch (e) {
       setLoi(e instanceof Error ? e.message : String(e));
     } finally {
       setDangTai(false);
+      setDangTaiThem(false);
     }
   }
 
@@ -168,6 +136,28 @@ export function LogsPage() {
           </p>
         )}
       </div>
+
+      {/* Chỉ hiện khi server nói còn log phía sau. Không dùng cuộn-vô-tận: đọc
+          log là việc dò tìm, tự nạp thêm lúc người dùng đang đọc làm trang nhảy
+          mất chỗ vừa nhìn. */}
+      {conTro && (
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            onClick={() => void nap(conTro)}
+            disabled={dangTaiThem}
+            className="rounded-lg border border-line bg-surface px-4 py-2 text-[13px] font-medium text-ink hover:bg-tile disabled:opacity-50"
+          >
+            {dangTaiThem ? "Đang tải..." : `Xem thêm ${MOI_TRANG} dòng cũ hơn`}
+          </button>
+        </div>
+      )}
+
+      {!conTro && entries.length > 0 && (
+        <p className="mt-4 text-center text-[12px] text-ink-soft/60">
+          Đã hết log lưu lại. Log cũ hơn bị xoay vòng theo LOG_FILE_KEEP_DAYS.
+        </p>
+      )}
     </>
   );
 }

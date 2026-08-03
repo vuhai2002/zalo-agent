@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { docDuoiFile, tachDong } from "./log-file-lines.js";
+import { doiConTroThanhChuoi, type ConTroLog } from "./log-cursor.js";
 
 /**
  * Đọc lại log đã ghi ra file để hiện trên dashboard.
@@ -14,9 +16,6 @@ import path from "node:path";
  * mỗi file chỉ là log của một ngày. Đổi lại có thêm trần MAX_BYTES_PER_FILE để
  * một ngày bất thường không kéo sập trang.
  */
-
-/** Chỉ đọc phần ĐUÔI của file lớn - dòng mới nhất nằm ở cuối */
-const MAX_BYTES_PER_FILE = 4 * 1024 * 1024;
 
 export const LOG_LEVELS = { trace: 10, debug: 20, info: 30, warn: 40, error: 50, fatal: 60 } as const;
 
@@ -37,6 +36,11 @@ export type ReadLogsOptions = {
   scope?: string;
   /** Tìm chữ trong toàn bộ dòng log, không phân biệt hoa thường */
   search?: string;
+  /**
+   * Chỉ lấy dòng CŨ HƠN vị trí này - nút "Xem thêm". Xem `log-cursor.ts` để
+   * biết vì sao con trỏ cần cả `daLay` chứ không chỉ mốc thời gian.
+   */
+  before?: ConTroLog;
 };
 
 export type ReadLogsResult = {
@@ -48,42 +52,14 @@ export type ReadLogsResult = {
   scopes: string[];
   /** Số file đã phải mở - cho biết kết quả trải dài bao nhiêu ngày */
   filesRead: number;
+  /**
+   * Con trỏ cho lần bấm "Xem thêm" kế tiếp; `null` = đã hết log để đọc.
+   *
+   * Biết là hết bằng cách lấy DƯ một dòng (`limit + 1`) rồi cắt bớt - rẻ hơn
+   * hẳn so với đếm tổng số dòng khớp, vốn phải parse hết mọi file.
+   */
+  nextCursor: string | null;
 };
-
-/** Đọc đuôi file, bỏ dòng đầu nếu bị cắt giữa chừng */
-function docDuoiFile(filePath: string): string {
-  const { size } = fs.statSync(filePath);
-  if (size <= MAX_BYTES_PER_FILE) return fs.readFileSync(filePath, "utf8");
-
-  const fd = fs.openSync(filePath, "r");
-  try {
-    const buf = Buffer.alloc(MAX_BYTES_PER_FILE);
-    fs.readSync(fd, buf, 0, MAX_BYTES_PER_FILE, size - MAX_BYTES_PER_FILE);
-    const text = buf.toString("utf8");
-    // Dòng đầu gần như chắc chắn bị cắt dở -> bỏ
-    return text.slice(text.indexOf("\n") + 1);
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
-function tachDong(raw: string): LogEntry | null {
-  try {
-    const o = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof o.level !== "number") return null;
-    const { level, time, scope, msg, pid, hostname, ...fields } = o;
-    return {
-      level,
-      time: typeof time === "number" ? time : 0,
-      scope: typeof scope === "string" ? scope : "",
-      msg: typeof msg === "string" ? msg : "",
-      fields,
-    };
-  } catch {
-    // Dòng hỏng (ghi dở lúc process chết) không được làm chết cả trang
-    return null;
-  }
-}
 
 export function readRecentLogs(dir: string, options: ReadLogsOptions): ReadLogsResult {
   let files: string[];
@@ -96,7 +72,7 @@ export function readRecentLogs(dir: string, options: ReadLogsOptions): ReadLogsR
       .sort()
       .reverse();
   } catch {
-    return { entries: [], scopes: [], filesRead: 0 };
+    return { entries: [], scopes: [], filesRead: 0, nextCursor: null };
   }
 
   const timKiem = options.search?.toLowerCase();
@@ -112,17 +88,27 @@ export function readRecentLogs(dir: string, options: ReadLogsOptions): ReadLogsR
 
   // Đi từ file mới nhất về cũ, DỪNG ngay khi đủ dòng. Bản cũ đọc và parse toàn
   // bộ log 7 ngày (đo thật ~6.5MB) mỗi lần vào trang, chỉ để trả về 200 dòng.
+  //
+  // Lấy DƯ 1 dòng để biết còn log phía sau hay không mà không phải đếm tổng.
+  const canLay = options.limit + 1;
+  const before = options.before;
   const entries: LogEntry[] = [];
   const scopes = new Set<string>();
   let filesRead = 0;
+  /**
+   * Số dòng khớp bộ lọc có ĐÚNG mốc `time` của dòng cuối cùng đã duyệt, đếm từ
+   * đầu luồng (kể cả dòng bị con trỏ bỏ qua). Đây chính là `daLay` của con trỏ
+   * trang sau - xem `log-cursor.ts`.
+   */
+  let cungMoc = 0;
+  let mocDangDem = -1;
 
   for (const f of files) {
-    if (entries.length >= options.limit) break;
+    if (entries.length >= canLay) break;
     filesRead++;
 
     // Trong một file: dòng cuối là mới nhất nên duyệt ngược
     const dong = docDuoiFile(path.join(dir, f)).split("\n");
-    const cuaFile: LogEntry[] = [];
     for (let i = dong.length - 1; i >= 0; i--) {
       const raw = dong[i]!;
       if (!raw.trim()) continue;
@@ -131,10 +117,56 @@ export function readRecentLogs(dir: string, options: ReadLogsOptions): ReadLogsR
       // Scope gom từ MỌI dòng của file đã mở, kể cả dòng bị lọc bỏ - không thì
       // lọc theo một scope xong là ô chọn chỉ còn đúng scope đó
       if (e.scope) scopes.add(e.scope);
-      if (khop(e)) cuaFile.push(e);
+      if (!khop(e)) continue;
+
+      // Đếm phải chạy TRƯỚC khi con trỏ loại dòng, vì `daLay` tính từ đầu luồng
+      if (e.time !== mocDangDem) {
+        mocDangDem = e.time;
+        cungMoc = 0;
+      }
+      cungMoc++;
+
+      if (before) {
+        // Dòng mới hơn con trỏ: đã trả ở trang trước
+        if (e.time > before.time) continue;
+        // Cùng mốc: bỏ qua đúng số dòng đã trả, phần còn lại mới là của trang này
+        if (e.time === before.time && cungMoc <= before.daLay) continue;
+      }
+
+      entries.push(e);
+      if (entries.length >= canLay) break;
     }
-    entries.push(...cuaFile);
   }
 
-  return { entries: entries.slice(0, options.limit), scopes: [...scopes].sort(), filesRead };
+  const conNua = entries.length > options.limit;
+  const trang = entries.slice(0, options.limit);
+  const cuoi = trang[trang.length - 1];
+  // `cungMoc` lúc này ứng với dòng DƯ (nếu có) chứ không phải dòng cuối trang,
+  // nên đếm lại trong phạm vi trang thay vì dùng thẳng biến đó.
+  const nextCursor =
+    conNua && cuoi
+      ? doiConTroThanhChuoi({
+          time: cuoi.time,
+          daLay: soDongCungMocTinhTuDau(trang, cuoi.time, before),
+        })
+      : null;
+
+  return { entries: trang, scopes: [...scopes].sort(), filesRead, nextCursor };
+}
+
+/**
+ * Tổng số dòng có mốc `time` đã trả TỪ ĐẦU luồng, gồm cả các trang trước.
+ *
+ * Trang trước đã trả `before.daLay` dòng ở mốc đó rồi, nên nếu trang này vẫn
+ * còn dòng cùng mốc thì phải cộng dồn - không cộng thì trang sau bỏ qua thiếu
+ * và trả lại đúng những dòng vừa xem.
+ */
+function soDongCungMocTinhTuDau(
+  trang: LogEntry[],
+  moc: number,
+  before: ConTroLog | undefined,
+): number {
+  let n = 0;
+  for (const e of trang) if (e.time === moc) n++;
+  return before?.time === moc ? before.daLay + n : n;
 }

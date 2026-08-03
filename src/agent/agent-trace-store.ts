@@ -37,6 +37,21 @@ const recentTurnsStmt = db.prepare(`
 `);
 
 /**
+ * Bản có CON TRỎ cho nút "Xem thêm": chỉ lấy lượt CŨ HƠN `id` đã cho.
+ *
+ * Câu riêng chứ không nhét `(? IS NULL OR t.id < ?)` vào câu trên: điều kiện
+ * luôn-đúng kiểu đó chặn SQLite dùng index trên `id`, tức là làm chậm chính
+ * đường đi thường xuyên nhất chỉ để gộp hai câu làm một.
+ */
+const recentTurnsBeforeStmt = db.prepare(`
+  SELECT t.id, t.total_tokens, t.steps, t.created_at,
+         (SELECT COUNT(*) FROM agent_steps s WHERE s.turn_id = t.id) AS step_count
+  FROM agent_turns t
+  WHERE t.account_id = ? AND t.thread_id = ? AND t.id < ?
+  ORDER BY t.id DESC LIMIT ?
+`);
+
+/**
  * Lượt của MỌI thread cho trang Trace ở sidebar.
  *
  * INNER JOIN chứ không LEFT: chỉ liệt kê lượt CÓ trace. Lượt không trace mà lên
@@ -50,6 +65,19 @@ const recentAllStmt = db.prepare(`
   FROM agent_turns t
   JOIN agent_steps s ON s.turn_id = t.id
   LEFT JOIN threads th ON th.account_id = t.account_id AND th.thread_id = t.thread_id
+  GROUP BY t.id
+  ORDER BY t.id DESC LIMIT ?
+`);
+
+/** Bản có CON TRỎ - xem lý do tách câu ở `recentTurnsBeforeStmt` */
+const recentAllBeforeStmt = db.prepare(`
+  SELECT t.id, t.account_id, t.thread_id, t.total_tokens, t.steps, t.created_at,
+         COALESCE(NULLIF(th.display_name, ''), t.thread_id) AS display_name,
+         COUNT(s.id) AS step_count
+  FROM agent_turns t
+  JOIN agent_steps s ON s.turn_id = t.id
+  LEFT JOIN threads th ON th.account_id = t.account_id AND th.thread_id = t.thread_id
+  WHERE t.id < ?
   GROUP BY t.id
   ORDER BY t.id DESC LIMIT ?
 `);
@@ -126,8 +154,16 @@ export type TurnSummary = {
   createdAt: string;
 };
 
-/** Các lượt gần đây của 1 thread - danh sách cho dashboard bấm vào xem trace */
-export function getRecentTurns(accountId: string, threadId: string, limit: number): TurnSummary[] {
+/**
+ * Các lượt gần đây của 1 thread - danh sách cho dashboard bấm vào xem trace.
+ * `beforeId` = chỉ lấy lượt cũ hơn id đó (nút "Xem thêm").
+ */
+export function getRecentTurns(
+  accountId: string,
+  threadId: string,
+  limit: number,
+  beforeId?: number,
+): TurnSummary[] {
   type Row = {
     id: number;
     total_tokens: number;
@@ -135,7 +171,11 @@ export function getRecentTurns(accountId: string, threadId: string, limit: numbe
     step_count: number;
     created_at: string;
   };
-  const rows = recentTurnsStmt.all(accountId, threadId, limit) as unknown as Row[];
+  const rows = (
+    beforeId === undefined
+      ? recentTurnsStmt.all(accountId, threadId, limit)
+      : recentTurnsBeforeStmt.all(accountId, threadId, beforeId, limit)
+  ) as unknown as Row[];
   return rows.map((r) => ({
     id: r.id,
     totalTokens: r.total_tokens,
@@ -152,8 +192,11 @@ export type TurnAcrossThreads = TurnSummary & {
   displayName: string;
 };
 
-/** Lượt gần đây của mọi thread - nguồn cho trang Trace ở sidebar */
-export function getRecentTurnsAllThreads(limit: number): TurnAcrossThreads[] {
+/**
+ * Lượt gần đây của mọi thread - nguồn cho trang Trace ở sidebar.
+ * `beforeId` = chỉ lấy lượt cũ hơn id đó (nút "Xem thêm").
+ */
+export function getRecentTurnsAllThreads(limit: number, beforeId?: number): TurnAcrossThreads[] {
   type Row = {
     id: number;
     account_id: string;
@@ -164,7 +207,9 @@ export function getRecentTurnsAllThreads(limit: number): TurnAcrossThreads[] {
     created_at: string;
     display_name: string;
   };
-  const rows = recentAllStmt.all(limit) as unknown as Row[];
+  const rows = (
+    beforeId === undefined ? recentAllStmt.all(limit) : recentAllBeforeStmt.all(beforeId, limit)
+  ) as unknown as Row[];
   return rows.map((r) => ({
     id: r.id,
     accountId: r.account_id,

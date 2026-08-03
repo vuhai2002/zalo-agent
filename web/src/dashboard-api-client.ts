@@ -226,20 +226,33 @@ export const api = {
     request<VisionSettings & { ok: true }>("/api/vision/sidecar", { method: "DELETE" }),
 
   // Log toàn hệ thống đọc từ file - chỉ đọc, không có đường xóa
-  logs: (q: { level?: string; scope?: string; search?: string; limit?: number }) => {
+  logs: (q: {
+    level?: string;
+    scope?: string;
+    search?: string;
+    limit?: number;
+    /** Con trỏ "Xem thêm" - lấy từ `nextCursor` của lần gọi trước */
+    before?: string;
+  }) => {
     const p = new URLSearchParams();
     if (q.level) p.set("level", q.level);
     if (q.scope) p.set("scope", q.scope);
     if (q.search) p.set("search", q.search);
     if (q.limit) p.set("limit", String(q.limit));
+    if (q.before) p.set("before", q.before);
     return request<LogsResponse>(`/api/logs?${p.toString()}`);
   },
 
   // Trace từng step của lượt agent - chỉ đọc, không có đường sửa/xóa
-  traceAll: () => request<{ turns: TraceTurnAcrossThreads[] }>("/api/traces"),
-  traceTurns: (accountId: string, threadId: string) =>
-    request<{ turns: TraceTurn[] }>(
-      `/api/traces/${encodeURIComponent(accountId)}/${encodeURIComponent(threadId)}`,
+  traceAll: (before?: number) =>
+    request<{ turns: TraceTurnAcrossThreads[]; nextCursor: number | null }>(
+      `/api/traces${before ? `?before=${before}` : ""}`,
+    ),
+  traceTurns: (accountId: string, threadId: string, before?: number) =>
+    request<{ turns: TraceTurn[]; nextCursor: number | null }>(
+      `/api/traces/${encodeURIComponent(accountId)}/${encodeURIComponent(threadId)}${
+        before ? `?before=${before}` : ""
+      }`,
     ),
   traceSteps: (turnId: number) => request<{ steps: TraceStep[] }>(`/api/traces/turn/${turnId}`),
 
@@ -457,6 +470,8 @@ export type LogsResponse = {
   entries: LogEntry[];
   /** Scope có trong log - dựng ô lọc từ đây, không hardcode */
   scopes: string[];
+  /** Con trỏ cho lần "Xem thêm" kế tiếp; `null` = đã hết log */
+  nextCursor: string | null;
   /** true khi LOG_FILE_ENABLED tắt: không có file để đọc */
   disabled: boolean;
   hint?: string;
