@@ -111,13 +111,54 @@ export async function sendReplyInParts(target: ReplyTarget, text: string): Promi
 }
 
 /**
+ * Lần cuối đã báo lỗi cho mỗi (thread + loại lỗi).
+ *
+ * Map sống suốt đời process nhưng KHÔNG rò rỉ đáng kể: khóa chỉ sinh ra khi có
+ * lỗi thật, và mỗi thread nhiều nhất vài loại. Một bot chat với hàng nghìn
+ * người mà lỗi ở cả nghìn thread thì bộ nhớ của Map này là chuyện nhỏ nhất.
+ */
+const lanBaoLoiCuoi = new Map<string, number>();
+
+/**
+ * Khoảng lặng giữa hai lần báo CÙNG một loại lỗi cho CÙNG một thread.
+ *
+ * Vì sao cần: provider chết 10 phút mà người ta nhắn 5 lần là 5 tin y hệt nhau
+ * đổ xuống - vừa phiền vừa làm họ tưởng bot hỏng nặng hơn thực tế. Một lần đã
+ * nói đủ ý "chờ rồi nhắn lại".
+ *
+ * Khóa gồm CẢ loại lỗi, không chỉ thread: "bot chưa cấu hình xong" và "mạng
+ * chập" là hai chuyện khác nhau và mỗi chuyện đáng được nói một lần. Nuốt câu
+ * thứ hai vì câu thứ nhất vừa gửi là giấu đúng thông tin người ta cần.
+ */
+const KHOANG_LANG_BAO_LOI_MS = 60_000;
+
+/**
  * Báo cho người nhắn biết bot đang hỏng. Tự nuốt lỗi: đây đã là đường cứu cánh,
  * hỏng nốt thì chỉ còn cách ghi log.
+ *
+ * Bỏ qua nếu vừa báo đúng loại lỗi này cho thread này - xem
+ * `KHOANG_LANG_BAO_LOI_MS`.
  */
 export async function notifyTechnicalError(target: ReplyTarget, loaiLoi?: string): Promise<void> {
+  const khoa = `${target.threadKey}:${loaiLoi ?? "chung"}`;
+  const lanCuoi = lanBaoLoiCuoi.get(khoa) ?? 0;
+  const bayGio = Date.now();
+  if (bayGio - lanCuoi < KHOANG_LANG_BAO_LOI_MS) {
+    log.debug({ threadId: target.threadId, loaiLoi }, "Vừa báo lỗi này rồi - không gửi lại");
+    return;
+  }
+  // Đánh dấu TRƯỚC khi gửi: gửi là việc async, hai lượt hỏng gần nhau có thể
+  // cùng đi qua chỗ kiểm ở trên rồi cùng gửi. Đánh dấu sau thì cửa sổ đó vẫn hở.
+  lanBaoLoiCuoi.set(khoa, bayGio);
+
   try {
     await sendOne(target, cauLoiTheoLoai(loaiLoi));
   } catch (err) {
     log.error({ threadId: target.threadId, err }, "Không gửi được cả thông báo lỗi");
   }
+}
+
+/** Xóa bộ nhớ khử trùng - chỉ test dùng, để các ca không ảnh hưởng lẫn nhau */
+export function resetKhuTrungBaoLoi(): void {
+  lanBaoLoiCuoi.clear();
 }

@@ -204,6 +204,15 @@ const TUNING_BY_KEY = {
     label: "Nhận tin nhắn thêm giữa chừng",
     hint: "Bot đang làm dở mà bạn nhắn thêm thì nó đọc luôn và tính vào việc đang làm, thay vì làm xong theo yêu cầu cũ rồi mới đọc. Tắt đi thì tin nhắn thêm phải đợi hết lượt.",
   },
+  BUSY_ACK_AFTER_MS: {
+    kind: "number",
+    group: "sending",
+    label: "Nhắn trấn an khi bắt chờ quá lâu",
+    hint: "Việc chạy lâu hơn ngần này mà có người nhắn thêm thì bot nói một câu cho biết vẫn đang làm. Mặc định 10 phút vì trước đó dấu 'đang nhập...' đã nói thay rồi. Đặt 0 để không bao giờ nhắn câu này.",
+    min: 0,
+    max: 3_600_000,
+    unit: "ms",
+  },
 
   // --- Ngữ cảnh và trí nhớ ---
   HISTORY_CONTEXT_LIMIT: {

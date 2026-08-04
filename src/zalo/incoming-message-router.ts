@@ -13,6 +13,7 @@ import {
 import { shouldRespond } from "../middleware/allowlist-filter.js";
 import { enqueueMessage } from "../middleware/message-batcher.js";
 import { createLogger } from "../shared/logger.js";
+import { maybeNotifyBusyWait } from "./busy-wait-notice.js";
 import { sendDeliveredReceipt } from "./message-receipts.js";
 import { processBatch } from "./message-turn-processor.js";
 import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
@@ -90,6 +91,17 @@ export function routeIncomingMessage(
       "Tin bị bỏ khỏi lượt vì hàng chờ chạm trần - đã ghi vào history để bot còn biết",
     );
   }
+
+  // Bot đã bận rất lâu thì nói một câu cho người ta biết vẫn đang làm. Hàm này
+  // tự quyết có đáng gửi hay không (xem `busy-wait-notice.ts` - mặc định chỉ
+  // gửi sau khi dấu "đang nhập..." đã tắt). Fire-and-forget và tự nuốt lỗi:
+  // đây là việc phụ, không được làm chậm đường nhận tin.
+  void maybeNotifyBusyWait({
+    api,
+    threadKey,
+    threadId: msg.threadId,
+    threadType: msg.threadType,
+  }).catch((err) => log.debug({ threadId: msg.threadId, err }, "Gửi câu trấn an thất bại"));
 }
 
 /**

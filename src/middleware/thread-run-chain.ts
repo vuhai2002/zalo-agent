@@ -17,6 +17,14 @@
 
 const threadChains = new Map<string, Promise<unknown>>();
 
+/**
+ * Mốc bắt đầu của lần chạy ĐẦU TIÊN trong chuỗi đang giữ khoá.
+ *
+ * Đo từ lúc thread bắt đầu bận chứ không phải từ lần chạy hiện tại: người đang
+ * chờ không quan tâm bên trong có mấy lượt nối nhau, họ chỉ biết đã chờ bao lâu.
+ */
+const batDauBan = new Map<string, number>();
+
 /** Các hàm muốn được gọi khi một lần chạy của thread kết thúc */
 const nguoiChoRanh: ((threadKey: string) => void)[] = [];
 
@@ -36,6 +44,17 @@ export function dangBanThread(threadKey: string): boolean {
 }
 
 /**
+ * Thread đã bận bao nhiêu mili giây, hoặc `null` nếu đang rảnh.
+ *
+ * Dùng để biết người đang chờ đã chờ bao lâu - quyết định có nên nói một câu
+ * trấn an hay không.
+ */
+export function daBanBaoLau(threadKey: string): number | null {
+  const moc = batDauBan.get(threadKey);
+  return moc === undefined ? null : Date.now() - moc;
+}
+
+/**
  * Chờ lượt trước của `threadKey` xong rồi mới chạy `fn`.
  *
  * Generic để caller lấy lại được kết quả thật của `fn` (vd `ReplyResult`).
@@ -44,11 +63,19 @@ export function runOnThreadChain<T>(threadKey: string, fn: () => Promise<T>): Pr
   const previous = threadChains.get(threadKey) ?? Promise.resolve();
   const run = previous.then(fn);
 
-  // Xóa entry khi thread chạy xong: Map này sống suốt đời process, giữ lại một
-  // promise đã settled cho mỗi thread từng nhắn/từng có job là rò rỉ bộ nhớ chậm.
+  // Chỉ đặt mốc cho lần chạy MỞ ĐẦU chuỗi; lượt nối thêm vào chuỗi đang chạy
+  // không được làm mới nó, không thì đồng hồ chờ của người dùng bị đặt lại mỗi
+  // lần bot bắt đầu một lượt mới và họ chờ mãi mà không bao giờ chạm ngưỡng.
+  if (!batDauBan.has(threadKey)) batDauBan.set(threadKey, Date.now());
+
+  // Xóa entry khi thread chạy xong: hai Map này sống suốt đời process, giữ lại
+  // một promise đã settled cho mỗi thread từng nhắn/từng có job là rò rỉ chậm.
   let tail: Promise<unknown>;
   const release = (): void => {
-    if (threadChains.get(threadKey) === tail) threadChains.delete(threadKey);
+    if (threadChains.get(threadKey) === tail) {
+      threadChains.delete(threadKey);
+      batDauBan.delete(threadKey);
+    }
     // Bắn VÔ ĐIỀU KIỆN, kể cả khi entry trên không phải của mình: lượt khác đã
     // chồng lên thì thread vẫn bận, và bên nghe tự kiểm lại rồi chờ tiếp. Bắn
     // thừa một lần còn hơn bỏ sót một lần - bỏ sót thì batch đang đỗ nằm lại

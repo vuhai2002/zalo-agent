@@ -88,6 +88,14 @@ const envSchema = z.object({
   // tin nhắn thêm mới được xử lý ở lượt sau - xem mid-turn-injection.ts.
   MID_TURN_INJECTION_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
 
+  // Nhắn một câu trấn an khi người ta gửi tin lúc bot đã bận LÂU hơn ngần này.
+  // Mặc định 10 phút = đúng lúc "đang nhập..." tự tắt (typing-indicator.ts):
+  // trước mốc đó người nhắn đã có ba tín hiệu (đang nhập, đã xem, reaction) nên
+  // thêm một tin text chỉ là nhiễu, và tốn thêm một lượt gọi API không chính
+  // thức. Sau mốc đó thì im lặng hoàn toàn - đã xảy ra thật ngày 2026-08-04.
+  // Đặt 0 để tắt hẳn.
+  BUSY_ACK_AFTER_MS: z.coerce.number().int().min(0).max(3_600_000).default(600_000),
+
   // Múi giờ của bot: bơm ngày vào system prompt + tool get_datetime.
   // Kiểm IANA hợp lệ ngay lúc boot thay vì để lượt agent đầu tiên mới lộ.
   BOT_TIMEZONE: z
