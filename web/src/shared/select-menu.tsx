@@ -36,6 +36,7 @@ export function SelectMenu({
   icon: Icon,
   size = "sm",
   placeholder = "-",
+  prefix,
 }: {
   value: string;
   options: SelectOption[];
@@ -49,6 +50,13 @@ export function SelectMenu({
   /** "md" khớp cỡ chữ và padding của `.gc-input` để đứng cạnh ô nhập không bị lệch */
   size?: "sm" | "md";
   placeholder?: string;
+  /**
+   * Chữ mô tả đứng trước giá trị đang chọn, vd "Sắp xếp:". Chỉ hiện ở ô đóng,
+   * KHÔNG lẫn vào từng dòng trong popup - nhét vào `label` thì mở ra thấy
+   * "Sắp xếp:" lặp lại ở mọi dòng, và ô tìm trong popup phải gõ cả tiền tố mới
+   * khớp. Có tiền tố thì cả cụm thu về 13px: nhãn dài ra nên phải nhường chỗ.
+   */
+  prefix?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [moLen, setMoLen] = useState(false);
@@ -114,7 +122,16 @@ export function SelectMenu({
         } ${disabled ? "" : "hover:bg-tile/50"}`}
       >
         {current?.dotClass && <span className={`h-2 w-2 shrink-0 rounded-full ${current.dotClass}`} />}
-        <span className={`min-w-0 flex-1 truncate font-medium ${current ? "" : "text-ink-soft"}`}>
+        {/* `leading-[22px]`: chữ nhỏ đi nhưng ô phải cao y như `.gc-input` bên
+            cạnh, không thì ba control trên cùng một hàng lệch nhau vài pixel */}
+        {prefix && (
+          <span className="shrink-0 text-[13px] font-normal leading-[22px] text-ink-soft">{prefix}</span>
+        )}
+        <span
+          className={`min-w-0 flex-1 truncate ${
+            prefix ? "text-[13px] font-semibold leading-[22px]" : "font-medium"
+          } ${current ? "" : "text-ink-soft"}`}
+        >
           {current?.label ?? placeholder}
         </span>
         {current?.hint && <span className="shrink-0 text-[11px] text-ink-soft">{current.hint}</span>}

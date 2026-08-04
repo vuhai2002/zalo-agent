@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { ManagedAgent } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
@@ -7,9 +7,8 @@ import { useConfirmDialog } from "../shared/confirm-dialog";
 import { IconBot } from "../shared/dashboard-icons";
 import { useUnsavedChangesPrompt } from "../shared/use-unsaved-changes-prompt";
 import { kiemForm, thanhPatch, tuAgent, type AgentDetailForm } from "./agent-detail-form";
+import { AgentFormLayout } from "./agent-form-layout";
 import { AgentIdentitySection } from "./agent-identity-section";
-import { AgentModelSection } from "./agent-model-section";
-import { AgentToolsSection } from "./agent-tools-section";
 
 /**
  * Trang sửa một agent. Tách khỏi màn TẠO (`agent-create-modal.tsx`) vì hai việc
@@ -23,10 +22,14 @@ import { AgentToolsSection } from "./agent-tools-section";
 export function AgentDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  // Tạo xong thì về thẳng danh sách, KHÔNG qua đây. Đường duy nhất màn tạo đá
+  // sang trang này là ca hiếm: agent đã tạo được nhưng nhịp PATCH phần model
+  // hỏng - phải nói ra, kẻo tưởng mấy ô model vừa đặt đã được lưu.
+  const tuManTao = useLocation().state as { loiSauKhiTao?: string } | null;
   const [agent, setAgent] = useState<ManagedAgent | null>(null);
   const [form, setForm] = useState<AgentDetailForm | null>(null);
   const [dangTai, setDangTai] = useState(true);
-  const [loi, setLoi] = useState("");
+  const [loi, setLoi] = useState(tuManTao?.loiSauKhiTao ?? "");
   const [daLuu, setDaLuu] = useState(false);
   const [busy, setBusy] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -167,29 +170,19 @@ export function AgentDetailPage() {
         <p className="mb-4 text-[13px] text-emerald-600 dark:text-emerald-400">Đã lưu thay đổi.</p>
       )}
 
-      <div className="space-y-5">
-        {/* Danh tính bên trái, Model bên phải - hai nhóm ngắn, xếp dọc nối
-            nhau thì trang dài ra mà nửa màn hình bên phải bỏ trống.
-            KHÔNG `items-start`: để mặc định `stretch` cho hai thẻ cao BẰNG NHAU,
-            mép dưới thẳng hàng. Thẻ nào ít nội dung hơn thì thừa khoảng trắng,
-            đổi lại hai khối không so le. Dưới xl về một cột, nửa màn quá hẹp. */}
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <AgentFormLayout
+        form={form}
+        onChange={doi}
+        soTaiKhoan={agent.accountCount}
+        danhTinh={
           <AgentIdentitySection
             id={agent.id}
             isDefault={agent.isDefault}
             form={form}
             onChange={doi}
           />
-          <AgentModelSection form={form} onChange={doi} />
-        </div>
-        {/* Công cụ chiếm trọn bề ngang: 13 dòng, mỗi dòng có mô tả riêng - nhét
-            vào nửa màn là mô tả vỡ dòng liên tục */}
-        <AgentToolsSection
-          disabledTools={form.disabledTools}
-          soTaiKhoan={agent.accountCount}
-          onChange={(disabledTools) => doi({ disabledTools })}
-        />
-      </div>
+        }
+      />
 
       {confirmDialog}
     </div>

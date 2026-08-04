@@ -5,7 +5,9 @@ import { api } from "./dashboard-api-client";
 import { coCanHoiTruocKhiRoi, xinPhepRoiTrang } from "./shared/unsaved-changes-guard";
 import { SidebarNav } from "./layout/sidebar-nav";
 import { AccountsPage } from "./pages/accounts-page";
+import { AgentCreatePage } from "./pages/agent-create-page";
 import { AgentDetailPage } from "./pages/agent-detail-page";
+import { DUONG_DAN_TAO } from "./pages/agent-draft";
 import { AgentsPage } from "./pages/agents-page";
 import { ContactsPage } from "./pages/contacts-page";
 import { LoginPage } from "./pages/login-page";
@@ -117,6 +119,9 @@ function DashboardShell() {
             <Route path="/memory" element={<MemoryPage accounts={accounts} />} />
             <Route path="/accounts" element={<AccountsPage />} />
             <Route path="/agents" element={<AgentsPage />} />
+            {/* Phải đứng TRƯỚC "/agents/:id" - và đường dẫn mở đầu bằng gạch
+                dưới nên không id agent hợp lệ nào che được nó, xem `agent-draft.ts` */}
+            <Route path={DUONG_DAN_TAO} element={<AgentCreatePage />} />
             <Route path="/agents/:id" element={<AgentDetailPage />} />
             <Route path="/tools" element={<ToolsPage />} />
             <Route path="/trace" element={<TracePage />} />

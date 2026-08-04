@@ -1,4 +1,5 @@
 import { AgentFormField, AgentFormRow, AgentFormSection } from "./agent-form-field";
+import { kiemDinhDangId } from "./agent-id-field";
 
 export type AgentIdentityForm = {
   icon: string;
@@ -18,11 +19,20 @@ export function AgentIdentitySection({
   isDefault,
   form,
   onChange,
+  onDoiId,
+  loiId,
 }: {
   id: string;
   isDefault: boolean;
   form: AgentIdentityForm;
   onChange: (patch: Partial<AgentIdentityForm>) => void;
+  /**
+   * Chỉ màn TẠO truyền vào. Agent chưa tồn tại thì id còn sửa được, và phải sửa
+   * được: nếu server trả 409 lúc bấm Tạo mà ô này chỉ đọc thì không còn đường
+   * nào thoát ngoài việc bỏ hết quay lại từ đầu.
+   */
+  onDoiId?: (v: string) => void;
+  loiId?: string;
 }) {
   return (
     <AgentFormSection
@@ -53,18 +63,40 @@ export function AgentIdentitySection({
       <AgentFormRow>
         <AgentFormField
           label="ID"
-          hint="Không đổi được: các tài khoản Zalo đang trỏ vào agent qua chính chuỗi này."
+          htmlFor={onDoiId ? "ag-d-id" : undefined}
+          hint={
+            onDoiId
+              ? "Đặt xong là chốt: sau khi tạo thì không đổi được nữa, vì các tài khoản Zalo sẽ trỏ vào agent qua chính chuỗi này."
+              : "Không đổi được: các tài khoản Zalo đang trỏ vào agent qua chính chuỗi này."
+          }
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="rounded-lg border border-line bg-tile px-3 py-2 font-mono text-[13px] text-ink-soft">
-              {id}
-            </code>
-            {isDefault && (
-              <span className="rounded-full bg-zalo-50 px-2 py-0.5 text-[11px] font-medium text-zalo-600">
-                agent mặc định
-              </span>
-            )}
-          </div>
+          {onDoiId ? (
+            <>
+              <input
+                id="ag-d-id"
+                className="gc-input w-full font-mono"
+                value={id}
+                onChange={(e) => onDoiId(e.target.value)}
+                placeholder="cham-soc-khach-hang"
+              />
+              {(loiId || kiemDinhDangId(id)) && (
+                <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">
+                  {loiId || kiemDinhDangId(id)}
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <code className="rounded-lg border border-line bg-tile px-3 py-2 font-mono text-[13px] text-ink-soft">
+                {id}
+              </code>
+              {isDefault && (
+                <span className="rounded-full bg-zalo-50 px-2 py-0.5 text-[11px] font-medium text-zalo-600">
+                  agent mặc định
+                </span>
+              )}
+            </div>
+          )}
         </AgentFormField>
       </AgentFormRow>
 

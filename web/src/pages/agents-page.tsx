@@ -1,18 +1,40 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ManagedAgent } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
-import { IconBot } from "../shared/dashboard-icons";
-import { AgentCreateModal } from "./agent-create-modal";
 import { useConfirmDialog } from "../shared/confirm-dialog";
-import { Badge } from "../shared/ui-bits";
+import { IconBot, IconPlus } from "../shared/dashboard-icons";
+import { AgentCard } from "./agent-card";
+import { AgentCreateModal } from "./agent-create-modal";
+import { DUONG_DAN_TAO } from "./agent-draft";
+import {
+  DaiSoLieu,
+  ThanhCongCu,
+  locAgent,
+  sapXepAgent,
+  type KieuSapXep,
+  type KieuXem,
+} from "./agents-toolbar";
 
 /**
  * Danh sách agent. Tạo mở modal 2 ô (nhanh), sửa mở trang riêng `/agents/:id`
  * (đủ chỗ cho model, công cụ, ngân sách token) - xem
  * `plans/260802-1348-agent-chuan-production/phase-01-*`.
  */
+
+/** Nhớ kiểu xem qua các lần vào trang - đổi bố cục xong mà lần sau vào lại từ đầu thì bực */
+const KHOA_KIEU_XEM = "zalo-agent:agents-kieu-xem";
+
+function kieuXemDaLuu(): KieuXem {
+  try {
+    return localStorage.getItem(KHOA_KIEU_XEM) === "danh-sach" ? "danh-sach" : "luoi";
+  } catch {
+    // Trình duyệt chặn localStorage (chế độ riêng tư) không được làm chết trang
+    return "luoi";
+  }
+}
+
 export function AgentsPage() {
   const navigate = useNavigate();
   const [agents, setAgents] = useState<ManagedAgent[]>([]);
@@ -20,14 +42,34 @@ export function AgentsPage() {
   const [error, setError] = useState("");
   /** Nhà cung cấp chung - để biết agent nào khai provider LỆCH */
   const [providerChung, setProviderChung] = useState<string | null>(null);
+  const [tim, setTim] = useState("");
+  const [sapXep, setSapXep] = useState<KieuSapXep>("mac-dinh");
+  const [kieuXem, setKieuXem] = useState<KieuXem>(kieuXemDaLuu);
   const { confirm, confirmDialog } = useConfirmDialog();
 
-  const reload = () => api.agentsAdmin.list().then((d) => setAgents(d.items)).catch(() => setAgents([]));
+  const reload = () =>
+    api.agentsAdmin
+      .list()
+      .then((d) => setAgents(d.items))
+      .catch(() => setAgents([]));
+
   useEffect(() => {
     void reload();
     // Lỗi thì bỏ qua: đây chỉ để hiện cảnh báo, không được làm chết trang
-    void api.provider().then((p) => setProviderChung(p.provider)).catch(() => undefined);
+    void api
+      .provider()
+      .then((p) => setProviderChung(p.provider))
+      .catch(() => undefined);
   }, []);
+
+  function doiKieuXem(v: KieuXem) {
+    setKieuXem(v);
+    try {
+      localStorage.setItem(KHOA_KIEU_XEM, v);
+    } catch {
+      // Không lưu được thì thôi, phiên này vẫn dùng bình thường
+    }
+  }
 
   async function remove(agent: ManagedAgent) {
     const ok = await confirm({
@@ -44,6 +86,9 @@ export function AgentsPage() {
     }
   }
 
+  const hienThi = useMemo(() => sapXepAgent(locAgent(agents, tim), sapXep), [agents, tim, sapXep]);
+  const tongAccount = agents.reduce((n, a) => n + a.accountCount, 0);
+
   return (
     <div>
       <PageHeader
@@ -53,8 +98,9 @@ export function AgentsPage() {
         aside={
           <button
             onClick={() => setCreating(true)}
-            className="rounded-lg bg-zalo-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-zalo-600"
+            className="flex items-center gap-1.5 rounded-lg bg-zalo-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-zalo-600"
           >
+            <IconPlus size={17} />
             Tạo agent
           </button>
         }
@@ -62,71 +108,62 @@ export function AgentsPage() {
 
       {error && <p className="mb-4 text-[13px] text-red-600 dark:text-red-400">{error}</p>}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {agents.map((agent) => (
-          <div key={agent.id} className="gc-card flex flex-col p-5">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-tile text-[22px]">
-                {agent.icon}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-ink">{agent.name}</span>
-                  {agent.isDefault && <Badge tone="blue" dot={false}>Mặc định</Badge>}
-                  {/* Override provider LỆCH bị `doiProviderAnToan` bỏ qua ở
-                      tầng dựng client, nên badge model ở đây là NÓI DỐI: bot
-                      đang chạy model chung chứ không phải model ghi trên badge.
-                      Trang chi tiết có cảnh báo, danh sách thì trước đó không. */}
-                  {agent.modelName &&
-                    (providerChung !== null &&
-                    agent.modelProvider !== null &&
-                    agent.modelProvider !== providerChung ? (
-                      <Badge tone="amber" dot={false}>
-                        {agent.modelName} - override bị bỏ qua
-                      </Badge>
-                    ) : (
-                      <Badge tone="gray" dot={false}>{agent.modelName}</Badge>
-                    ))}
-                </div>
-                <div className="text-[12px] text-ink-soft/60">{agent.id}</div>
-              </div>
-            </div>
+      <DaiSoLieu soAgent={agents.length} soAccount={tongAccount} />
 
-            <p className="mt-3 line-clamp-3 min-h-10 flex-1 text-[13px] leading-relaxed text-ink-soft">
-              {agent.persona || "(chưa có persona - dùng giọng mặc định của bot)"}
-            </p>
+      {/* Thanh công cụ chỉ hiện từ 2 agent trở lên: tìm kiếm và sắp xếp trên
+          đúng một mục là ba control không làm được gì */}
+      {agents.length > 1 && (
+        <ThanhCongCu
+          tim={tim}
+          onTim={setTim}
+          sapXep={sapXep}
+          onSapXep={setSapXep}
+          kieuXem={kieuXem}
+          onKieuXem={doiKieuXem}
+        />
+      )}
 
-            <div className="mt-4 flex items-center justify-between border-t border-line/70 pt-3">
-              <span className="text-[12px] text-ink-soft">
-                {agent.accountCount > 0 ? `${agent.accountCount} account đang dùng` : "Chưa gắn account nào"}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => navigate(`/agents/${encodeURIComponent(agent.id)}`)}
-                  className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-tile"
-                >
-                  Sửa
-                </button>
-                {!agent.isDefault && (
-                  <button
-                    onClick={() => remove(agent)}
-                    className="rounded-lg px-3 py-1.5 text-[13px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
-                  >
-                    Xóa
-                  </button>
-                )}
-              </div>
-            </div>
+      {hienThi.length === 0 && (
+        <p className="rounded-2xl border border-line bg-surface px-5 py-10 text-center text-[13px] text-ink-soft/70">
+          {agents.length === 0 ? "Chưa có agent nào." : `Không có agent nào khớp "${tim}".`}
+        </p>
+      )}
+
+      {hienThi.length > 0 &&
+        (kieuXem === "danh-sach" ? (
+          <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+            {hienThi.map((agent) => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                providerChung={providerChung}
+                danhSach
+                onSua={() => navigate(`/agents/${encodeURIComponent(agent.id)}`)}
+                onXoa={() => void remove(agent)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+            {hienThi.map((agent) => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                providerChung={providerChung}
+                danhSach={false}
+                onSua={() => navigate(`/agents/${encodeURIComponent(agent.id)}`)}
+                onXoa={() => void remove(agent)}
+              />
+            ))}
           </div>
         ))}
-      </div>
 
       {creating && (
         <AgentCreateModal
           onClose={() => setCreating(false)}
-          // Tạo xong đi thẳng vào trang sửa: ai muốn chỉnh tiếp thì đã ở đúng
-          // chỗ, ai không thì đóng lại là xong
-          onCreated={(id) => navigate(`/agents/${encodeURIComponent(id)}`)}
+          idDangCo={agents.map((a) => a.id)}
+          // Modal chỉ thu thập; agent sinh ra khi bấm Tạo ở trang kia
+          onTiepTuc={(banNhap) => navigate(DUONG_DAN_TAO, { state: banNhap })}
         />
       )}
 

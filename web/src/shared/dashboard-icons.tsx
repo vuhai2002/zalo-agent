@@ -242,3 +242,43 @@ export const IconUndo = (p: IconProps) => (
     <path d="m7.5 5.5-3 4 3 4" />
   </svg>
 );
+
+export const IconPlus = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+/** Bút chì - nút Sửa */
+export const IconPencil = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
+    <path d="m14.5 6.5 3 3" />
+  </svg>
+);
+
+/** Ba chấm dọc - mở menu hành động phụ của một mục */
+export const IconDots = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+/** Kiểu xem danh sách - đi cặp với IconGrid ở nút chuyển bố cục */
+export const IconList = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9 6h11M9 12h11M9 18h11" />
+    <circle cx="4.5" cy="6" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="4.5" cy="12" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="4.5" cy="18" r="1.2" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const IconTrash = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4.5 7h15M9.5 7V5.5a1.5 1.5 0 0 1 1.5-1.5h2a1.5 1.5 0 0 1 1.5 1.5V7" />
+    <path d="M6.5 7l.8 11.2a2 2 0 0 0 2 1.8h5.4a2 2 0 0 0 2-1.8L17.5 7" />
+  </svg>
+);
