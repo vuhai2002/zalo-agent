@@ -147,6 +147,34 @@ function flush(threadKey: string): void {
 }
 
 /**
+ * Lấy hết tin đang ĐỖ của thread và xóa khỏi hàng chờ.
+ *
+ * Dùng cho đường tiêm tin giữa lượt (`mid-turn-injection.ts`): lượt đang chạy
+ * tự kéo tin mới vào thay vì để chúng nằm đợi thành một lượt nữa.
+ *
+ * Trả rỗng khi cụm tin CÒN ĐANG GÕ DỞ (`timer` chưa hết). Cùng một bất biến
+ * với `danhThucHangCho`: chưa im lặng đủ thì chưa ai được đụng vào batch. Kéo
+ * sớm sẽ cắt đôi đúng cụm tin người ta đang gõ - model nhận nửa câu rồi nửa
+ * còn lại tới ở step sau, tệ hơn là cứ để nguyên.
+ *
+ * KHÔNG cần kiểm thread có bận hay không: chỉ lượt đang chạy mới gọi hàm này,
+ * mà nó chạy được nghĩa là nó đang giữ khoá.
+ */
+export function layTinDangDo(threadKey: string): ParsedMessage[] {
+  const batch = pending.get(threadKey);
+  if (!batch || batch.timer) return [];
+
+  pending.delete(threadKey);
+  if (batch.soTinBoQua > 0) {
+    log.warn(
+      { threadKey, soTinBoQua: batch.soTinBoQua, soTinChen: batch.messages.length },
+      "Tin chen giữa lượt lấy từ hàng chờ đã chạm trần - số tin bị bỏ (vẫn được ghi vào history)",
+    );
+  }
+  return batch.messages;
+}
+
+/**
  * Thread vừa rảnh: chạy batch đang đỗ (nếu có).
  *
  * Còn timer nghĩa là người ta vẫn đang gõ dở một cụm tin - để timer tự lo, đừng

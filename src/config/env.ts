@@ -83,6 +83,11 @@ const envSchema = z.object({
   // đổi quy ước header hoặc cần cô lập từng request.
   LLM_CACHE_SESSION_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
 
+  // Lượt đang chạy tự kéo tin người dùng vừa nhắn thêm vào giữa chừng, ở ranh
+  // giới step. Không có nó thì lượt đầu vẫn chạy trọn theo bối cảnh thiếu rồi
+  // tin nhắn thêm mới được xử lý ở lượt sau - xem mid-turn-injection.ts.
+  MID_TURN_INJECTION_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
+
   // Múi giờ của bot: bơm ngày vào system prompt + tool get_datetime.
   // Kiểm IANA hợp lệ ngay lúc boot thay vì để lượt agent đầu tiên mới lộ.
   BOT_TIMEZONE: z

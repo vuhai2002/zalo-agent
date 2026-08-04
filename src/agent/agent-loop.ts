@@ -28,6 +28,7 @@ import {
 import { catNguCanhTheoNganSach } from "./trim-context-to-budget.js";
 import { giayChoLai, maHttpCua, phanLoaiLoiProvider } from "./provider-error-classifier.js";
 import { chayStream } from "./stream-text-result.js";
+import { dungTinChen, taoBoChenTin } from "./mid-turn-injection.js";
 import {
   canLuotChot,
   hitStepLimit,
@@ -106,6 +107,22 @@ export type AgentTurnParams = {
    * đúng nếp message-turn-processor.ts đang làm cho lượt tin nhắn.
    */
   isolated?: boolean;
+  /**
+   * Lấy tin người dùng nhắn thêm TRONG LÚC lượt này đang chạy, gọi ở ranh giới
+   * mỗi step. Trả mảng rỗng nghĩa là chưa có gì mới.
+   *
+   * Caller sở hữu mọi hệ quả phụ của việc lấy tin (ghi history, báo "đã xem",
+   * thả reaction) - cùng nếp với mảng `trace`. Hàm này chỉ lo đưa tin vào ngữ
+   * cảnh của model.
+   *
+   * Lượt theo lịch KHÔNG truyền tham số này: không có ai đang ngồi chờ để mà
+   * nhắn thêm, và `run-scheduled-job.ts` cũng không giữ khoá thread nên không
+   * có hàng chờ nào thuộc về nó.
+   *
+   * Cho phép trả Promise: đường thật phải `await persistBatchImages` để ảnh
+   * của tin chen có `localPath` trước khi dựng ngữ cảnh và ghi history.
+   */
+  layTinChen?: () => ParsedMessage[] | Promise<ParsedMessage[]>;
 };
 
 export type AgentTurnResult = {
@@ -127,6 +144,7 @@ export async function runAgentTurn({
   trace,
   resolveModel = resolveLanguageModel,
   isolated = false,
+  layTinChen,
 }: AgentTurnParams): Promise<AgentTurnResult> {
   // Tin cuối đại diện cho lượt: tools (thả reaction, quote) tác động lên tin này
   const latest = batch[batch.length - 1]!;
@@ -213,6 +231,53 @@ export async function runAgentTurn({
   // giá trị là trace của các lần chạy sau bị đánh nhãn của lần đầu.
   const quanSatStep = taoQuanSatStep({ guard, trace, layLanChay: () => lanChay });
 
+  /**
+   * Tin chen ĐÃ KÉO khỏi hàng chờ trong lượt này.
+   *
+   * BẮT BUỘC phải giữ ở đây, không được chỉ để nó sống trong mảng `messages`
+   * nội bộ của AI SDK. Lý do: `layTinDangDo` đã XÓA tin khỏi hàng chờ, nên
+   * không còn đường nào lấy lại; mà mọi nhánh chữa lỗi (`thuLaiKhongPixel`,
+   * 429, tràn ngữ cảnh, retry completion rỗng) và cả LƯỢT CHỐT đều dựng lại
+   * ngữ cảnh từ biến `messages` của hàm này chứ không từ mảng của SDK.
+   *
+   * Bỏ mảng này thì đúng những lượt dài - lượt duy nhất đủ lâu để người ta kịp
+   * nhắn thêm - lại là lượt đánh rơi tin chen: lượt chạm trần step đi vào lượt
+   * chốt, và lượt chốt mới là nơi sinh ra câu trả lời gửi xuống Zalo. Người
+   * nhắn nhận câu soạn theo yêu cầu CŨ, còn model thì được dặn "trả lời NGAY
+   * BÂY GIỜ" nên không có đường nào nói ra là nó đang bỏ qua một yêu cầu.
+   *
+   * Cùng nếp sở hữu với mảng `trace`: chỗ nào cần sống qua nhiều lần chạy thì
+   * chỗ đó phải do hàm này giữ.
+   */
+  const tinChenDaKeo: ParsedMessage[] = [];
+
+  // `layImageMode` là HÀM: `imageMode` đổi giữa lượt khi provider từ chối pixel
+  // và vòng lặp dựng lại input không kèm ảnh. Truyền giá trị là tin chen bị
+  // dựng theo chế độ đã hết hiệu lực.
+  const chenTinGiuaLuot = taoBoChenTin({
+    layTinChen:
+      layTinChen &&
+      (async () => {
+        const moi = await layTinChen();
+        // Ghi vào mảng NGAY, trước cả bước dựng nội dung: dựng lỗi (ảnh tải
+        // không được) thì tin vẫn còn đây để lần dựng lại sau lấy dùng.
+        tinChenDaKeo.push(...moi);
+        return moi;
+      }),
+    layImageMode: () => imageMode,
+    layTranToken: () => tranToken,
+    guard,
+  });
+
+  /**
+   * Gắn lại tin chen vào một mảng ngữ cảnh vừa được dựng lại.
+   *
+   * Gọi ở MỌI chỗ gán lại `messages` và ở lượt chốt. Quên một chỗ là tin chen
+   * biến mất đúng ở nhánh đó, và nó sẽ không lộ ra cho tới khi gặp đúng ca hỏng.
+   */
+  const ganTinChenVao = async (goc: ModelMessage[]): Promise<ModelMessage[]> =>
+    tinChenDaKeo.length === 0 ? goc : [...goc, await dungTinChen(tinChenDaKeo, imageMode)];
+
   // `streamText` chứ không phải `generateText`: request non-stream buộc router
   // gom trọn câu trả lời rồi mới gửi byte đầu, mà Cloudflare trước 9Router cắt
   // bằng 524 khi byte đầu chưa tới trong 100 giây - mọi lượt sinh dài đều chết.
@@ -266,6 +331,10 @@ export async function runAgentTurn({
           // toàn bộ chẩn đoán phải đi đường vòng qua DB + tái hiện tay)
           onStepFinish: quanSatStep,
           onError,
+          // Ranh giới step: sau khi có kết quả tool, TRƯỚC lần gọi LLM kế -
+          // đúng điểm chèn goclaw dùng. Bản ghi đè `messages` được AI SDK mang
+          // sang các step sau nên chỉ cần chèn một lần.
+          prepareStep: ({ messages: tinHienTai }) => chenTinGiuaLuot(tinHienTai),
         }),
       ghiLoiStream,
     );
@@ -301,17 +370,30 @@ export async function runAgentTurn({
     // tránh. Và ca này chỉ nổ ở lượt nặng, tức đúng lúc vừa đốt hết 8 step.
     const cauHoi = messages[messages.length - 1];
     const truocCauHoi = messages.slice(0, -1);
-    const chuaChoSan =
-      uocLuongTokenTinNhan(cauHoi ? [cauHoi, nhacChot] : [nhacChot], TOKEN_MOI_ANH_THEO_CO[getTuning("ZALO_IMAGE_QUALITY")]);
+
+    // Tin chen đi vào ĐUÔI ĐƯỢC BẢO VỆ cùng câu hỏi và lời nhắc, KHÔNG vào
+    // phần bị cắt. Nó là thứ mới nhất và thường là thứ SỬA yêu cầu; cắt nó đi
+    // rồi bảo model "trả lời NGAY BÂY GIỜ" là chốt lại theo yêu cầu đã lỗi
+    // thời, mà lượt chốt mới chính là nơi sinh ra câu gửi xuống Zalo.
+    //
+    // Đây là biến thể của đúng cái bẫy đã vá một lần ở khối chú thích trên -
+    // lần đó là CÂU HỎI bị cắt mất, lần này là CÂU SỬA.
+    const tinChenChot =
+      tinChenDaKeo.length > 0 ? [await dungTinChen(tinChenDaKeo, imageMode)] : [];
+    const duoiBaoVe = [...(cauHoi ? [cauHoi] : []), ...tinChenChot, nhacChot];
+    const chuaChoSan = uocLuongTokenTinNhan(
+      duoiBaoVe,
+      TOKEN_MOI_ANH_THEO_CO[getTuning("ZALO_IMAGE_QUALITY")],
+    );
 
     const { tinNhan: phanCatDuoc, daCat: daCatChot } = catNguCanhTheoNganSach({
       tinNhan: [...truocCauHoi, ...daLam],
-      // Chừa sẵn chỗ cho hai tin không bao giờ bị cắt
+      // Chừa sẵn chỗ cho phần đuôi không bao giờ bị cắt
       tranToken: Math.max(0, nganSachAnToan(tranToken) - chuaChoSan),
       soTinBaoVeCuoi: 1,
       coAnh: getTuning("ZALO_IMAGE_QUALITY"),
     });
-    const tinChot = [...phanCatDuoc, ...(cauHoi ? [cauHoi] : []), nhacChot];
+    const tinChot = [...phanCatDuoc, ...duoiBaoVe];
     if (daCatChot) log.warn({ ...daCatChot }, "Đã cắt bớt ngữ cảnh cho lượt chốt");
 
     // Streaming vì đúng lý do của `runOnce`, và ở đây còn cần hơn: lượt chốt
@@ -363,8 +445,10 @@ export async function runAgentTurn({
       // có ngân sách - đúng lúc ngữ cảnh đã nặng tới mức provider vừa từ chối
       tranToken,
     });
-    messages = rebuilt.messages;
     imageMode = rebuilt.imageMode;
+    // Gắn lại SAU khi đã đổi `imageMode`: tin chen phải được dựng theo chế độ
+    // MỚI, không thì lượt vừa bị từ chối vì ảnh lại nhận thêm ảnh.
+    messages = await ganTinChenVao(rebuilt.messages);
     if (rebuilt.daCat) {
       log.warn({ ...rebuilt.daCat, tranToken }, "Ngữ cảnh vượt ngân sách ở lượt dựng lại - đã cắt bớt");
     }
@@ -395,6 +479,8 @@ export async function runAgentTurn({
       await new Promise((r) => setTimeout(r, cho * 1000));
       lanChay++;
       guard.datLai();
+      // Lần chạy mới dựng ngữ cảnh từ `messages` - tin chen chưa từng vào đó
+      messages = await ganTinChenVao(messages);
       return runOnce();
     }
 
@@ -408,7 +494,10 @@ export async function runAgentTurn({
         coAnh: getTuning("ZALO_IMAGE_QUALITY"),
       });
       log.warn({ ...daCat }, "Provider báo tràn ngữ cảnh - cắt sâu hơn rồi thử lại 1 lần");
-      messages = hep;
+      // Gắn tin chen SAU khi cắt: nó là thứ mới nhất và có thể là thứ ĐỔI yêu
+      // cầu, cắt nó đi để giữ history cũ là giữ nhầm phần. `taoBoChenTin` đã tự
+      // bỏ ảnh khi tin chen quá to nên nó không phải thủ phạm gây tràn.
+      messages = await ganTinChenVao(hep);
       lanChay++;
       guard.datLai();
       return runOnce();
@@ -445,6 +534,7 @@ export async function runAgentTurn({
     log.warn("Router trả completion rỗng (0 token) - thử lại 1 lần");
     lanChay++;
     guard.datLai();
+    messages = await ganTinChenVao(messages);
     result = await runOnce();
   }
 
@@ -458,6 +548,10 @@ export async function runAgentTurn({
   log.info(
     {
       batchSize: batch.length,
+      // Số tin người dùng nhắn thêm giữa lượt. Có mặt ở đây vì `uocLuong` bên
+      // dưới ước theo `messages` (KHÔNG có tin chen) còn số thật thì có - lượt
+      // nào khác 0 là lượt phải loại khỏi việc hiệu chỉnh hai hằng số ước lượng.
+      soTinChen: tinChenDaKeo.length,
       // native = model tự đọc ảnh; describe = sidecar mô tả; hybrid = combo
       // nhận cả pixel + mô tả; blind = bỏ ảnh. Lượt bị reactive fallback thì
       // đây là chế độ THẬT đã chạy (describe/blind), không phải chế độ ban đầu.

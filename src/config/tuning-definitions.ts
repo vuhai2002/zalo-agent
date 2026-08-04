@@ -198,6 +198,12 @@ const TUNING_BY_KEY = {
     label: "Bật prompt cache theo phiên",
     hint: "Gửi kèm mã phiên ổn định theo cuộc trò chuyện để router tái dùng phần đầu prompt, rẻ hơn nhiều. Chỉ tắt khi router đổi quy ước hoặc cần mỗi lượt hoàn toàn độc lập.",
   },
+  MID_TURN_INJECTION_ENABLED: {
+    kind: "boolean",
+    group: "turn",
+    label: "Nhận tin nhắn thêm giữa chừng",
+    hint: "Bot đang làm dở mà bạn nhắn thêm thì nó đọc luôn và tính vào việc đang làm, thay vì làm xong theo yêu cầu cũ rồi mới đọc. Tắt đi thì tin nhắn thêm phải đợi hết lượt.",
+  },
 
   // --- Ngữ cảnh và trí nhớ ---
   HISTORY_CONTEXT_LIMIT: {

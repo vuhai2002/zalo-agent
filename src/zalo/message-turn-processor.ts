@@ -5,6 +5,7 @@ import type { StepTrace } from "../agent/agent-step-trace.js";
 import type { AccountConfig } from "../config/account-store.js";
 import { appendMessage } from "../conversation/history-store.js";
 import { imagePathsOf, persistBatchImages } from "../conversation/media-store.js";
+import { layTinDangDo } from "../middleware/message-batcher.js";
 import { maybeSummarizeThread } from "../conversation/thread-summarizer.js";
 import { saveTurnTrace } from "../agent/agent-trace-store.js";
 import { traceLuotHong } from "../agent/failed-turn-trace.js";
@@ -20,6 +21,20 @@ import { startTypingIndicator } from "./typing-indicator.js";
 import { describeForHistory, type ParsedMessage } from "./zalo-message-parser.js";
 
 const log = createLogger("message-turn");
+
+/**
+ * Các điểm tiêm CHỈ dùng cho test - chạy thật thì bỏ trống hết và mỗi thứ tự
+ * phân giải như cũ. Cùng nếp seam đã dùng ở `run-scheduled-job.ts`.
+ */
+type XuLyLuotOptions = {
+  resolveModel?: AgentTurnParams["resolveModel"];
+  /**
+   * Lưu ảnh xuống đĩa. Có seam vì đường thật gọi mạng thẳng, mà bất biến "ảnh
+   * của tin chen cũng được lưu" thì phải ghim được: thiếu nó là history chỉ còn
+   * dòng chữ "[gửi kèm N ảnh]" và ảnh mất hẳn khi URL Zalo hết hạn.
+   */
+  persistImages?: typeof persistBatchImages;
+};
 
 /**
  * Báo cho người nhắn biết bot đã nhận: thả reaction vào tin vừa gửi.
@@ -56,7 +71,7 @@ export async function processBatch(
    * Chỉ để TEST tiêm model giả - đúng seam `run-scheduled-job.ts` đang dùng.
    * Chạy thật thì bỏ trống và `runAgentTurn` tự phân giải như cũ.
    */
-  options: { resolveModel?: AgentTurnParams["resolveModel"] } = {},
+  options: XuLyLuotOptions = {},
 ): Promise<void> {
   const latest = batch[batch.length - 1]!;
   const turnId = openAgentTurn(config.id, latest.threadId);
@@ -70,7 +85,7 @@ async function xuLyLuot(
   api: API,
   batch: ParsedMessage[],
   turnId: number,
-  options: { resolveModel?: AgentTurnParams["resolveModel"] },
+  options: XuLyLuotOptions,
 ): Promise<void> {
   const latest = batch[batch.length - 1]!;
   const threadKey = `${config.id}:${latest.threadId}`;
@@ -115,12 +130,41 @@ async function xuLyLuot(
   // lần hai - xem giải thích ở đó.
   let turnFinished = false;
 
+  const luuAnh = options.persistImages ?? persistBatchImages;
+
+  /**
+   * Tin người dùng nhắn thêm GIỮA lượt, đã được kéo vào ngữ cảnh của model.
+   *
+   * Mảng do CHỖ NÀY sở hữu, cùng nếp với `trace`: `runAgentTurn` chỉ lo đưa tin
+   * vào input cho model, còn mọi hệ quả phụ - ghi history, báo "đã xem", thả
+   * reaction, lưu ảnh - là việc ở đây. Không gom vào đây thì tin chen biến mất
+   * khỏi history y như ca tin bị bỏ ở trần hàng chờ.
+   */
+  const tinChen: ParsedMessage[] = [];
+  const layTinChen = async (): Promise<ParsedMessage[]> => {
+    const moi = layTinDangDo(threadKey);
+    if (moi.length === 0) return moi;
+    tinChen.push(...moi);
+    // Đối xử y hệt tin mở đầu lượt: người gửi phải thấy bot đã nhận, không thì
+    // họ tưởng tin rơi vào khoảng không và gửi lại.
+    sendSeenReceipt(api, moi);
+    sendAutoReaction(config, api, moi[moi.length - 1]!);
+    // AWAIT chứ không fire-and-forget: `localPath` phải có TRƯỚC khi dựng nội
+    // dung cho model, và trước khi ghi history. Thiếu nó thì history chỉ còn
+    // dòng chữ "[gửi kèm N ảnh]" mà không đường dẫn nào - lượt sau bot không
+    // nạp lại được ảnh, sidecar phải mô tả lại từ đầu mỗi lần vì cache khóa
+    // theo chính `localPath`, và ảnh coi như mất hẳn khi URL Zalo hết hạn.
+    await luuAnh(config.id, moi);
+    return moi;
+  };
+
   // Ghi 1 lần duy nhất, gọi được ở cả nhánh thành công và nhánh lỗi
   let historyWritten = false;
   const writeBatchToHistory = (): void => {
     if (historyWritten) return;
     historyWritten = true;
-    for (const msg of batch) {
+    // Tin chen ghi SAU tin mở đầu, đúng thứ tự người ta đã gửi
+    for (const msg of [...batch, ...tinChen]) {
       appendMessage(config.id, msg.threadId, {
         role: "user",
         content: describeForHistory(msg),
@@ -134,7 +178,7 @@ async function xuLyLuot(
   try {
     // Lưu ảnh xuống data/media TRƯỚC lượt agent: agent đọc từ đĩa (khỏi tải 2 lần)
     // và các lượt sau nạp lại được ảnh này từ history
-    await persistBatchImages(config.id, batch);
+    await luuAnh(config.id, batch);
 
     // Chạy agent TRƯỚC khi ghi history: runAgentTurn tự đọc history cũ và tự
     // ghép batch hiện tại vào input - ghi trước sẽ khiến tin mới lặp 2 lần.
@@ -144,6 +188,7 @@ async function xuLyLuot(
       batch,
       trace,
       resolveModel: options.resolveModel,
+      layTinChen,
     });
     finishAgentTurn(turnId, result.usage);
     // Từ đây trở đi lượt đã CHỐT SỔ THẬT. Nhánh catch bên dưới không được chốt

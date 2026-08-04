@@ -116,7 +116,7 @@ const tinNhan = (): ParsedMessage => ({
 async function chayLuot(
   ketQua: (() => unknown)[],
   batch = [tinNhan()],
-  opts: { isolated?: boolean } = {},
+  opts: { isolated?: boolean; layTinChen?: () => ParsedMessage[] } = {},
 ) {
   // Suy kiểu từ chính mock, không import @ai-sdk/provider - pnpm layout chặt
   // nên package đó không phải dependency trực tiếp, import vào là typecheck đỏ
@@ -144,6 +144,7 @@ async function chayLuot(
     trace,
     resolveModel: () => model,
     isolated: opts.isolated,
+    layTinChen: opts.layTinChen,
   });
   return { ket, trace, calls, soLanGoi: () => lan };
 }
@@ -770,5 +771,197 @@ describe("runAgentTurn - isolated (lượt theo lịch của scheduler)", () => 
     const { calls } = await chayLuot([() => traLoi("ok")]);
     const toolKeys = calls[0]!.tools?.map((t) => t.name) ?? [];
     assert.ok(toolKeys.includes("add_reaction"), "lượt tin nhắn thường không bị ảnh hưởng bởi bộ lọc mới");
+  });
+});
+
+/**
+ * Tiêm tin giữa lượt: người dùng nhắn thêm TRONG LÚC lượt đang chạy thì lượt
+ * đó phải đọc luôn, thay vì chạy trọn theo bối cảnh thiếu rồi mới xử lý ở lượt
+ * sau. Điểm chèn là `prepareStep` - ranh giới step.
+ */
+describe("runAgentTurn - tiêm tin giữa lượt", () => {
+  const DAU_VET_CHEN = "cho-minh-doi-thanh-file-word-nhe";
+
+  /**
+   * Bám phần Ý NGHĨA của nhãn, không bám nguyên văn: câu chữ còn chỉnh nhiều,
+   * bám nguyên văn thì mỗi lần chỉnh lại đỏ giả. Nhưng cũng KHÔNG import hằng
+   * số vào - hằng bị làm rỗng thì `includes("")` luôn đúng và test hoá vô dụng
+   * đúng lúc cần nhất. "đang làm dở" là thứ duy nhất nói cho model biết nó
+   * đang bị chen ngang chứ không phải nhận yêu cầu mới.
+   */
+  const DAU_HIEU_NHAN = "đang làm dở";
+
+  const tinChenGia = (text = DAU_VET_CHEN): ParsedMessage => ({ ...tinNhan(), text, msgId: "m-chen" });
+
+  before(() => {
+    // 3 step: đủ để dựng "chèn ở step 1, kiểm step 2 và step 3 vẫn mang theo"
+    tuning.setTuning("LLM_MAX_STEPS", 3);
+  });
+  after(() => {
+    tuning.setTuning("LLM_MAX_STEPS", null);
+  });
+
+  /**
+   * `prepareStep` chạy trước MỌI step, kể cả step đầu. Nên "tin tới giữa lượt"
+   * mô phỏng bằng cách trả rỗng ở lần hỏi đầu rồi mới trả tin ở lần sau.
+   */
+  const chenOLanThu = (lanCanChen: number) => {
+    let lan = 0;
+    return () => {
+      lan++;
+      return lan === lanCanChen ? [tinChenGia()] : [];
+    };
+  };
+
+  it("chèn được NGAY TRƯỚC step đầu - tin tới trong lúc còn đang tải ảnh vẫn kịp", async () => {
+    // Giữa lúc bộ gộp chốt batch và lần gọi LLM đầu tiên còn cả bước lưu ảnh và
+    // dựng ngữ cảnh (đều async, có tải mạng). Tin tới trong khoảng đó đã đỗ sẵn
+    // trong hàng chờ, và nhận nó ngay từ step đầu là đúng - đợi tới step 2 chỉ
+    // tổ để model làm một vòng thừa theo yêu cầu cũ.
+    const { calls } = await chayLuot([() => traLoi("ok")], [tinNhan()], {
+      layTinChen: chenOLanThu(1),
+    });
+    assert.ok(promptText(calls[0]!).includes(DAU_VET_CHEN), "step đầu phải nhận được tin đã đỗ sẵn");
+  });
+
+  it("tin nhắn thêm vào ĐÚNG prompt của step kế tiếp, kèm nhãn nói rõ là chen ngang", async () => {
+    const { calls } = await chayLuot([goiTool, () => traLoi("ok")], [tinNhan()], {
+      layTinChen: chenOLanThu(2),
+    });
+
+    assert.ok(calls.length >= 2, `mong ít nhất 2 lần gọi model, nhận ${calls.length}`);
+    assert.ok(
+      !promptText(calls[0]!).includes(DAU_VET_CHEN),
+      "step ĐẦU chưa được thấy tin chen - lúc đó người ta chưa gửi",
+    );
+    const promptSau = promptText(calls[1]!);
+    assert.ok(promptSau.includes(DAU_VET_CHEN), "step sau phải thấy nội dung tin chen");
+    assert.ok(
+      promptSau.includes(DAU_HIEU_NHAN),
+      "phải kèm nhãn, không thì model đọc nó như một yêu cầu mới hoàn toàn rồi bỏ ngang việc đang làm",
+    );
+  });
+
+  it("chèn MỘT lần rồi mang theo các step sau - không phải chèn lại từng step", async () => {
+    const { calls } = await chayLuot([goiTool, goiTool, () => traLoi("xong")], [tinNhan()], {
+      layTinChen: chenOLanThu(2),
+    });
+
+    assert.ok(calls.length >= 3, `mong 3 lần gọi model, nhận ${calls.length}`);
+    // Bản ghi đè `messages` của prepareStep được AI SDK mang sang các step sau.
+    // Không đúng thì tin chen bốc hơi ngay step kế và model quên mất người ta
+    // vừa nói gì - đúng cái hỏng đang chữa, chỉ chậm hơn một step.
+    assert.ok(promptText(calls[2]!).includes(DAU_VET_CHEN), "step thứ 3 vẫn phải còn tin chen");
+    // Và chỉ xuất hiện MỘT lần, không nhân bản qua từng step
+    const soLanXuatHien = promptText(calls[2]!).split(DAU_VET_CHEN).length - 1;
+    assert.equal(soLanXuatHien, 1, `tin chen bị nhân bản ${soLanXuatHien} lần trong prompt`);
+  });
+
+  it("không có tin chen thì prompt KHÔNG dính nhãn - đối chứng", async () => {
+    const { calls } = await chayLuot([goiTool, () => traLoi("ok")], [tinNhan()], {
+      layTinChen: () => [],
+    });
+    for (const call of calls) {
+      assert.ok(
+        !promptText(call).includes(DAU_HIEU_NHAN),
+        "không có tin chen mà vẫn dán nhãn là nói dối model",
+      );
+    }
+  });
+
+  it("layTinChen NÉM LỖI thì lượt vẫn chạy trọn - đây là nhánh làm tốt thêm, không phải nhánh bắt buộc", async () => {
+    // Lượt đã tốn mấy phút gọi tool; để một lỗi ở đường tiêm giết nó là đổi
+    // một tiện ích lấy cả câu trả lời.
+    const { ket } = await chayLuot([goiTool, () => traLoi("vẫn trả lời được")], [tinNhan()], {
+      layTinChen: () => {
+        throw new Error("hàng chờ hỏng");
+      },
+    });
+    assert.equal(ket.text, "vẫn trả lời được");
+  });
+
+  it("tắt ở trang Cấu hình thì KHÔNG chen, và cũng không gọi tới hàng chờ", async () => {
+    tuning.setTuning("MID_TURN_INJECTION_ENABLED", false);
+    try {
+      let soLanLay = 0;
+      const { calls } = await chayLuot([goiTool, () => traLoi("ok")], [tinNhan()], {
+        layTinChen: () => {
+          soLanLay++;
+          return [tinChenGia()];
+        },
+      });
+      assert.equal(soLanLay, 0, "tắt rồi thì không được đụng vào hàng chờ - đụng là rút tin ra rồi bỏ đi");
+      for (const call of calls) {
+        assert.ok(!promptText(call).includes(DAU_VET_CHEN));
+      }
+    } finally {
+      tuning.setTuning("MID_TURN_INJECTION_ENABLED", null);
+    }
+  });
+
+  it("tin chen SỐNG QUA nhánh thử lại completion rỗng - không bị đánh rơi", async () => {
+    // Hàng chờ đã bị `layTinDangDo` XÓA nên tin không lấy lại được. Lần chạy
+    // thứ hai dựng ngữ cảnh từ biến `messages` của agent-loop, mà tin chen chưa
+    // từng vào đó - không gắn lại là tin biến mất vĩnh viễn: nó nằm trong
+    // history nhưng KHÔNG lượt nào trả lời nó. Tệ hơn hành vi trước khi có
+    // tính năng này (hồi đó nó được hẳn một lượt riêng).
+    let soLanLay = 0;
+    const { calls } = await chayLuot([rong, () => traLoi("lần hai ổn")], [tinNhan()], {
+      layTinChen: () => {
+        soLanLay++;
+        return soLanLay === 1 ? [tinChenGia()] : [];
+      },
+    });
+
+    assert.ok(calls.length >= 2, `mong 2 lần chạy, nhận ${calls.length}`);
+    assert.ok(
+      promptText(calls[calls.length - 1]!).includes(DAU_VET_CHEN),
+      "lần chạy SAU retry vẫn phải mang tin chen",
+    );
+  });
+
+  it("tin chen có mặt trong LƯỢT CHỐT - nơi sinh ra câu trả lời gửi xuống Zalo", async () => {
+    // Lượt chạm trần step đi vào `runWrapUp`, và text của lượt chốt mới là thứ
+    // được gửi. Lượt càng dài càng dễ chạm trần, mà cũng chính lượt dài mới có
+    // thời gian cho người ta kịp nhắn thêm - nên đây là ca THƯỜNG GẶP chứ không
+    // phải ca biên. Rơi tin ở đây là người nhắn nhận câu soạn theo yêu cầu CŨ,
+    // còn model thì được dặn "trả lời NGAY BÂY GIỜ" nên không nói ra được.
+    tuning.setTuning("LLM_MAX_STEPS", 2);
+    try {
+      let soLanLay = 0;
+      // Cả 2 step đều gọi tool -> hết trần -> lượt chốt
+      const { calls } = await chayLuot([goiTool], [tinNhan()], {
+        layTinChen: () => {
+          soLanLay++;
+          return soLanLay === 1 ? [tinChenGia()] : [];
+        },
+      });
+
+      const promptChot = promptText(calls[calls.length - 1]!);
+      assert.ok(
+        promptChot.includes("trả lời người dùng NGAY BÂY GIỜ"),
+        "lần gọi cuối phải đúng là lượt chốt",
+      );
+      assert.ok(promptChot.includes(DAU_VET_CHEN), "LƯỢT CHỐT PHẢI CÓ TIN CHEN");
+    } finally {
+      tuning.setTuning("LLM_MAX_STEPS", 3);
+    }
+  });
+
+  it("lượt theo lịch: agent-loop KHÔNG tự chặn theo isolated - chặn nằm ở call site", async () => {
+    let soLanLay = 0;
+    await chayLuot([goiTool, () => traLoi("ok")], [tinNhan()], {
+      isolated: true,
+      // `run-scheduled-job.ts` không truyền `layTinChen`; test truyền vào để
+      // khẳng định rằng kể cả khi có, lượt cô lập vẫn không dính tin của thread.
+      layTinChen: () => {
+        soLanLay++;
+        return [];
+      },
+    });
+    // Ghi lại hành vi THẬT: lượt cô lập không tự chặn, nó chỉ không được truyền
+    // hàm này ở đường chạy thật. Nếu sau này có ai truyền vào thì phải quyết
+    // định có chặn ở agent-loop hay không - test này sẽ đỏ và bắt đọc lại chỗ đó.
+    assert.ok(soLanLay > 0, "hiện tại agent-loop KHÔNG tự chặn theo isolated - chặn nằm ở call site");
   });
 });

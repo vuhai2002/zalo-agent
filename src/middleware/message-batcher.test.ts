@@ -304,6 +304,47 @@ describe("message-batcher - tin đến trong lúc thread đang bận", () => {
     assert.deepEqual(batches, [["hỏi-lúc-job-chạy"]]);
   });
 
+  it("layTinDangDo lấy tin đã đỗ và XÓA khỏi hàng chờ - không để chạy thêm lượt nữa", async () => {
+    // Đây là mặt sau của việc tiêm tin giữa lượt: lượt đang chạy kéo tin vào
+    // rồi thì khi khoá nhả ra không được đẻ thêm một lượt cho chính mấy tin đó.
+    const events: string[] = [];
+    const batches: string[][] = [];
+    const handler = async (batch: ParsedMessage[]) => {
+      batches.push(batch.map((m) => m.text));
+    };
+
+    const nha = chiemThread("k-lay-tin-do", events);
+    await sleep(20);
+    batcher.enqueueMessage("k-lay-tin-do", makeMessage("chen-1"), handler, 25);
+    batcher.enqueueMessage("k-lay-tin-do", makeMessage("chen-2"), handler, 25);
+    await sleep(60); // hết cửa sổ gộp -> batch đã đỗ
+
+    const daLay = batcher.layTinDangDo("k-lay-tin-do");
+    assert.deepEqual(daLay.map((m) => m.text), ["chen-1", "chen-2"]);
+
+    nha();
+    await sleep(120);
+    assert.equal(batches.length, 0, "đã lấy rồi thì KHÔNG được chạy thêm lượt nào cho mấy tin đó");
+    assert.equal(batcher.activeThreadCount(), 0, "lấy xong phải dọn sạch hàng chờ");
+  });
+
+  it("layTinDangDo trả RỖNG khi cụm tin còn đang gõ dở - không cắt đôi giữa chừng", async () => {
+    // Cùng bất biến với `danhThucHangCho`: chưa im lặng đủ thì chưa ai được
+    // đụng vào batch. Kéo sớm là model nhận nửa câu ở step này, nửa còn lại ở
+    // step sau - tệ hơn là cứ để nguyên.
+    const events: string[] = [];
+    const nha = chiemThread("k-lay-som", events);
+    await sleep(20);
+    batcher.enqueueMessage("k-lay-som", makeMessage("đang gõ dở"), async () => {}, 200);
+    await sleep(20); // còn xa mới hết cửa sổ gộp
+
+    assert.deepEqual(batcher.layTinDangDo("k-lay-som"), []);
+
+    batcher.clearPendingBatches();
+    nha();
+    await sleep(30);
+  });
+
   it("dồn xong chạy hết thì Map sạch - đường mới không rò rỉ", async () => {
     const events: string[] = [];
     const nha = chiemThread("k-ban-ro-ri", events);
