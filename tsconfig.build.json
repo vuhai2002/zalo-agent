@@ -14,6 +14,7 @@
     // `import assert from "node:assert/strict"` nên không được vào bản build.
     "src/shared/fake-agent-profile.ts",
     "src/agent/tools/tool-failure-result-test-helper.ts",
+    "src/agent/streaming-model-test-helper.ts",
     // Bộ eval chạy TAY bằng tsx, không bao giờ chạy từ `dist`
     "evals/**"
   ]

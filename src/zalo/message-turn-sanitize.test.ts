@@ -4,6 +4,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import type { API } from "zca-js";
 import { ThreadType } from "zca-js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
+import { thanhKetQuaStream, type KetQuaGenerate } from "../agent/streaming-model-test-helper.js";
 // import type bị xóa lúc chạy nên không kéo module lên trước setupTestEnv
 import type { AccountConfig } from "../config/account-store.js";
 import type { ParsedMessage } from "./zalo-message-parser.js";
@@ -98,8 +99,9 @@ const traLoi = (text: string) => ({
 });
 
 async function chayLuot(textCuaModel: string): Promise<void> {
+  // `doStream`: vòng lặp agent đi đường `streamText` (xem stream-text-result.ts)
   const model = new MockLanguageModelV4({
-    doGenerate: async () => traLoi(textCuaModel) as never,
+    doStream: async () => thanhKetQuaStream(traLoi(textCuaModel) as unknown as KetQuaGenerate),
   });
   await processor.processBatch(config, api, [tinNhan()], { resolveModel: () => model });
 }

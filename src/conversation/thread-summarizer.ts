@@ -1,4 +1,5 @@
-import { generateText } from "ai";
+import { streamText } from "ai";
+import { chayStream } from "../agent/stream-text-result.js";
 import { createLogger } from "../shared/logger.js";
 import { db } from "./database.js";
 import { getThreadSummary, setThreadSummary } from "./thread-store.js";
@@ -55,12 +56,24 @@ export type SummaryGenerator = (prompt: string) => Promise<string>;
 const defaultGenerator: SummaryGenerator = async (prompt) => {
   // Import động để tránh vòng import (llm-provider -> ... -> thread-store)
   const { resolveLanguageModel } = await import("../agent/llm-provider.js");
-  const result = await generateText({
-    model: resolveLanguageModel(),
-    prompt,
-    maxOutputTokens: 1024,
-    maxRetries: 1,
-  });
+  // Streaming vì cùng lý do với lượt agent: router nằm sau Cloudflare, mà
+  // Cloudflare cắt bằng 524 khi byte đầu chưa tới trong 100 giây (xem
+  // `stream-text-result.ts`). Ở đây 1024 token nên hiếm khi chạm mốc đó, nhưng
+  // hỏng ở đây là hỏng CÂM: `maybeSummarizeThread` nuốt lỗi, summary lặng lẽ
+  // ngừng cập nhật và trí nhớ dài hạn của bot mòn dần mà không ai thấy. Giữ
+  // đúng một bất biến "không còn lời gọi LLM non-stream nào" dễ hơn nhiều so
+  // với việc nhớ chỗ nào được miễn.
+  const result = await chayStream(
+    (onError) =>
+      streamText({
+        model: resolveLanguageModel(),
+        prompt,
+        maxOutputTokens: 1024,
+        maxRetries: 1,
+        onError,
+      }),
+    (loi) => log.warn({ err: loi }, "streamText phát lỗi khi tóm tắt thread"),
+  );
   return result.text.trim();
 };
 

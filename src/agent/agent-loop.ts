@@ -1,4 +1,4 @@
-import { generateText, stepCountIs, type ModelMessage } from "ai";
+import { stepCountIs, streamText, type ModelMessage } from "ai";
 import type { API } from "zca-js";
 import type { AccountConfig } from "../config/account-store.js";
 import { getAgentForAccount } from "../config/agent-store.js";
@@ -27,6 +27,7 @@ import {
 } from "./token-estimate.js";
 import { catNguCanhTheoNganSach } from "./trim-context-to-budget.js";
 import { giayChoLai, maHttpCua, phanLoaiLoiProvider } from "./provider-error-classifier.js";
+import { chayStream } from "./stream-text-result.js";
 import {
   canLuotChot,
   hitStepLimit,
@@ -39,6 +40,26 @@ import {
 export { canLuotChot, hitStepLimit, isEmptyRouterCompletion, nhanLyDoDung, vuotTranToken };
 
 const log = createLogger("agent-loop");
+
+/**
+ * Ghi log cho `onError` của `streamText`, thay cho hành vi mặc định.
+ *
+ * Mặc định của ai@7.0.37 là `console.error(error)` thẳng - hai cái hại cùng
+ * lúc: dòng đó KHÔNG đi qua pino nên không vào file log (đúng lúc cần nhất),
+ * và `console.error` in error THÔ nên `requestBodyValues` của `APICallError`
+ * (trọn system prompt + hội thoại + ảnh base64) đổ ra stdout. Đó chính là thứ
+ * `safe-error-serializer.ts` sinh ra để chặn, và nó chỉ chặn được khi lỗi đi
+ * qua logger.
+ *
+ * Mức WARN chứ không DEBUG: có ca `streamText` gọi `onError` rồi VẪN resolve -
+ * lỗi nổ ở step sau khi step trước đã ghi xong thì `flush` không reject (xem
+ * `stream-text.ts:1384`). Lúc đó dòng này là dấu vết DUY NHẤT của sự cố. Lượt
+ * hỏng hẳn thì có thêm dòng ERROR của `chuaLoiProvider` kèm phân loại - hai
+ * dòng bổ cho nhau chứ không trùng.
+ */
+const ghiLoiStream = (error: unknown): void => {
+  log.warn({ err: error }, "streamText phát lỗi");
+};
 
 /**
  * Tin nhắn khi router hỏng cả 2 lần - im lặng bỏ treo người nhắn là tệ nhất.
@@ -192,51 +213,62 @@ export async function runAgentTurn({
   // giá trị là trace của các lần chạy sau bị đánh nhãn của lần đầu.
   const quanSatStep = taoQuanSatStep({ guard, trace, layLanChay: () => lanChay });
 
+  // `streamText` chứ không phải `generateText`: request non-stream buộc router
+  // gom trọn câu trả lời rồi mới gửi byte đầu, mà Cloudflare trước 9Router cắt
+  // bằng 524 khi byte đầu chưa tới trong 100 giây - mọi lượt sinh dài đều chết.
+  // Xem `stream-text-result.ts` để biết số đo. Bot vẫn KHÔNG stream chữ xuống
+  // Zalo: `gomKetQuaStream` đọc hết stream rồi trả về đúng hình dạng cũ, nên
+  // phần còn lại của vòng lặp không đổi một dòng nào.
   const runOnce = () =>
-    generateText({
-      model: resolveModel(agent, {
-        accountId: account.id,
-        threadId: latest.threadId,
-      }),
-      system: buildSystemPrompt(agent, latest, memory, account, isolated),
-      messages,
-      // Hai lớp lọc tool giao nhau: agent khai năng lực, account áp chính sách.
-      // Thêm `isolated` lọc bớt tool không hợp với lượt theo lịch (add_reaction
-      // không có msgId thật, read_image không có ảnh, save_memory chặn injection
-      // từ job) - xem runsInScheduledTurn ở tool-registry.ts
-      tools: buildAgentTools({ api, account, agent, message: latest, batch, isolated }),
-      // Hai điều kiện dừng. `stepCountIs` chặn số VÒNG; điều kiện token chặn
-      // KÍCH THƯỚC - kết quả tool cộng dồn qua từng step (web_fetch một mình đã
-      // tới WEB_FETCH_MAX_CHARS ký tự), nên một lượt ít step vẫn phình được.
-      // Đo trên DB thật: đã có lượt cộng dồn 184.835 token qua 8 step.
-      // Dùng ĐÚNG ngân sách đã trừ hao như lúc cắt ngữ cảnh, không phải trần
-      // thô. So với trần thô thì điều kiện này gần như không bao giờ chạy:
-      // provider trả 400 trước khi usage của lần gọi đó kịp về, nên hàm chưa
-      // từng được gọi với con số vượt.
-      stopWhen: [
-        stepCountIs(tranStep),
-        vuotTranToken(nganSachAnToan(tranToken)),
-        // Guard đã chốt chặn thì dừng vòng. Dừng ở đây step cuối vẫn còn tool
-        // call, nên `canLuotChot` bắt được và lượt đi vào lượt chốt - model
-        // buộc phải trả lời bằng những gì đã thu được, thay vì để người dùng
-        // nhận câu tường thuật tiến trình.
-        () => guard.daChan(),
-      ],
-      maxOutputTokens: getTuning("LLM_MAX_OUTPUT_TOKENS"),
-      // Bật thinking theo LLM_REASONING_EFFORT - kiểm chứng bằng
-      // usage.outputTokenDetails.reasoningTokens > 0 trong log bên dưới
-      providerOptions: resolveReasoningOptions(agent),
-      maxRetries: 2,
-      // Chặn trên cho CẢ lượt. Không có nó, router nhận kết nối rồi treo sẽ ăn
-      // 300s (undici) x maxRetries x số step, khóa thread hàng giờ trong khi tin
-      // nhắn sau xếp hàng chờ. `totalMs` bao gồm cả thời gian chạy tool, nên giá
-      // trị này bắt buộc lớn hơn IMAGE_GEN_TIMEOUT_MS.
-      timeout: { totalMs: getTuning("LLM_TURN_TIMEOUT_MS") },
-      // Log từng tool call kèm input + đầu output: khi bot trả lời kém phải đọc
-      // được ngay nó fetch trang nào và thấy gì (vụ dò vé số chỉ có số steps,
-      // toàn bộ chẩn đoán phải đi đường vòng qua DB + tái hiện tay)
-      onStepFinish: quanSatStep,
-    });
+    chayStream(
+      (onError) =>
+        streamText({
+          model: resolveModel(agent, {
+            accountId: account.id,
+            threadId: latest.threadId,
+          }),
+          system: buildSystemPrompt(agent, latest, memory, account, isolated),
+          messages,
+          // Hai lớp lọc tool giao nhau: agent khai năng lực, account áp chính sách.
+          // Thêm `isolated` lọc bớt tool không hợp với lượt theo lịch (add_reaction
+          // không có msgId thật, read_image không có ảnh, save_memory chặn injection
+          // từ job) - xem runsInScheduledTurn ở tool-registry.ts
+          tools: buildAgentTools({ api, account, agent, message: latest, batch, isolated }),
+          // Hai điều kiện dừng. `stepCountIs` chặn số VÒNG; điều kiện token chặn
+          // KÍCH THƯỚC - kết quả tool cộng dồn qua từng step (web_fetch một mình đã
+          // tới WEB_FETCH_MAX_CHARS ký tự), nên một lượt ít step vẫn phình được.
+          // Đo trên DB thật: đã có lượt cộng dồn 184.835 token qua 8 step.
+          // Dùng ĐÚNG ngân sách đã trừ hao như lúc cắt ngữ cảnh, không phải trần
+          // thô. So với trần thô thì điều kiện này gần như không bao giờ chạy:
+          // provider trả 400 trước khi usage của lần gọi đó kịp về, nên hàm chưa
+          // từng được gọi với con số vượt.
+          stopWhen: [
+            stepCountIs(tranStep),
+            vuotTranToken(nganSachAnToan(tranToken)),
+            // Guard đã chốt chặn thì dừng vòng. Dừng ở đây step cuối vẫn còn tool
+            // call, nên `canLuotChot` bắt được và lượt đi vào lượt chốt - model
+            // buộc phải trả lời bằng những gì đã thu được, thay vì để người dùng
+            // nhận câu tường thuật tiến trình.
+            () => guard.daChan(),
+          ],
+          maxOutputTokens: getTuning("LLM_MAX_OUTPUT_TOKENS"),
+          // Bật thinking theo LLM_REASONING_EFFORT - kiểm chứng bằng
+          // usage.outputTokenDetails.reasoningTokens > 0 trong log bên dưới
+          providerOptions: resolveReasoningOptions(agent),
+          maxRetries: 2,
+          // Chặn trên cho CẢ lượt. Không có nó, router nhận kết nối rồi treo sẽ ăn
+          // 300s (undici) x maxRetries x số step, khóa thread hàng giờ trong khi tin
+          // nhắn sau xếp hàng chờ. `totalMs` bao gồm cả thời gian chạy tool, nên giá
+          // trị này bắt buộc lớn hơn IMAGE_GEN_TIMEOUT_MS.
+          timeout: { totalMs: getTuning("LLM_TURN_TIMEOUT_MS") },
+          // Log từng tool call kèm input + đầu output: khi bot trả lời kém phải đọc
+          // được ngay nó fetch trang nào và thấy gì (vụ dò vé số chỉ có số steps,
+          // toàn bộ chẩn đoán phải đi đường vòng qua DB + tái hiện tay)
+          onStepFinish: quanSatStep,
+          onError,
+        }),
+      ghiLoiStream,
+    );
 
   /**
    * Lượt CHỐT khi đã hết step: nối lại đúng những gì model vừa làm rồi hỏi lại
@@ -282,14 +314,22 @@ export async function runAgentTurn({
     const tinChot = [...phanCatDuoc, ...(cauHoi ? [cauHoi] : []), nhacChot];
     if (daCatChot) log.warn({ ...daCatChot }, "Đã cắt bớt ngữ cảnh cho lượt chốt");
 
-    const r = await generateText({
-      model: resolveModel(agent, { accountId: account.id, threadId: latest.threadId }),
-      system: buildSystemPrompt(agent, latest, memory, account, isolated),
-      messages: tinChot,
-      maxOutputTokens: getTuning("LLM_MAX_OUTPUT_TOKENS"),
-      maxRetries: 1,
-      timeout: { totalMs: getTuning("LLM_TURN_TIMEOUT_MS") },
-    });
+    // Streaming vì đúng lý do của `runOnce`, và ở đây còn cần hơn: lượt chốt
+    // luôn là lượt sinh dài nhất (model phải viết câu trả lời từ mọi thứ đã
+    // thu được), tức là ca dễ vượt mốc 100 giây của Cloudflare nhất.
+    const r = await chayStream(
+      (onError) =>
+        streamText({
+          model: resolveModel(agent, { accountId: account.id, threadId: latest.threadId }),
+          system: buildSystemPrompt(agent, latest, memory, account, isolated),
+          messages: tinChot,
+          maxOutputTokens: getTuning("LLM_MAX_OUTPUT_TOKENS"),
+          maxRetries: 1,
+          timeout: { totalMs: getTuning("LLM_TURN_TIMEOUT_MS") },
+          onError,
+        }),
+      ghiLoiStream,
+    );
     if (getTuning("AGENT_TRACE_ENABLED")) {
       trace.push(summarizeStep(r.steps[0] ?? {}, getTuning("AGENT_TRACE_MAX_CHARS"), lanChay + 1));
     }

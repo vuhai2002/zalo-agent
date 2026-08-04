@@ -1,4 +1,5 @@
-import { generateText } from "ai";
+import { streamText } from "ai";
+import { chayStream } from "../../agent/stream-text-result.js";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -95,12 +96,18 @@ export const providerRoutes = new Hono()
   .post("/test", async (c) => {
     try {
       const { resolveLanguageModel } = await import("../../agent/llm-provider.js");
-      const result = await generateText({
-        model: resolveLanguageModel(),
-        prompt: "Trả lời đúng 1 từ: ok",
-        maxOutputTokens: 200,
-        maxRetries: 0,
-      });
+      // Streaming để nút này đi ĐÚNG đường vận chuyển mà bot dùng. Test một
+      // đằng bot chạy một nẻo thì nút báo xanh trong khi bot đang chết vì 524,
+      // hoặc ngược lại - đúng lúc người ta bấm nó để tìm nguyên nhân.
+      const result = await chayStream((onError) =>
+        streamText({
+          model: resolveLanguageModel(),
+          prompt: "Trả lời đúng 1 từ: ok",
+          maxOutputTokens: 200,
+          maxRetries: 0,
+          onError,
+        }),
+      );
       return c.json({ ok: true, reply: result.text.trim().slice(0, 100) });
     } catch (err) {
       return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 502);

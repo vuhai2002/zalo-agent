@@ -118,6 +118,14 @@ export function resolveLanguageModel(
         apiKey: settings.apiKey,
         headers: sessionHeaders,
         fetch: sanitizingFetch,
+        // Gửi `stream_options: {include_usage: true}`. Lượt agent đi đường
+        // streaming (xem stream-text-result.ts), mà provider này mặc định KHÔNG
+        // gửi cờ đó - với provider chỉ trả usage khi được hỏi thì mọi số token
+        // của bot âm thầm về 0: log sai, bảng usage sai, trần token mất tác dụng.
+        // Đo trên 9Router thì nó trả usage kể cả khi không hỏi, nhưng cả điểm
+        // của `openai-compatible` là đổi provider bằng env mà không sửa code -
+        // LiteLLM/OpenRouter/vLLM đều đòi cờ này.
+        includeUsage: true,
       });
       return provider(settings.model);
     }

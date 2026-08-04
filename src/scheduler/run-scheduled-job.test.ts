@@ -4,6 +4,7 @@ import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { API } from "zca-js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
+import { thanhKetQuaStream, type KetQuaGenerate } from "../agent/streaming-model-test-helper.js";
 // import type bị xóa lúc chạy nên không kéo module lên trước setupTestEnv
 import type { AccountConfig } from "../config/account-store.js";
 import type { CreateScheduledJobInput } from "./scheduled-job-store.js";
@@ -388,14 +389,16 @@ describe("runScheduledJob - kind=agent", () => {
     };
   }
 
+  // `doStream` chứ không phải `doGenerate`: vòng lặp agent đi đường `streamText`
+  // để thoát 524 của Cloudflare (xem stream-text-result.ts).
   function mockModel(result: () => unknown) {
-    const calls: Parameters<MockLanguageModelV4["doGenerate"]>[0][] = [];
+    const calls: Parameters<MockLanguageModelV4["doStream"]>[0][] = [];
     const model = new MockLanguageModelV4({
-      doGenerate: async (options) => {
+      doStream: async (options) => {
         calls.push(options);
         const r = result();
         if (r instanceof Error) throw r;
-        return r as Awaited<ReturnType<MockLanguageModelV4["doGenerate"]>>;
+        return thanhKetQuaStream(r as KetQuaGenerate);
       },
     });
     return { model, calls };

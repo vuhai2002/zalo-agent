@@ -6,6 +6,7 @@ import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { ThreadType, type API } from "zca-js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
+import { thanhKetQuaStream, type KetQuaGenerate } from "./streaming-model-test-helper.js";
 import type { StepTrace } from "./agent-step-trace.js";
 import type { AccountConfig } from "../config/account-store.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
@@ -119,16 +120,19 @@ async function chayLuot(
 ) {
   // Suy kiểu từ chính mock, không import @ai-sdk/provider - pnpm layout chặt
   // nên package đó không phải dependency trực tiếp, import vào là typecheck đỏ
-  const calls: Parameters<MockLanguageModelV4["doGenerate"]>[0][] = [];
+  const calls: Parameters<MockLanguageModelV4["doStream"]>[0][] = [];
   let lan = 0;
+  // `doStream` chứ không phải `doGenerate`: vòng lặp đi đường `streamText` để
+  // thoát 524 của Cloudflare, nên `doGenerate` không còn được gọi tới. Fixture
+  // bên trên vẫn mô tả một lần trả lời như cũ, `thanhKetQuaStream` bắc cầu.
   const model = new MockLanguageModelV4({
-    doGenerate: async (options) => {
+    doStream: async (options) => {
       calls.push(options);
       const tiep = ketQua[Math.min(lan, ketQua.length - 1)]!;
       lan++;
       const r = tiep();
       if (r instanceof Error) throw r;
-      return r as Awaited<ReturnType<MockLanguageModelV4["doGenerate"]>>;
+      return thanhKetQuaStream(r as KetQuaGenerate);
     },
   });
 
@@ -145,14 +149,14 @@ async function chayLuot(
 }
 
 /** Gộp toàn bộ nội dung `prompt` gửi cho model thành 1 chuỗi để dò substring */
-function promptText(call: Parameters<MockLanguageModelV4["doGenerate"]>[0]): string {
+function promptText(call: Parameters<MockLanguageModelV4["doStream"]>[0]): string {
   return call.prompt
     .map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content)))
     .join("\n");
 }
 
 /** System prompt (role='system') nằm ở đầu `prompt`, không phải field riêng trên call options */
-function systemText(call: Parameters<MockLanguageModelV4["doGenerate"]>[0]): string | undefined {
+function systemText(call: Parameters<MockLanguageModelV4["doStream"]>[0]): string | undefined {
   const systemMsg = call.prompt.find((m) => m.role === "system");
   return systemMsg?.content;
 }
@@ -617,10 +621,10 @@ describe("runAgentTurn - lượt ném lỗi", () => {
     const trace: StepTrace[] = [];
     let lan = 0;
     const model = new MockLanguageModelV4({
-      doGenerate: async () => {
+      doStream: async () => {
         lan++;
         // Step 1 chạy tool trót lọt (đã có trace), step 2 mới chết giữa lượt
-        if (lan === 1) return goiTool() as never;
+        if (lan === 1) return thanhKetQuaStream(goiTool() as unknown as KetQuaGenerate);
         throw new APICallError({
           message: "500 từ router",
           url: "https://router/v1/chat",
@@ -642,6 +646,74 @@ describe("runAgentTurn - lượt ném lỗi", () => {
       /500 từ router/,
     );
     assert.equal(trace.length, 1, "step đã chạy phải còn lại để chẩn đoán, không rơi theo stack");
+  });
+
+  // Ba test dưới đây khóa lại phần dễ vỡ nhất của đường streaming. `streamText`
+  // KHÔNG ném lỗi gốc ra ngoài (xem stream-text-result.ts), nên mỗi bất biến ở
+  // đây từng là một ca hỏng thật lúc chuyển từ `generateText` sang.
+
+  it("ném LỖI GỐC của provider, không phải vỏ NoOutputGeneratedError của streamText", async () => {
+    // Đây là bất biến đắt nhất: mất mã HTTP là `phanLoaiLoiProvider` ra
+    // `unknown` cho mọi thứ, và sai khóa bị báo cho người nhắn thành "thử lại
+    // sau ít phút" - chờ bao lâu cũng không tự hết.
+    await assert.rejects(
+      chayLuot([() => loiApi(401, "Invalid API key")]),
+      (err: unknown) => {
+        assert.ok(APICallError.isInstance(err), `mong APICallError, nhận ${(err as Error)?.name}`);
+        assert.equal(err.statusCode, 401, "mã HTTP phải còn nguyên để phân loại được");
+        return true;
+      },
+    );
+  });
+
+  it("stream chết SAU khi step 1 đã xong thì vẫn ném - không trả kết quả cụt", async () => {
+    // `streamText` chỉ reject khi CHƯA ghi được step nào; lỗi ở step 2 trở đi
+    // làm promise RESOLVE với kết quả cụt và lỗi biến mất. Nuốt như vậy thì
+    // lượt đi tiếp vào lượt chốt và người nhắn nhận câu "chưa gom đủ" - đổ tại
+    // hết lượt trong khi thật ra router chết.
+    let lan = 0;
+    await assert.rejects(
+      chayLuot([
+        () => {
+          lan++;
+          return lan === 1 ? goiTool() : loiApi(503, "Upstream unavailable");
+        },
+      ]),
+      /Upstream unavailable/,
+    );
+  });
+
+  it("SDK tự thử lại rồi THÀNH CÔNG thì lượt chạy tiếp bình thường", async () => {
+    // Đối chứng cho hai test trên. Đường ném-khi-bắt-được-lỗi chỉ đúng nếu
+    // `onError` KHÔNG nổ cho lần thử hỏng mà sau đó SDK gọi lại thành công.
+    // Nổ thì mọi trục trặc thoáng qua - đúng loại lỗi SDK sinh ra để che - lại
+    // giết cả lượt, và hỏng đó chỉ lộ ra trên máy thật.
+    let lan = 0;
+    const { ket } = await chayLuot([
+      () => {
+        lan++;
+        return lan === 1 ? loiApi(503, "chớp một cái rồi thôi") : traLoi("xong rồi nhé");
+      },
+    ]);
+    assert.equal(ket.text, "xong rồi nhé");
+    assert.ok(lan >= 2, `mong SDK gọi lại ít nhất 1 lần, nhận ${lan}`);
+  });
+
+  it("lỗi của lần chạy TRƯỚC không giết lần chạy sau trong cùng lượt", async () => {
+    // 429 dai dẳng đốt hết 3 lần thử của SDK, rồi `chuaLoiProvider` chờ
+    // Retry-After và gọi lại `runOnce` - lần này model trả lời được.
+    //
+    // Bộ bắt lỗi phải được dựng MỚI cho mỗi `runOnce`. Dùng chung một bộ cho
+    // cả lượt thì lỗi 429 cũ vẫn nằm đó và nhánh "có lỗi thì ném" sẽ giết
+    // đúng lần chạy vừa cứu được lượt - tức là đường chữa lỗi tự phá chính nó.
+    let lan = 0;
+    const { ket } = await chayLuot([
+      () => {
+        lan++;
+        return lan <= 3 ? loiApi(429, "Rate limit exceeded") : traLoi("chữa xong, trả lời đây");
+      },
+    ]);
+    assert.equal(ket.text, "chữa xong, trả lời đây");
   });
 });
 

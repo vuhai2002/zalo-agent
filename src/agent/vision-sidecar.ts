@@ -1,5 +1,6 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { generateText } from "ai";
+import { streamText } from "ai";
+import { chayStream } from "./stream-text-result.js";
 import {
   getVisionSettings,
   isSidecarConfigured,
@@ -65,20 +66,27 @@ const defaultCaller: SidecarCaller = async (settings, image, prompt) => {
     baseURL: settings.baseUrl,
     apiKey: settings.apiKey,
   });
-  const result = await generateText({
-    model: provider(settings.model),
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "file", data: image.base64, mediaType: image.mediaType },
-          { type: "text", text: prompt },
-        ],
-      },
-    ],
-    maxOutputTokens: DESCRIBE_MAX_TOKENS,
-    maxRetries: 1,
-  });
+  // Streaming như mọi lời gọi LLM khác trong dự án. Sidecar hiện trỏ thẳng
+  // Gemini nên không dính 524 của Cloudflare, NHƯNG base URL là thứ chỉnh được
+  // từ dashboard - trỏ nó về router là dính ngay. Giữ một bất biến "không còn
+  // lời gọi LLM non-stream nào" rẻ hơn việc nhớ chỗ nào đang được miễn và vì sao.
+  const result = await chayStream((onError) =>
+    streamText({
+      model: provider(settings.model),
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "file", data: image.base64, mediaType: image.mediaType },
+            { type: "text", text: prompt },
+          ],
+        },
+      ],
+      maxOutputTokens: DESCRIBE_MAX_TOKENS,
+      maxRetries: 1,
+      onError,
+    }),
+  );
   // finishReason "length" = model đang viết dở thì chạm trần token
   return { text: result.text.trim(), truncated: result.finishReason === "length" };
 };
