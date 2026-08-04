@@ -971,15 +971,21 @@ describe("runAgentTurn - tiêm tin giữa lượt", () => {
     // làm lại thứ đã xong.
     tuning.setTuning("LLM_MAX_STEPS", 3);
     let soLanLay = 0;
-    // Lần 1: 429 (chữa -> chạy lại). Lần 2: completion rỗng (chữa -> chạy lại).
-    // Lần 3: trả lời được.
+    // Lần 1: tràn ngữ cảnh (chữa -> chạy lại). Lần 2: completion rỗng (chữa ->
+    // chạy lại). Lần 3: trả lời được.
+    //
+    // CỐ Ý chọn cặp nhánh KHÔNG NGỦ. Cặp `429 -> rỗng` cũng dựng được ca này
+    // nhưng nhánh 429 chờ thật 5 giây cộng 3 lần thử của SDK - hơn 11 giây mỗi
+    // lần chạy test. Nó không chỉ chậm: đốt timer lâu như vậy làm nghẽn cả bộ
+    // test chạy song song và đã làm một test lịch hẹn (margin 20 ms) đỏ lúc
+    // được lúc không. 400 không được SDK thử lại nên cặp này chạy trong mili giây.
     let lan = 0;
     const { calls } = await chayLuot(
       [
         () => {
           lan++;
-          if (lan <= 3) return loiApi(429, "Rate limit exceeded"); // SDK tự thử 3 lần
-          if (lan === 4) return rong();
+          if (lan === 1) return loiApi(400, "prompt is too long");
+          if (lan === 2) return rong();
           return traLoi("xong");
         },
       ],
