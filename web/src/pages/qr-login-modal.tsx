@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ManagedAccount } from "../dashboard-api-client";
+import { useChotNen } from "../shared/backdrop-close-guard";
 
 type QrState = {
   status: "idle" | "starting" | "waiting_scan" | "scanned" | "success" | "declined" | "error" | "timeout";
@@ -61,10 +62,11 @@ export function QrLoginModal({
   }, [account.id, retryKey]);
 
   const failed = ["declined", "error", "timeout"].includes(state.status);
+  const nen = useChotNen(onClose);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/25 p-4 backdrop-blur-[2px]" onClick={onClose}>
-      <div className="gc-card w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/25 p-4 backdrop-blur-[2px]" {...nen}>
+      <div className="gc-card w-full max-w-sm p-6 text-center">
         <div className="mb-1 font-semibold text-ink">Login QR - {account.label}</div>
         <p className="mb-4 text-[13px] text-ink-soft">{STATUS_TEXT[state.status]}</p>
 

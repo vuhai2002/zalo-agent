@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ManagedAccount, ManagedAgent, ReactionIcon } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
+import { useChotNen } from "../shared/backdrop-close-guard";
 import { SelectMenu } from "../shared/select-menu";
 import { ToggleKnob } from "../shared/ui-bits";
 
@@ -49,6 +50,7 @@ export function AccountEditDrawer({
   const [reactionIcons, setReactionIcons] = useState<ReactionIcon[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const nen = useChotNen(onClose);
 
   useEffect(() => {
     api.accountsAdmin
@@ -96,8 +98,8 @@ export function AccountEditDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" onClick={onClose}>
-      <div className="flex h-full w-full max-w-md flex-col border-l border-line bg-surface" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" {...nen}>
+      <div className="flex h-full w-full max-w-md flex-col border-l border-line bg-surface">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div className="font-semibold text-ink">{account ? `Sửa: ${account.label}` : "Thêm account Zalo"}</div>
           <button onClick={onClose} className="rounded-lg border border-line px-3 py-1 text-[13px] text-ink-soft hover:bg-tile">

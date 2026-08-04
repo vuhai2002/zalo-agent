@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ScheduledJobItem, ScheduledJobRunItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
+import { useChotNen } from "../shared/backdrop-close-guard";
 import { formatBotTime } from "../shared/format-bot-time";
 import { Badge } from "../shared/ui-bits";
 
@@ -29,6 +30,7 @@ export function ScheduleRunHistoryDrawer({
 }) {
   const [runs, setRuns] = useState<ScheduledJobRunItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const nen = useChotNen(onClose);
 
   useEffect(() => {
     api.schedule
@@ -39,11 +41,8 @@ export function ScheduleRunHistoryDrawer({
   }, [job.id, job.accountId, job.threadId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" onClick={onClose}>
-      <div
-        className="flex h-full w-full max-w-lg flex-col border-l border-line bg-surface"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" {...nen}>
+      <div className="flex h-full w-full max-w-lg flex-col border-l border-line bg-surface">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>
             <div className="font-semibold text-ink">Lịch sử chạy - {job.name}</div>

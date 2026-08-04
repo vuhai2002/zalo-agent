@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useChotNen } from "../shared/backdrop-close-guard";
 import { ToggleKnob } from "../shared/ui-bits";
 
 /**
@@ -84,15 +85,13 @@ export function ToolModalShell({
   children: ReactNode;
   footer: ReactNode;
 }) {
+  const nen = useChotNen(onClose);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/25 p-4 backdrop-blur-[2px]"
-      onClick={onClose}
+      {...nen}
     >
-      <div
-        className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-5 shadow-xl">
         <h2 className="text-[17px] font-semibold text-ink">{title}</h2>
         <p className="mt-1 text-[13px] leading-[1.6] text-ink-soft">{subtitle}</p>
         {/* Khoảng trắng giữa các vùng xám chính là phân cách - không cần kẻ */}

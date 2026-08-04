@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MessageItem, ThreadItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
+import { useChotNen } from "../shared/backdrop-close-guard";
 import { formatTime } from "../shared/ui-bits";
 import { SessionTraceView } from "./session-trace-view";
 
@@ -27,6 +28,8 @@ export function SessionDetailDrawer({
     });
   }, [thread.accountId, thread.threadId]);
 
+  const nen = useChotNen(onClose);
+
   async function loadOlder() {
     const oldestId = messages[0]?.id;
     if (!oldestId) return;
@@ -36,11 +39,8 @@ export function SessionDetailDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" onClick={onClose}>
-      <div
-        className="flex h-full w-full max-w-lg flex-col border-l border-line bg-surface"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" {...nen}>
+      <div className="flex h-full w-full max-w-lg flex-col border-l border-line bg-surface">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>
             <div className="font-semibold text-ink">{thread.displayName || thread.threadId}</div>

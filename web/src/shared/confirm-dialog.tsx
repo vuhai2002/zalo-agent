@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useChotNen } from "./backdrop-close-guard";
 import { IconWarning } from "./dashboard-icons";
 
 /**
@@ -57,6 +58,7 @@ function ConfirmDialog({
 }) {
   const confirmRef = useRef<HTMLButtonElement>(null);
   const danger = (options.tone ?? "danger") === "danger";
+  const nen = useChotNen(() => onClose(false));
 
   useEffect(() => {
     confirmRef.current?.focus();
@@ -72,14 +74,11 @@ function ConfirmDialog({
     // z cao hơn modal thường (z-50) vì thường mở TỪ trong một modal
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/30 p-4 backdrop-blur-[2px]"
-      onClick={() => onClose(false)}
+      {...nen}
       role="dialog"
       aria-modal="true"
     >
-      <div
-        className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-xl">
         <div className="flex gap-3.5">
           {danger && (
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400">

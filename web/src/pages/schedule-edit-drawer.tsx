@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AccountInfo, ScheduleKind, ScheduledJobItem } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
+import { useChotNen } from "../shared/backdrop-close-guard";
 import { ScheduleDestinationFields } from "./schedule-destination-fields";
 import { ScheduleFieldsSection } from "./schedule-fields-section";
 import { buildSchedule, initialOnce, scheduleChanged } from "./schedule-form-helpers";
@@ -39,6 +40,7 @@ export function ScheduleEditDrawer({
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const nen = useChotNen(onClose);
 
   async function save() {
     const schedule = buildSchedule(form);
@@ -80,11 +82,8 @@ export function ScheduleEditDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" onClick={onClose}>
-      <div
-        className="flex h-full w-full max-w-md flex-col border-l border-line bg-surface"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex justify-end bg-ink/25 backdrop-blur-[2px]" {...nen}>
+      <div className="flex h-full w-full max-w-md flex-col border-l border-line bg-surface">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div className="font-semibold text-ink">{job ? `Sửa: ${job.name}` : "Thêm lịch hẹn"}</div>
           <button onClick={onClose} className="rounded-lg border border-line px-3 py-1 text-[13px] text-ink-soft hover:bg-tile">
