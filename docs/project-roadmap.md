@@ -1814,4 +1814,14 @@ phải chờ ngần ấy.
 - [ ] `gpt-combo` trên 9Router chỉ có MỘT model (`cx/gpt-5.6-sol`). Fallback với
   một model thì không có gì để fall back - thêm model thứ hai là có lớp chịu lỗi
   thật, không tốn dòng code nào.
-- [ ] Chưa chạy `pnpm eval` sau loạt này.
+- [x] `pnpm eval` 11/11 đạt với model thật (chạy 2 lần: trước và sau bản vá của
+  vòng rà tổng). Lưu ý eval chỉ đi đường THUẬN - không ca nào chạm nhánh chữa
+  lỗi, nên nó không thể bắt được lớp lỗi mà vòng rà tổng vừa tìm ra.
+- [ ] Đồng hồ chờ của câu trấn an đo theo CHUỖI chạy, không theo tin đến. Từ khi
+  bộ gộp cho batch đỗ lại, lượt kế mở chuỗi mới và đồng hồ về 0 - người chờ 7
+  phút rồi sang lượt sau bị tính là 0. Đo đúng thì phải theo dõi từ tin cũ nhất
+  chưa được trả lời.
+- [ ] Lượt KHÔNG gọi tool chỉ có một step nên đường tiêm tin không bao giờ chạy
+  (`prepareStep` chạy một lần ở đầu, lúc chưa ai kịp nhắn thêm). Đó lại đúng là
+  ca sinh dài nhất. Không có cách sửa rẻ - không kiểm soát được ranh giới step
+  bên trong một lần gọi model.
