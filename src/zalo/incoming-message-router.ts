@@ -16,7 +16,7 @@ import { createLogger } from "../shared/logger.js";
 import { sendDeliveredReceipt } from "./message-receipts.js";
 import { processBatch } from "./message-turn-processor.js";
 import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
-import { describeForHistory, parseIncomingMessage } from "./zalo-message-parser.js";
+import { describeForHistory, parseIncomingMessage, type ParsedMessage } from "./zalo-message-parser.js";
 
 const log = createLogger("message-router");
 
@@ -60,19 +60,7 @@ export function routeIncomingMessage(
 
   if (!decision.respond) {
     if (decision.record) {
-      // Ghi tin ngay để giữ đúng thứ tự history; ảnh tải xong (async) mới gắn vào
-      // row qua id - persistBatchImages không bao giờ reject nên fire-and-forget được
-      const rowId = appendMessage(config.id, msg.threadId, {
-        role: "user",
-        content: describeForHistory(msg),
-        senderName: msg.senderName,
-        senderId: msg.senderId,
-      });
-      if (msg.images.length > 0) {
-        void persistBatchImages(config.id, [msg]).then(() => {
-          setMessageImages(rowId, imagePathsOf(msg.images));
-        });
-      }
+      ghiVaoHistory(config.id, msg);
     }
     log.debug(
       { accountId: config.id, threadId: msg.threadId, reason: decision.reason },
@@ -82,7 +70,46 @@ export function routeIncomingMessage(
   }
 
   const threadKey = `${config.id}:${msg.threadId}`;
-  enqueueMessage(threadKey, msg, (batch) => processBatch(config, api, batch));
+  const daNhan = enqueueMessage(threadKey, msg, (batch) => processBatch(config, api, batch));
+
+  // Chạm trần hàng chờ. Tin không tới được `processBatch` - mà đó là nơi DUY
+  // NHẤT ghi history cho nhánh có-trả-lời - nên phải tự ghi ở đây. Không ghi
+  // thì tin biến mất khỏi cả cuộc hội thoại lẫn trí nhớ của bot, trong khi
+  // `sendDeliveredReceipt` bên trên đã báo "đã nhận" và người ta đinh ninh bot
+  // có nghe. Với bot cá nhân, im lặng nuốt một câu người ta đã nói là kết cục
+  // tệ nhất - cùng lý do đã chốt cho job lịch hẹn trễ hạn.
+  //
+  // ĐÁNH ĐỔI đã biết: dòng này ghi NGAY, còn batch đang đỗ thì mãi tới lúc lượt
+  // chạy xong mới ghi - nên trong history tin bị bỏ nằm TRƯỚC những tin đến
+  // trước nó. Chấp nhận: sai thứ tự một tin trong một ca bệnh lý vẫn hơn mất
+  // hẳn tin đó. Đường passive bên trên vốn đã có đúng tính chất này.
+  if (!daNhan) {
+    ghiVaoHistory(config.id, msg);
+    log.warn(
+      { accountId: config.id, threadId: msg.threadId },
+      "Tin bị bỏ khỏi lượt vì hàng chờ chạm trần - đã ghi vào history để bot còn biết",
+    );
+  }
+}
+
+/**
+ * Ghi 1 tin vào history ngay lập tức.
+ *
+ * Ảnh tải xong (async) mới gắn vào row qua id - `persistBatchImages` không bao
+ * giờ reject nên fire-and-forget được.
+ */
+function ghiVaoHistory(accountId: string, msg: ParsedMessage): void {
+  const rowId = appendMessage(accountId, msg.threadId, {
+    role: "user",
+    content: describeForHistory(msg),
+    senderName: msg.senderName,
+    senderId: msg.senderId,
+  });
+  if (msg.images.length > 0) {
+    void persistBatchImages(accountId, [msg]).then(() => {
+      setMessageImages(rowId, imagePathsOf(msg.images));
+    });
+  }
 }
 
 /** Lấy tên group 1 lần khi gặp lần đầu, cache vào bảng threads */

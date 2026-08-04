@@ -147,6 +147,176 @@ describe("message-batcher", () => {
   });
 });
 
+/**
+ * Nhóm này khóa điều kiện (b): batch chỉ chốt khi thread KHÔNG còn lượt nào
+ * đang chạy. Đây là phần chữa cho ca thật ngày 2026-08-04 - một lượt tạo tài
+ * liệu chạy 249 giây, hai tin gửi trong lúc đó thành hai lượt agent riêng và
+ * mỗi lượt lại làm lại từ đầu toàn bộ công việc.
+ */
+describe("message-batcher - tin đến trong lúc thread đang bận", () => {
+  /** Dựng một lượt chiếm chỗ, trả về hàm nhả nó ra */
+  function chiemThread(threadKey: string, events: string[]) {
+    let nha!: () => void;
+    const bịChặn = new Promise<void>((resolve) => {
+      nha = resolve;
+    });
+    void batcher.runOnThreadChain(threadKey, async () => {
+      events.push("start:lượt-dài");
+      await bịChặn;
+      events.push("end:lượt-dài");
+    });
+    return nha;
+  }
+
+  it("nhiều cụm tin rời rạc trong lúc bận GỘP thành ĐÚNG MỘT lượt", async () => {
+    // Đây là bất biến chính của cả đợt. Ba tin cách nhau xa hơn cửa sổ gộp -
+    // đường cũ cho ra ba lượt, mỗi lượt làm lại từ đầu.
+    const events: string[] = [];
+    const batches: string[][] = [];
+    const handler = async (batch: ParsedMessage[]) => {
+      batches.push(batch.map((m) => m.text));
+    };
+
+    const nha = chiemThread("k-ban-gop", events);
+    await sleep(20);
+
+    batcher.enqueueMessage("k-ban-gop", makeMessage("a"), handler, 25);
+    await sleep(60); // quá cửa sổ gộp -> đường cũ đã chốt lượt cho riêng "a"
+    batcher.enqueueMessage("k-ban-gop", makeMessage("b"), handler, 25);
+    await sleep(60);
+    batcher.enqueueMessage("k-ban-gop", makeMessage("c"), handler, 25);
+    await sleep(60);
+
+    assert.equal(batches.length, 0, "không lượt nào được chạy khi thread còn bận");
+
+    nha();
+    await sleep(120);
+
+    assert.equal(batches.length, 1, `mong ĐÚNG 1 lượt, nhận ${batches.length}`);
+    assert.deepEqual(batches[0], ["a", "b", "c"]);
+  });
+
+  it("vẫn chờ im lặng đủ debounce SAU KHI thread rảnh - không cướp cò giữa cụm tin", async () => {
+    // Bất biến "chưa im lặng đủ thì chưa chạy" phải đúng cho cả đường bận lẫn
+    // đường rảnh. Chốt ngay lúc thread rảnh sẽ cắt đôi đúng cụm tin người ta
+    // đang gõ dở - tức là đẻ lại chính cái lượt thừa vừa chữa xong.
+    const events: string[] = [];
+    const batches: string[][] = [];
+    const handler = async (batch: ParsedMessage[]) => {
+      batches.push(batch.map((m) => m.text));
+    };
+
+    const nha = chiemThread("k-ban-cho-them", events);
+    await sleep(20);
+
+    batcher.enqueueMessage("k-ban-cho-them", makeMessage("a"), handler, 60);
+    await sleep(10);
+    nha(); // thread rảnh trong khi cửa sổ gộp còn đang chạy
+    await sleep(10);
+    batcher.enqueueMessage("k-ban-cho-them", makeMessage("b"), handler, 60);
+
+    await sleep(30);
+    assert.equal(batches.length, 0, "còn trong cửa sổ gộp thì chưa được chạy");
+
+    await sleep(90);
+    assert.equal(batches.length, 1);
+    assert.deepEqual(batches[0], ["a", "b"], "tin b phải kịp vào cùng lượt với a");
+  });
+
+  it("chạm trần thì BỎ tin mới, phần đã dồn vẫn chạy trọn", async () => {
+    const events: string[] = [];
+    const batches: ParsedMessage[][] = [];
+    const handler = async (batch: ParsedMessage[]) => {
+      batches.push(batch);
+    };
+
+    const nha = chiemThread("k-ban-tran", events);
+    await sleep(20);
+
+    const soTinGui = batcher.TRAN_TIN_DON + 5;
+    for (let i = 0; i < soTinGui; i++) {
+      batcher.enqueueMessage("k-ban-tran", makeMessage(`t${i}`), handler, 25);
+    }
+    await sleep(60);
+    nha();
+    await sleep(120);
+
+    assert.equal(batches.length, 1);
+    assert.equal(
+      batches[0]!.length,
+      batcher.TRAN_TIN_DON,
+      "phải dừng đúng ở trần, không phình theo số tin gửi",
+    );
+    // Bỏ tin MỚI chứ không đẩy tin cũ ra: tin cũ đã được người ta gửi trước và
+    // lượt sẽ trả lời theo nó, nên giữ đúng thứ tự đến.
+    assert.equal(batches[0]![0]!.text, "t0");
+  });
+
+  it("báo cho caller biết tin nào BỊ BỎ - không thì tin biến mất khỏi cả history", async () => {
+    // Giá trị trả về là thứ DUY NHẤT caller biết được tin đã bị bỏ. Tin bị bỏ
+    // không tới `processBatch`, mà đó là nơi duy nhất ghi history cho nhánh
+    // có-trả-lời - nuốt giá trị này là bot quên hẳn câu người ta vừa nói,
+    // trong khi họ đã thấy dấu "đã nhận".
+    const events: string[] = [];
+    const nha = chiemThread("k-tra-ve", events);
+    await sleep(20);
+
+    const ketQua: boolean[] = [];
+    for (let i = 0; i < batcher.TRAN_TIN_DON + 3; i++) {
+      ketQua.push(
+        batcher.enqueueMessage("k-tra-ve", makeMessage(`t${i}`), async () => {}, 25),
+      );
+    }
+
+    assert.equal(
+      ketQua.filter((x) => x).length,
+      batcher.TRAN_TIN_DON,
+      "đúng số tin lọt vào batch phải trả true",
+    );
+    assert.deepEqual(
+      ketQua.slice(batcher.TRAN_TIN_DON),
+      [false, false, false],
+      "mọi tin sau khi chạm trần phải trả false",
+    );
+
+    nha();
+    await sleep(120);
+  });
+
+  it("job lịch hẹn chiếm thread cũng gom tin y hệt lượt agent", async () => {
+    // `deliverProactively` dùng chung `runOnThreadChain`, nên đường đánh thức
+    // phải chạy cho cả nguồn đó - không thì tin gửi trong lúc job đang gửi sẽ
+    // nằm lại vĩnh viễn và người nhắn không bao giờ được trả lời.
+    const events: string[] = [];
+    const batches: string[][] = [];
+    const handler = async (batch: ParsedMessage[]) => {
+      batches.push(batch.map((m) => m.text));
+    };
+
+    const nha = chiemThread("k-job-gom", events);
+    await sleep(20);
+    batcher.enqueueMessage("k-job-gom", makeMessage("hỏi-lúc-job-chạy"), handler, 25);
+    await sleep(60);
+    assert.equal(batches.length, 0);
+
+    nha();
+    await sleep(120);
+    assert.deepEqual(batches, [["hỏi-lúc-job-chạy"]]);
+  });
+
+  it("dồn xong chạy hết thì Map sạch - đường mới không rò rỉ", async () => {
+    const events: string[] = [];
+    const nha = chiemThread("k-ban-ro-ri", events);
+    await sleep(20);
+    batcher.enqueueMessage("k-ban-ro-ri", makeMessage("x"), async () => {}, 20);
+    await sleep(50);
+    nha();
+    await sleep(120);
+
+    assert.equal(batcher.activeThreadCount(), 0, "chạy xong phải dọn sạch cả pending lẫn chain");
+  });
+});
+
 describe("runOnThreadChain", () => {
   it("gọi trực tiếp (không qua enqueueMessage) vẫn xâu chuỗi đúng thread - scheduler dùng lại y hệt tin nhắn", async () => {
     const events: string[] = [];
