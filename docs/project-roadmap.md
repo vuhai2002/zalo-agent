@@ -1698,3 +1698,120 @@ chính), và một vòng rà soát toàn cục bắt được ReDoS 20 giây tro
   riêng cho từng công cụ đó.
 - [ ] Ba dòng "hỏi lại" trong persona chưa chứng minh được tác dụng với model
   đang dùng (bỏ đi eval vẫn xanh) - giữ làm lưới đỡ cho lần đổi model rẻ hơn.
+
+## V3.4 - Hết 524, và tin nhắn thêm giữa lượt không còn đẻ ra lượt thừa (2026-08-04)
+
+Xuất phát từ một hội thoại thật: người dùng nhờ soạn bài giảng, trả lời câu hỏi
+của bot làm 3 tin cách nhau 50 giây, và nhận về 3 lượt agent - mỗi lượt làm lại
+từ đầu toàn bộ web_search cộng dựng lại tài liệu 18.000 ký tự - rồi 2 tin báo
+lỗi giống hệt nhau. Chẩn đoán ra hai căn nguyên độc lập.
+
+### Căn nguyên 1: Cloudflare cắt 524 vì request non-stream
+
+`9router.vuhai.io.vn` bật proxy Cloudflare (xác minh bằng header `Server:
+cloudflare` + `CF-RAY`; grep source 9Router không có chỗ nào phát mã 524).
+Cloudflare cắt khi origin chưa trả BYTE ĐẦU trong 100 giây, mà `generateText`
+buộc router gom trọn câu trả lời rồi mới gửi.
+
+Đo trên router thật, cùng prompt sinh 4000 chữ:
+
+| Đường | Kết quả | Byte đầu | Tổng |
+|---|---|---|---|
+| `stream=false` | HTTP 524 | không bao giờ | chết ở 125 s |
+| `stream=true` | HTTP 200, 880 KB | 7,5 s | 135 s |
+
+Lượt streaming chạy LÂU HƠN mốc bị cắt mà vẫn qua - Cloudflare đếm tới byte
+đầu, không đếm tổng thời lượng.
+
+- [x] Chuyển cả 5 điểm gọi LLM sang `streamText` (vòng lặp agent, lượt chốt,
+  tóm tắt thread, sidecar mô tả ảnh, nút Test kết nối). Bất biến giờ là "không
+  còn lời gọi LLM non-stream nào" - dễ giữ hơn "non-stream trừ mấy chỗ này".
+  Nút Test kết nối phải đi đúng đường vận chuyển của bot, không thì nó báo xanh
+  trong khi bot đang chết vì 524
+- [x] `stream-text-result.ts` vá 3 hành vi của `streamText`, cả 3 đều hỏng CÂM:
+  `onError` mặc định là `console.error` thô (đổ `requestBodyValues` = system
+  prompt + hội thoại + ảnh base64 ra stdout, không qua pino); lỗi gốc bị thay
+  bằng `NoOutputGeneratedError` lúc flush (làm `phanLoaiLoiProvider` mất sạch
+  mã HTTP - 401 bị báo thành "thử lại sau ít phút"); lỗi nổ sau khi step 1 đã
+  ghi thì promise VẪN resolve với kết quả cụt
+- [x] Bộ bắt lỗi dựng MỚI mỗi lần gọi - dùng chung cả lượt thì lỗi lần trước
+  giết luôn lần thử lại đã thành công
+- [x] Bật `includeUsage` cho openai-compatible (mặc định TẮT). 9Router trả
+  usage kể cả khi không hỏi nhưng LiteLLM/OpenRouter thì đòi
+- [x] **Nghiệm thu bằng gọi thật**: chạy lại đúng ca đã chết bằng code mới -
+  222 giây, `finishReason: stop`, 39.326 ký tự
+
+### Căn nguyên 2: bộ gộp chốt cứng batch rồi mới xếp hàng
+
+`flush()` cũ đo khoảng lặng giữa các tin, không đo thread có bận. Chốt danh
+sách rồi xếp hàng nghĩa là tin tới sau không còn chỗ gộp vào. Bằng chứng trong
+log: lượt 100 và 101 khởi động đúng 2 giây sau khi lượt trước kết thúc.
+
+- [x] Batch chỉ chốt khi CẢ HAI đúng: im lặng đủ debounce, VÀ không còn ai giữ
+  khoá thread. Gặp thread bận thì ĐỖ LẠI để tin tới tiếp còn chỗ gộp
+- [x] Không cướp cò khi khoá nhả mà cụm tin còn gõ dở - bất biến "chưa im lặng
+  đủ thì chưa chạy lượt" đúng cho cả đường bận lẫn đường rảnh
+- [x] Trần 32 tin mỗi batch (con số Hermes). Trần này CHỈ chặn bộ nhớ: batch dù
+  to vẫn là một lượt, và input gửi model đã có đường cắt theo ngân sách token
+- [x] Tin bị bỏ ở trần vẫn ghi vào history (`enqueueMessage` trả boolean). Rà
+  soát bắt được: không ghi thì tin biến mất khỏi cả hội thoại lẫn trí nhớ bot,
+  trong khi người nhắn đã nhận dấu "đã nhận"
+- [x] Tách `thread-run-chain.ts` - khoá là nguyên thủy dùng chung (scheduler giữ
+  cùng cái khoá đó). Khoá bắn hook khi nhả, bộ gộp tự đăng ký
+
+### Tiêm tin vào lượt đang chạy
+
+Dồn tin mới chỉ hạ 3 lượt xuống 2 - lượt ĐẦU vẫn phóng đi với bối cảnh thiếu.
+Không cửa sổ gộp nào phủ được khoảng 50 giây mà không bắt mọi câu hỏi thường
+phải chờ ngần ấy.
+
+- [x] Chèn ở ranh giới step qua `prepareStep` - đúng điểm goclaw dùng
+  (`observe_stage.go` tiêu thụ `InjectCh`). Không cần bộ phân loại ý định bằng
+  LLM như goclaw: bọc nhãn rồi để model tự xử là đủ, xử đúng cả ca "thôi khỏi"
+- [x] Tin chen GIỮ Ở TẦNG agent-loop, không chỉ trong mảng nội bộ của SDK. Rà
+  soát bắt được lỗi Critical: `layTinDangDo` đã xóa tin khỏi hàng chờ, mà mọi
+  nhánh chữa lỗi và LƯỢT CHỐT đều dựng lại từ biến `messages` của agent-loop.
+  Thiếu chỗ này thì đúng lượt dài - lượt duy nhất đủ lâu để người ta kịp nhắn
+  thêm - lại là lượt đánh rơi tin chen, mà lượt chốt mới là nơi sinh ra câu gửi
+  xuống Zalo
+- [x] Trong lượt chốt, tin chen nằm ở đuôi ĐƯỢC BẢO VỆ cùng câu hỏi và lời
+  nhắc (biến thể của đúng cái bẫy đã vá một lần - lần đó là câu hỏi bị cắt)
+- [x] Trần token riêng cho tin chen (1/4 ngân sách), quá trần thì dựng lại
+  không kèm ảnh - giữ chữ vì chữ mới là thứ đổi yêu cầu
+- [x] Ảnh tin chen được lưu đĩa như tin mở đầu; thiếu thì history chỉ còn dòng
+  "[gửi kèm N ảnh]" và ảnh mất hẳn khi URL Zalo hết hạn
+- [x] Toàn bộ đường chèn trong try/catch, hỏng thì trả "không đổi gì" - đây là
+  nhánh làm tốt thêm, để nó giết lượt vừa tốn mấy phút gọi tool là đổi một tiện
+  ích lấy cả câu trả lời
+- [x] Bật/tắt ở trang Cấu hình (`MID_TURN_INJECTION_ENABLED`, mặc định bật)
+
+### Bớt nhiễu
+
+- [x] Khử trùng câu báo lỗi theo (thread + LOẠI lỗi). Khử theo mỗi thread sẽ
+  nuốt mất "bot chưa cài xong" khi vừa báo "mạng chập" - hai chuyện dẫn tới hai
+  hành động khác nhau
+- [x] Câu trấn an thu HẸP so với kế hoạch đầu: đo lại thì tài khoản thật đã bật
+  cả typing indicator lẫn auto-react, và tin chen cũng nhận đủ "đã xem" +
+  reaction. Ba tín hiệu rồi thì thêm tin text là nhiễu + tốn lượt gọi API không
+  chính thức. Khe hở thật là typing tự tắt ở phút 10 còn lượt chạy tới phút 15
+  (log 12:21:22 ghi "Typing chạy quá lâu - tự tắt") - `BUSY_ACK_AFTER_MS` mặc
+  định 600s lấp đúng khoảng đó, đặt 0 để tắt
+
+### Kiểm chứng
+
+- 1343 test xanh (+27 test mới), typecheck sạch, build chạy
+- **Phá code kiểm test 20 lần, bắt được 19**. Lần không bắt được (giữ lỗi đầu
+  hay lỗi cuối trong bộ bắt lỗi stream) đã ghi thẳng vào comment là chưa có
+  test nào ghim, thay vì để comment ngụ ý đó là bất biến đã chứng minh
+- 2 vòng rà soát bằng subagent (đợt bộ gộp, đợt tiêm tin). Vòng hai tìm ra lỗi
+  Critical ở lượt chốt kèm số đo tái hiện
+
+### Còn treo
+
+- [ ] `agent-loop.ts` đã 657 dòng (vượt ngưỡng 200 từ TRƯỚC đợt này, lúc đó 523).
+  Ứng viên tách là `runWrapUp` nhưng nó ôm 12 biến closure - tách ra là một tham
+  số object to đùng, rủi ro cao mà không thêm tính đúng đắn nào.
+- [ ] `gpt-combo` trên 9Router chỉ có MỘT model (`cx/gpt-5.6-sol`). Fallback với
+  một model thì không có gì để fall back - thêm model thứ hai là có lớp chịu lỗi
+  thật, không tốn dòng code nào.
+- [ ] Chưa chạy `pnpm eval` sau loạt này.
