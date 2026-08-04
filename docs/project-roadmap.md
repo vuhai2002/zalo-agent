@@ -1806,14 +1806,17 @@ phải chờ ngần ấy.
 - 2 vòng rà soát bằng subagent (đợt bộ gộp, đợt tiêm tin). Vòng hai tìm ra lỗi
   Critical ở lượt chốt kèm số đo tái hiện
 
+### Quyết định đã chốt - đừng lật lại nếu không có bằng chứng mới
+
+- **KHÔNG tách `agent-loop.ts`** dù nó 657 dòng (vượt ngưỡng 200 từ TRƯỚC đợt
+  này, lúc đó đã 523). Ứng viên duy nhất là `runWrapUp`, nhưng nó ôm 12 biến
+  closure - tách ra là một tham số object to đùng, rủi ro cao mà không thêm
+  tính đúng đắn nào. User đã cân nhắc và chốt giữ nguyên (2026-08-05).
+
 ### Còn treo
 
-- [ ] `agent-loop.ts` đã 657 dòng (vượt ngưỡng 200 từ TRƯỚC đợt này, lúc đó 523).
-  Ứng viên tách là `runWrapUp` nhưng nó ôm 12 biến closure - tách ra là một tham
-  số object to đùng, rủi ro cao mà không thêm tính đúng đắn nào.
-- [ ] `gpt-combo` trên 9Router chỉ có MỘT model (`cx/gpt-5.6-sol`). Fallback với
-  một model thì không có gì để fall back - thêm model thứ hai là có lớp chịu lỗi
-  thật, không tốn dòng code nào.
+- [x] `gpt-combo` trên 9Router đã thêm model thứ hai - fallback giờ có chỗ để
+  fall back thật (làm trên dashboard 9Router, không đụng code).
 - [x] `pnpm eval` 11/11 đạt với model thật (chạy 2 lần: trước và sau bản vá của
   vòng rà tổng). Lưu ý eval chỉ đi đường THUẬN - không ca nào chạm nhánh chữa
   lỗi, nên nó không thể bắt được lớp lỗi mà vòng rà tổng vừa tìm ra.
@@ -1825,3 +1828,80 @@ phải chờ ngần ấy.
   (`prepareStep` chạy một lần ở đầu, lúc chưa ai kịp nhắn thêm). Đó lại đúng là
   ca sinh dài nhất. Không có cách sửa rẻ - không kiểm soát được ranh giới step
   bên trong một lần gọi model.
+
+## V3.4.1 - Vá sau khi dùng thật: dashboard mất tin, và trần ngày lệch ngày (2026-08-05)
+
+Ba việc phát sinh khi user dùng dashboard thật, cộng một bug scheduler có sẵn
+lộ ra đúng lúc ngày thật qua nửa đêm.
+
+### Dashboard: tin bot gửi bị mất, khung chat mở nhầm chỗ
+
+User đối chiếu Zalo với dashboard: bot gửi 3 tin (câu dẫn, file .docx, câu
+chốt) mà web chỉ hiện 1.
+
+- [x] 5 tool (`send_file`, 2 tool tạo tài liệu, `create_image`, `tag_member`)
+  gọi thẳng `enqueueSend`, không đi qua `deliverChatReply` - mà đó là chỗ DUY
+  NHẤT gọi `appendMessage`. Hỏng nặng hơn chuyện hiển thị: history CHÍNH LÀ thứ
+  model đọc lại ở lượt sau, nên gửi file xong bot không nhớ đã gửi, hỏi lại là
+  dựng lại từ đầu. Nghi đây là một phần lý do lượt 100/101 hôm 04/08 làm lại
+  tài liệu.
+- [x] Tool KHÔNG tự `appendMessage`: tin người dùng được ghi ở CUỐI lượt (ghi
+  trước thì model thấy tin lặp hai lần), nên tool ghi thẳng lúc gửi sẽ nằm
+  TRƯỚC tin người dùng. Tool chỉ ghi nhận vào mảng do `message-turn-processor`
+  sở hữu - cùng nếp `trace` và `tinChen`. Có test ghim riêng thứ tự này.
+- [x] Khung chat mở ra ở TIN MỚI NHẤT (trước đây đứng ở `scrollTop = 0`, tức
+  tin cũ nhất trong 50 tin vừa nạp). "Tải tin cũ hơn" giữ nguyên chỗ đang đọc -
+  đo khoảng cách tới ĐÁY trước khi chèn, vì đó là đại lượng duy nhất không đổi
+  khi danh sách dài ra.
+- [x] Nút xóa bản tóm tắt hội thoại cũ. Đặt CẢ `summary_covers_to_message_id`
+  về 0 chứ không chỉ xóa chữ - giữ nguyên mốc thì lần gộp sau chỉ gộp backlog
+  mới và đoạn cũ mất hẳn, tức xóa một bản tóm tắt SAI lại hóa ra xóa luôn TRÍ
+  NHỚ về đoạn đó.
+- [x] Khối tóm tắt thu gọn 2 dòng, mở ra thì có trần chiều cao và tự cuộn (nó
+  là anh em cùng cấp với danh sách tin trong flex column mà không có trần lẫn
+  overflow, nên bản 300 từ nở ~460px và bóp phần hội thoại).
+
+### Scheduler: trần ngày ghi sổ bằng hai cái đồng hồ
+
+Hai test đỏ sau nửa đêm. Xác định trách nhiệm bằng `git checkout 0064fb7`
+(trước cả loạt V3.4) - vẫn đỏ, nên lỗi CÓ SẴN, không phải hồi quy.
+
+Tìm căn nguyên bằng cách chèn log vào từng điểm quyết định: mọi thứ phía trên
+đều đúng, nhưng hai lần đọc CÙNG một khóa cho hai kết quả - hàng trong
+`proactive_send_counters` biến mất giữa chừng.
+
+- [x] `recordProactiveSend` khai `now: Date = new Date()` và `sendCapNotice`
+  quên truyền `now`. Nó vừa cộng bộ đếm vào day-key của giờ THẬT, vừa dọn bảng
+  bằng cutoff của giờ thật (retention 3 ngày) - xóa luôn dòng của ngày lượt
+  đang xử lý. Mốc giả lập 2026-08-01 hôm 04/08 còn sát mép nên sống, qua nửa
+  đêm sang 05/08 là bị xóa.
+- [x] BỐN nơi gọi đều thiếu `now`, trong khi `reserveCapNotice`/`revertCapNotice`
+  thì có - bản vá "Mục 3, vòng 4" trước đây chỉ làm nửa chừng.
+- [x] Bug THẬT ở ranh giới nửa đêm, không riêng gì test: giành suất ngày D, gửi
+  mất 20 giây (`SCHEDULER_SEND_GAP_MS`) rồi hỏng, hoàn suất trả cho ngày D+1.
+  Ngày D giữ suất VĨNH VIỄN không ai đòi lại được, ngày D+1 bị `MAX(0, count-1)`
+  nuốt êm. Đây là lá chắn chống khóa nick nên rò một suất là rò thật.
+- [x] Sửa: chốt MỘT mốc ở đầu tick rồi luồn xuyên suốt
+  (`RunScheduledJobOptions.now`). BỎ HẾT `= new Date()` trong
+  `proactive-send-guard.ts` để trình biên dịch canh - chính cái mặc định đó đẻ
+  ra bug, dựng lại nó ở tầng trên là lặp lại đúng sai lầm. Compiler chỉ ra đủ
+  24 call site, không sót chỗ nào.
+- [x] Cân nhắc hướng ngược lại (bỏ `now` khỏi reserve/revert để mọi thứ dùng
+  giờ thật) và BÁC: nó có lỗ hổng thật - giành và hoàn cách nhau cả quãng gửi,
+  mỗi bên tự lấy giờ thật là hoàn nhầm ngày. Bất biến đúng là "một lượt xử lý
+  job = MỘT mốc thời gian".
+
+### Kiểm chứng
+
+- 1351 test xanh, chạy cả bộ 3 lần đều xanh (trước đó 1-2 đỏ ngẫu nhiên)
+- Phá code kiểm test: dựng lại đúng bug gốc thì 2 test cũ đỏ y như trước; bản
+  phá ở đường hoàn suất KHÔNG bị bắt -> lộ ra lỗ hổng test, đã viết bổ sung 3
+  test cho ranh giới nửa đêm (cả tầng đơn vị lẫn qua ĐƯỜNG GỬI THẬT)
+- Bản đầu của chính test mới cũng xanh giả (khẳng định "ngày thật bằng 0" trong
+  khi ca chạy trước đã tiêu một suất) - sửa thành "lượt này không đụng vào ngày
+  thật" mới ghim được
+
+### Còn treo
+
+- [ ] Ảnh và file bot đã gửi TRƯỚC bản vá này vẫn không có trong history - chỉ
+  ghi từ giờ trở đi, không dựng lại quá khứ.
