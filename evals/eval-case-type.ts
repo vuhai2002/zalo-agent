@@ -24,6 +24,16 @@ export type MongDoi = {
    * thật.
    */
   kiemTraText?: { moTa: string; dat: (text: string) => boolean };
+  /**
+   * Khẳng định trên THAM SỐ model truyền cho tool, không chỉ tên tool.
+   *
+   * Cần cho những case mà gọi đúng tool vẫn có thể sai hoàn toàn: `save_memory`
+   * với `action: "them"` khi người dùng vừa đính chính là ĐẺ THÊM một điều mâu
+   * thuẫn, trong khi phép đo chỉ nhìn tên tool lại báo xanh.
+   *
+   * `input` là chuỗi JSON đúng như trace ghi lại.
+   */
+  kiemTraToolArgs?: { tool: string; moTa: string; dat: (input: string) => boolean };
 };
 
 export type EvalCase = {
@@ -42,5 +52,12 @@ export type EvalCase = {
   disabledTools?: string[];
   /** Chat nhóm thay vì chat riêng */
   laNhom?: boolean;
+  /**
+   * Điều bot ĐÃ NHỚ về người nhắn, gieo sẵn trước khi chạy lượt.
+   *
+   * Không có nó thì không đo được nhánh sửa/xóa của `save_memory`: model phải
+   * đang nhớ một điều SAI thì lời đính chính mới có nghĩa.
+   */
+  factCoSan?: string[];
   mongDoi: MongDoi;
 };

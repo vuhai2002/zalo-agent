@@ -66,6 +66,7 @@ async function main(): Promise<void> {
   const traceStore = await import("../src/agent/agent-trace-store.js");
   const processor = await import("../src/zalo/message-turn-processor.js");
   const database = await import("../src/conversation/database.js");
+  const memoryStore = await import("../src/conversation/memory-store.js");
   const { cleanupTestEnv } = await import("../src/shared/test-env-setup.js");
   const { ThreadType } = await import("zca-js");
   // Chính hằng số production dùng để nhắn báo lỗi - so bằng nguồn thật, không
@@ -101,6 +102,19 @@ async function main(): Promise<void> {
         lastSenderName: "Người dùng eval",
       });
 
+      // Gieo điều bot "đã nhớ" từ trước. Xóa sạch trước mỗi case để case này
+      // không thấy fact case kia vừa ghi - DB tạm dùng chung cả lượt chạy.
+      database.db.exec("DELETE FROM memories");
+      for (const noiDung of c.factCoSan ?? []) {
+        memoryStore.saveMemoryFact({
+          accountId: ACC,
+          subjectId: "eval-user",
+          content: noiDung,
+          learnedInThreadId: threadId,
+          learnedInGroup: Boolean(c.laNhom),
+        });
+      }
+
       const fake = taoFakeZaloApi();
       const config = { ...accountStore.getAccount(ACC)!, agentId: AGENT };
       const batch = [
@@ -133,7 +147,8 @@ async function main(): Promise<void> {
 
       const luot = traceStore.getRecentTurns(ACC, threadId, 1)[0];
       const steps = luot ? traceStore.getTurnTrace(luot.id) : [];
-      const toolDaGoi = steps.flatMap((s) => s.toolCalls.map((t) => t.name));
+      const toolDaGoiKemArgs = steps.flatMap((s) => s.toolCalls);
+      const toolDaGoi = toolDaGoiKemArgs.map((t) => t.name);
       const traLoi = fake.tinDaGui.join("\n");
 
       // `processBatch` BẮT lỗi rồi nhắn câu báo lỗi thay vì ném, nên `loiChay`
@@ -151,7 +166,7 @@ async function main(): Promise<void> {
           cauLoiHeThong: [TECHNICAL_ERROR_REPLY, STEP_LIMIT_REPLY, ...Object.values(LOI_THEO_LOAI)],
         });
 
-      const cham = chamCase(c, { toolDaGoi, traLoi, loiChay: hong });
+      const cham = chamCase(c, { toolDaGoi, toolDaGoiKemArgs, traLoi, loiChay: hong });
       ketQua.push({
         ten: c.ten,
         dat: cham.dat,

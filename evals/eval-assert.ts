@@ -11,6 +11,8 @@ import type { EvalCase } from "./eval-case-type.js";
 export type QuanSat = {
   /** Tên tool đã gọi, theo thứ tự, có lặp */
   toolDaGoi: string[];
+  /** Tên + tham số JSON của từng lời gọi - cho `kiemTraToolArgs` */
+  toolDaGoiKemArgs?: { name: string; input: string }[];
   /** Chữ người dùng thật sự nhận */
   traLoi: string;
   /** Lượt ném lỗi thì đây là thông báo; null nếu chạy trót lọt */
@@ -84,12 +86,26 @@ export function chamCase(c: EvalCase, qs: QuanSat): KetQuaCham {
     lyDoHong.push(`Câu trả lời không đạt yêu cầu cấu trúc: ${kt.moTa}`);
   }
 
+  const kta = c.mongDoi.kiemTraToolArgs;
+  if (kta) {
+    const cacLoiGoi = (qs.toolDaGoiKemArgs ?? []).filter((g) => g.name === kta.tool);
+    if (cacLoiGoi.length === 0) {
+      lyDoHong.push(`Phải gọi "${kta.tool}" để kiểm tham số nhưng không gọi lần nào`);
+    } else if (!cacLoiGoi.some((g) => kta.dat(g.input))) {
+      // Đạt khi CÓ ÍT NHẤT MỘT lời gọi đúng: model có thể gọi tool nhiều lần
+      // trong một lượt, đòi mọi lời gọi đều đúng là nguồn đỏ ngẫu nhiên.
+      const ds = cacLoiGoi.map((g) => g.input).join(" | ");
+      lyDoHong.push(`Tham số "${kta.tool}" không đạt: ${kta.moTa} (đã gọi với: ${ds})`);
+    }
+  }
+
   // Không có mong đợi nào là case vô nghĩa - nó LUÔN xanh nên chỉ tổ làm bảng
   // kết quả trông đầy đặn hơn thực chất
   if (
     !c.mongDoi.goiTool?.length &&
     !c.mongDoi.khongGoiTool?.length &&
-    !c.mongDoi.kiemTraText
+    !c.mongDoi.kiemTraText &&
+    !c.mongDoi.kiemTraToolArgs
   ) {
     lyDoHong.push("Case không khai mong đợi nào - luôn xanh nên vô nghĩa");
   }

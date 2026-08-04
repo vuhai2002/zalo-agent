@@ -87,7 +87,14 @@ export function getMemoriesForContext(params: {
     .map((r) => ({ subjectId: r.subject_id, content: r.content }));
 }
 
-// ===== Cho dashboard: xem + xóa fact (xóa là quyền của user, bot không tự xóa) =====
+// ===== Cho dashboard: xem + xóa fact =====
+//
+// Trước đây ghi "xóa là quyền của user, bot không tự xóa". Đã đổi: bot sửa và
+// xóa được qua `memory-edit-store.ts`, nhưng CHỈ trong tập fact nó đang nhìn
+// thấy. Lý do đổi là bằng chứng mới chứ không phải đổi ý: không có đường sửa
+// thì một lời đính chính của người dùng ("mình chuyển ra Hà Nội rồi") chỉ đẻ
+// thêm fact mới nằm cạnh fact cũ, để lại hai điều mâu thuẫn - tệ hơn hẳn so
+// với không nhớ gì. Đường xóa của dashboard vẫn giữ, không phụ thuộc vào bot.
 
 const listStmt = db.prepare(`
   SELECT id, account_id, subject_id, content, learned_in_thread_id, learned_in_group, created_at
