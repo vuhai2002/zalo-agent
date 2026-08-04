@@ -96,7 +96,7 @@ const TY_LE_TRAN_TIN_CHEN = 0.25;
  * Bỏ ảnh giữ chữ chứ không bỏ cả tin: chữ mới là thứ đổi yêu cầu, còn ảnh vẫn
  * nằm trong history nên lượt sau đọc lại được.
  */
-async function dungTinChenTrongNganSach(
+export async function dungTinChenTrongNganSach(
   moi: ParsedMessage[],
   imageMode: ImageContextMode,
   tranToken: number,

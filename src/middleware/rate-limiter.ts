@@ -36,3 +36,16 @@ export function enqueueSend<T>(threadKey: string, task: () => Promise<T>): Promi
 export function pendingSendThreadCount(): number {
   return queues.size;
 }
+
+/**
+ * Thread này đang có tin nào đang gửi/chờ gửi không.
+ *
+ * Dùng để KHÔNG chen một tin phụ vào giữa chuỗi tin của một câu trả lời đang
+ * được cắt làm nhiều đoạn. `sendReplyInParts` xếp hàng TỪNG đoạn một (await
+ * xong đoạn này mới xếp đoạn kế), nên giữa hai đoạn hàng đợi rỗng và bất kỳ
+ * `enqueueSend` nào khác chèn vào được - người nhắn thấy câu trả lời bị cắt đôi
+ * bởi một tin không liên quan.
+ */
+export function dangGuiTren(threadKey: string): boolean {
+  return queues.has(threadKey);
+}

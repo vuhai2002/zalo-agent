@@ -106,6 +106,35 @@ describe("maybeNotifyBusyWait", () => {
     await sleep(10);
   });
 
+  it("IM khi thread đang có tin đi ra - không chen ngang giữa câu trả lời đang cắt nhiều đoạn", async () => {
+    // `sendReplyInParts` xếp hàng TỪNG đoạn một, nên giữa hai đoạn hàng đợi
+    // rỗng và câu trấn an chèn được vào giữa. Lúc đó nội dung của nó ("vẫn đang
+    // xử lý") còn sai sự thật - bot đang GỬI chứ không còn đang xử lý.
+    const rateLimiter = await import("../middleware/rate-limiter.js");
+    tuning.setTuning("BUSY_ACK_AFTER_MS", 20);
+    const nha = chiemThread("k-dang-gui");
+    await sleep(60);
+
+    // Giữ hàng đợi gửi bận bằng một việc gửi chưa xong
+    let nhaGui!: () => void;
+    const guiBiChan = new Promise<void>((resolve) => {
+      nhaGui = resolve;
+    });
+    void rateLimiter.enqueueSend("k-dang-gui", () => guiBiChan);
+    await sleep(10);
+
+    assert.equal(
+      await notice.maybeNotifyBusyWait(muc("k-dang-gui")),
+      false,
+      "đang gửi dở thì phải im",
+    );
+    assert.deepEqual(daGui, []);
+
+    nhaGui();
+    nha();
+    await sleep(30);
+  });
+
   it("đặt 0 là tắt hẳn - kể cả khi đã bận rất lâu", async () => {
     tuning.setTuning("BUSY_ACK_AFTER_MS", 0);
     const nha = chiemThread("k-tat");

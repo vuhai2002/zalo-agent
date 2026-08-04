@@ -156,6 +156,21 @@ function promptText(call: Parameters<MockLanguageModelV4["doStream"]>[0]): strin
     .join("\n");
 }
 
+/**
+ * Chỉ `n` tin CUỐI của prompt - dùng để soi phần ĐUÔI ĐƯỢC BẢO VỆ của lượt chốt.
+ *
+ * Soi vị trí chứ không soi sự có mặt: khẳng định "câu hỏi còn trong prompt" chỉ
+ * đỏ khi bộ cắt thật sự cắt tới nó, mà điều đó phụ thuộc kích thước ngữ cảnh -
+ * nên nó xanh giả ở mọi lượt nhẹ. Câu hỏi PHẢI nằm trong đuôi, đó mới là bất
+ * biến thật.
+ */
+function promptDuoi(call: Parameters<MockLanguageModelV4["doStream"]>[0], n: number): string {
+  return call.prompt
+    .slice(-n)
+    .map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content)))
+    .join("\n");
+}
+
 /** System prompt (role='system') nằm ở đầu `prompt`, không phải field riêng trên call options */
 function systemText(call: Parameters<MockLanguageModelV4["doStream"]>[0]): string | undefined {
   const systemMsg = call.prompt.find((m) => m.role === "system");
@@ -945,6 +960,92 @@ describe("runAgentTurn - tiêm tin giữa lượt", () => {
       assert.ok(promptChot.includes(DAU_VET_CHEN), "LƯỢT CHỐT PHẢI CÓ TIN CHEN");
     } finally {
       tuning.setTuning("LLM_MAX_STEPS", 3);
+    }
+  });
+
+  it("HAI nhánh chữa lỗi nối nhau vẫn chỉ MỘT bản tin chen - không cộng dồn", async () => {
+    // Bộ test cũ chỉ đo CÓ MẶT (`includes`) trong một lần chạy, nên không thấy
+    // được ca này. Đường gắn lại tin chen không idempotent: gán ngược vào biến
+    // `messages` ở từng nhánh thì hai nhánh nối nhau cho ra hai bản y hệt, và
+    // model đọc ra "người này nhắc lại hai lần" đúng lúc nó đang được dặn đừng
+    // làm lại thứ đã xong.
+    tuning.setTuning("LLM_MAX_STEPS", 3);
+    let soLanLay = 0;
+    // Lần 1: 429 (chữa -> chạy lại). Lần 2: completion rỗng (chữa -> chạy lại).
+    // Lần 3: trả lời được.
+    let lan = 0;
+    const { calls } = await chayLuot(
+      [
+        () => {
+          lan++;
+          if (lan <= 3) return loiApi(429, "Rate limit exceeded"); // SDK tự thử 3 lần
+          if (lan === 4) return rong();
+          return traLoi("xong");
+        },
+      ],
+      [tinNhan()],
+      {
+        layTinChen: () => {
+          soLanLay++;
+          return soLanLay === 1 ? [tinChenGia()] : [];
+        },
+      },
+    );
+
+    const cuoi = promptText(calls[calls.length - 1]!);
+    const soBan = cuoi.split(DAU_VET_CHEN).length - 1;
+    assert.ok(cuoi.includes(DAU_VET_CHEN), "tin chen phải sống qua cả hai nhánh chữa lỗi");
+    assert.equal(soBan, 1, `tin chen bị nhân thành ${soBan} bản trong prompt cuối`);
+  });
+
+  it("sau nhánh chữa lỗi, LƯỢT CHỐT vẫn giữ được CÂU HỎI GỐC", async () => {
+    // `runWrapUp` lấy câu hỏi bằng `messages[length - 1]`. Gán tin chen ngược
+    // vào `messages` là phần tử cuối thành tin chen, câu hỏi gốc rơi vào vùng
+    // bị cắt - mở lại đúng cái bẫy mà khối chú thích ở `runWrapUp` nói đã vá.
+    tuning.setTuning("LLM_MAX_STEPS", 2);
+    // Ngữ cảnh CHẬT để lượt chốt thật sự phải cắt. Không ép cắt thì câu hỏi gốc
+    // sống sót kể cả khi nó rơi khỏi đuôi được bảo vệ, và test xanh giả - đã
+    // dính đúng vậy ở bản đầu của chính test này.
+    tuning.setTuning("LLM_CONTEXT_WINDOW", 3_000);
+    const goiToolCongKenh = () => ({
+      ...goiTool(),
+      content: [...goiTool().content, { type: "text" as const, text: "phần đệm ".repeat(2_000) }],
+    });
+    try {
+      let soLanLay = 0;
+      let lan = 0;
+      const { calls } = await chayLuot(
+        [
+          () => {
+            lan++;
+            if (lan === 1) return rong(); // buộc đi qua nhánh chữa
+            return goiToolCongKenh(); // step nào cũng gọi tool -> hết trần -> lượt chốt
+          },
+        ],
+        [tinNhan()],
+        {
+          layTinChen: () => {
+            soLanLay++;
+            return soLanLay === 1 ? [tinChenGia()] : [];
+          },
+        },
+      );
+
+      const promptChot = promptText(calls[calls.length - 1]!);
+      assert.ok(
+        promptChot.includes("trả lời người dùng NGAY BÂY GIỜ"),
+        "lần gọi cuối phải đúng là lượt chốt",
+      );
+      // Đuôi được bảo vệ của lượt chốt là [câu hỏi, tin chen, lời nhắc] - ba
+      // tin không bao giờ bị cắt. Câu hỏi rơi khỏi đó là nó vào vùng bị cắt, và
+      // chỉ cần ngữ cảnh đủ nặng là mất hẳn.
+      assert.ok(
+        promptDuoi(calls[calls.length - 1]!, 3).includes(tinNhan().text),
+        "CÂU HỎI GỐC phải nằm trong ĐUÔI ĐƯỢC BẢO VỆ - rơi ra ngoài là model chốt lại mà không biết người ta hỏi gì",
+      );
+    } finally {
+      tuning.setTuning("LLM_MAX_STEPS", 3);
+      tuning.setTuning("LLM_CONTEXT_WINDOW", null);
     }
   });
 

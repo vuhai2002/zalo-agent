@@ -64,8 +64,15 @@ export function runOnThreadChain<T>(threadKey: string, fn: () => Promise<T>): Pr
   const run = previous.then(fn);
 
   // Chỉ đặt mốc cho lần chạy MỞ ĐẦU chuỗi; lượt nối thêm vào chuỗi đang chạy
-  // không được làm mới nó, không thì đồng hồ chờ của người dùng bị đặt lại mỗi
-  // lần bot bắt đầu một lượt mới và họ chờ mãi mà không bao giờ chạm ngưỡng.
+  // không được làm mới nó.
+  //
+  // GIỚI HẠN ĐÃ BIẾT: đồng hồ này đo "chuỗi hiện tại đã chạy bao lâu", KHÔNG
+  // phải "người này đã chờ câu trả lời bao lâu". Từ khi bộ gộp cho batch ĐỖ LẠI
+  // thay vì nối vào chuỗi đang chạy, lượt kế tiếp mở một chuỗi MỚI và đồng hồ
+  // về 0. Người nhắn lúc phút 5 của một lượt 12 phút sẽ được tính là chờ 0 giây
+  // khi lượt sau bắt đầu. Nhánh "lượt nối thêm" mà dòng trên bảo vệ giờ gần như
+  // chỉ còn bước GỬI của scheduler. Đo cho đúng thì phải theo dõi từ TIN ĐẾN
+  // (tin cũ nhất chưa được trả lời) chứ không theo chuỗi - việc riêng, chưa làm.
   if (!batDauBan.has(threadKey)) batDauBan.set(threadKey, Date.now());
 
   // Xóa entry khi thread chạy xong: hai Map này sống suốt đời process, giữ lại
@@ -82,7 +89,19 @@ export function runOnThreadChain<T>(threadKey: string, fn: () => Promise<T>): Pr
     // vĩnh viễn và người nhắn không bao giờ được trả lời.
     //
     // Gắn ở CẢ hai nhánh của `then` nên `fn` ném lỗi cũng vẫn nhả khoá.
-    for (const fnRanh of nguoiChoRanh) fnRanh(threadKey);
+    //
+    // Mỗi hook bọc riêng: một hook ném sẽ nuốt luôn các hook sau nó, và lỗi đó
+    // rơi vào `tail` không ai bắt (unhandledRejection). Hôm nay chỉ có một hook
+    // và nó khó ném, nhưng cam kết "bắn thừa còn hơn bỏ sót" ngay trên chỉ đúng
+    // khi việc bắn không tự cắt ngang được.
+    for (const fnRanh of nguoiChoRanh) {
+      try {
+        fnRanh(threadKey);
+      } catch {
+        // Không log ở đây: module này cố ý không phụ thuộc logger. Hook nào cần
+        // chẩn đoán thì tự bọc try/catch bên trong nó.
+      }
+    }
   };
   tail = run.then(release, release);
   threadChains.set(threadKey, tail);

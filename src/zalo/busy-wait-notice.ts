@@ -1,6 +1,7 @@
 import type { API } from "zca-js";
 import type { ThreadType } from "zca-js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
+import { dangGuiTren } from "../middleware/rate-limiter.js";
 import { daBanBaoLau } from "../middleware/thread-run-chain.js";
 import { createLogger } from "../shared/logger.js";
 import { sendReplyInParts } from "./send-reply-in-parts.js";
@@ -10,9 +11,15 @@ import { sendReplyInParts } from "./send-reply-in-parts.js";
  *
  * Vì sao hẹp như vậy chứ không báo bận mọi lúc: người nhắn đã có sẵn ba tín
  * hiệu - dấu "đang nhập..." chạy suốt lượt, biên nhận "đã xem", và reaction tự
- * động (tin nhắn thêm giữa lượt cũng nhận đủ cả ba, xem
- * `message-turn-processor.ts`). Chồng thêm một tin text vào đó vừa là nhiễu,
- * vừa tốn thêm một lượt gọi API không chính thức mà `CLAUDE.md` dặn hạn chế.
+ * động. Chồng thêm một tin text vào đó vừa là nhiễu, vừa tốn thêm một lượt gọi
+ * API không chính thức mà `CLAUDE.md` dặn hạn chế.
+ *
+ * Tin nhắn thêm giữa lượt nhận đủ cả ba tín hiệu CHỈ KHI nó được kéo vào lượt
+ * (`sendSeenReceipt` + `sendAutoReaction` nằm trong `layTinChen` của
+ * `message-turn-processor.ts`). Lượt KHÔNG gọi tool chỉ có đúng một step nên
+ * `prepareStep` chạy một lần ở đầu, lúc chưa ai kịp nhắn thêm - tin đỗ nguyên
+ * tới hết lượt và chỉ có mỗi biên nhận "đã nhận" của router. Đó lại đúng là ca
+ * sinh dài nhất (model viết thẳng một mạch), tức ca chờ lâu nhất.
  *
  * Khe hở thật nằm ở chỗ khác: `typing-indicator.ts` tự tắt sau 10 phút, còn
  * `LLM_TURN_TIMEOUT_MS` cho lượt chạy tới 15 phút. Khoảng giữa hai mốc đó là im
@@ -51,6 +58,16 @@ export async function maybeNotifyBusyWait(muc: MucTieuTranAn): Promise<boolean> 
 
   const daCho = daBanBaoLau(muc.threadKey);
   if (daCho === null || daCho < nguong) return false;
+
+  // Thread đang có tin đi ra thì IM. `sendReplyInParts` xếp hàng từng đoạn một,
+  // nên giữa hai đoạn hàng đợi rỗng và câu này chen được vào giữa một câu trả
+  // lời đang cắt làm nhiều tin - lúc đó nội dung của nó ("vẫn đang xử lý") còn
+  // sai sự thật vì bot đang GỬI chứ không còn đang xử lý. Cùng khe hở với
+  // khoảng 60-135 giây giữa tin "đang vẽ ảnh" và ảnh thật của `create_image`.
+  if (dangGuiTren(muc.threadKey)) {
+    log.debug({ threadId: muc.threadId }, "Thread đang có tin đi ra - hoãn câu trấn an");
+    return false;
+  }
 
   // Cùng ngưỡng dùng luôn làm khoảng lặng: chờ thêm bấy nhiêu nữa mới đáng nói
   // lần hai. Một hằng số, một ý nghĩa - đỡ phải chỉnh hai chỗ cho khớp nhau.
