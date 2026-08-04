@@ -25,17 +25,38 @@ const capStmt = db.prepare(`
                ORDER BY id DESC LIMIT 1 OFFSET ?)
 `);
 
+const trungStmt = db.prepare(`
+  SELECT id FROM memories WHERE account_id = ? AND subject_id = ? AND content = ? LIMIT 1
+`);
+
+export type KetQuaGhiNho =
+  | { ghi: true }
+  /** Đã có sẵn một fact y hệt - không ghi bản thứ hai */
+  | { ghi: false; lyDo: "trung" };
+
+/**
+ * So khớp TRÙNG KHÍT (sau khi cắt khoảng trắng hai đầu), không chuẩn hóa gì
+ * thêm. Học Hermes (`memory_tool.py`: `if content in entries` -> "Entry already
+ * exists"). Cố ý không bỏ dấu hay hạ chữ thường để so: hai câu chỉ khác dấu
+ * trong tiếng Việt thường là hai câu khác nghĩa, mà chặn nhầm ở đây nghĩa là
+ * người dùng dặn một điều mới và bot im lặng không nhớ.
+ */
 export function saveMemoryFact(params: {
   accountId: string;
   subjectId: string;
   content: string;
   learnedInThreadId: string;
   learnedInGroup: boolean;
-}): void {
+}): KetQuaGhiNho {
+  const noiDung = params.content.trim();
+  if (trungStmt.get(params.accountId, params.subjectId, noiDung)) {
+    return { ghi: false, lyDo: "trung" };
+  }
+
   insertStmt.run(
     params.accountId,
     params.subjectId,
-    params.content,
+    noiDung,
     params.learnedInThreadId,
     params.learnedInGroup ? 1 : 0,
   );
@@ -46,6 +67,7 @@ export function saveMemoryFact(params: {
     params.subjectId,
     getTuning("MEMORY_MAX_FACTS_PER_SUBJECT"),
   );
+  return { ghi: true };
 }
 
 // Quy tắc inject BẤT ĐỐI XỨNG (user đã chốt): private không bao giờ chảy ra public.

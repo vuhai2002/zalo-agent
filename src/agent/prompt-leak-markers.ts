@@ -22,6 +22,21 @@
  */
 export const THE_NOI_DUNG_NGOAI = "noi_dung_ngoai";
 
+/**
+ * Tên thẻ bọc khối "điều đã ghi nhớ" trong system prompt.
+ *
+ * Vì sao memory cũng cần ranh giới: nó là đường prompt injection BỀN duy nhất
+ * còn hở. Nội dung web đã bọc `THE_NOI_DUNG_NGOAI`, tin của người ngoài
+ * allowlist đã có nhãn "[chưa xác minh]" - nhưng fact đi thẳng vào system prompt
+ * dưới dạng gạch đầu dòng trần và nằm đó ở MỌI lượt sau. Một tin soạn khéo dụ
+ * model ghi một câu chỉ thị vào trí nhớ là cài được lệnh vĩnh viễn.
+ *
+ * `khoiDieuDaNho` khử mọi lần xuất hiện của chuỗi này trong nội dung fact trước
+ * khi bọc, đúng như `wrapUntrustedContent` làm - nếu không, chỉ cần ghi đúng thẻ
+ * đóng vào một fact là cắt sớm được ranh giới.
+ */
+export const THE_DIEU_DA_NHO = "dieu_da_nho";
+
 /** Tiêu đề mục an toàn trong `BASE_PERSONA` */
 export const TIEU_DE_QUY_TAC_AN_TOAN = "Quy tắc an toàn (tuyệt đối, không có ngoại lệ):";
 
@@ -57,6 +72,10 @@ export const KHA_NANG_DAY_DU = [
  */
 export const DAU_HIEU_RO_PROMPT: readonly string[] = [
   `<${THE_NOI_DUNG_NGOAI}`,
+  // Cùng lý do và cùng mức an toàn với thẻ trên: có dấu `<` đứng trước nên
+  // không ai vô tình viết ra trong lúc nhắn tin. Nội dung fact đã bị khử tên thẻ
+  // lúc bọc, nên model không đọc được dạng gạch dưới từ chính khối này.
+  `<${THE_DIEU_DA_NHO}`,
   TIEU_DE_QUY_TAC_AN_TOAN,
   ...KHA_NANG_DAY_DU,
 ];

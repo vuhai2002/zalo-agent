@@ -107,13 +107,17 @@ export function createSaveMemoryTool({ account, message }: ToolContext) {
 
       if (hanhDong === "them") {
         if (!content) return ketQuaLoi("Thiếu nội dung cần nhớ");
-        saveMemoryFact({
+        const kq = saveMemoryFact({
           accountId: account.id,
           subjectId,
           content,
           learnedInThreadId: message.threadId,
           learnedInGroup: message.isGroup,
         });
+        // KHÔNG phải lỗi: điều cần nhớ vẫn đang nằm trong trí nhớ, đúng như model
+        // muốn. Nhưng phải nói rõ là không ghi thêm bản nào, kẻo model tưởng hỏng
+        // rồi gọi lại. Cùng ngữ nghĩa với "Entry already exists" của Hermes.
+        if (!kq.ghi) return `Điều này đã có sẵn trong trí nhớ, không ghi thêm bản trùng: ${content}`;
         return `Đã ghi nhớ: ${content}`;
       }
 

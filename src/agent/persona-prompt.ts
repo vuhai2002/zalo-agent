@@ -3,6 +3,7 @@ import type { AgentProfile } from "../config/agent-store.js";
 import { botTimeZone } from "../config/runtime-tuning-settings.js";
 import type { MemoryContext } from "../conversation/memory-store.js";
 import { currentDateLine } from "../shared/current-datetime.js";
+import { khoiDieuDaNho } from "./memory-prompt-block.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 import { listAvailableTools, type ToolDefinition } from "./tools/tool-registry.js";
 import { toolPersonaSections } from "./persona-tool-rules.js";
@@ -101,10 +102,7 @@ export function buildSystemPrompt(
   }
 
   if (memory && memory.facts.length > 0) {
-    const lines = memory.facts.map((f) => `- ${f.content}`).join("\n");
-    sections.push(
-      `Điều bạn đã ghi nhớ từ trước (dùng tự nhiên, đừng đọc lại như danh sách; TUYỆT ĐỐI không nhắc thông tin cá nhân của một người trước mặt người khác trong nhóm):\n${lines}`,
-    );
+    sections.push(khoiDieuDaNho(memory.facts));
   }
 
   const context = msg.isGroup

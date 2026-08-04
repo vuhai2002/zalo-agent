@@ -90,6 +90,51 @@ describe("memory-store - quy tắc inject bất đối xứng", () => {
   });
 });
 
+describe("memory-store - chặn ghi trùng khít", () => {
+  const ghi = (content: string, subjectId = "user-trung") =>
+    memory.saveMemoryFact({
+      accountId: "acc-1",
+      subjectId,
+      content,
+      learnedInThreadId: subjectId,
+      learnedInGroup: false,
+    });
+
+  it("ghi lần đầu thì nhận, ghi y hệt lần hai thì từ chối", () => {
+    assert.deepEqual(ghi("B thích trà sữa ít đường"), { ghi: true });
+    assert.deepEqual(ghi("B thích trà sữa ít đường"), { ghi: false, lyDo: "trung" });
+  });
+
+  it("từ chối rồi thì KHÔNG có bản thứ hai trong kho", () => {
+    ghi("B nuôi một con mèo tên Mun");
+    ghi("B nuôi một con mèo tên Mun");
+    const facts = memory.getMemoriesForContext({
+      accountId: "acc-1",
+      threadId: "user-trung",
+      senderId: "user-trung",
+      isGroup: false,
+    });
+    assert.equal(facts.filter((f) => f.content === "B nuôi một con mèo tên Mun").length, 1);
+  });
+
+  it("khác khoảng trắng hai đầu vẫn là trùng - model xuống dòng thừa là chuyện thường", () => {
+    ghi("B làm ca đêm");
+    assert.deepEqual(ghi("  B làm ca đêm\n"), { ghi: false, lyDo: "trung" });
+  });
+
+  it("chỉ khác DẤU là hai điều khác nhau, phải ghi cả hai", () => {
+    // Cố ý không hạ chữ thường / bỏ dấu khi so: "mắt" với "mất" là hai nghĩa,
+    // chặn nhầm ở đây nghĩa là bot im lặng không nhớ điều người dùng vừa dặn
+    assert.deepEqual(ghi("B hay đau mắt"), { ghi: true });
+    assert.deepEqual(ghi("B hay đau mất"), { ghi: true });
+  });
+
+  it("cùng nội dung nhưng KHÁC người thì vẫn ghi - trùng xét theo từng subject", () => {
+    assert.deepEqual(ghi("Thích ăn cay", "user-trung-1"), { ghi: true });
+    assert.deepEqual(ghi("Thích ăn cay", "user-trung-2"), { ghi: true });
+  });
+});
+
 describe("memory-store - cap và xóa", () => {
   it("vượt cap thì fact cũ nhất bị thay", () => {
     for (let i = 1; i <= MAX_FACTS + 3; i++) {

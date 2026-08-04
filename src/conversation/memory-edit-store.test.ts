@@ -93,8 +93,21 @@ describe("sửa điều đã nhớ", () => {
   it("khớp nhiều điều TRÙNG KHÍT thì làm trên cái đầu - học từ Hermes", () => {
     // Hermes: `if len(unique_texts) > 1` mới báo lỗi. Trùng khít thì không có
     // gì để chọn nhầm, từ chối chỉ làm model kẹt.
+    //
+    // Dựng hai bản trùng khít qua chính đường CÒN HỞ: `saveMemoryFact` đã chặn
+    // ghi trùng (xem memory-store.ts), nhưng `suaFactTheoDoanChu` thì không -
+    // sửa điều này thành giống hệt điều kia vẫn lọt. Nên nhánh dưới chưa phải
+    // code chết, và dữ liệu ghi trước khi có chốt kia cũng còn nguyên khả năng
+    // trùng.
     nho(NGUOI, "Hải thích cà phê đen", false);
-    nho(NGUOI, "Hải thích cà phê đen", false);
+    nho(NGUOI, "Hải thích trà sữa", false);
+    edit.suaFactTheoDoanChu(phamViChatRieng, "trà sữa", "Hải thích cà phê đen");
+    assert.deepEqual(
+      dangNho(NGUOI),
+      ["Hải thích cà phê đen", "Hải thích cà phê đen"],
+      "đường `sua` vẫn tạo ra được hai bản trùng khít",
+    );
+
     const kq = edit.suaFactTheoDoanChu(phamViChatRieng, "cà phê đen", "Hải thích trà");
     assert.equal(kq.ok, true);
     assert.deepEqual(dangNho(NGUOI), ["Hải thích trà", "Hải thích cà phê đen"]);
