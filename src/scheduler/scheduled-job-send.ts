@@ -36,6 +36,8 @@ export async function blockedByGuard(
   runId: number,
   timeZone: string,
   scheduledFor: string,
+  /** Mốc của LƯỢT xử lý - xem `RunScheduledJobOptions.now`. Bắt buộc, không mặc định. */
+  now: Date,
   turnId?: number,
 ): Promise<boolean> {
   const fresh = checkAccountAndThreadReady(job.accountId, job.threadId);
@@ -44,9 +46,9 @@ export async function blockedByGuard(
     return true;
   }
 
-  const slot = reserveProactiveSlot(job.accountId, job.threadId, timeZone);
+  const slot = reserveProactiveSlot(job.accountId, job.threadId, timeZone, now);
   if (!slot.ok) {
-    await concludeCapBlocked(job, runId, slot.reason, timeZone, new Date(), {
+    await concludeCapBlocked(job, runId, slot.reason, timeZone, now, {
       notifyCapHitOnce: slot.notifyCapHitOnce,
       target,
       turnId,
@@ -80,6 +82,11 @@ export async function sendAndConclude(
   timeZone: string,
   text: string,
   scheduledFor: string,
+  /**
+   * PHẢI là ĐÚNG mốc mà `blockedByGuard` đã dùng để giành suất. Lệch một cái
+   * là hoàn suất trả nhầm ngày và suất đã giành không ai đòi lại được.
+   */
+  now: Date,
   turnId?: number,
 ): Promise<void> {
   const reply = await deliverProactively(target.threadKey, async () => {
@@ -99,14 +106,14 @@ export async function sendAndConclude(
   });
 
   if (!reply.deliveredText) {
-    refundProactiveSlot(job.accountId, job.threadId, timeZone);
+    refundProactiveSlot(job.accountId, job.threadId, timeZone, now);
     concludeDeliveryFailed(job, runId, scheduledFor, errorText(reply.error) ?? "Gửi thất bại không rõ nguyên nhân.", turnId);
     return;
   }
 
   try {
     if (reply.sentParts > 1) {
-      recordProactiveSend(job.accountId, job.threadId, timeZone, reply.sentParts - 1);
+      recordProactiveSend(job.accountId, job.threadId, timeZone, reply.sentParts - 1, now);
     }
     concludeDelivered(job, runId, reply, turnId);
   } catch (err) {

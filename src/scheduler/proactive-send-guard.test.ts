@@ -90,13 +90,13 @@ describe("checkAccountAndThreadReady", () => {
 
 describe("checkProactiveSendGuard - thứ tự 3 điều kiện", () => {
   it("account chưa từng attach (không chạy) thì chặn ngay ở điều kiện đầu tiên", () => {
-    const r = guard.checkProactiveSendGuard(ACC_OFFLINE, "t-bat-ky", TZ);
+    const r = guard.checkProactiveSendGuard(ACC_OFFLINE, "t-bat-ky", TZ, new Date());
     assert.equal(r.ok, false);
     if (!r.ok) assert.match(r.reason, /không chạy/);
   });
 
   it("account chạy nhưng thread chưa từng ghi nhận trong hệ thống thì chặn", () => {
-    const r = guard.checkProactiveSendGuard(ACC_RUNNING, "t-chua-tung-thay", TZ);
+    const r = guard.checkProactiveSendGuard(ACC_RUNNING, "t-chua-tung-thay", TZ, new Date());
     assert.equal(r.ok, false);
     if (!r.ok) assert.match(r.reason, /chưa từng ghi nhận/);
   });
@@ -105,14 +105,14 @@ describe("checkProactiveSendGuard - thứ tự 3 điều kiện", () => {
     makeThread("t-tat-bot");
     threadStore.setBotEnabled(ACC_RUNNING, "t-tat-bot", false);
 
-    const r = guard.checkProactiveSendGuard(ACC_RUNNING, "t-tat-bot", TZ);
+    const r = guard.checkProactiveSendGuard(ACC_RUNNING, "t-tat-bot", TZ, new Date());
     assert.equal(r.ok, false);
     if (!r.ok) assert.match(r.reason, /đang tắt/);
   });
 
   it("account chạy + thread hợp lệ + chưa chạm trần thì cho qua", () => {
     makeThread("t-hop-le");
-    assert.deepEqual(guard.checkProactiveSendGuard(ACC_RUNNING, "t-hop-le", TZ), { ok: true });
+    assert.deepEqual(guard.checkProactiveSendGuard(ACC_RUNNING, "t-hop-le", TZ, new Date()), { ok: true });
   });
 });
 
@@ -332,6 +332,66 @@ describe("refundProactiveSlot - hoàn suất đã giữ nhưng cuối cùng khô
     const afterReserve = counterStore.getProactiveCounter(ACC_RUNNING, threadId, dayKey).count;
     guard.refundProactiveSlot(ACC_RUNNING, threadId, TZ, now);
     assert.equal(counterStore.getProactiveCounter(ACC_RUNNING, threadId, dayKey).count, afterReserve - 1);
+  });
+
+  it("hoàn suất phải trả về ĐÚNG NGÀY đã giành - lệch một ngày là suất mất vĩnh viễn", async () => {
+    // Đây là lỗ hổng nặng nhất của bug "thiếu `now`", và trước đợt này KHÔNG
+    // test nào phủ. Ca thật: job đến hạn 23:59:50, `reserveProactiveSlot` giành
+    // suất ngày D; gửi mất 20 giây (SCHEDULER_SEND_GAP_MS) rồi hỏng;
+    // `refundProactiveSlot` nếu tự lấy giờ THẬT sẽ trừ suất của ngày D+1.
+    //
+    // Hậu quả: ngày D giữ suất vĩnh viễn không ai đòi lại được, còn ngày D+1
+    // bị `MAX(0, count-1)` nuốt êm. Trần này là lá chắn chống khóa nick.
+    const counterStore = await import("./proactive-send-counter-store.js");
+    const zoneTime = await import("../shared/zone-time.js");
+    const threadId = "t-refund-qua-nua-dem";
+    makeThread(threadId);
+
+    // 23:59:50 và 00:00:10 giờ VN - hai bên của cùng một ranh giới nửa đêm
+    const lucGianh = new Date("2026-08-01T16:59:50Z");
+    const lucHoan = new Date("2026-08-01T17:00:10Z");
+    const ngayGianh = zoneTime.todayKey(TZ, lucGianh);
+    const ngayHoan = zoneTime.todayKey(TZ, lucHoan);
+    assert.notEqual(ngayGianh, ngayHoan, "hai mốc phải nằm hai ngày khác nhau thì ca này mới có nghĩa");
+
+    guard.reserveProactiveSlot(ACC_RUNNING, threadId, TZ, lucGianh);
+    assert.equal(counterStore.getProactiveCounter(ACC_RUNNING, threadId, ngayGianh).count, 1);
+
+    // Hoàn bằng ĐÚNG mốc của lượt (mốc lúc giành), KHÔNG phải mốc lúc gửi hỏng
+    guard.refundProactiveSlot(ACC_RUNNING, threadId, TZ, lucGianh);
+
+    assert.equal(
+      counterStore.getProactiveCounter(ACC_RUNNING, threadId, ngayGianh).count,
+      0,
+      "suất của ngày ĐÃ GIÀNH phải được trả lại",
+    );
+    assert.equal(
+      counterStore.getProactiveCounter(ACC_RUNNING, threadId, ngayHoan).count,
+      0,
+      "ngày hôm sau KHÔNG được bị trừ oan",
+    );
+  });
+
+  it("cộng đếm KHÔNG được dọn mất chính dòng vừa ghi (retention tính theo `now` của lượt)", async () => {
+    // Bug gốc: `recordProactiveSend` mặc định `now = new Date()`, nên nó vừa
+    // cộng vào day-key của giờ THẬT, vừa dọn bảng bằng cutoff của giờ thật -
+    // xóa luôn dòng của ngày đang xử lý khi ngày đó cách quá retention 3 ngày.
+    const counterStore = await import("./proactive-send-counter-store.js");
+    const zoneTime = await import("../shared/zone-time.js");
+    const threadId = "t-ghi-khong-tu-xoa";
+    makeThread(threadId);
+
+    // Mốc CỐ Ý cách xa ngày thật lúc chạy test - đúng thứ làm bug lộ ra
+    const now = new Date("2026-08-01T03:00:00.000Z");
+    const dayKey = zoneTime.todayKey(TZ, now);
+
+    guard.recordProactiveSend(ACC_RUNNING, threadId, TZ, 2, now);
+
+    assert.equal(
+      counterStore.getProactiveCounter(ACC_RUNNING, threadId, dayKey).count,
+      2,
+      "dòng vừa ghi phải còn - dọn theo giờ thật sẽ xóa mất chính nó",
+    );
   });
 
   it("refund khi count đang 0 thì kẹp sàn ở 0, không xuống âm", async () => {

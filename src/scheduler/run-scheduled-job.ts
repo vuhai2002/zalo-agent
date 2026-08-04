@@ -37,6 +37,17 @@ export type RunScheduledJobOptions = {
   late: boolean;
   /** `next_run_at` GỐC (mốc job LẼ RA phải chạy) - cho nhãn "(nhắc trễ, lịch gốc HH:MM)" VÀ để phục hồi khi bị chặn (xem concludeBlockedNotRun) */
   scheduledFor: string;
+  /**
+   * Mốc thời gian của LƯỢT XỬ LÝ NÀY - chốt ở đầu tick, dùng chung cho mọi sổ
+   * sách trần ngày (giành suất, hoàn suất, cộng đếm, quyền báo trần).
+   *
+   * BẮT BUỘC, cố ý không cho mặc định `new Date()`: giành suất và hoàn suất
+   * cách nhau cả quãng gửi (20 giây `SCHEDULER_SEND_GAP_MS`, job agent thì vài
+   * phút). Mỗi bên tự lấy giờ thật thì nửa đêm rơi vào giữa là giành suất ngày
+   * D còn hoàn suất trả cho ngày D+1 - ngày D giữ suất vĩnh viễn. Xem khối chú
+   * thích đầu `proactive-send-guard.ts`.
+   */
+  now: Date;
   /** Seam test - model giả cho lượt agent; mặc định `resolveLanguageModel` thật (agent-loop.ts) */
   resolveModel?: typeof resolveLanguageModel;
 };
@@ -113,7 +124,7 @@ async function runMessageJob(
   timeZone: string,
   options: RunScheduledJobOptions,
 ): Promise<void> {
-  if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor)) return;
+  if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor, options.now)) return;
 
   // `payload` là chữ MODEL viết lúc đặt lịch (qua tool `schedule_task`), và
   // lượt đặt lịch đó hoàn toàn có thể đã đọc nội dung web hay tin của người lạ.
@@ -157,7 +168,7 @@ async function runMessageJob(
   const text = options.late
     ? withLateLabel(sach.text, options.scheduledFor, timeZone)
     : sach.text;
-  await sendAndConclude(job, target, runId, timeZone, text, options.scheduledFor);
+  await sendAndConclude(job, target, runId, timeZone, text, options.scheduledFor, options.now);
 }
 
 /** kind='agent': lượt agent CÔ LẬP (isolated:true) rồi mới xét gửi hay im */
@@ -232,14 +243,14 @@ async function runAgentJob(
         return;
       }
 
-      if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor, turnId)) return;
+      if (await blockedByGuard(job, target, runId, timeZone, options.scheduledFor, options.now, turnId)) return;
 
       // Nhãn "nhắc trễ" ghép SAU khi làm sạch: nó là chữ của mình, không phải
       // của model, nên không có gì để lọc và cũng không được để lọt qua bộ lọc
       const finalText = options.late
         ? withLateLabel(sach.text, options.scheduledFor, timeZone)
         : sach.text;
-      await sendAndConclude(job, target, runId, timeZone, finalText, options.scheduledFor, turnId);
+      await sendAndConclude(job, target, runId, timeZone, finalText, options.scheduledFor, options.now, turnId);
     } catch (err) {
       // Lượt ném lỗi (provider chết, timeout...) vẫn phải chốt token đã tốn +
       // lưu trace các step ĐÃ chạy được - đúng nếp message-turn-processor.ts.

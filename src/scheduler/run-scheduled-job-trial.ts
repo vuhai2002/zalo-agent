@@ -115,7 +115,10 @@ export async function runScheduledJobTrial(job: ScheduledJob): Promise<JobRun | 
   // hay phục hồi, cứ chạy thẳng qua runScheduledJob (nó tự no-op an toàn khi
   // job không còn trong DB) rồi trả về run log rỗng.
   if (!before) {
-    await runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt ?? new Date().toISOString() });
+    // Chạy thử TAY từ dashboard: mốc là giờ THẬT lúc bấm nút, đúng nghĩa
+    // "chạy ngay bây giờ". Chốt MỘT lần rồi truyền vào để mọi sổ sách trần
+    // trong lượt này dùng chung.
+    await runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt ?? new Date().toISOString(), now: new Date() });
     return listRuns(job.id, 1)[0];
   }
 
@@ -124,6 +127,7 @@ export async function runScheduledJobTrial(job: ScheduledJob): Promise<JobRun | 
     await runScheduledJob(job, {
       late: false,
       scheduledFor: job.nextRunAt ?? new Date().toISOString(),
+      now: new Date(),
     });
   } finally {
     // finally, không phải sau await: runScheduledJob cam kết không bao giờ

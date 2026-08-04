@@ -104,12 +104,12 @@ function toTarget(job: ScheduledJob, api: API | undefined): ReplyTarget | undefi
  */
 async function notifyCapHit(job: ScheduledJob, target: ReplyTarget, timeZone: string, now: Date): Promise<void> {
   if (!reserveCapNotice(job.accountId, job.threadId, timeZone, now)) return; // job/tick khác đã giành hoặc đã gửi rồi
-  const notified = await sendCapNotice(job, target, timeZone);
+  const notified = await sendCapNotice(job, target, timeZone, now);
   if (!notified) revertCapNotice(job.accountId, job.threadId, timeZone, now);
 }
 
 /** Nhắn ĐÚNG 1 câu khi lần đầu chạm trần ngày. Trả `true` khi thật sự gửi được - caller chỉ giữ quyền "đã báo" khi đó */
-async function sendCapNotice(job: ScheduledJob, target: ReplyTarget, timeZone: string): Promise<boolean> {
+async function sendCapNotice(job: ScheduledJob, target: ReplyTarget, timeZone: string, now: Date): Promise<boolean> {
   try {
     const max = getTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY");
     const text = `Hôm nay cuộc trò chuyện này đã nhận đủ ${max} tin nhắc/báo cáo chủ động, mình tạm dừng để tránh làm phiền - các lịch còn lại sẽ tiếp tục vào ngày mai.`;
@@ -131,7 +131,7 @@ async function sendCapNotice(job: ScheduledJob, target: ReplyTarget, timeZone: s
     });
 
     if (reply.deliveredText) {
-      recordProactiveSend(job.accountId, job.threadId, timeZone, reply.sentParts);
+      recordProactiveSend(job.accountId, job.threadId, timeZone, reply.sentParts, now);
     }
     // CHỈ xét đã ra được hay chưa (`deliveredText`) - KHÔNG xét `reply.error`
     // nữa (Mục 3, vòng 4): thông báo có thể đã RA THẬT rồi mới hỏng ở bước

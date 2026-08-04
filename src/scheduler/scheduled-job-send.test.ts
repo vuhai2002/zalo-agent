@@ -125,7 +125,7 @@ describe("sendAndConclude - lỗi ném ra SAU KHI đã gửi thành công KHÔNG
     const job = makeJob({ payload: "Tin này phải ra đúng 1 lần, không được lặp lại" });
     const scheduledForGoc = job.nextRunAt!;
 
-    await runJob.runScheduledJob(job, { late: false, scheduledFor: scheduledForGoc });
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: scheduledForGoc, now: new Date() });
 
     // 1. Tin ĐÃ RA THẬT - mock api ghi nhận đúng 1 lần, đúng nội dung.
     assert.equal(sent.length, 1, "tin phải ra Zalo đúng 1 lần - đây là bằng chứng gửi THẬT, không phải giả định");
@@ -152,5 +152,77 @@ describe("sendAndConclude - lỗi ném ra SAU KHI đã gửi thành công KHÔNG
     assert.equal(after.nextRunAt, null, "once đã markRun (maxRuns=1, hitMax) nên next_run_at phải là NULL, không phải mốc chờ thử lại");
     assert.equal(after.runCount, 1, "phải markRun - job ĐÃ chạy thật (tin ra thật), không phải Finding 1 'chưa gửi được'");
     assert.equal(after.enabled, false, "maxRuns=1 đã chạm nên phải tự tắt - không phải job còn 'chờ retry'");
+  });
+});
+
+describe("sendAndConclude - hoàn suất trần phải trả về ĐÚNG NGÀY đã giành", () => {
+  it("gửi hỏng ở lượt có `now` giả lập: suất hoàn về ngày của LƯỢT, không phải ngày thật lúc chạy", async () => {
+    // Lỗ hổng nặng nhất của bug "thiếu `now`", và trước đợt này KHÔNG test nào
+    // phủ qua ĐƯỜNG GỬI THẬT (chỉ có unit test gọi thẳng refundProactiveSlot).
+    //
+    // Ca thật: job đến hạn lúc 23:59:50 -> `blockedByGuard` giành suất ngày D.
+    // Gửi mất 20 giây (`SCHEDULER_SEND_GAP_MS`) rồi hỏng. Nếu
+    // `refundProactiveSlot` tự lấy giờ THẬT thì nó trừ suất của ngày D+1: ngày
+    // D giữ suất vĩnh viễn không ai đòi lại được, ngày D+1 bị `MAX(0, count-1)`
+    // nuốt êm. Trần này là lá chắn chống khóa nick nên rò một suất là rò thật.
+    const counterStore = await import("./proactive-send-counter-store.js");
+    const zoneTime = await import("../shared/zone-time.js");
+
+    // Mốc CỐ Ý cách xa ngày thật lúc chạy test - có lệch thì mới lộ
+    const now = new Date("2026-08-01T08:00:00.000Z");
+    const timeZone = "Asia/Ho_Chi_Minh";
+    const dayKeyLuot = zoneTime.todayKey(timeZone, now);
+    const dayKeyThat = zoneTime.todayKey(timeZone, new Date());
+    assert.notEqual(dayKeyLuot, dayKeyThat, "mốc giả lập phải khác ngày thật thì ca này mới có nghĩa");
+
+    // API gửi LUÔN HỎNG -> đường refund chắc chắn chạy
+    attachOnline();
+    const accountManagerMod = await import("../zalo/account-manager.js");
+    accountManagerMod.attachAccount(
+      {
+        id: ACC,
+        label: "Test",
+        enabled: true,
+        agentId: "khong-quan-tam",
+        allowlist: { mode: "all", userIds: [] },
+        groupRequireMention: true,
+        respondToGroups: true,
+        groupPassiveListen: true,
+        autoReactEnabled: false,
+        autoReactIcon: "heart",
+        typingIndicatorEnabled: false,
+        disabledTools: [],
+      },
+      {
+        getOwnId: () => "self-1",
+        listener: { on: () => {}, onConnected: () => {}, onError: () => {}, onClosed: () => {}, start: () => {}, stop: () => {} },
+        sendMessage: async () => {
+          throw new Error("Zalo từ chối");
+        },
+      } as unknown as API,
+    );
+
+    const job = makeJob({ payload: "tin này sẽ gửi hỏng" });
+    const truocKhiChay = counterStore.getProactiveCounter(ACC, THREAD, dayKeyLuot).count;
+    // Đo mốc ngày THẬT TRƯỚC lượt: ca chạy trước trong file này đã tiêu suất
+    // của ngày thật, nên bất biến đúng là "lượt này không đụng vào nó", chứ
+    // không phải "nó bằng 0".
+    const ngayThatTruoc = counterStore.getProactiveCounter(ACC, THREAD, dayKeyThat).count;
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, now });
+
+    assert.equal(
+      counterStore.getProactiveCounter(ACC, THREAD, dayKeyLuot).count,
+      truocKhiChay,
+      "gửi hỏng thì suất của NGÀY LƯỢT phải được hoàn - còn dư là rò suất vĩnh viễn",
+    );
+    assert.equal(
+      counterStore.getProactiveCounter(ACC, THREAD, dayKeyThat).count,
+      ngayThatTruoc,
+      "lượt này KHÔNG được đụng vào bộ đếm của ngày THẬT lúc chạy test",
+    );
+
+    // Trả API bình thường lại cho các ca sau
+    attachOnline();
   });
 });

@@ -74,6 +74,26 @@ export type GuardResult =
       notifyCapHitOnce: boolean;
     };
 
+/**
+ * `now` là THAM SỐ BẮT BUỘC ở MỌI hàm trong file này - cố ý bỏ hết
+ * `= new Date()`.
+ *
+ * Đây là lỗi đã trả giá: `recordProactiveSend` từng có mặc định `new Date()`,
+ * và `sendCapNotice` quên truyền `now`. Hệ quả kép, cả hai đều âm thầm:
+ *
+ * 1. Bộ đếm cộng vào day-key của giờ THẬT thay vì ngày lượt đang xử lý.
+ * 2. `keepSinceDayKey` dọn bảng bằng mốc của giờ thật, XÓA luôn dòng của ngày
+ *    vừa ghi (retention 3 ngày).
+ *
+ * Nặng nhất là ca nửa đêm: `reserveProactiveSlot` giành suất ngày D, gửi mất
+ * 20 giây (`SCHEDULER_SEND_GAP_MS`) rồi hỏng, `refundProactiveSlot` trả suất
+ * cho ngày D+1 - ngày D giữ suất vĩnh viễn không ai đòi lại được, mà đây là
+ * lá chắn chống khóa nick.
+ *
+ * BẤT BIẾN: một lượt xử lý job = MỘT mốc thời gian, chốt ở đầu tick rồi luồn
+ * đi khắp nơi. Để mặc định là mở lại đúng cái bẫy đó cho người sửa sau.
+ */
+
 /** Số ngày giữ lại bộ đếm - trần chỉ cần biết ĐÚNG HÔM NAY nên không cần giữ lâu */
 const COUNTER_RETENTION_DAYS = 3;
 
@@ -96,7 +116,7 @@ export function checkProactiveDailyCap(
   accountId: string,
   threadId: string,
   timeZone: string,
-  now: Date = new Date(),
+  now: Date,
 ): GuardResult {
   const dayKey = todayKey(timeZone, now);
   const counter = getProactiveCounter(accountId, threadId, dayKey);
@@ -119,7 +139,7 @@ export function reserveProactiveSlot(
   accountId: string,
   threadId: string,
   timeZone: string,
-  now: Date = new Date(),
+  now: Date,
 ): GuardResult {
   const dayKey = todayKey(timeZone, now);
   const max = getTuning("SCHEDULER_MAX_PROACTIVE_PER_DAY");
@@ -131,7 +151,7 @@ export function reserveProactiveSlot(
 }
 
 /** Hoàn lại ĐÚNG 1 suất đã `reserveProactiveSlot` giành nhưng cuối cùng không gửi được gì */
-export function refundProactiveSlot(accountId: string, threadId: string, timeZone: string, now: Date = new Date()): void {
+export function refundProactiveSlot(accountId: string, threadId: string, timeZone: string, now: Date): void {
   refundProactiveSlotRow(accountId, threadId, todayKey(timeZone, now));
 }
 
@@ -140,7 +160,7 @@ export function checkProactiveSendGuard(
   accountId: string,
   threadId: string,
   timeZone: string,
-  now: Date = new Date(),
+  now: Date,
 ): GuardResult {
   const preflight = checkAccountAndThreadReady(accountId, threadId);
   if (!preflight.ok) return { ok: false, reason: preflight.reason, notifyCapHitOnce: false };
@@ -157,7 +177,7 @@ export function markProactiveCapNotified(
   accountId: string,
   threadId: string,
   timeZone: string,
-  now: Date = new Date(),
+  now: Date,
 ): void {
   markProactiveCapNoticeSent(accountId, threadId, todayKey(timeZone, now));
 }
@@ -168,12 +188,12 @@ export function markProactiveCapNotified(
  * bị chặn trong 1 tick, khác `markProactiveCapNotified` (ghi SAU khi gửi
  * xong, quá muộn để chặn race).
  */
-export function reserveCapNotice(accountId: string, threadId: string, timeZone: string, now: Date = new Date()): boolean {
+export function reserveCapNotice(accountId: string, threadId: string, timeZone: string, now: Date): boolean {
   return tryReserveCapNotice(accountId, threadId, todayKey(timeZone, now));
 }
 
 /** Trả lại quyền đã giành ở `reserveCapNotice` nhưng cuối cùng gửi hỏng - job/tick sau còn cơ hội thử lại */
-export function revertCapNotice(accountId: string, threadId: string, timeZone: string, now: Date = new Date()): void {
+export function revertCapNotice(accountId: string, threadId: string, timeZone: string, now: Date): void {
   revertCapNoticeRow(accountId, threadId, todayKey(timeZone, now));
 }
 
@@ -188,7 +208,7 @@ export function recordProactiveSend(
   threadId: string,
   timeZone: string,
   count: number,
-  now: Date = new Date(),
+  now: Date,
 ): void {
   addProactiveSendCount(accountId, threadId, todayKey(timeZone, now), count, keepSinceDayKey(timeZone, now));
 }

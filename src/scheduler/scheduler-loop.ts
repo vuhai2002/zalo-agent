@@ -225,7 +225,7 @@ function processDueJob(job: ScheduledJob, now: Date): void {
 
     // KHÔNG await: đúng luật cứng nhất của cả vòng tick (xem doc đầu file).
     // KHÔNG bọc runOnThreadChain ở đây - xem doc đầu file vì sao (deadlock).
-    void runScheduledJob(job, { late: action === "run-late", scheduledFor });
+    void runScheduledJob(job, { late: action === "run-late", scheduledFor, now });
   } catch (err) {
     // 1 job hỏng không được giết tick - các job KHÁC trong CÙNG tick vẫn phải
     // được xử lý tiếp (goclaw safeCheckJobs, cùng lý do với try/catch ở trên
