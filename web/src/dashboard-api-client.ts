@@ -114,6 +114,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ accountId, botEnabled }),
     }),
+  xoaTomTatThread: (accountId: string, threadId: string) =>
+    request<{ ok: true }>(
+      `/api/threads/${encodeURIComponent(threadId)}/summary?accountId=${encodeURIComponent(accountId)}`,
+      { method: "DELETE" },
+    ),
 
   contacts: (accountId: string, q: string, page: number) =>
     request<{ items: ContactItem[]; hasMore: boolean }>(

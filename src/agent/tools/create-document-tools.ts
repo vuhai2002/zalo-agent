@@ -20,6 +20,7 @@ import { withNamedTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
 import { ketQuaLoi, type KetQuaLoiTool } from "./tool-failure-result.js";
 import { capTionSach } from "./clean-tool-caption.js";
+import { ghiChuDaGuiFile } from "./sent-by-tool-note.js";
 
 /**
  * Tool tạo file .docx/.xlsx rồi GỬI LUÔN cho cuộc trò chuyện.
@@ -39,7 +40,7 @@ const log = createLogger("create-document");
 const DELIVERED_NOTE =
   "Đã tạo và GỬI file cho người dùng rồi. KHÔNG gọi send_file để gửi lại file này.";
 
-type Ctx = Pick<ToolContext, "api" | "account" | "message">;
+type Ctx = Pick<ToolContext, "api" | "account" | "message" | "ghiNhanDaGui">;
 
 /** Dựng buffer -> gửi kèm caption -> xóa file tạm. Trả câu cho model đọc. */
 async function deliverFile(
@@ -58,6 +59,9 @@ async function deliverFile(
       ),
     ),
   );
+  // Vào history: tin này KHÔNG đi qua `deliverChatReply` nên không ai ghi hộ.
+  // Thiếu nó thì dashboard không thấy, và lượt sau bot không nhớ đã gửi file.
+  ctx.ghiNhanDaGui?.(ghiChuDaGuiFile(fileName, caption));
   log.info(
     { accountId: ctx.account.id, threadId: ctx.message.threadId, fileName, bytes: data.length },
     "Đã gửi file tự tạo",

@@ -158,6 +158,20 @@ async function xuLyLuot(
     return moi;
   };
 
+  /**
+   * Tin do TOOL gửi thẳng xuống Zalo trong lượt này (file, ảnh, tag).
+   *
+   * Mảng do CHỖ NÀY sở hữu chứ không để tool tự `appendMessage`: tin của NGƯỜI
+   * DÙNG được ghi ở CUỐI lượt (ghi trước thì model thấy tin lặp hai lần), nên
+   * tool ghi thẳng lúc gửi sẽ nằm TRƯỚC tin người dùng trong history - sai thứ
+   * tự thật. Gom về đây thì thứ tự đúng: tin người dùng -> tin tool gửi -> câu
+   * chốt của agent (`deliverChatReply` ghi sau cùng).
+   */
+  const daGuiBoiTool: string[] = [];
+  const ghiNhanDaGui = (noiDung: string): void => {
+    if (noiDung.trim()) daGuiBoiTool.push(noiDung.trim());
+  };
+
   // Ghi 1 lần duy nhất, gọi được ở cả nhánh thành công và nhánh lỗi
   let historyWritten = false;
   const writeBatchToHistory = (): void => {
@@ -172,6 +186,11 @@ async function xuLyLuot(
         senderId: msg.senderId,
         images: imagePathsOf(msg.images),
       });
+    }
+    // Ghi trong CÙNG hàm này để không thể quên ở nhánh lỗi: lượt chết sau khi
+    // tool đã gửi file thì file VẪN nằm trên máy người ta, history phải nói ra.
+    for (const noiDung of daGuiBoiTool) {
+      appendMessage(config.id, latest.threadId, { role: "assistant", content: noiDung });
     }
   };
 
@@ -189,6 +208,7 @@ async function xuLyLuot(
       trace,
       resolveModel: options.resolveModel,
       layTinChen,
+      ghiNhanDaGui,
     });
     finishAgentTurn(turnId, result.usage);
     // Từ đây trở đi lượt đã CHỐT SỔ THẬT. Nhánh catch bên dưới không được chốt

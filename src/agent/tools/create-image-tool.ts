@@ -11,6 +11,7 @@ import { CREATE_IMAGE_DESCRIPTION } from "./create-image-tool-description.js";
 import { collectRecentImagePaths } from "./read-image-tool.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 import { capTionSach } from "./clean-tool-caption.js";
+import { ghiChuDaGuiAnh, ghiChuDaGuiChu } from "./sent-by-tool-note.js";
 import type { ToolContext } from "./index.js";
 
 /**
@@ -133,9 +134,15 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
           ctx.message.threadId,
           ctx.message.threadType,
         ),
-      ).catch(() => {
-        // Báo trước hỏng không được làm chết cả lượt vẽ
-      });
+      )
+        .then(() => {
+          // Câu báo trước cũng là tin THẬT người ta đọc được - vào history như
+          // mọi tin khác, không thì dashboard hiện ảnh mà thiếu câu dẫn.
+          ctx.ghiNhanDaGui?.(ghiChuDaGuiChu(refImage ? "Đang sửa ảnh, đợi 1-3 phút nhé..." : "Đang vẽ ảnh, đợi 1-3 phút nhé..."));
+        })
+        .catch(() => {
+          // Báo trước hỏng không được làm chết cả lượt vẽ
+        });
 
       try {
         const image = await generate({ prompt, refImage, transparentBackground });
@@ -149,6 +156,7 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
             ),
           ),
         );
+        ctx.ghiNhanDaGui?.(ghiChuDaGuiAnh(1, caption));
         log.info(
           { accountId: ctx.account.id, threadId: ctx.message.threadId, kb: Math.round(image.data.length / 1024), sua: Boolean(refImage) },
           "Đã gửi ảnh tự vẽ",

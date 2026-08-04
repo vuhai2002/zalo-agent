@@ -4,8 +4,9 @@ import { enqueueSend } from "../../middleware/rate-limiter.js";
 import type { ToolContext } from "./index.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 import { lamSachTraLoi } from "../../zalo/sanitize-reply-text.js";
+import { ghiChuDaGuiChu } from "./sent-by-tool-note.js";
 
-export function createTagMemberTool({ api, account, message }: ToolContext) {
+export function createTagMemberTool({ api, account, message, ghiNhanDaGui }: ToolContext) {
   return tool({
     description:
       "Gửi tin nhắn có tag (@mention) một thành viên trong nhóm. Chỉ dùng trong group chat, cần biết đúng userId (lấy từ get_group_info nếu chưa biết).",
@@ -40,6 +41,7 @@ export function createTagMemberTool({ api, account, message }: ToolContext) {
             message.threadType,
           ),
         );
+        ghiNhanDaGui?.(ghiChuDaGuiChu(`${mentionText} ${noiDung}`));
         return `Đã gửi tin nhắn tag ${memberName}`;
       } catch (err) {
         return ketQuaLoi(`Tag thất bại: ${err instanceof Error ? err.message : String(err)}`);

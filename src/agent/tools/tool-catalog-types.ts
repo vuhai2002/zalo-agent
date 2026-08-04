@@ -36,6 +36,21 @@ export type ToolContext = {
    * cho lượt tin nhắn thường.
    */
   isolated?: boolean;
+  /**
+   * Báo cho caller biết tool vừa GỬI một tin xuống Zalo, để tin đó vào history.
+   *
+   * 5 tool gửi thẳng qua `enqueueSend`, không đi qua `deliverChatReply` - mà đó
+   * mới là chỗ duy nhất gọi `appendMessage`. Không có đường này thì tin bot gửi
+   * biến mất khỏi dashboard VÀ khỏi trí nhớ của chính bot ở lượt sau.
+   *
+   * Chỉ GHI NHẬN, không tự ghi DB: thứ tự trong history do
+   * `message-turn-processor` quyết (tin người dùng ghi ở CUỐI lượt, nên tool
+   * ghi thẳng lúc gửi sẽ nằm nhầm phía trước). Cùng nếp sở hữu mảng với `trace`.
+   *
+   * Optional vì lượt theo lịch không truyền - 5 tool này vốn đã bị loại khỏi
+   * lượt đó (`runsInScheduledTurn: false`).
+   */
+  ghiNhanDaGui?: (noiDung: string) => void;
 };
 
 /**
