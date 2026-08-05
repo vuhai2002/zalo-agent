@@ -2553,3 +2553,81 @@ giữa các mục, còn "Đối chiếu vé 645300:" vẫn dính liền danh sá
 **Kiểm chứng.** 1450 test xanh; `pnpm eval` 16/16. Phá code: bỏ điều kiện
 `laCauDan` thì ca "GIỮ dòng trống trước mục danh sách khi đoạn trên KHÔNG dẫn
 vào nó" đỏ ngay.
+
+## V3.7 - Vẽ ảnh hụt thì vẽ lại một lần (2026-08-05)
+
+Người dùng vẽ infographic trên Zalo thật, nhận về đúng một lời hứa rồi im. Log
+turnId 166: `Codex did not return an image. Account may not be entitled
+(Plus/Pro required).`
+
+### Câu lỗi nói sai chuyện
+
+Câu đó không phải của tài khoản, cũng không phải của bot - nó là **nhánh bắt
+tất** trong chính router (`9router/open-sse/handlers/imageProviders/codex.js:124`
+và `:194`), bắn ra mỗi khi stream Codex chạy hết mà không thấy
+`image_generation_call` nào có `result`. Phần "Plus/Pro required" là router
+ĐOÁN, không phải điều upstream nói.
+
+Nguyên nhân thật nằm ở `codex.js:176`: router gửi **`tool_choice: "auto"`**, nên
+model upstream tự quyết có gọi tool vẽ hay không. Nó chọn trả lời bằng chữ là
+stream kết thúc sạch sẽ mà chẳng có ảnh nào.
+
+**Ba phép đo bác bỏ giả thuyết "tài khoản thiếu quyền":**
+
+| Phép đo | Kết quả |
+|---|---|
+| Lượt hỏng chạy bao lâu rồi mới lỗi | **129,9 giây** - thiếu quyền thì bị chối trong vài giây |
+| Gọi lại bằng key tạm, cùng pool | **9/9 ra ảnh** (3 prompt đơn giản, 3 tên model, 3 prompt infographic tiếng Việt nặng chữ dựng lại gần giống lượt hỏng) |
+| `cx/gpt-5.5-image` trong `/v1/models` | KHÔNG có, nhưng endpoint ảnh định tuyến riêng nên vẫn đúng - đừng suy ra sai cấu hình từ danh sách model |
+
+### Vì sao fallback của router không cứu được
+
+`imageGenerationCore.js:179` trả `{success: true, response: sseResponse}` NGAY
+KHI stream mở. Đi đường SSE (bot luôn gửi `Accept: text/event-stream`) là router
+đã chốt HTTP 200 và đã chọn xong connection trước khi biết có ảnh hay không;
+`event: error` nằm trong thân stream nên vòng fallback ở `imageGeneration.js:131`
+không nhìn thấy. Không có cách nào chữa ca này ở phía router.
+
+**Round robin cũng không phải thuốc.** 9router có hai nút trùng tên: một xoay
+vòng CONNECTION cùng provider (`auth.js:110-150`), một xoay vòng MODEL trong một
+combo (`combo.js:157`). `cx/gpt-5.5-image` là model đơn nên nút thứ hai không
+chạy tới; nút thứ nhất chỉ đổi *chọn tài khoản nào trước*, mà lỗi lộ ra SAU khi
+đã trả 200. Nó chữa "một tài khoản chết", không chữa "model không chịu vẽ".
+Thêm một giá phải trả: rải request ra nhiều tài khoản làm giảm tỉ lệ trúng prompt
+cache của luồng chat.
+
+### Bản sửa
+
+Thử lại **đúng một lần**, chỉ cho lớp lỗi "chạy xong mà không ra ảnh"
+(`src/images/image-retry-policy.ts`). Lớp lỗi được gắn NGAY tại chỗ đọc stream -
+chỗ duy nhất còn nhìn thấy câu gốc của provider; lên tới tool thì nó đã lẫn vào
+mọi lỗi khác.
+
+- **Hai đường nhận diện, xếp theo độ tin cậy giảm dần**: lỗi do chính mình ném
+  (`LoiVeHutAnh`, bền vững) và chữ của provider (chỉ dùng cho `event: error`, vì
+  lúc đó câu lỗi là thứ duy nhất provider đưa). Router đổi hành văn thì nhánh
+  sau ngừng khớp và ta rơi về KHÔNG thử lại - hỏng theo hướng an toàn.
+- **KHÔNG thử lại**: quá hạn và mất tín hiệu (tiêu thêm trọn một trần thời gian
+  nữa mà nguyên nhân chưa hết), HTTP 4xx (sai key, hết quota - lần sau y hệt),
+  Content-Type lạ (trang lỗi hạ tầng, không phải model đổi ý).
+- **Đúng một lần, không phải ba**: mỗi lần vẽ tốn 1-3 phút; thử tới lần ba là
+  kéo người ta chờ 6 phút rồi mới biết hỏng.
+- **Nhắn báo trước khi vẽ lại.** Lần hụt đã ngốn 130 giây trong khi đầu lượt hứa
+  "1-3 phút" - thử lại âm thầm là bắt họ ngồi im gần 4 phút không lý do. Câu báo
+  nói THẲNG "lần vẽ đầu chưa ra ảnh" chứ không ậm ừ "vẫn đang xử lý", và vào
+  history như mọi tin thật.
+- **Lần vẽ lại KHÔNG trừ thêm suất** trong trần ảnh mỗi giờ: bắt trả giá hai
+  suất cho một tấm ảnh là phạt người dùng vì lỗi của provider.
+- Nhắn hụt không được làm chết lượt vẽ - gửi được ảnh quý hơn gửi được lời nhắn.
+
+**Kiểm chứng.** 1475 test xanh (+25), typecheck sạch. Phá code 5 phép, cả 5 đều
+đỏ: bỏ hẳn việc vẽ lại (10 test), vẽ lại mà không nhắn (5), coi mọi lỗi là đáng
+vẽ lại (7), không phân lớp lỗi ở SSE (1), lần vẽ lại trừ thêm suất (1).
+
+### Việc còn treo
+
+- Không tái hiện được lỗi trong 9 lần gọi thật, nên **chưa đo được tần suất**.
+  Bản sửa dựa trên lập luận về cơ chế (`tool_choice: "auto"`) chứ không phải
+  trên một mẫu thống kê.
+- Nhánh "mất tín hiệu" cố ý không thử lại. Nếu về sau thấy nó cũng chập chờn thì
+  cân nhắc lại - giá của nó chỉ là một trần im lặng (90 giây), rẻ hơn quá hạn.

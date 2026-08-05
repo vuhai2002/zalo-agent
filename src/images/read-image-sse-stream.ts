@@ -1,4 +1,5 @@
 import { getTuning } from "../config/runtime-tuning-settings.js";
+import { laChuVeHutAnh, LoiVeHutAnh } from "./image-retry-policy.js";
 
 /**
  * Đọc stream SSE của endpoint vẽ ảnh, trả về base64 của ảnh hoàn chỉnh.
@@ -91,7 +92,7 @@ export async function readImageFromSseStream(
   response: Response,
   stallMs: number = getTuning("IMAGE_GEN_STALL_MS"),
 ): Promise<string> {
-  if (!response.body) throw new Error("Provider không trả về ảnh (stream rỗng)");
+  if (!response.body) throw new LoiVeHutAnh("Provider không trả về ảnh (stream rỗng)");
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -113,7 +114,9 @@ export async function readImageFromSseStream(
         if (!block) continue;
 
         const failure = errorFrom(block);
-        if (failure) throw new Error(failure);
+        // Gắn LỚP lỗi ngay tại đây - chỗ duy nhất còn nhìn thấy câu gốc của
+        // provider. Lên tới tool thì câu này đã lẫn vào mọi lỗi khác.
+        if (failure) throw laChuVeHutAnh(failure) ? new LoiVeHutAnh(failure) : new Error(failure);
 
         imageB64 = imageFromDone(block) ?? imageB64;
       }
@@ -126,7 +129,7 @@ export async function readImageFromSseStream(
 
   if (!imageB64) {
     // Stream chạy hết mà không có done: đừng trả chuỗi rỗng rồi ghi ra file 0 byte
-    throw new Error("Provider không trả về ảnh (stream kết thúc mà thiếu sự kiện done)");
+    throw new LoiVeHutAnh("Provider không trả về ảnh (stream kết thúc mà thiếu sự kiện done)");
   }
   return imageB64;
 }

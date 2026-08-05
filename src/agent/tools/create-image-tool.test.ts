@@ -27,6 +27,8 @@ type Event =
   | { kind: "generate"; prompt: string; hasRef: boolean; transparent: boolean };
 let events: Event[] = [];
 let generateError: Error | null = null;
+/** Kịch bản nhiều lần gọi liên tiếp, dùng cho ca thử lại. Rỗng = dùng `generateError` */
+let generateErrorQueue: (Error | null)[] = [];
 
 before(async () => {
   dataDir = setupTestEnv({ IMAGE_GEN_MAX_PER_HOUR: "2" });
@@ -49,6 +51,7 @@ after(() => {
 beforeEach(() => {
   events = [];
   generateError = null;
+  generateErrorQueue = [];
   rateLimit.resetImageRateLimit();
 });
 
@@ -60,7 +63,10 @@ const fakeGenerate: typeof import("../../images/image-generation-client.js").gen
     hasRef: Boolean(params.refImage),
     transparent: Boolean(params.transparentBackground),
   });
-  if (generateError) throw generateError;
+  if (generateErrorQueue.length > 0) {
+    const loi = generateErrorQueue.shift();
+    if (loi) throw loi;
+  } else if (generateError) throw generateError;
   return { data: JPEG_BYTES, ext: "jpg" };
 };
 
@@ -298,5 +304,88 @@ describe("create_image - chặn và lỗi", () => {
 
     assert.equal(events.filter((e) => e.kind === "generate").length, 0);
     assert.match(loiCuaTool(result), /chưa cấu hình/i);
+  });
+});
+
+/**
+ * Ca thật ngày 2026-08-05 (log turnId 166): provider chạy 129,9 giây rồi báo
+ * "Codex did not return an image", người dùng nhận đúng một lời hứa rồi im.
+ * Gọi lại ngay sau đó thì 9/9 lần ra ảnh.
+ */
+describe("create_image - hụt ảnh thì vẽ lại một lần", () => {
+  const HUT_ANH = () =>
+    new Error("Codex did not return an image. Account may not be entitled (Plus/Pro required).");
+
+  it("hụt lần đầu -> nhắn báo rồi vẽ lại rồi GỬI ẢNH, người dùng vẫn nhận được ảnh", async () => {
+    generateErrorQueue = [HUT_ANH()];
+
+    const result = await run(makeCtx(), { mode: "ve_moi", prompt: "infographic tiếng Việt" });
+
+    assert.deepEqual(
+      events.map((e) => e.kind),
+      ["text", "generate", "text", "generate", "file"],
+      "thứ tự phải là: báo trước - vẽ hụt - báo thử lại - vẽ lại - gửi ảnh",
+    );
+    assert.match(result, /Đã vẽ và GỬI ảnh/);
+  });
+
+  it("câu báo thử lại nói THẲNG là lần đầu chưa ra, kèm mốc thời gian mới", async () => {
+    generateErrorQueue = [HUT_ANH()];
+    await run(makeCtx(), { mode: "ve_moi", prompt: "poster" });
+
+    const texts = events.filter((e): e is { kind: "text"; msg: string } => e.kind === "text");
+    assert.equal(texts.length, 2);
+    assert.match(texts[1]!.msg, /chưa ra ảnh/i, "ậm ừ 'vẫn đang xử lý' thì lần chờ thứ hai không có lý do");
+    assert.match(texts[1]!.msg, /\d/, "lời hứa 1-3 phút ở đầu lượt đã hết hạn, phải cho mốc mới");
+  });
+
+  it("câu báo thử lại VÀO history - thiếu thì dashboard và trí nhớ bot đều mất tin đã gửi", async () => {
+    generateErrorQueue = [HUT_ANH()];
+    const daGhi: string[] = [];
+    const ctx = { ...makeCtx(), ghiNhanDaGui: (note: string) => void daGhi.push(note) } as ToolContext;
+
+    await run(ctx, { mode: "ve_moi", prompt: "poster" });
+
+    assert.equal(daGhi.length, 3, "báo trước + báo thử lại + ảnh");
+    assert.ok(
+      daGhi.some((n) => /chưa ra ảnh/i.test(n)),
+      "câu báo thử lại là tin THẬT người ta đọc được, không phải log nội bộ",
+    );
+  });
+
+  it("vẽ lại KHÔNG trừ thêm suất - phạt người dùng vì lỗi provider là sai", async () => {
+    // Trần trong test là 2. Hai lượt, mỗi lượt hụt một lần rồi vẽ lại được:
+    // tính đúng thì tiêu 2 suất, tính theo lần gọi API thì đã tiêu 4 và lượt
+    // thứ hai đã bị chặn từ trước.
+    generateErrorQueue = [HUT_ANH()];
+    const dau = await run(makeCtx(), { mode: "ve_moi", prompt: "1" });
+    assert.match(dau, /Đã vẽ và GỬI ảnh/);
+
+    generateErrorQueue = [HUT_ANH()];
+    const sau = await run(makeCtx(), { mode: "ve_moi", prompt: "2" });
+    assert.match(sau, /Đã vẽ và GỬI ảnh/, "lượt thứ hai vẫn phải vẽ được");
+  });
+
+  it("hụt CẢ HAI lần -> nói thật với model, không gửi file rác", async () => {
+    generateErrorQueue = [HUT_ANH(), HUT_ANH()];
+
+    const result = await run(makeCtx(), { mode: "ve_moi", prompt: "poster" });
+
+    assert.equal(events.filter((e) => e.kind === "generate").length, 2, "không được thử tới lần ba");
+    assert.equal(events.filter((e) => e.kind === "file").length, 0);
+    assert.match(loiCuaTool(result), /did not return an image/);
+  });
+
+  it("lỗi KHÁC lớp (sai key) thì KHÔNG vẽ lại và KHÔNG nhắn thử lại", async () => {
+    generateError = new Error("API key required for remote API access");
+
+    await run(makeCtx(), { mode: "ve_moi", prompt: "poster" });
+
+    assert.equal(events.filter((e) => e.kind === "generate").length, 1);
+    assert.equal(
+      events.filter((e) => e.kind === "text").length,
+      1,
+      "chỉ còn câu báo trước - hứa 'đang thử lại' khi không thử lại là nói dối",
+    );
   });
 });

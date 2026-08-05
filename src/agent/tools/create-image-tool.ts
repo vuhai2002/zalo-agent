@@ -8,6 +8,7 @@ import { enqueueSend } from "../../middleware/rate-limiter.js";
 import { createLogger } from "../../shared/logger.js";
 import { withNamedTempFile } from "../../shared/temp-file-store.js";
 import { CREATE_IMAGE_DESCRIPTION } from "./create-image-tool-description.js";
+import { veVoiMotLanThuLai } from "./draw-image-with-one-retry.js";
 import { collectRecentImagePaths } from "./read-image-tool.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 import { guiFileKemCaption } from "./send-attachment-with-caption.js";
@@ -32,6 +33,15 @@ const log = createLogger("create-image");
 
 const DELIVERED_NOTE =
   "Đã vẽ và GỬI ảnh cho người dùng rồi. KHÔNG gọi send_file để gửi lại ảnh này.";
+
+/**
+ * Câu báo khi lần vẽ đầu hụt và đang gọi lại provider.
+ *
+ * Nói THẲNG là lần đầu chưa ra chứ không ậm ừ "vẫn đang xử lý": người dùng đã
+ * đợi hơn hai phút, giấu đi thì lần chờ thứ hai không có lý do nào giải thích.
+ * Nhắc lại mốc thời gian vì lời hứa "1-3 phút" ở đầu lượt đã hết hạn.
+ */
+const TIN_THU_LAI = "Lần vẽ đầu chưa ra ảnh, mình vẽ lại lần nữa, đợi thêm 1-3 phút nhé...";
 
 /**
  * Trần ký tự prompt. Đây là CHÍNH SÁCH tự đặt, KHÔNG phải giới hạn của provider
@@ -145,7 +155,19 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
         });
 
       try {
-        const image = await generate({ prompt, refImage, transparentBackground });
+        const image = await veVoiMotLanThuLai(
+          (p) => generate(p),
+          { prompt, refImage, transparentBackground },
+          async () => {
+            // KHÔNG trừ thêm suất: `checkImageRateLimit` đã chạy ở trên và lần
+            // hụt vừa rồi đã tiêu mất một suất rồi. Bắt trả giá hai suất cho
+            // một tấm ảnh là phạt người dùng vì lỗi của provider.
+            await enqueueSend(threadKey, () =>
+              ctx.api.sendMessage({ msg: TIN_THU_LAI }, ctx.message.threadId, ctx.message.threadType),
+            );
+            ctx.ghiNhanDaGui?.(ghiChuDaGuiChu(TIN_THU_LAI));
+          },
+        );
         const fileName = `anh-${Date.now()}.${image.ext}`;
         await withNamedTempFile(fileName, image.data, (filePath) =>
           guiFileKemCaption(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { LoiVeHutAnh } from "./image-retry-policy.js";
 import { readImageFromSseStream } from "./read-image-sse-stream.js";
 
 /**
@@ -82,5 +83,43 @@ describe("readImageFromSseStream - phân biệt chậm với chết", () => {
 
     await assert.rejects(() => readImageFromSseStream(response, 80));
     assert.equal(cancelled, true);
+  });
+});
+
+/**
+ * PHÂN LỚP lỗi ngay tại đây, vì đây là chỗ duy nhất còn nhìn thấy câu gốc của
+ * provider - lên tới tool thì nó đã lẫn vào mọi lỗi khác. Lớp này quyết định
+ * `create_image` có vẽ lại hay không, nên nhận nhầm là bot đợi thêm 1-3 phút
+ * cho một lỗi vô phương.
+ */
+describe("readImageFromSseStream - phân lớp lỗi để quyết định vẽ lại", () => {
+  it("router báo không ra ảnh -> LoiVeHutAnh, để tầng trên biết là đáng vẽ lại", async () => {
+    const err = 'event: error\ndata: {"message":"Codex did not return an image. Account may not be entitled (Plus/Pro required)."}\n\n';
+    await assert.rejects(
+      () => readImageFromSseStream(scheduledStream([{ atMs: 0, text: err }], 20), 5000),
+      (e) => e instanceof LoiVeHutAnh,
+    );
+  });
+
+  it("lỗi provider KIỂU KHÁC vẫn là Error thường - không được vẽ lại bừa", async () => {
+    const err = 'event: error\ndata: {"message":"upstream rate limit exceeded"}\n\n';
+    await assert.rejects(
+      () => readImageFromSseStream(scheduledStream([{ atMs: 0, text: err }], 20), 5000),
+      (e) => e instanceof Error && !(e instanceof LoiVeHutAnh),
+    );
+  });
+
+  it("stream đóng sạch mà thiếu done -> cùng lớp hụt ảnh, cũng đáng vẽ lại", async () => {
+    await assert.rejects(
+      () => readImageFromSseStream(scheduledStream([{ atMs: 0, text: KEEPALIVE }], 20), 5000),
+      (e) => e instanceof LoiVeHutAnh,
+    );
+  });
+
+  it("mất tín hiệu KHÔNG phải hụt ảnh - vẽ lại chỉ tốn thêm một trần im lặng nữa", async () => {
+    await assert.rejects(
+      () => readImageFromSseStream(scheduledStream([{ atMs: 0, text: KEEPALIVE }]), 60),
+      (e) => e instanceof Error && !(e instanceof LoiVeHutAnh),
+    );
   });
 });

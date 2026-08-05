@@ -42,6 +42,14 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- Vẽ ảnh hụt thì bỏ cuộc ngay, dù gọi lại là gần như chắc được. Nhà cung cấp
+  chạy xong mà không đẻ ra ảnh nào là hành vi KHÔNG XÁC ĐỊNH (model upstream tự
+  quyết có gọi tool vẽ hay không), khác hẳn sai khóa hay hết quota. Nay lớp lỗi
+  đó được phân loại riêng và vẽ lại đúng một lần, có nhắn cho người dùng biết
+  là đang vẽ lại - lần hụt đo được đã ngốn 130 giây, thử lại âm thầm là bắt họ
+  ngồi im gần 4 phút sau một lời hứa 3 phút. Lần vẽ lại KHÔNG trừ thêm suất
+  trong trần ảnh mỗi giờ. Quá hạn, mất tín hiệu, sai khóa, hết quota vẫn không
+  thử lại: gọi lại chỉ tốn thêm thời gian chứ không đổi kết cục.
 - Ô chọn nhà cung cấp của agent gửi API key của router thẳng sang endpoint của
   bên khác: `resolveLanguageModel` chỉ đổi provider và model, còn key luôn lấy
   từ cấu hình chung. Vừa lộ khóa sang bên thứ ba vừa làm bot câm vì 401. Nay

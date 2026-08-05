@@ -1,5 +1,6 @@
 import { getImageSettings, isImageGenConfigured, type ImageGenSettings } from "../config/runtime-image-settings.js";
 import { readImageFromSseStream } from "./read-image-sse-stream.js";
+import { LoiVeHutAnh } from "./image-retry-policy.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
@@ -143,7 +144,10 @@ async function readImageResponse(response: Response, requestedExt: ImageExt): Pr
   if (contentType === "application/json") {
     const parsed = (await response.json().catch(() => null)) as { data?: { b64_json?: string }[] } | null;
     const b64 = parsed?.data?.[0]?.b64_json;
-    if (!b64) throw new Error("Provider không trả về ảnh (JSON thiếu b64_json)");
+    // Cùng lớp với nhánh SSE: chạy xong mà không ra ảnh -> đáng thử lại. Nhánh
+    // Content-Type lạ bên dưới thì KHÔNG: đó là trang lỗi hạ tầng, không phải
+    // model đổi ý.
+    if (!b64) throw new LoiVeHutAnh("Provider không trả về ảnh (JSON thiếu b64_json)");
     return { data: Buffer.from(b64, "base64"), ext: requestedExt };
   }
 
