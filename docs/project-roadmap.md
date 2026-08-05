@@ -2259,3 +2259,17 @@ dùng khoanh trên ảnh:
 
 **Bài học.** Phép phá code chỉ chạm được thứ có test. Logic một dòng nằm trong
 hàm lớn thì phá không tới - tách ra hàm nhỏ mới kiểm được.
+
+### Chân trang nguồn/ngày được in đậm phần nhãn (2026-08-05)
+
+Sau khi siết "in đậm tiết kiệm", model bỏ luôn in đậm ở đoạn kết nên dòng ghi
+nguồn đọc ra trơ trọi. ĐÃ KIỂM trước khi kết luận: bộ cắt KHÔNG đánh rơi style ở
+đoạn cuối (dựng lại đúng tin đó có thêm in đậm ở dòng cuối - đoạn 2 giữ nguyên
+span), và log không có cảnh báo bỏ định dạng. Tức là model tự chọn không tô.
+
+Thêm một dòng persona: dòng ghi nguồn/ngày ở cuối thì in đậm phần NHÃN. Đo chi
+phí trước khi chốt - đúng +1 span, +33 byte, SỐ TIN KHÔNG ĐỔI ở cả 20/40/60 dòng.
+
+Ăn khớp với luật đã có ở dòng "Độ dài theo việc" (chốt bằng nguồn + ngày).
+
+1423 test xanh; `pnpm eval` 11/11.
