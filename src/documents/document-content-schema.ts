@@ -78,8 +78,18 @@ const columnLetter = z
 const multiplyFormula = z.object({
   kind: z.literal("formula"),
   op: z.literal("multiply"),
-  /** Chữ cái 2 cột cùng dòng cần nhân, vd ["B", "C"] */
-  columns: z.tuple([columnLetter, columnLetter]),
+  /**
+   * Chữ cái 2 cột cùng dòng cần nhân, vd ["B", "C"].
+   *
+   * CỐ Ý dùng `array().length(2)` chứ KHÔNG dùng `z.tuple()`, dù tuple diễn tả
+   * đúng ý hơn: schema này bay thẳng sang nhà cung cấp LLM, mà `z.tuple()` dịch
+   * ra JSON Schema kiểu draft-07 với `items` là một MẢNG. Lớp OpenAI-compatible
+   * của Google chỉ nhận 2020-12, ở đó `items` bắt buộc là object hoặc boolean,
+   * nên nó chối CẢ REQUEST bằng 400 - và vì bộ tool đi kèm mọi lượt, bot câm
+   * hoàn toàn chứ không riêng lượt nào nhờ làm Excel (đã dính thật 06/08/2026).
+   * Ràng buộc lúc chạy y hệt tuple: đúng 2 phần tử, mỗi phần tử đúng dạng cột.
+   */
+  columns: z.array(columnLetter).length(2),
 });
 
 const sumFormula = z.object({

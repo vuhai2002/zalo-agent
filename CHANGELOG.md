@@ -42,6 +42,15 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- Chọn Google Gemini làm nhà cung cấp LLM thì bot CÂM HOÀN TOÀN: mọi tin nhắn
+  chết bằng HTTP 400 trước khi model kịp nghĩ gì. Căn nguyên là `z.tuple()`
+  trong schema của `create_excel_file` - nó dịch ra JSON Schema draft-07 với
+  `items` là một MẢNG, trong khi lớp OpenAI-compatible của Google chỉ nhận
+  2020-12 (`items` phải là object hoặc boolean) nên chối cả request. Vì bộ tool
+  đi kèm mọi lượt nên lỗi không giới hạn ở lượt nào nhờ làm Excel. Đổi sang
+  `z.array().length(2)`: ràng buộc lúc chạy y hệt, JSON Schema thì mọi nhà cung
+  cấp đều nhận. Thêm test quét cấu trúc schema của cả 13 tool để lỗi cùng lớp
+  đỏ ngay tại chỗ thay vì nằm im tới lúc ai đó đổi nhà cung cấp.
 - Vẽ ảnh hụt thì bỏ cuộc ngay, dù gọi lại là gần như chắc được. Nhà cung cấp
   chạy xong mà không đẻ ra ảnh nào là hành vi KHÔNG XÁC ĐỊNH (model upstream tự
   quyết có gọi tool vẽ hay không), khác hẳn sai khóa hay hết quota. Nay lớp lỗi

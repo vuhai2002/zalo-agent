@@ -2631,3 +2631,83 @@ vẽ lại (7), không phân lớp lỗi ở SSE (1), lần vẽ lại trừ th�
   trên một mẫu thống kê.
 - Nhánh "mất tín hiệu" cố ý không thử lại. Nếu về sau thấy nó cũng chập chờn thì
   cân nhắc lại - giá của nó chỉ là một trần im lặng (90 giây), rẻ hơn quá hạn.
+
+## V3.7.1 - Đổi sang Gemini là bot câm: một `z.tuple()` giết cả bộ tool (2026-08-06)
+
+Đổi nhà cung cấp LLM sang Google Gemini trên dashboard. Nút "Test kết nối" xanh,
+model trả lời "Ok". Nhưng mọi tin nhắn đều chết: `AI_APICallError 400 Bad
+Request`, `steps: 0` - lượt tắt trước khi model kịp nghĩ gì.
+
+### Câu lỗi thật
+
+Log của bot cắt mất thân lỗi, nên phải gọi lại endpoint để lấy nguyên văn:
+
+```
+schema at properties.sheets.items.properties.rows.items.items.anyOf.2
+  .properties.columns.items must be a boolean or an object
+```
+
+Lần theo đường dẫn ra `document-content-schema.ts:82`:
+`columns: z.tuple([columnLetter, columnLetter])`.
+
+`z.tuple()` dịch ra JSON Schema kiểu **draft-07**, ở đó tuple viết bằng `items`
+là một **MẢNG**:
+
+```json
+{"type":"array","items":[{"type":"string",...},{"type":"string",...}]}
+```
+
+Lớp OpenAI-compatible của Google chỉ nhận **2020-12**, ở đó `items` bắt buộc là
+object hoặc boolean. Thấy mảng là chối CẢ REQUEST.
+
+### Vì sao tới giờ mới lộ, và vì sao nó nặng
+
+- **"Test kết nối" mù ca này**: nút đó gửi một câu chat trần, KHÔNG kèm tool nào.
+  Schema hỏng không có mặt trong request nên xanh là đương nhiên.
+- **9router / OpenAI / Anthropic đều nuốt dạng draft-07**, nên lỗi nằm im suốt
+  từ ngày viết tool Excel tới lúc đổi nhà cung cấp.
+- **Bộ tool đi kèm MỌI lượt**, nên hỏng một schema là hỏng mọi tin nhắn, không
+  riêng lượt nào nhờ làm Excel. Đây là chỗ khiến nó thành lỗi chặn hoàn toàn
+  chứ không phải lỗi một tính năng.
+
+### Cách khoanh vùng
+
+Bắn từng mảnh payload một, không đoán:
+
+| Phép đo | Kết quả |
+|---|---|
+| Chat trần / `max_tokens` / `reasoning_effort` / `stream` / tool có tham số / tool không tham số | **7/7 ra 200** - loại hết giả thuyết "model không hỗ trợ" |
+| Bắn từng tool thật một trong 13 tool | **12 qua, đúng `create_excel_file` chối** |
+| A/B `z.tuple` với `z.array().length(2)` cùng một request | **400 với 200** |
+| Nghiệm thu lại cả 13 tool sau khi sửa | **200**, model stream trả lời tiếng Việt bình thường |
+
+### Bản sửa
+
+`columns: z.array(columnLetter).length(2)`. Ràng buộc lúc chạy y hệt tuple (đúng
+2 phần tử, mỗi phần tử khớp `^[A-Za-z]{1,2}$`, vẫn tự viết hoa), còn JSON Schema
+ra `{"type":"array","items":{...},"minItems":2,"maxItems":2}` - dạng mọi nhà
+cung cấp đều nhận. Kiểu TS đổi từ `[string, string]` sang `string[]`; repo không
+bật `noUncheckedIndexedAccess` nên 4 chỗ dùng `columns[0]`/`columns[1]` không vỡ.
+
+**Test chặn cả LỚP lỗi** (`tool-schema-provider-compat.test.ts`): quét cây JSON
+Schema của cả 13 tool, đỏ nếu có `items` nào là mảng. Ai thêm `z.tuple()` vào
+tool mới thì biết ngay tại chỗ, thay vì đợi đổi nhà cung cấp rồi bot câm mới lộ.
+Kèm hai khẳng định về chính bộ quét: nó phải dựng đủ 13 tool, và phải đi tới
+được nhánh sâu nhất - thiếu hai cái đó thì một bộ quét rỗng cũng đọc ra như đạt.
+
+### Phá code bắt được một lỗ hổng thứ hai
+
+Phép phá "bỏ `.length(2)`" ban đầu **không làm test nào đỏ**. Hồi còn `z.tuple()`
+thì độ dài do KIỂU giữ nên chưa ai cần test; bản sửa chuyển nó thành ràng buộc
+LÚC CHẠY mà không có người canh. Thiếu nó thì `columns[1]` là undefined và công
+thức ghi ra file thành `B5*undefined5`. Đã thêm test "đúng 2 cột, thiếu hay thừa
+đều bị chối"; sau đó cả 4 phép phá đều đỏ.
+
+**Kiểm chứng.** 1479 test xanh (+4), typecheck sạch, nghiệm thu thật trên Gemini
+với đủ 13 tool ra 200.
+
+### Việc còn treo
+
+- "Test kết nối" vẫn không gửi tool nên vẫn mù với lớp lỗi này. Muốn nó phát
+  hiện được thì phải cho gửi kèm bộ tool thật - chưa làm, vì test hiện tại rẻ và
+  nhanh, còn bộ quét schema đã chặn từ phía CI rồi.

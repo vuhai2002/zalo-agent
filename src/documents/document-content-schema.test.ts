@@ -45,6 +45,20 @@ describe("spreadsheetCellSchema", () => {
     );
   });
 
+  /**
+   * `columns` từng là `z.tuple()` nên độ dài do KIỂU giữ. Nay là
+   * `z.array().length(2)` - đổi để nhà cung cấp soi chặt chịu nhận schema, xem
+   * `tool-schema-provider-compat.test.ts` - nên độ dài thành ràng buộc LÚC CHẠY
+   * và phải có người canh. Thiếu nó thì `columns[1]` là undefined và công thức
+   * ghi ra file thành "B5*undefined5".
+   */
+  it("ô nhân phải có ĐÚNG 2 cột - thiếu hay thừa đều bị chối", () => {
+    for (const columns of [[], ["B"], ["B", "C", "D"]]) {
+      const ket = spreadsheetCellSchema.safeParse({ kind: "formula", op: "multiply", columns });
+      assert.equal(ket.success, false, `columns=${JSON.stringify(columns)} lẽ ra phải bị chối`);
+    }
+  });
+
   it("chuỗi thường và số thuần - cách model gửi TỰ NHIÊN - được nhận và chuẩn hóa", () => {
     assert.deepEqual(spreadsheetCellSchema.parse("Vụ kim cương A"), {
       kind: "text",
