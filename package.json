@@ -2,7 +2,42 @@
   "name": "zalo-agent",
   "version": "0.1.0",
   "private": true,
-  "description": "Multi-account Zalo AI agent - zca-js + Vercel AI SDK (provider-agnostic via env)",
+  "description": "Bot AI thường trú trên Zalo cá nhân, đa tài khoản: agent loop tự gọi tool, dashboard web, lịch hẹn, trí nhớ bền, tin nhắn có định dạng. Self-hosted, provider-agnostic.",
+  "keywords": [
+    "zalo",
+    "zalo-bot",
+    "zalo-ai",
+    "zca-js",
+    "ai-agent",
+    "llm-agent",
+    "chatbot",
+    "vietnamese",
+    "tool-calling",
+    "function-calling",
+    "vercel-ai-sdk",
+    "openai-compatible",
+    "anthropic",
+    "self-hosted",
+    "multi-account",
+    "sqlite",
+    "typescript",
+    "hono",
+    "react",
+    "prompt-injection-defense",
+    "scheduler",
+    "cron",
+    "rich-text",
+    "personal-assistant"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/vuhai2002/zalo-agent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vuhai2002/zalo-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vuhai2002/zalo-agent/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.13"
