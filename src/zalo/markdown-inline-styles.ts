@@ -34,6 +34,21 @@ const CAP_DAU: { regex: RegExp; style: TextStyle }[] = [
   { regex: /~~([^~\n]+)~~/g, style: TextStyle.StrikeThrough },
   { regex: /`([^`\n]+)`/g, style: TextStyle.Bold }, // Zalo không có font mono
   { regex: /(?<![*\w])\*(?!\*)([^*\n]+?)\*(?!\*)(?!\w)/g, style: TextStyle.Italic },
+  // Màu và gạch chân: markdown KHÔNG có cú pháp cho hai thứ này nên phải tự đặt
+  // quy ước. Dùng thẻ kiểu HTML vì model quen viết, và vì lớp ký tự phủ định
+  // `[^<\n]` giữ biểu thức tuyến tính - không thẻ nào lồng trong thẻ nào được,
+  // đó cũng chính là điều mình muốn (tô hai màu chồng nhau là vô nghĩa).
+  //
+  // Đây thuần là DỮ LIỆU, không phải code do model sinh ra, nên không mở thêm
+  // đường prompt injection - cùng nguyên tắc với tool tạo file.
+  //
+  // Cả 4 màu + gạch chân đã ĐO THẬT trên cả Zalo Web lẫn điện thoại: hiện y hệt
+  // nhau, kể cả khi chồng với đậm hoặc nghiêng.
+  { regex: /<do>([^<\n]+)<\/do>/gi, style: TextStyle.Red },
+  { regex: /<cam>([^<\n]+)<\/cam>/gi, style: TextStyle.Orange },
+  { regex: /<vang>([^<\n]+)<\/vang>/gi, style: TextStyle.Yellow },
+  { regex: /<xanh>([^<\n]+)<\/xanh>/gi, style: TextStyle.Green },
+  { regex: /<gach>([^<\n]+)<\/gach>/gi, style: TextStyle.Underline },
 ];
 
 export type SpanInline = { start: number; len: number; st: Exclude<TextStyle, TextStyle.Indent> };
@@ -52,8 +67,28 @@ export type SpanInline = { start: number; len: number; st: Exclude<TextStyle, Te
  * chuỗi và phát span theo offset CUỐI CÙNG.
  */
 export function apDungInline(dong: string): { text: string; spans: SpanInline[] } {
-  const cat: { noiDung: string; style: TextStyle }[] = [];
-  let tam = dong;
+  const cat: MucDaCat[] = [];
+  const tam = tokenHoa(dong, cat);
+
+  // Nội dung cất ra ở pass TRƯỚC không được các pass SAU quét tới, nên phải
+  // token hóa lại chính nó. Ví dụ `**<cam>X</cam>**`: pass đậm cất nguyên
+  // `<cam>X</cam>` vào kho rồi pass màu chỉ còn thấy token ở ngoài, thẻ màu nằm
+  // trong kho thành chữ trần. Vòng này quét cả những mục MỚI sinh ra (`cat` dài
+  // thêm trong lúc lặp) và dừng chắc chắn vì nội dung mỗi lần một ngắn đi.
+  for (let k = 0; k < cat.length; k++) {
+    cat[k]!.noiDung = tokenHoa(cat[k]!.noiDung, cat);
+  }
+
+  const spans: SpanInline[] = [];
+  const text = moRong(tam, cat, 0, spans);
+  return { text, spans };
+}
+
+type MucDaCat = { noiDung: string; style: TextStyle };
+
+/** Thay mọi đoạn khớp bằng token, cất nội dung vào `cat`. Trả chuỗi đã token hóa. */
+function tokenHoa(chuoi: string, cat: MucDaCat[]): string {
+  let tam = chuoi;
   for (const { regex, style } of CAP_DAU) {
     tam = tam.replace(regex, (_ca, noiDung: string) => {
       const n = cat.length;
@@ -61,25 +96,36 @@ export function apDungInline(dong: string): { text: string; spans: SpanInline[] 
       return `${MOC}${n}${MOC}`;
     });
   }
+  return tam;
+}
 
-  const spans: SpanInline[] = [];
+/**
+ * Dựng lại chuỗi từ token và phát span theo offset CUỐI CÙNG.
+ *
+ * ĐỆ QUY vì thẻ lồng nhau là ca thường gặp nhất của màu: `<cam>**Thời gian:**</cam>`
+ * phải ra HAI span cùng phủ "Thời gian:" - một cam, một đậm. Bản một tầng chỉ
+ * phát được span ngoài, còn dấu `**` bên trong lọt ra thành chữ.
+ */
+function moRong(chuoi: string, cat: MucDaCat[], goc: number, spans: SpanInline[]): string {
   let ra = "";
   let i = 0;
-  while (i < tam.length) {
-    if (tam[i] !== MOC) {
-      ra += tam[i++];
+  while (i < chuoi.length) {
+    if (chuoi[i] !== MOC) {
+      ra += chuoi[i++];
       continue;
     }
-    const het = tam.indexOf(MOC, i + 1);
-    const muc = het === -1 ? undefined : cat[Number(tam.slice(i + 1, het))];
+    const het = chuoi.indexOf(MOC, i + 1);
+    const muc = het === -1 ? undefined : cat[Number(chuoi.slice(i + 1, het))];
     if (!muc) {
       // Token hỏng (không nên xảy ra) - giữ nguyên ký tự, KHÔNG nuốt chữ
-      ra += tam[i++];
+      ra += chuoi[i++];
       continue;
     }
-    spans.push({ start: ra.length, len: muc.noiDung.length, st: muc.style as SpanInline["st"] });
-    ra += muc.noiDung;
+    const batDau = goc + ra.length;
+    const trong = moRong(muc.noiDung, cat, batDau, spans);
+    spans.push({ start: batDau, len: trong.length, st: muc.style as SpanInline["st"] });
+    ra += trong;
     i = het + 1;
   }
-  return { text: ra, spans };
+  return ra;
 }

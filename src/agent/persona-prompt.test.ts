@@ -261,4 +261,33 @@ describe("BẤT BIẾN BẮC CẦU: dấu hiệu rò prompt phải CÓ THẬT tr
     const sp = prompt.buildSystemPrompt(AGENT, MSG, undefined, account([]));
     assert.ok(sp.includes(`<${THE_NOI_DUNG_NGOAI}>`), "tên thẻ không còn khớp persona");
   });
+
+  it("tool là HẠ TẦNG không bị kể trong mục Khả năng, nhưng model vẫn được cấp", () => {
+    // Người dùng nói thẳng khi thấy bot khoe "xem ngày giờ chính xác": "cái đó
+    // tôi cũng xem được, đưa vào năng lực làm gì". Khoe những thứ ai cũng làm
+    // được thì cả danh sách trông nghiệp dư.
+    const text = prompt.buildSystemPrompt(AGENT, MSG, undefined, account([]));
+
+    assert.ok(!text.includes("Ngày giờ hiện tại"), "get_datetime không được kể trong mục Khả năng");
+    assert.ok(!text.includes("Thả cảm xúc"), "add_reaction không được kể trong mục Khả năng");
+
+    // NHƯNG model vẫn phải biết mà gọi - đây là điểm khác hẳn việc tắt tool.
+    // Thiếu vế này thì bỏ nhầm luôn tool khỏi schema mà test vẫn xanh.
+    const coTrongSchema = registry
+      .listAvailableTools({ agent: AGENT, account: account([]) }, {})
+      .map((t) => t.key);
+    assert.ok(coTrongSchema.includes("get_datetime"), "get_datetime phải còn trong schema tool");
+    assert.ok(coTrongSchema.includes("add_reaction"), "add_reaction phải còn trong schema tool");
+  });
+
+  it("tool ĐÁNG KHOE thì vẫn phải có trong mục Khả năng", () => {
+    // Lưới chặn chiều ngược: đánh dấu nhầm hàng loạt tool là "không khoe" thì
+    // mục Khả năng rỗng dần mà ca trên vẫn xanh.
+    const text = prompt.buildSystemPrompt(AGENT, MSG, undefined, account([]));
+    // CỐ Ý không lấy "Vẽ ảnh AI": tool đó có `available()` kiểm cấu hình nên
+    // môi trường test không cấp - đúng hành vi, nhưng làm ca này đỏ oan.
+    for (const nhan of ["Tìm kiếm web", "Tạo file Word", "Gửi file", "Lịch hẹn"]) {
+      assert.ok(text.includes(nhan), `"${nhan}" phải được kể trong mục Khả năng`);
+    }
+  });
 });

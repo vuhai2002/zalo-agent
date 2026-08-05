@@ -763,11 +763,15 @@ describe("runAgentTurn - isolated (lượt theo lịch của scheduler)", () => 
     const textBinhThuong = systemText(binhThuong.calls[0]!)!;
     const textCoLap = systemText(coLap.calls[0]!)!;
 
-    assert.notEqual(textCoLap, textBinhThuong, "mục Khả năng PHẢI khác nhau - lượt cô lập thiếu 2 tool bị loại");
+    assert.notEqual(textCoLap, textBinhThuong, "mục Khả năng PHẢI khác nhau - lượt cô lập thiếu tool bị loại");
     assert.match(textCoLap, /Bạn là trợ lý AI trả lời tin nhắn trên Zalo/, "persona gốc vẫn phải còn nguyên");
-    assert.doesNotMatch(textCoLap, /Thả cảm xúc/, "add_reaction không được kể trong mục Khả năng khi cô lập");
     assert.doesNotMatch(textCoLap, /Ghi nhớ lâu dài/, "save_memory không được kể trong mục Khả năng khi cô lập");
-    assert.match(textBinhThuong, /Thả cảm xúc/, "lượt thường (đối chứng) vẫn phải kể add_reaction");
+    // Đối chứng dùng save_memory chứ KHÔNG dùng add_reaction: từ khi có
+    // `keTrongKhaNang`, add_reaction bị loại khỏi mục Khả năng ở CẢ HAI lượt
+    // (nó là phép lịch sự lúc trò chuyện, không phải năng lực đáng khoe), nên
+    // nó không còn phân biệt được hai nhánh.
+    assert.match(textBinhThuong, /Ghi nhớ lâu dài/, "lượt thường (đối chứng) vẫn phải kể save_memory");
+    assert.doesNotMatch(textBinhThuong, /Thả cảm xúc/, "add_reaction không đáng khoe ở lượt nào cả");
   });
 
   it("isolated:true loại add_reaction, save_memory khỏi schema tool gửi model", async () => {

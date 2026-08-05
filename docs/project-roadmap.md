@@ -2273,3 +2273,283 @@ phí trước khi chốt - đúng +1 span, +33 byte, SỐ TIN KHÔNG ĐỔI ở 
 Ăn khớp với luật đã có ở dòng "Độ dài theo việc" (chốt bằng nguồn + ngày).
 
 1423 test xanh; `pnpm eval` 11/11.
+
+## V3.6 - Màu chữ và gạch chân trên Zalo (2026-08-05)
+
+Người dùng gửi ảnh một thư mời có màu cam/đỏ/xanh và hỏi bot làm được không.
+Đưa đúng nội dung đó qua bộ dịch: ra 10 span đúng cấu trúc (tiêu đề to-đậm,
+nhãn đậm, thơ nghiêng, emoji, link) - thiếu ĐÚNG một thứ là màu.
+
+**Đo trước khi viết code** (rút kinh nghiệm hai lần sai vì nghiệm thu một
+client). 9 tin thử, xem trên CẢ Zalo Web LẪN điện thoại:
+
+| | Web | Điện thoại |
+|---|---|---|
+| 4 màu (đỏ/cam/vàng/xanh) | đúng | đúng |
+| màu + đậm, màu + nghiêng | đúng | đúng |
+| gạch chân, gạch chân + đỏ | đúng | đúng |
+| `f_13` / `f_18` | đúng | đúng |
+| `f_20/22/24/26` (đoán "Rất lớn") | đều BẰNG NHAU, không hơn `f_18` | như Web |
+
+Thanh công cụ Zalo có 4 cỡ chữ nhưng enum zca-js chỉ khai 2. Bốn giá trị đoán
+cho "Rất lớn" đều rơi về cùng một cỡ -> BỎ, dùng `f_18` cho tiêu đề là đủ.
+
+**Quy ước: thẻ kiểu HTML.** `<do>` `<cam>` `<vang>` `<xanh>` `<gach>`. Markdown
+không có cú pháp màu nên phải tự đặt. Lớp ký tự phủ định `[^<
+]` giữ biểu thức
+tuyến tính và chặn luôn việc lồng thẻ trong thẻ - đó cũng là điều mình muốn.
+Thẻ thuần là DỮ LIỆU, không phải code do model sinh ra, nên không mở thêm đường
+prompt injection.
+
+**Việc khó nhất: thẻ LỒNG với dấu markdown.** `<cam>**Thời gian:**</cam>` là hình
+dạng thường gặp nhất của nhãn trong thư mời. Bộ token hóa một tầng chỉ phát được
+span ngoài, dấu `**` bên trong lọt ra thành chữ. Hai việc phải thêm:
+
+- `moRong` thành ĐỆ QUY để nội dung trong token được mở tiếp
+- Sau khi token hóa, quét LẠI chính nội dung đã cất (`cat[k].noiDung = tokenHoa(...)`).
+  Không có bước này thì chỉ một chiều lồng chạy đúng: pass đậm chạy trước sẽ cất
+  nguyên `<cam>X</cam>` vào kho, pass màu chỉ còn thấy token ở ngoài.
+
+**Đường TẮT cũng phải bóc thẻ.** Persona vẫn dạy model cú pháp kể cả khi tắt cấu
+hình định dạng, nên `lamSachTraLoi` thêm bước `boTheMau` - nhận nguyên chuỗi
+`<cam>Thời gian:</cam>` còn tệ hơn mất màu.
+
+**Persona: chỉ tô khi được yêu cầu.** Trò chuyện thường mà có màu thì đọc như
+quảng cáo. Luật để thành MỘT KHỐI LIỀN (`KHOI_MAU_CHU`) kèm chú thích - đây là
+ứng viên đầu tiên cho hệ thống skill, dời đi chỉ việc cắt nguyên khối.
+
+**Vì sao CHƯA làm hệ thống skill.** Đã tra goclaw (`docs/15-core-skills-system.md`)
+và Hermes (`agent/prompt_builder.py:1514`): cả hai chỉ để MỤC LỤC trong prompt
+(tên + mô tả, ~100-150 token/skill) và nạp thân bài theo yêu cầu; goclaw bỏ hẳn
+mục lục khi quá 40 skill hoặc 5000 token rồi thay bằng `skill_search` BM25;
+Hermes có chế độ nén cả nhóm xuống chỉ còn tên. Mình MỚI CÓ MỘT hướng dẫn, mà
+persona chỉ tăng 861 -> 1030 token - dựng bảng DB + trang dashboard + tool cho
+một hướng dẫn là ngược YAGNI. Mốc để dựng: từ 3 hướng dẫn, hoặc persona vượt
+~1500 token, hoặc cần sửa hướng dẫn mà không muốn vỡ prompt cache.
+
+**Kiểm chứng.** 1433 test xanh (2 lượt); `pnpm eval` 11/11. Phá code 4 lần: bỏ
+vòng token hóa lại, bỏ đệ quy, bỏ cờ `i` của regex, bỏ bước bóc thẻ ở đường tắt.
+
+Phép phá thứ 4 **báo "không đỏ" một cách giả**: lệnh perl không khớp vì file có
+xuống dòng CRLF, nên phá thành no-op. Chỉ phát hiện ra vì có kiểm lại rằng phép
+phá ĐÃ ÁP ĐƯỢC. Đúng cái bẫy đã ghi trong memory - dùng công cụ sửa file thay vì
+perl/sed cho file CRLF.
+
+### Vá ngay sau khi dùng thật: thẻ vắt dòng và hồi quy "thôi hỏi lại" (2026-08-05)
+
+**1. Thẻ màu vắt nhiều dòng lọt ra thành chữ.** Model viết thư mời như người ta
+viết thật - bọc CẢ KHỐI trong một cặp dấu:
+
+```
+<cam>**THƯ MỜI THAM GIA
+KHÓA THIỀN TỪ TÂN THÁNG 8**</cam>
+
+<xanh>*Tháng Tám chớm thu gió dịu hiền,*
+*Lời hẹn khóa thiền giữ vẹn nguyên.*</xanh>
+```
+
+Bộ dịch xử lý TỪNG DÒNG và mọi biểu thức inline đều kẹp bằng lớp phủ định có
+`
+`, nên cặp vắt dòng không bao giờ khớp.
+
+Sửa: `multiline-markup-per-line.ts` rải dấu vắt dòng thành dấu từng dòng, chạy
+TRƯỚC khi cắt dòng. RẢI chứ không cho span vượt dòng - span phủ qua ký tự xuống
+dòng chính là thứ đã trả giá ở `lst_1` (hai client render khác nhau).
+
+Thứ tự chốt: rải `**` TRƯỚC thẻ màu. Ngược lại thì `<cam>**A
+B**</cam>` ra
+`<cam>**A</cam>` - dấu sao mất vế đóng trên dòng đó rồi lọt ra chữ.
+
+Quét bằng `indexOf` chứ không dùng biểu thức lười vượt dòng: `([\s\S]*?)` với
+nhiều thẻ mở mà thiếu thẻ đóng cho ra bậc hai, mà bot đọc tin của người lạ.
+
+**2. HỒI QUY: thêm luật màu xong thì bot thôi hỏi lại.** Cùng một nội dung dán
+vào: 06:10 (trước) bot hỏi "muốn xử lý theo hướng nào", 06:51 (sau) tự trình bày
+lại luôn. Người dùng phát hiện, không phải test.
+
+Căn nguyên là CÂU CHỮ của luật: "CHỈ khi người dùng nhờ soạn thư mời, thông báo"
+bị model đọc thành LOẠI NỘI DUNG chứ không phải LỜI YÊU CẦU - thấy nội dung là
+thư mời thì tự cho là được phép.
+
+Đo A/B thay vì suy đoán từ trùng hợp thời điểm - cùng tin, hai persona, 3 lần
+mỗi nhánh:
+
+| | Kết quả |
+|---|---|
+| CÓ khối màu (bản cũ) | 3/3 tự làm luôn |
+| BỎ khối màu | 3/3 hỏi lại |
+| CÓ khối màu (bản đã sửa câu chữ) | 3/3 hỏi lại |
+
+Sửa: nói rõ "người dùng NÓI RÕ là muốn soạn/trình bày lại", kèm câu chốt "đoạn
+dán vào trông giống thư mời KHÔNG có nghĩa là họ nhờ soạn thư mời".
+
+**3. Emoji dẫn đầu dòng** cho thư mời/thông báo, chọn đúng nghĩa (🕐 giờ giấc,
+📍 địa điểm, 📝 đăng ký, 🔗 đường dẫn, 🎁 ưu đãi, ⚠️ lưu ý). Một dòng một cái.
+
+**Không phải lỗi.** "Bot gửi 2 tin" hóa ra là hai lượt trả lời cho HAI tin người
+dùng nhắn (dán nội dung lúc 06:51:19, nhắn "format lại" lúc 06:51:32). Log không
+có dòng cắt tin nào ở cả hai lượt.
+
+**Kiểm chứng.** 1439 test xanh; `pnpm eval` 12/12. Phá code 2 lần cho phần rải
+(bỏ hẳn bước rải, đảo thứ tự `**` với thẻ) đều bị bắt.
+
+Thêm ca eval `dan-vao-thi-hoi-lai` ghim đúng hồi quy này, và ĐÃ PHÁ để kiểm: trả
+câu chữ về bản mơ hồ cũ thì ca đó đỏ.
+
+### Eval nhìn thấy ĐỊNH DẠNG, và luật viết theo nguyên tắc (2026-08-05)
+
+Người dùng hỏi "bạn làm được gì" và nhận về mười mấy gạch đầu dòng phẳng lì.
+Kèm câu hỏi đáng giá hơn nhiều: "sao cứ có case nào tôi phát hiện ra thì mới
+chỉnh lại vậy?"
+
+**Nguyên nhân trực tiếp: luật của chính mình cấm đúng thứ đang cần.** Luật viết
+sáng nay là "chỉ tô CON SỐ hoặc KẾT LUẬN". Danh sách khả năng không có con số
+cũng không có kết luận, nên theo đúng luật thì không gì được in đậm - model làm
+đúng y lời dặn, đầu ra xấu là lỗi luật.
+
+**Nguyên nhân gốc: eval MÙ HOÀN TOÀN với định dạng.** `kiemTraText` nhận chữ
+TRẦN sau khi đã dịch markdown, lúc đó dấu `**` biến mất rồi. Mọi ca eval chỉ
+khẳng định được "không rò ký tự markdown ra chữ", không đo được có in đậm hay
+không. Giới hạn này đã ghi vào roadmap lúc sáng rồi bỏ qua - nên máy không có
+cách nào bắt lỗi trình bày, chỉ mắt người dùng bắt được.
+
+Hệ quả: luật persona đắp thêm theo từng ca lẻ. Nhìn lại một ngày - "chỉ tô con
+số" (khi tin bị cắt vụn), "riêng dòng nguồn thì tô nhãn" (khi đoạn cuối trơ),
+"chỉ tô khi nói rõ" (khi bot thôi hỏi lại). Luật rồi ngoại lệ rồi ngoại lệ.
+
+**Đã làm - ba việc, thứ tự có lý do:**
+
+1. `eval-formatting-view.ts` + bắt `payload.styles` ở `fake-zalo-api.ts` +
+   khẳng định `kiemTraDinhDang`. Mảnh hạ tầng thiếu; không có nó thì hai việc
+   sau vô nghĩa. Góc nhìn kèm ĐOẠN CHỮ mà mỗi span phủ, không chỉ mã style -
+   "có 5 span đậm" gần như vô nghĩa, "span đậm phủ đúng mấy chữ đầu mỗi mục" mới
+   là thứ người đọc cảm nhận được.
+2. Thay 2 luật hẹp bằng 1 NGUYÊN TẮC: "in đậm đúng cái người đọc lướt mắt tìm".
+   Cộng luật gom nhóm khi danh sách quá 6-7 mục.
+3. Ba ca eval cho BA DẠNG TIN khác nhau: `danh-sach-de-luot-mat` (danh sách dài
+   phải scan được), `tro-chuyen-thi-dung-trang-tri` (chuyện phiếm phải KHÔNG có
+   định dạng), `thu-moi-khi-duoc-nho` (chiều khẳng định của luật màu).
+
+**Quyết định đã chốt - đừng lật lại nếu không có bằng chứng mới**
+
+- Ca khẳng định định dạng mà người chạy KHÔNG cung cấp `dinhDang` thì chấm HỎNG,
+  tuyệt đối không bỏ qua lặng lẽ. Bỏ qua là đúng kiểu xanh giả mà cả `eval-assert.ts`
+  sinh ra để chặn: case tuyên bố đo định dạng nhưng thực tế không đo gì.
+- Ca `dan-vao-thi-hoi-lai` (phủ định) đi CẶP với `thu-moi-khi-duoc-nho` (khẳng
+  định). Thiếu một trong hai thì sửa luật lệch hướng nào cũng còn nửa số ca xanh.
+
+**Kiểm chứng.** 1447 test xanh; `pnpm eval` 15/15. Phá code 3 lần:
+
+- Bỏ nhánh "thiếu dinhDang thì hỏng" -> test bộ chấm đỏ
+- Cắt sai lát chữ (`slice(start, len)`) -> test góc nhìn đỏ. Lần đầu CHỈ 1/2 test
+  bắt được vì fixture dùng `start = 0`, lúc đó hai công thức ra kết quả y hệt -
+  đã sửa fixture dùng `indexOf` thay vì đếm tay
+- QUAN TRỌNG NHẤT: trả luật persona về bản "chỉ tô con số hoặc kết luận" rồi chạy
+  eval -> `danh-sach-de-luot-mat` ĐỎ với đúng lý do người dùng đã nêu bằng mắt.
+  Đây là bằng chứng việc "người dùng phát hiện" đã chuyển thành "eval phát hiện".
+
+### Danh sách khả năng: đánh số, có icon, và bớt khoe việc vặt (2026-08-05)
+
+Người dùng đối chiếu với một bot khác: "sao con của mình nó xấu vậy, học kiểu con
+màu vàng được không, có số thứ tự rõ ràng kìa" - kèm một câu sắc hơn: "xem giờ
+cụ thể thì tôi cũng xem được, đưa vào năng lực của AI làm gì".
+
+**Việc 1 - bỏ khoe tool là hạ tầng.** Mục "Khả năng" liệt kê THẲNG từ danh bạ
+tool, nên `get_datetime` ("Ngày giờ hiện tại") và `add_reaction` ("Thả cảm xúc")
+cũng lọt vào danh sách giới thiệu. Thêm cờ `keTrongKhaNang` vào `ToolDefinition`,
+mặc định CÓ - phải khai tường minh `false` mới bị loại, để tool mới thêm không
+âm thầm biến mất.
+
+Lọc ở `toolCapabilitySection` chứ KHÔNG ở `listAvailableTools`: model vẫn nhận
+schema và gọi bình thường, chỉ là không đem ra quảng cáo. Khác hẳn việc tắt tool.
+
+**Việc 2 - đánh số và icon.** Viết theo NGUYÊN TẮC chứ không phải "hễ ai hỏi làm
+được gì thì...": danh sách các mục ĐỘC LẬP VÀ ĐÁNG ĐẾM (khả năng, các bước, các
+phương án) thì đánh số + emoji + in đậm tên mục; danh sách các ý BỔ TRỢ cho câu
+ngay trên nó thì gạch đầu dòng. Cách phát biểu này tự phân loại được ca chưa gặp
+- ví dụ các dòng đối chiếu số vé là ý bổ trợ nên vẫn gạch đầu dòng.
+
+**Kiểm chứng.** 1449 test xanh; `pnpm eval` 14/15 (ca đỏ là `ngay-co-san`, flake
+CÓ SẴN - chạy riêng 3/3 đạt, và đã kiểm từ trước bằng cách hoàn persona về bản cũ
+thì vẫn đỏ).
+
+Mở rộng ca `danh-sach-de-luot-mat`: ngoài khẳng định in đậm, giờ đòi thêm CÓ ĐÁNH
+SỐ, CÓ EMOJI, và KHÔNG nhắc tới việc xem ngày giờ.
+
+Phá code 2 lần: bỏ bộ lọc `keTrongKhaNang` -> test persona đỏ; test đối chứng
+chiều ngược (tool đáng khoe vẫn phải có mặt) chặn ca đánh dấu nhầm hàng loạt.
+
+Sửa kèm 2 test cũ bị ảnh hưởng hợp lý:
+- `run-agent-turn.test.ts` dùng `add_reaction` làm đối chứng cho lượt cô lập, mà
+  giờ nó bị loại ở CẢ HAI lượt nên không phân biệt được nữa - đổi sang
+  `save_memory`.
+- Fixture của ca "tool đáng khoe" ban đầu lấy `create_image`, mà tool đó có
+  `available()` kiểm cấu hình nên môi trường test không cấp - đỏ oan, đã đổi.
+
+### Model bắt chước chính nó: luật mới bị lịch sử cũ đè (2026-08-05)
+
+Người dùng hỏi lại "bạn làm được gì" sau khi sửa luật và báo "vẫn như cũ, chả
+khác gì". Ba lớp kiểm tra, hai lớp đầu loại trừ được nghi vấn:
+
+**Không phải code cũ.** Lượt 16:18 chạy trên tiến trình khởi động 16:17:39, sau
+lần sửa cuối lúc 15:34. Xác định bằng cách dò `pid` trong log chứ không tin dòng
+"đăng nhập" (dòng đó là listener kết nối lại, không phải tiến trình mới).
+
+**Không phải persona riêng của agent nuốt luật.** A/B trên đúng bộ dựng prompt
+production, persona rỗng và persona thật đều ra: đánh số CÓ, emoji CÓ, không
+khoe xem giờ - 2/2 mỗi nhánh.
+
+**Là LỊCH SỬ HỘI THOẠI.** Bằng chứng không thể chối: cụm "Xem ngày giờ chính xác"
+KHÔNG CÒN trong prompt (đã lọc bằng `keTrongKhaNang`), vậy mà câu trả lời 16:18
+vẫn viết gần như nguyên văn câu 14:57:
+
+```
+14:57  - Xem ngày giờ chính xác: theo múi giờ Việt Nam.
+16:18  - Xem ngày giờ chính xác theo giờ Việt Nam.
+```
+
+Model không lấy cụm đó từ đâu ngoài chính câu trả lời cũ của nó. Bình thường
+việc bắt chước này là TÍNH NĂNG (giữ giọng nhất quán trong một cuộc trò chuyện),
+nhưng nó làm luật vừa sửa bị đè.
+
+**Đã làm:** thêm một dòng persona nói thẳng "luật trình bày thắng mọi ví dụ cũ
+trong lịch sử". Đo trên đường `generateText` với persona thật + lịch sử thật:
+không có dòng đó 2/2 lần chép kiểu cũ, có dòng đó 4/4 lần theo luật mới.
+
+**Hạ tầng eval:** thêm `lichSuTruoc` cho `EvalCase` (gieo lịch sử trước khi gửi
+tin) và `PERSONA_KIEU_THAT` (persona riêng kiểu thật, vì `run-eval.ts` mặc định
+dựng agent persona RỖNG còn bot thật luôn có persona cả nghìn ký tự).
+
+**GIỚI HẠN PHẢI GHI RÕ:** ca eval `luat-thang-lich-su-cu` KHÔNG tái hiện được
+lỗi. Bỏ dòng persona ra rồi chạy lại: 3/3 vẫn ĐẠT, kể cả khi đã gieo persona
+kiểu thật và chép đúng hình dạng câu trả lời cũ (10 mục, phẳng). Nghĩa là ca đó
+hiện chỉ ghim hành vi đúng chứ CHƯA chứng minh được nó bắt lỗi - khác hẳn ca
+`danh-sach-de-luot-mat` (đã phá và thấy đỏ). Chênh lệch còn lại giữa eval và
+production chưa xác định được; nghi ở tầng dựng ngữ cảnh của agent-loop (dấu
+thời gian, cắt cửa sổ) nhưng chưa đo.
+
+Ghi lại để lần sau ai đọc không tưởng ca đó là lưới chắc.
+
+**Hệ quả thực dụng:** sửa luật trình bày CHỈ thấy ngay trong cuộc trò chuyện
+MỚI. Thread đang có nhiều câu trả lời kiểu cũ thì model còn bị kéo về kiểu đó
+một thời gian.
+
+**Kiểm chứng.** 1449 test xanh; `pnpm eval` 16/16.
+
+### Luật bỏ dòng trống quá rộng: mục đánh số dính vào tin trước (2026-08-05)
+
+Bản tin công nghệ: mỗi tin là một mục đánh số, kết bằng dòng nguồn và URL. Mục
+sau dính luôn vào URL của tin trước, trong khi các mục khác vẫn có khoảng cách -
+nhìn ra là cách dòng lộn xộn.
+
+**Căn nguyên.** Luật "BỎ dòng trống giữa đoạn văn và DANH SÁCH ngay dưới nó" nổ
+cả khi đoạn trên chẳng dẫn vào danh sách. Ý định ban đầu chỉ nhắm ca "Đối chiếu
+vé 645300:" rồi tới các mục - danh sách là phần khai triển của chính câu đó.
+
+**Dấu hiệu phân biệt: câu dẫn KẾT THÚC BẰNG DẤU HAI CHẤM.** Thêm `laCauDan`, chỉ
+bỏ dòng trống khi dòng trên đúng là câu dẫn. Đo lại: bản tin giữ khoảng cách
+giữa các mục, còn "Đối chiếu vé 645300:" vẫn dính liền danh sách như trước.
+
+**Kiểm chứng.** 1450 test xanh; `pnpm eval` 16/16. Phá code: bỏ điều kiện
+`laCauDan` thì ca "GIỮ dòng trống trước mục danh sách khi đoạn trên KHÔNG dẫn
+vào nó" đỏ ngay.

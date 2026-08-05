@@ -22,12 +22,21 @@ export type FakeZaloApi = {
   loiGoi: LoiGoiApi[];
   /** Nội dung các tin ĐÃ "gửi" - dùng để khẳng định eval không nhắn ra ngoài */
   tinDaGui: string[];
+  /**
+   * Tin kèm ĐỊNH DẠNG, đúng payload đi vào `sendMessage`.
+   *
+   * Tách khỏi `tinDaGui` để không đụng vào chỗ đã dùng, nhưng đây mới là thứ đo
+   * được chất lượng trình bày: `tinDaGui` là chữ trần sau khi dịch nên dấu `**`
+   * đã biến mất, không cách nào biết có in đậm hay không.
+   */
+  tinKemDinhDang: { msg: string; styles?: { start: number; len: number; st: string }[] }[];
   xoaGhiChep(): void;
 };
 
 export function taoFakeZaloApi(): FakeZaloApi {
   const loiGoi: LoiGoiApi[] = [];
   const tinDaGui: string[] = [];
+  const tinKemDinhDang: FakeZaloApi["tinKemDinhDang"] = [];
 
   const ghi = (ham: string, ...thamSo: unknown[]): void => {
     loiGoi.push({ ham, thamSo });
@@ -36,9 +45,14 @@ export function taoFakeZaloApi(): FakeZaloApi {
   const api = {
     getOwnId: () => "eval-self",
 
-    sendMessage: async (payload: { msg?: string }, threadId: string, threadType: number) => {
+    sendMessage: async (
+      payload: { msg?: string; styles?: { start: number; len: number; st: string }[] },
+      threadId: string,
+      threadType: number,
+    ) => {
       ghi("sendMessage", payload, threadId, threadType);
       tinDaGui.push(payload?.msg ?? "");
+      tinKemDinhDang.push({ msg: payload?.msg ?? "", styles: payload?.styles });
       return { msgId: `eval-${tinDaGui.length}`, cliMsgId: `c-${tinDaGui.length}` };
     },
 
@@ -77,9 +91,11 @@ export function taoFakeZaloApi(): FakeZaloApi {
     api,
     loiGoi,
     tinDaGui,
+    tinKemDinhDang,
     xoaGhiChep() {
       loiGoi.length = 0;
       tinDaGui.length = 0;
+      tinKemDinhDang.length = 0;
     },
   };
 }

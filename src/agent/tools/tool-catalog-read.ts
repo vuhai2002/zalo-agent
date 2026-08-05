@@ -17,6 +17,9 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
     label: "Ngày giờ hiện tại",
     description: "Cho bot biết chính xác ngày, giờ, thứ trong tuần theo múi giờ Việt Nam",
     group: "read",
+    // Không khoe: người dùng tự xem giờ được, đưa vào danh sách năng lực chỉ
+    // làm cả danh sách trông nghiệp dư. Model vẫn gọi tool này bình thường.
+    keTrongKhaNang: false,
     build: () => createGetDatetimeTool(),
   },
   {

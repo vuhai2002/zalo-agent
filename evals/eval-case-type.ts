@@ -9,6 +9,8 @@
  * Module THUẦN: chỉ khai kiểu, không import gì.
  */
 
+import type { DinhDangDaGui } from "./eval-formatting-view.js";
+
 export type MongDoi = {
   /** PHẢI gọi (thứ tự bất kỳ, gọi thêm tool khác vẫn đạt) */
   goiTool?: string[];
@@ -24,6 +26,14 @@ export type MongDoi = {
    * thật.
    */
   kiemTraText?: { moTa: string; dat: (text: string) => boolean };
+  /**
+   * Khẳng định trên ĐỊNH DẠNG thật sự tới Zalo, không phải trên chữ.
+   *
+   * `kiemTraText` nhận chữ TRẦN sau khi đã dịch markdown - lúc đó dấu `**` đã
+   * biến mất nên không cách nào biết có in đậm hay không. Lỗ hổng này khiến mọi
+   * lỗi trình bày đều phải do người dùng phát hiện; xem `eval-formatting-view.ts`.
+   */
+  kiemTraDinhDang?: { moTa: string; dat: (dd: DinhDangDaGui) => boolean };
   /**
    * Khẳng định trên THAM SỐ model truyền cho tool, không chỉ tên tool.
    *
@@ -50,6 +60,18 @@ export type EvalCase = {
   persona?: string;
   /** Tool TẮT cho agent của case này - dùng thử nhánh "agent hẹp tool" */
   disabledTools?: string[];
+  /**
+   * Lịch sử hội thoại DỰNG SẴN trước khi gửi `tinNhan`.
+   *
+   * VÌ SAO CẦN - lỗ hổng đã trả giá thật ngày 2026-08-05: eval chạy thread
+   * TRẮNG, còn bot thật luôn có lịch sử. Model bắt chước rất mạnh cách trình
+   * bày của CHÍNH NÓ ở lượt trước, nên sửa luật persona xong thì eval xanh
+   * (thread trắng) mà người dùng vẫn thấy kiểu cũ (thread có lịch sử).
+   *
+   * Đo được: cùng system prompt, thread trắng thì 2/2 lần đánh số đúng luật
+   * mới, thread có câu trả lời cũ kiểu phẳng thì 2/2 lần chép lại kiểu cũ.
+   */
+  lichSuTruoc?: { role: "user" | "assistant"; content: string }[];
   /** Chat nhóm thay vì chat riêng */
   laNhom?: boolean;
   /**

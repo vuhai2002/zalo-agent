@@ -2,6 +2,7 @@ import { dungEvalEnv } from "./eval-env.js";
 import { EVAL_CASES } from "./eval-cases.js";
 import { taoFakeZaloApi } from "./fake-zalo-api.js";
 import { inBang, type KetQuaCase } from "./eval-report.js";
+import { dungGocNhinDinhDang } from "./eval-formatting-view.js";
 import { chamCase, phatHienLuotHong } from "./eval-assert.js";
 
 /**
@@ -67,6 +68,7 @@ async function main(): Promise<void> {
   const processor = await import("../src/zalo/message-turn-processor.js");
   const database = await import("../src/conversation/database.js");
   const memoryStore = await import("../src/conversation/memory-store.js");
+  const historyStore = await import("../src/conversation/history-store.js");
   const { cleanupTestEnv } = await import("../src/shared/test-env-setup.js");
   const { ThreadType } = await import("zca-js");
   // Chính hằng số production dùng để nhắn báo lỗi - so bằng nguồn thật, không
@@ -113,6 +115,13 @@ async function main(): Promise<void> {
           learnedInThreadId: threadId,
           learnedInGroup: Boolean(c.laNhom),
         });
+      }
+
+      // Gieo LỊCH SỬ có sẵn. Thread trắng là bối cảnh KHÔNG giống bot thật:
+      // model bắt chước rất mạnh cách trình bày của chính nó ở lượt trước, nên
+      // ca nào muốn đo sức bền của luật trước lịch sử cũ phải dựng lịch sử đó.
+      for (const tin of c.lichSuTruoc ?? []) {
+        historyStore.appendMessage(ACC, threadId, { role: tin.role, content: tin.content });
       }
 
       const fake = taoFakeZaloApi();
@@ -166,7 +175,15 @@ async function main(): Promise<void> {
           cauLoiHeThong: [TECHNICAL_ERROR_REPLY, STEP_LIMIT_REPLY, ...Object.values(LOI_THEO_LOAI)],
         });
 
-      const cham = chamCase(c, { toolDaGoi, toolDaGoiKemArgs, traLoi, loiChay: hong });
+      const cham = chamCase(c, {
+        toolDaGoi,
+        toolDaGoiKemArgs,
+        traLoi,
+        // Định dạng THẬT SỰ tới Zalo. `traLoi` là chữ trần sau khi dịch nên
+        // không đo được in đậm - xem `eval-formatting-view.ts`.
+        dinhDang: dungGocNhinDinhDang(fake.tinKemDinhDang),
+        loiChay: hong,
+      });
       ketQua.push({
         ten: c.ten,
         dat: cham.dat,

@@ -1,5 +1,6 @@
 import { TextStyle, type Style } from "zca-js";
 import { apDungInline, MOC } from "./markdown-inline-styles.js";
+import { raiDinhDangNhieuDong } from "./multiline-markup-per-line.js";
 import { chuanHoaStyles } from "./normalize-zalo-styles.js";
 
 /**
@@ -39,6 +40,22 @@ function laDongDanhSach(dong: string | undefined): boolean {
 }
 
 /**
+ * Dòng này có DẪN VÀO danh sách ngay dưới không - dấu hiệu là kết thúc bằng
+ * dấu hai chấm ("Đối chiếu vé 645300:", "Kết quả Tiền Giang:").
+ *
+ * Cần phân biệt vì bản đầu bỏ dòng trống trước MỌI danh sách, kể cả khi đoạn
+ * trên chẳng liên quan. Đo trên tin thật: bản tin công nghệ có "Nguồn: CNBC"
+ * rồi URL, rồi mục "2. Nvidia thúc đẩy..." - dòng trống giữa URL và mục 2 bị
+ * xóa nên mục mới dính luôn vào cuối tin trước, trong khi các mục khác vẫn có
+ * khoảng cách. Nhìn ra là cách dòng lộn xộn.
+ */
+function laCauDan(dong: string | undefined): boolean {
+  if (dong === undefined) return false;
+  const s = dong.trimEnd();
+  return s.length > 0 && s.endsWith(":");
+}
+
+/**
  * VÌ SAO KHÔNG DÙNG `lst_1`/`lst_2` CỦA ZALO - đo trên máy thật 2026-08-05:
  * hai client render KHÁC NHAU. Zalo Web vẽ một dấu đầu dòng cho mỗi dòng nằm
  * trong span; Zalo trên điện thoại chỉ vẽ MỘT dấu cho cả span rồi thụt các dòng
@@ -73,6 +90,12 @@ export function markdownSangStyleZalo(input: string): KetQuaDinhDang {
 
   // Rào code CÙNG DÒNG: chỉ gỡ rào, giữ nguyên nội dung
   src = src.replace(/```([^\n`]*)```/g, (_ca, than: string) => than);
+
+  // Rải dấu VẮT NHIỀU DÒNG thành dấu từng dòng, TRƯỚC khi cắt dòng. Model bọc
+  // cả khối nhiều dòng trong một cặp dấu (`<xanh>` quanh cả bài thơ) là chuyện
+  // thường, mà vòng lặp dưới đây xử theo dòng nên cặp đó không bao giờ khớp -
+  // người dùng nhận nguyên chuỗi `<xanh>` giữa bài.
+  src = raiDinhDangNhieuDong(src);
 
   const dongs = src.split("\n");
   const phan: string[] = [];
@@ -110,9 +133,9 @@ export function markdownSangStyleZalo(input: string): KetQuaDinhDang {
     // người dùng chỉ trên ảnh chụp màn hình thật, không phải suy đoán.
     //
     //   BỎ - ngay SAU dòng tiêu đề: tiêu đề và câu dẫn của nó thuộc về nhau.
-    //   BỎ - giữa một đoạn văn và DANH SÁCH ngay dưới nó: danh sách là phần
-    //        khai triển của chính câu đó ("Đối chiếu vé 645300:" rồi tới các
-    //        mục), tách ra là làm rời hai thứ đi liền nhau.
+    //   BỎ - giữa CÂU DẪN và danh sách ngay dưới nó: danh sách là phần khai
+    //        triển của chính câu đó ("Đối chiếu vé 645300:" rồi tới các mục),
+    //        tách ra là làm rời hai thứ đi liền nhau.
     //   GIỮ - ngay TRƯỚC dòng tiêu đề: đó là ranh giới giữa hai mục, thiếu nó
     //        thì "Kết luận: Không trúng." dính luôn vào tiêu đề mục sau.
     //   GIỮ - mọi chỗ còn lại (giữa hai đoạn văn, sau một khối danh sách).
@@ -120,9 +143,7 @@ export function markdownSangStyleZalo(input: string): KetQuaDinhDang {
       const truoc = dongs[i - 1];
       const sau = dongs[i + 1];
       if (laDongKhoi(truoc)) continue;
-      if (laDongDanhSach(sau) && truoc !== undefined && truoc.trim() !== "" && !laDongDanhSach(truoc)) {
-        continue;
-      }
+      if (laCauDan(truoc) && laDongDanhSach(sau) && !laDongDanhSach(truoc)) continue;
     }
 
     // [chữ](url) -> "chữ (url)" để URL vẫn bấm được; trùng nhau thì chỉ giữ url.

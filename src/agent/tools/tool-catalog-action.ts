@@ -20,6 +20,9 @@ export const ACTION_TOOL_DEFINITIONS: ToolDefinition[] = [
     label: "Thả cảm xúc",
     description: "Thả reaction (tim, like...) vào tin nhắn trong hội thoại",
     group: "action",
+    // Không khoe: đây là phép lịch sự trong lúc trò chuyện, không phải việc ai
+    // đó nhờ bot làm.
+    keTrongKhaNang: false,
     // Lượt theo lịch không có tin thật nào (msgId rỗng) để mà thả reaction vào
     runsInScheduledTurn: false,
     build: (ctx) => createAddReactionTool(ctx),

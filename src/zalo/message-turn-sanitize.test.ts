@@ -202,3 +202,32 @@ describe("processBatch - làm sạch đầu ra trước khi gửi", () => {
     );
   });
 });
+
+describe("processBatch - thẻ màu", () => {
+  it("BẬT định dạng: thẻ màu thành style thật của Zalo", async () => {
+    await chayLuot("<cam>**Thời gian:**</cam> 7h00 thứ 7");
+
+    const text = daGui[0]!;
+    assert.equal(text, "Thời gian: 7h00 thứ 7", "thẻ và dấu đậm phải biến khỏi chữ");
+    const styles = daGuiStyle[0] as { start: number; len: number; st: string }[] | undefined;
+    assert.ok(styles, "phải có style tới sendMessage");
+    // Hai span cùng phủ "Thời gian:" - một cam, một đậm
+    assert.deepEqual(
+      styles.map((s) => text.slice(s.start, s.start + s.len)),
+      ["Thời gian:", "Thời gian:"],
+    );
+    assert.deepEqual(new Set(styles.map((s) => s.st)), new Set(["c_f27806", "b"]));
+  });
+
+  it("TẮT định dạng: thẻ màu bị BÓC, tuyệt đối không lọt ra chữ", async () => {
+    // Persona vẫn dạy model cú pháp thẻ nên thẻ vẫn xuất hiện khi cấu hình tắt.
+    // Người dùng nhận nguyên chuỗi "<cam>Thời gian:</cam>" thì tệ hơn mất màu.
+    tuning.setTuning("ZALO_RICH_TEXT_ENABLED", false);
+    await chayLuot("<cam>**Thời gian:**</cam> 7h00 thứ 7");
+
+    const text = daGui[0]!;
+    assert.ok(!text.includes("<"), `còn sót thẻ: ${text}`);
+    assert.equal(text, "Thời gian: 7h00 thứ 7");
+    assert.equal(daGuiStyle[0], undefined, "tắt rồi thì không đính styles");
+  });
+});

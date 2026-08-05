@@ -145,11 +145,25 @@ describe("markdownSangStyleZalo - khối", () => {
     assert.equal(ket.text, "Kết luận: xong.\n\nMục sau\nCâu dẫn.");
   });
 
-  it("BỎ dòng trống giữa đoạn văn và DANH SÁCH ngay dưới nó", () => {
+  it("BỎ dòng trống giữa CÂU DẪN và danh sách ngay dưới nó", () => {
     // Danh sách là phần khai triển của chính câu đó ("Đối chiếu vé 645300:" rồi
     // tới các mục) - tách ra là làm rời hai thứ vốn đi liền nhau.
     const ket = markdownSangStyleZalo("Đối chiếu vé 645300:\n\n- Hai số cuối 00\n- Ba số cuối 300");
     assert.equal(ket.text, "Đối chiếu vé 645300:\n- Hai số cuối 00\n- Ba số cuối 300");
+  });
+
+  it("GIỮ dòng trống trước mục danh sách khi đoạn trên KHÔNG dẫn vào nó", () => {
+    // Đo trên bản tin công nghệ thật: mỗi tin là một mục đánh số, kết bằng dòng
+    // nguồn và URL. Bản đầu bỏ dòng trống trước MỌI danh sách nên mục sau dính
+    // luôn vào URL của tin trước, trong khi các mục khác vẫn có khoảng cách -
+    // nhìn ra là cách dòng lộn xộn.
+    const ket = markdownSangStyleZalo(
+      "1. **Tin một**\n\nNội dung.\n\nNguồn: CNBC\nhttps://a.test/x.html\n\n2. **Tin hai**\n\nNội dung hai.",
+    );
+    assert.ok(
+      ket.text.includes("https://a.test/x.html\n\n2. Tin hai"),
+      `mục 2 dính vào URL của tin trước:\n${ket.text}`,
+    );
   });
 
   it("GIỮ dòng trống SAU khối danh sách - đó là ranh giới sang ý khác", () => {
@@ -233,5 +247,178 @@ describe("markdownSangStyleZalo - an toàn", () => {
       assert.ok(s.start + s.len <= ket.text.length, `span vượt biên: ${s.start}+${s.len} > ${ket.text.length}`);
       assert.ok(s.len > 0, "span rỗng không có nghĩa gì");
     }
+  });
+});
+
+describe("markdownSangStyleZalo - màu chữ và gạch chân", () => {
+  /** Bảng tra ngược: mã style của Zalo -> tên đọc được */
+  const TEN = {
+    [TextStyle.Red]: "đỏ",
+    [TextStyle.Orange]: "cam",
+    [TextStyle.Yellow]: "vàng",
+    [TextStyle.Green]: "xanh",
+    [TextStyle.Underline]: "gạch",
+  } as Record<string, string>;
+
+  it("bốn màu và gạch chân bóc thẻ, tô đúng đoạn chữ", () => {
+    // Cả 5 kiểu đã đo thật trên CẢ Zalo Web LẪN điện thoại - hiện y hệt nhau.
+    const ket = markdownSangStyleZalo(
+      "<do>đỏ</do> <cam>cam</cam> <vang>vàng</vang> <xanh>lá</xanh> <gach>gạch</gach>",
+    );
+    assert.equal(ket.text, "đỏ cam vàng lá gạch", "thẻ phải biến mất khỏi chữ");
+    assert.deepEqual(
+      ket.styles.map((s) => [TEN[s.st], ket.text.slice(s.start, s.start + s.len)]),
+      [
+        ["đỏ", "đỏ"],
+        ["cam", "cam"],
+        ["vàng", "vàng"],
+        ["xanh", "lá"],
+        ["gạch", "gạch"],
+      ],
+    );
+  });
+
+  it("THẺ LỒNG với in đậm - đúng hình dạng nhãn của thư mời", () => {
+    // Ca thường gặp nhất của màu. Bộ token hóa một tầng chỉ phát được span
+    // ngoài, còn dấu ** bên trong lọt ra thành chữ.
+    const ket = markdownSangStyleZalo("<cam>**Thời gian:**</cam> 7h00 thứ 7");
+    assert.equal(ket.text, "Thời gian: 7h00 thứ 7", "dấu ** bên trong thẻ phải bị bóc");
+    assert.deepEqual(
+      new Set(ket.styles.map((s) => s.st)),
+      new Set([TextStyle.Orange, TextStyle.Bold]),
+    );
+    for (const s of ket.styles) {
+      assert.equal(ket.text.slice(s.start, s.start + s.len), "Thời gian:");
+    }
+  });
+
+  it("LỒNG NGƯỢC LẠI cũng phải ra đúng hai span", () => {
+    // `**<cam>X</cam>**`: pass đậm cất nguyên thẻ màu vào kho rồi pass màu chỉ
+    // còn thấy token ở ngoài - thẻ nằm trong kho sẽ thành chữ trần nếu không
+    // token hóa lại chính nội dung đã cất.
+    const ket = markdownSangStyleZalo("**<cam>Đặc biệt</cam>**");
+    assert.equal(ket.text, "Đặc biệt");
+    assert.deepEqual(
+      new Set(ket.styles.map((s) => s.st)),
+      new Set([TextStyle.Orange, TextStyle.Bold]),
+    );
+  });
+
+  it("màu lồng với NGHIÊNG - đúng hình dạng câu thơ", () => {
+    const ket = markdownSangStyleZalo("<xanh>*Tháng Tám chớm thu*</xanh>");
+    assert.equal(ket.text, "Tháng Tám chớm thu");
+    assert.deepEqual(
+      new Set(ket.styles.map((s) => s.st)),
+      new Set([TextStyle.Green, TextStyle.Italic]),
+    );
+  });
+
+  it("thẻ viết HOA vẫn nhận - model không nhất quán chuyện hoa thường", () => {
+    const ket = markdownSangStyleZalo("<CAM>nhãn</CAM>");
+    assert.equal(ket.text, "nhãn");
+    assert.equal(ket.styles[0]!.st, TextStyle.Orange);
+  });
+
+  it("thẻ KHÔNG ĐÓNG thì giữ nguyên chữ, tuyệt đối không nuốt", () => {
+    // Luật số 1 của lớp này: nuốt chữ tệ hơn nhiều so với để lọt vài ký tự thẻ.
+    const ket = markdownSangStyleZalo("<cam>quên đóng thẻ");
+    assert.equal(ket.text, "<cam>quên đóng thẻ");
+    assert.deepEqual(ket.styles, []);
+  });
+
+  it("thẻ nằm TRONG KHỐI CODE giữ nguyên xi, không thành màu", () => {
+    const ket = markdownSangStyleZalo("Ví dụ:\n```html\n<do>chữ đỏ</do>\n```");
+    assert.ok(ket.text.includes("<do>chữ đỏ</do>"), "code phải giữ nguyên thẻ");
+    assert.deepEqual(ket.styles, []);
+  });
+
+  it("mọi span của tin nhiều màu đều nằm trong biên và trỏ đúng chữ", () => {
+    const thuMoi = [
+      "## 🌟 <cam>**THƯ MỜI KHÓA THIỀN**</cam> 🌟",
+      "",
+      "- 🌿 <cam>**Thời gian:**</cam> <do>**7h00 thứ 7 ngày 08/08**</do>",
+      "- 📮 <cam>**Địa chỉ:**</cam> Chùa Từ Tân, Bảy Hiền",
+      "",
+      "<xanh>*Tháng Tám chớm thu gió dịu hiền,*</xanh>",
+      "<xanh>*Lời hẹn khóa thiền giữ vẹn nguyên*</xanh>",
+    ].join("\n");
+    const ket = markdownSangStyleZalo(thuMoi);
+
+    assert.ok(!ket.text.includes("<"), `còn sót thẻ trong chữ: ${ket.text}`);
+    assert.ok(!ket.text.includes("**"), "còn sót dấu đậm");
+    for (const s of ket.styles) {
+      assert.ok(s.start >= 0 && s.len > 0, "span rỗng hoặc âm");
+      assert.ok(s.start + s.len <= ket.text.length, "span vượt biên");
+      const doan = ket.text.slice(s.start, s.start + s.len);
+      assert.ok(!doan.includes("<") && !doan.includes("*"), `span dính ký tự thẻ: ${doan}`);
+    }
+  });
+});
+
+describe("markdownSangStyleZalo - dấu VẮT NHIỀU DÒNG", () => {
+  it("thẻ màu bọc cả khối nhiều dòng: mỗi dòng một span, không lọt thẻ", () => {
+    // Đo trên tin thật: model bọc CẢ BÀI THƠ trong một cặp <xanh>. Vòng lặp xử
+    // theo dòng nên cặp đó không bao giờ khớp, người dùng nhận nguyên chuỗi
+    // "<xanh>" giữa bài.
+    const ket = markdownSangStyleZalo("<xanh>Câu một,\nCâu hai,\nCâu ba.</xanh>");
+    assert.equal(ket.text, "Câu một,\nCâu hai,\nCâu ba.", "không được sót ký tự thẻ");
+    assert.deepEqual(
+      ket.styles.map((s) => [s.st, ket.text.slice(s.start, s.start + s.len)]),
+      [
+        [TextStyle.Green, "Câu một,"],
+        [TextStyle.Green, "Câu hai,"],
+        [TextStyle.Green, "Câu ba."],
+      ],
+    );
+  });
+
+  it("in đậm vắt hai dòng cũng rải theo dòng", () => {
+    // Model viết tiêu đề hai dòng: `**THƯ MỜI THAM GIA\nKHÓA THIỀN...**`
+    const ket = markdownSangStyleZalo("**THƯ MỜI THAM GIA\nKHÓA THIỀN THÁNG 8**");
+    assert.equal(ket.text, "THƯ MỜI THAM GIA\nKHÓA THIỀN THÁNG 8");
+    assert.deepEqual(
+      ket.styles.map((s) => ket.text.slice(s.start, s.start + s.len)),
+      ["THƯ MỜI THAM GIA", "KHÓA THIỀN THÁNG 8"],
+    );
+  });
+
+  it("THẺ BỌC ĐẬM cùng vắt dòng - đúng hình dạng tiêu đề thư mời", () => {
+    // Ca khó nhất: rải thẻ trước thì ra `<cam>**A</cam>` - dấu sao mất vế đóng
+    // trên dòng đó rồi lọt ra thành chữ. Phải rải `**` trước.
+    const ket = markdownSangStyleZalo("<cam>**THƯ MỜI\nTHÁNG 8**</cam>");
+    assert.equal(ket.text, "THƯ MỜI\nTHÁNG 8", "không được sót dấu sao hay thẻ");
+    const theoDoan = new Map<string, Set<string>>();
+    for (const s of ket.styles) {
+      const doan = ket.text.slice(s.start, s.start + s.len);
+      theoDoan.set(doan, (theoDoan.get(doan) ?? new Set()).add(String(s.st)));
+    }
+    assert.deepEqual(
+      [...theoDoan.entries()].map(([d, k]) => [d, [...k].sort()]),
+      [
+        ["THƯ MỜI", [TextStyle.Bold, TextStyle.Orange].sort()],
+        ["THÁNG 8", [TextStyle.Bold, TextStyle.Orange].sort()],
+      ],
+    );
+  });
+
+  it("DÒNG TRỐNG bên trong khối không bị bọc - span rỗng là dữ liệu hỏng", () => {
+    const ket = markdownSangStyleZalo("<xanh>Câu một,\n\nCâu hai.</xanh>");
+    for (const s of ket.styles) assert.ok(s.len > 0, "span rỗng");
+    assert.deepEqual(
+      ket.styles.map((s) => ket.text.slice(s.start, s.start + s.len)),
+      ["Câu một,", "Câu hai."],
+    );
+  });
+
+  it("thẻ vắt dòng mà KHÔNG ĐÓNG thì giữ nguyên chữ", () => {
+    const ket = markdownSangStyleZalo("<xanh>Câu một,\nCâu hai.");
+    assert.equal(ket.text, "<xanh>Câu một,\nCâu hai.");
+    assert.deepEqual(ket.styles, []);
+  });
+
+  it("cặp dấu trong MỘT dòng không bị đụng tới", () => {
+    const ket = markdownSangStyleZalo("Giá **45.000đ** và <cam>khuyến mãi</cam>");
+    assert.equal(ket.text, "Giá 45.000đ và khuyến mãi");
+    assert.equal(ket.styles.length, 2);
   });
 });

@@ -193,3 +193,41 @@ describe("bộ case thật", () => {
     assert.equal(new Set(ten).size, ten.length);
   });
 });
+
+describe("chamCase - kiemTraDinhDang", () => {
+  const dd = (span: { st: string; chu: string }[]) => ({
+    span: span.map((s) => ({ ...s, tin: 1 })),
+    soTin: 1,
+  });
+  const caseDinhDang = {
+    ...caseGoc({}),
+    mongDoi: {
+      kiemTraDinhDang: {
+        moTa: "phải có ít nhất 2 chỗ in đậm",
+        dat: (d: { span: { st: string }[] }) => d.span.filter((s) => s.st === "b").length >= 2,
+      },
+    },
+  } as unknown as Parameters<typeof chamCase>[0];
+
+  it("đủ định dạng thì đạt", () => {
+    const kq = chamCase(
+      caseDinhDang,
+      qs({ dinhDang: dd([{ st: "b", chu: "Tra cứu web" }, { st: "b", chu: "Đọc ảnh" }]) }),
+    );
+    assert.equal(kq.dat, true);
+  });
+
+  it("thiếu định dạng thì HỎNG", () => {
+    const kq = chamCase(caseDinhDang, qs({ dinhDang: dd([{ st: "b", chu: "chỉ một chỗ" }]) }));
+    assert.equal(kq.dat, false);
+    assert.match(kq.lyDoHong.join(" "), /Định dạng không đạt/);
+  });
+
+  it("KHÔNG có dữ liệu định dạng thì chấm HỎNG, tuyệt đối không bỏ qua", () => {
+    // Bỏ qua lặng lẽ là đúng kiểu xanh giả mà cả file này sinh ra để chặn: case
+    // tuyên bố đo định dạng mà thực tế không đo gì, rồi báo ĐẠT.
+    const kq = chamCase(caseDinhDang, qs({}));
+    assert.equal(kq.dat, false);
+    assert.match(kq.lyDoHong.join(" "), /không cung cấp/);
+  });
+});

@@ -1,4 +1,5 @@
 import type { EvalCase } from "./eval-case-type.js";
+import type { DinhDangDaGui } from "./eval-formatting-view.js";
 
 /**
  * Chấm một case: so kết quả quan sát được với mong đợi.
@@ -15,6 +16,14 @@ export type QuanSat = {
   toolDaGoiKemArgs?: { name: string; input: string }[];
   /** Chữ người dùng thật sự nhận */
   traLoi: string;
+  /**
+   * Định dạng thật sự tới Zalo - cho `kiemTraDinhDang`.
+   *
+   * Tùy chọn để mọi chỗ dựng `QuanSat` bằng tay trong test cũ không phải sửa;
+   * ca nào khẳng định định dạng mà thiếu trường này thì chấm HỎNG chứ không bỏ
+   * qua - im lặng bỏ qua là đúng kiểu xanh giả mà cả file này sinh ra để chặn.
+   */
+  dinhDang?: DinhDangDaGui;
   /** Lượt ném lỗi thì đây là thông báo; null nếu chạy trót lọt */
   loiChay: string | null;
 };
@@ -86,6 +95,15 @@ export function chamCase(c: EvalCase, qs: QuanSat): KetQuaCham {
     lyDoHong.push(`Câu trả lời không đạt yêu cầu cấu trúc: ${kt.moTa}`);
   }
 
+  const kdd = c.mongDoi.kiemTraDinhDang;
+  if (kdd) {
+    if (!qs.dinhDang) {
+      lyDoHong.push(`Case khẳng định định dạng nhưng người chạy không cung cấp - xem QuanSat.dinhDang`);
+    } else if (!kdd.dat(qs.dinhDang)) {
+      lyDoHong.push(`Định dạng không đạt yêu cầu: ${kdd.moTa}`);
+    }
+  }
+
   const kta = c.mongDoi.kiemTraToolArgs;
   if (kta) {
     const cacLoiGoi = (qs.toolDaGoiKemArgs ?? []).filter((g) => g.name === kta.tool);
@@ -105,6 +123,7 @@ export function chamCase(c: EvalCase, qs: QuanSat): KetQuaCham {
     !c.mongDoi.goiTool?.length &&
     !c.mongDoi.khongGoiTool?.length &&
     !c.mongDoi.kiemTraText &&
+    !c.mongDoi.kiemTraDinhDang &&
     !c.mongDoi.kiemTraToolArgs
   ) {
     lyDoHong.push("Case không khai mong đợi nào - luôn xanh nên vô nghĩa");

@@ -23,13 +23,37 @@ import {
 // lại VẪN XANH - model tự biết hỏi. Giữ lại vì gần như không tốn gì (khoảng 60
 // token trên một prefix vốn đã được prompt-cache) và vì nó ghi rõ ý định cho
 // lần đổi sang model rẻ hơn, chứ KHÔNG phải vì đã chứng minh được tác dụng.
+/**
+ * Luật tô màu, tách thành KHỐI RIÊNG để lần sau dời đi chỉ việc cắt nguyên khối.
+ *
+ * Đây là ứng viên đầu tiên cho hệ thống "skill" (nạp hướng dẫn theo yêu cầu thay
+ * vì nhét hết vào persona - xem cách goclaw và Hermes làm). Chưa dựng hệ thống
+ * đó vì mới có MỘT hướng dẫn: vài dòng ở đây rẻ hơn hẳn một bảng DB, một trang
+ * dashboard và một tool. Mốc để dựng: từ 3 hướng dẫn trở lên, hoặc persona vượt
+ * ~1500 token (hiện ~950).
+ *
+ * Bốn màu và gạch chân đã ĐO THẬT trên cả Zalo Web lẫn điện thoại - hiện y hệt
+ * nhau, kể cả khi chồng với đậm hoặc nghiêng. Cỡ chữ "Rất lớn" của thanh công
+ * cụ thì KHÔNG có: đã thử f_20/f_22/f_24/f_26, cả bốn rơi về cùng một cỡ không
+ * hơn f_18.
+ */
+const KHOI_MAU_CHU = `- Tô màu và gạch chân CHỈ khi người dùng NÓI RÕ là muốn soạn hoặc trình bày lại, ví dụ "soạn giúp thư mời", "format lại tin này cho đẹp". Người ta dán một đoạn vào mà CHƯA nói muốn gì thì HỎI LẠI xem cần làm gì, đừng tự trình bày lại - đoạn dán vào trông giống thư mời KHÔNG có nghĩa là họ nhờ soạn thư mời.
+- Trò chuyện và trả lời thường thì TUYỆT ĐỐI không tô - tin thường mà có màu thì đọc như quảng cáo.
+- Cú pháp khi được phép: <do>đỏ</do>, <cam>cam</cam>, <vang>vàng</vang>, <xanh>xanh lá</xanh>, <gach>gạch chân</gach>. Zalo chỉ có đúng 4 màu đó, không có màu nào khác.
+- Lồng được với đậm và nghiêng: <cam>**Thời gian:**</cam> hoặc <xanh>*câu thơ*</xanh>.
+- Tô có tiết chế: tiêu đề một màu, các nhãn cùng một màu, phần nội dung để đen. Mỗi tin nhiều nhất hai màu, tô nhiều màu thì rối mắt chứ không đẹp.
+- Thư mời và thông báo thì mở đầu mỗi dòng thông tin bằng MỘT emoji đúng nghĩa của dòng đó: 🕐 giờ giấc, 📍 địa điểm, 📝 đăng ký, 🔗 đường dẫn, 🎁 quà và ưu đãi, ⚠️ lưu ý quan trọng. Chọn cho khớp nội dung, đừng rải emoji cho vui - một dòng một cái là đủ.`;
+
 const BASE_PERSONA = `Bạn là trợ lý AI trả lời tin nhắn trên Zalo bằng tiếng Việt tự nhiên, thân thiện.
 
 Quy tắc trả lời:
 - Được dùng markdown ở mức cơ bản, hệ thống tự đổi thành định dạng thật của Zalo: **in đậm**, "## " đầu dòng cho tiêu đề mục, "- " cho gạch đầu dòng, "1. " cho danh sách có thứ tự.
-- In đậm phải TIẾT KIỆM: chỉ tô con số hoặc kết luận mà người đọc cần thấy ngay, mỗi dòng nhiều nhất một chỗ. Bôi đậm mọi con số thì chẳng còn gì nổi bật, mà tin dài lại bị Zalo cắt thành nhiều mẩu vụn.
-- Riêng dòng ghi nguồn/ngày ở cuối thì in đậm phần NHÃN để nó đọc ra như một chân trang, ví dụ "**Nguồn:** VOH Online, tra cứu ngày 05/08/2026".
+- In đậm ĐÚNG CÁI NGƯỜI ĐỌC LƯỚT MẮT TÌM, mỗi dòng một chỗ: mấy chữ đầu của mỗi mục trong danh sách, con số quyết định, câu kết luận, nhãn của dòng ghi nguồn. Bôi đậm cả câu hay bôi mọi con số thì chẳng còn gì nổi bật, mà tin dài lại bị Zalo cắt thành nhiều mẩu vụn.
+- Danh sách các mục ĐỘC LẬP và đáng đếm (khả năng làm được, các bước phải làm, các phương án chọn) thì ĐÁNH SỐ "1. " "2. " và mỗi mục dẫn đầu bằng một emoji hợp nghĩa, rồi in đậm tên mục. Danh sách các ý bổ trợ cho câu ngay trên nó thì dùng gạch đầu dòng "- ", không đánh số.
+- Danh sách quá 6-7 mục thì gom thành vài nhóm, mỗi nhóm một tiêu đề ngắn. Liệt kê phẳng mười mấy dòng thì người ta đọc mệt và không nhớ được gì.
+- Mấy luật trình bày trên đây THẮNG mọi ví dụ cũ trong lịch sử hội thoại. Câu trả lời cũ của chính bạn trình bày kiểu khác thì đó là kiểu đã lỗi thời - làm theo luật, đừng chép lại kiểu cũ cho giống.
 - KHÔNG dùng bảng markdown, gạch dưới "_", hay khối code cho văn xuôi - Zalo không hiển thị đẹp. Cần liệt kê nhiều cột thì tách thành gạch đầu dòng.
+${KHOI_MAU_CHU}
 - Độ dài theo việc: hỏi đáp thường thì vài câu là đủ; còn tác vụ đối chiếu, dò số, tính toán, báo số liệu thì PHẢI trình bày đầy đủ: dữ liệu đọc được từ người dùng, số liệu nguồn đã tra, đối chiếu từng mục, kết luận rõ từng mục, chốt bằng nguồn + ngày. Người dùng phải tự kiểm lại được mà không cần hỏi thêm.
 - Biết tên người nhắn thì xưng hô theo tên cho thân tình, đừng gọi "bạn" trống không.
 - Đọc dữ liệu từ ảnh (số chứng từ, mã, biển số...): tách phần CHỮ và phần SỐ đúng như in trên giấy, đừng dán liền nhau; có chỗ in lặp lại thì đối chiếu chéo cho chắc.
@@ -61,7 +85,12 @@ export type PromptMemory = {
  * Excel" cho người dùng nghe, không phải "create_excel_file".
  */
 function toolCapabilitySection(available: ToolDefinition[]): string {
-  const lines = available.map((t) => `- ${t.label}: ${t.description}`);
+  // Lọc tool là HẠ TẦNG chứ không phải năng lực người dùng quan tâm - xem
+  // `keTrongKhaNang`. Lọc ở ĐÂY chứ không ở `listAvailableTools`: model vẫn
+  // phải nhận schema của chúng để gọi bình thường, chỉ là không đem ra khoe.
+  const lines = available
+    .filter((t) => t.keTrongKhaNang !== false)
+    .map((t) => `- ${t.label}: ${t.description}`);
   if (lines.length === 0) {
     return `${TIEU_DE_KHA_NANG}: KHÔNG có công cụ nào được bật - chỉ trò chuyện và trả lời bằng kiến thức sẵn có. Đừng hứa tra web, tạo file hay vẽ ảnh.`;
   }

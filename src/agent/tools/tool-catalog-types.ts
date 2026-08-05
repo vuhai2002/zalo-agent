@@ -86,6 +86,22 @@ export type ToolDefinition = {
    */
   unavailableHint?: string;
   /**
+   * Tool này có đáng kể ra khi ai đó hỏi "bạn làm được gì" không.
+   *
+   * Mặc định CÓ - phải khai tường minh `false` mới bị loại, để tool mới thêm
+   * không âm thầm biến mất khỏi lời giới thiệu.
+   *
+   * Vì sao cần: mục Khả năng liệt kê thẳng từ danh bạ này, nên có tool là hạ
+   * tầng chứ không phải năng lực người dùng quan tâm cũng lọt vào. Người dùng
+   * nói thẳng khi thấy bot khoe "xem ngày giờ chính xác": "cái đó tôi cũng xem
+   * được, đưa vào năng lực làm gì". Khoe những thứ ai cũng làm được thì cả danh
+   * sách trông nghiệp dư.
+   *
+   * KHÁC hẳn việc tắt tool: model VẪN nhận schema và vẫn gọi được bình thường,
+   * chỉ là không đem ra quảng cáo.
+   */
+  keTrongKhaNang?: boolean;
+  /**
    * Tool này có được cấp trong lượt CHẠY THEO LỊCH (job scheduler) không.
    * Mặc định true - phải khai TƯỜNG MINH false mới bị loại. Chín tool loại,
    * hai nhóm lý do khác nhau:

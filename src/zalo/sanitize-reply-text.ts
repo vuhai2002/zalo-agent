@@ -166,6 +166,25 @@ function boDongPhanCachBang(text: string, daSua: string[]): string {
 }
 
 /**
+ * Bỏ THẺ MÀU/GẠCH CHÂN, giữ nguyên nội dung bên trong.
+ *
+ * Cần ở đây vì đường này là đường khi TẮT cấu hình định dạng: persona vẫn dạy
+ * model cú pháp `<cam>...</cam>`, nên thẻ vẫn có thể xuất hiện. Không bóc thì
+ * người dùng nhận nguyên chuỗi `<cam>Thời gian:</cam>` - tệ hơn hẳn so với mất
+ * màu. Cùng danh sách thẻ với `markdown-inline-styles.ts`.
+ *
+ * Biểu thức TUYẾN TÍNH nhờ lớp ký tự phủ định `[^<\n]`, cùng luật với cả file.
+ */
+const THE_MAU_RE = /<\/?(?:do|cam|vang|xanh|gach)>/gi;
+
+function boTheMau(text: string, daSua: string[]): string {
+  if (!text.includes("<")) return text;
+  const sau = text.replace(THE_MAU_RE, "");
+  if (sau !== text) daSua.push("thẻ màu");
+  return sau;
+}
+
+/**
  * Bỏ dòng CHỈ chứa nhãn `[SILENT]` lọt vào lượt chat THƯỜNG.
  *
  * Dùng `laDongSentinel` (cấp DÒNG), KHÔNG dùng `isSilentResponse` (cấp CẢ CÂU
@@ -227,6 +246,7 @@ export function lamSachTraLoi(text: string): KetQuaLamSach {
   ra = boDam(ra, daSua);
   ra = boNghieng(ra, daSua);
   ra = boDongPhanCachBang(ra, daSua);
+  ra = boTheMau(ra, daSua);
   ra = boSentinel(ra, daSua);
 
   return { text: traKhoiCodeVe(ra, khoi), daSua, chan: false };
