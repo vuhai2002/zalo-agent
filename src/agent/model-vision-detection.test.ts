@@ -189,3 +189,33 @@ describe("markModelNoVision - cache âm của reactive fallback", () => {
     );
   });
 });
+
+/**
+ * Gemini đọc ảnh được, và `/models` là API riêng của 9Router - gọi thẳng Google
+ * thì không có endpoint đó. Đã dính thật 06/08/2026: lượt Gemini chết vì thiếu
+ * `thought_signature` (chẳng liên quan gì tới ảnh) nhưng `isImageRejectionError`
+ * khớp MỌI 4xx và lịch sử thread có ảnh cũ, nên bot ghi nhớ "model mù" rồi bỏ
+ * pixel suốt 10 phút sau đó.
+ */
+describe("classifyModelVision - provider google", () => {
+  it("luôn vision và KHÔNG gọi /models - endpoint đó là của router, không phải của Google", async () => {
+    let calls = 0;
+    const fetcher = async () => {
+      calls++;
+      return routerPayload;
+    };
+    llmStore.updateLlmSettings({ provider: "google", model: "gemini-3.5-flash-lite" });
+    assert.equal(await detection.classifyModelVision(undefined, fetcher), "vision");
+    assert.equal(calls, 0);
+  });
+
+  it("một lỗi 4xx KHÔNG làm Gemini bị ghi là mù", async () => {
+    llmStore.updateLlmSettings({ provider: "google", model: "gemini-3.5-flash-lite" });
+    detection.markModelNoVision({ modelName: "gemini-3.5-flash-lite" });
+    assert.equal(
+      await detection.classifyModelVision(undefined, async () => routerPayload),
+      "vision",
+      "ghi nhầm là bot bỏ pixel suốt 10 phút dù model đọc ảnh được",
+    );
+  });
+});

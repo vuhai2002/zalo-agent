@@ -24,8 +24,12 @@ export const BASE_URL_PRESETS: BaseUrlPreset[] = [
   // https://openrouter.ai/docs/quickstart
   { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
   { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
-  // https://ai.google.dev/gemini-api/docs/openai
-  { label: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai" },
+  // Gemini CỐ Ý không có ở đây nữa - chọn kiểu kết nối "Google (Gemini)".
+  // Lớp giả OpenAI của Google (`/v1beta/openai`) chạy được chat chay nhưng HỎNG
+  // mọi lượt có gọi tool: Gemini 3 bắt gửi lại `thought_signature` kèm mỗi
+  // function call, mà lớp giả đưa nó ở `tool_calls[].extra_content` - trường
+  // ngoài chuẩn OpenAI nên client bỏ mất, và lượt sau ăn 400. Đã dính thật
+  // 06/08/2026. Bot này gọi tool ở gần như mọi lượt nên preset đó là cái bẫy.
   // https://api-docs.deepseek.com - tài liệu ghi ĐÚNG dạng không có /v1
   { label: "DeepSeek", baseUrl: "https://api.deepseek.com" },
   // https://platform.kimi.ai/docs/api/chat (platform.moonshot.ai đã 301 sang đây)
@@ -47,6 +51,17 @@ export const BASE_URL_PRESETS: BaseUrlPreset[] = [
 
 /** Giá trị của mục "Tự nhập" - chuỗi rỗng để không đụng vào base URL đang có */
 export const TU_NHAP = "";
+
+/**
+ * Base URL này có trỏ vào Gemini không - để cảnh báo người đang cấu hình sai.
+ *
+ * Ai đã lưu preset Gemini cũ (hoặc tự dán URL đó) thì cấu hình vẫn nằm nguyên
+ * trong DB và vẫn hỏng ở mọi lượt gọi tool. Im lặng bỏ preset đi chỉ chặn người
+ * mới; người cũ cần một câu chỉ đúng việc phải làm.
+ */
+export function laUrlGemini(baseUrl: string): boolean {
+  return /generativelanguage\.googleapis\.com/i.test(baseUrl.trim());
+}
 
 /**
  * Tên hãng khớp với base URL đang nhập, hoặc `TU_NHAP` khi không khớp mục nào.

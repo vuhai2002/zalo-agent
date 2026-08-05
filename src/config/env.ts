@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { LLM_PROVIDER_KINDS } from "./llm-provider-kind.js";
 import { isValidTimezone } from "../shared/current-datetime.js";
 
 // Nạp .env bằng API built-in của Node (>= 20.12); thiếu file thì lấy env từ OS
@@ -23,7 +24,7 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error"]).default("info"),
   DATA_DIR: z.string().default("./data"),
 
-  LLM_PROVIDER: z.enum(["openai-compatible", "anthropic"]).default("openai-compatible"),
+  LLM_PROVIDER: z.enum(LLM_PROVIDER_KINDS).default("openai-compatible"),
   LLM_BASE_URL: z.preprocess(emptyToUndefined, z.string().startsWith("http").optional()),
   // Để trống được: key và tên model đều nhập được ở trang Providers trên
   // dashboard (lưu DB, key thì mã hóa). Thiếu cả 2 nơi thì lượt agent lỗi với

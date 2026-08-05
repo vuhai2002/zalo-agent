@@ -1,6 +1,6 @@
 import { SecretInput } from "../shared/secret-input";
 import { SelectMenu } from "../shared/select-menu";
-import { BASE_URL_PRESETS, timPreset, TU_NHAP } from "./llm-base-url-presets";
+import { BASE_URL_PRESETS, laUrlGemini, timPreset, TU_NHAP } from "./llm-base-url-presets";
 import { useProviderForm } from "./use-provider-form";
 
 /**
@@ -27,9 +27,13 @@ export function ProvidersSection() {
       <div className="space-y-4">
         <div>
           {/* "Kiểu kết nối" chứ không phải "Provider": ô này chọn GIAO THỨC,
-              không chọn hãng. Mọi hãng nói giao thức OpenAI (DeepSeek, Gemini,
-              Kimi, Qwen, OpenRouter, Ollama...) đều đi nhánh trên; nhánh dưới
-              chỉ dành cho API gốc của Anthropic vốn có hình dạng khác hẳn. */}
+              không chọn hãng. Mọi hãng nói giao thức OpenAI (DeepSeek, Kimi,
+              Qwen, OpenRouter, Ollama...) đều đi nhánh đầu; hai nhánh dưới dành
+              cho API GỐC của Anthropic và Google, vốn khác hình dạng.
+
+              Gemini phải đi nhánh riêng chứ không đi lớp giả OpenAI của Google:
+              lớp giả làm rơi `thought_signature` nên mọi lượt gọi tool ăn 400.
+              Xem `llm-base-url-presets.ts`. */}
           <label className="mb-1.5 block text-[13px] font-medium text-ink" htmlFor="pv-provider">
             Kiểu kết nối
           </label>
@@ -40,9 +44,17 @@ export function ProvidersSection() {
             options={[
               { value: "openai-compatible", label: "OpenAI-compatible" },
               { value: "anthropic", label: "Anthropic" },
+              { value: "google", label: "Google (Gemini)" },
             ]}
             onChange={(provider) => setForm({ ...form, provider })}
           />
+          {form.provider === "openai-compatible" && laUrlGemini(form.baseUrl) && (
+            <p className="mt-1.5 text-[13px] text-amber-600 dark:text-amber-500">
+              Base URL này là lớp giả OpenAI của Google. Chat chay chạy được, nhưng mọi lượt bot
+              gọi công cụ sẽ lỗi. Đổi Kiểu kết nối sang <strong>Google (Gemini)</strong> - key và
+              tên model giữ nguyên.
+            </p>
+          )}
         </div>
 
         {form.provider === "openai-compatible" && (

@@ -1,3 +1,4 @@
+import { laGoiThangHang } from "../config/llm-provider-kind.js";
 import { getEffectiveLlmSettings } from "../config/runtime-llm-settings.js";
 import { getVisionSettings } from "../config/runtime-vision-settings.js";
 import { createLogger } from "../shared/logger.js";
@@ -109,8 +110,10 @@ async function lookupFromRouter(
 /**
  * Reactive fallback gọi khi provider TỪ CHỐI ảnh bằng lỗi 4xx: ghi nhớ model
  * đang hiệu lực không đọc được ảnh để các lượt sau đi thẳng describe/blind.
- * Đường anthropic không bao giờ bị đánh dấu - model Claude đều có vision, lỗi
- * 4xx ở đó là chuyện khác (ảnh quá cỡ, request hỏng), đánh dấu chỉ gây hại.
+ * Đường gọi thẳng hãng (Anthropic, Google) không bao giờ bị đánh dấu - Claude
+ * và Gemini đều đọc được ảnh, lỗi 4xx ở đó là chuyện khác (ảnh quá cỡ, request
+ * hỏng), đánh dấu chỉ gây hại. Đã dính thật với Gemini: một lỗi 400 vì thiếu
+ * thought_signature bị quy cho ảnh, và model đọc ảnh được vẫn bị coi là mù.
  */
 export function markModelNoVision(override?: ModelOverride): void {
   const base = getEffectiveLlmSettings();
@@ -120,7 +123,7 @@ export function markModelNoVision(override?: ModelOverride): void {
   // không bao giờ được ghi, và reactive fallback đâm lại đường pixel MỖI lượt -
   // mỗi lượt tốn hai lần gọi model.
   const { provider, model } = modelHieuLuc(override);
-  if (provider === "anthropic") return;
+  if (laGoiThangHang(provider)) return;
   noVisionUntil.set(`${base.baseUrl ?? ""}|${model}`, Date.now() + CACHE_TTL_MS);
   log.warn({ model }, "Ghi nhớ model không đọc được ảnh (provider từ chối bằng 4xx)");
 }
@@ -149,7 +152,7 @@ export async function classifyModelVision(
   // được ảnh và bot đính pixel, trong khi lượt thật đi tới model router có thể mù.
   const { provider, model } = modelHieuLuc(override);
 
-  if (provider === "anthropic") return "vision";
+  if (laGoiThangHang(provider)) return "vision";
 
   // Bằng chứng thật (provider đã từ chối ảnh) thắng mọi suy đoán
   const negativeUntil = noVisionUntil.get(`${base.baseUrl ?? ""}|${model}`);

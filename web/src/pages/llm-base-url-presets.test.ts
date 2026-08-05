@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { BASE_URL_PRESETS, timPreset, TU_NHAP } from "./llm-base-url-presets";
+import { BASE_URL_PRESETS, laUrlGemini, timPreset, TU_NHAP } from "./llm-base-url-presets";
 
 describe("BASE_URL_PRESETS", () => {
   it("mọi URL đều bắt đầu bằng http - server chặn dạng khác", () => {
@@ -35,10 +35,10 @@ describe("timPreset", () => {
     assert.equal(timPreset("https://api.moonshot.ai/v1"), "https://api.moonshot.ai/v1");
   });
 
-  it("bỏ qua dấu gạch cuối - tài liệu Gemini ghi hẳn URL có gạch cuối", () => {
-    const gemini = "https://generativelanguage.googleapis.com/v1beta/openai";
-    assert.equal(timPreset(gemini + "/"), gemini);
-    assert.equal(timPreset(gemini + "///"), gemini);
+  it("bỏ qua dấu gạch cuối - tài liệu các hãng hay ghi URL kèm gạch cuối", () => {
+    const url = "https://openrouter.ai/api/v1";
+    assert.equal(timPreset(url + "/"), url);
+    assert.equal(timPreset(url + "///"), url);
   });
 
   it("bỏ qua hoa thường và khoảng trắng thừa khi dán từ tài liệu", () => {
@@ -54,5 +54,31 @@ describe("timPreset", () => {
   it("chuỗi rỗng thì về Tự nhập", () => {
     assert.equal(timPreset(""), TU_NHAP);
     assert.equal(timPreset("   "), TU_NHAP);
+  });
+});
+
+/**
+ * Lớp giả OpenAI của Google chạy được chat chay nhưng hỏng mọi lượt gọi tool
+ * (mất `thought_signature`). Preset đã bị bỏ, nhưng cấu hình cũ vẫn nằm trong
+ * DB nên phải nhận ra được để cảnh báo.
+ */
+describe("laUrlGemini", () => {
+  it("nhận ra lớp giả OpenAI của Google, kể cả khi dán kèm gạch cuối hay chữ hoa", () => {
+    assert.ok(laUrlGemini("https://generativelanguage.googleapis.com/v1beta/openai"));
+    assert.ok(laUrlGemini("  https://generativelanguage.googleapis.com/v1beta/openai/  "));
+    assert.ok(laUrlGemini("https://GenerativeLanguage.GoogleAPIs.com/v1beta/openai"));
+  });
+
+  it("KHÔNG bắt nhầm nhà cung cấp khác - cảnh báo sai chỗ còn tệ hơn không cảnh báo", () => {
+    assert.ok(!laUrlGemini("https://openrouter.ai/api/v1"));
+    assert.ok(!laUrlGemini("https://api.openai.com/v1"));
+    assert.ok(!laUrlGemini(""));
+  });
+
+  it("KHÔNG mục nào trong danh sách chọn nhanh còn trỏ vào lớp giả đó", () => {
+    // Đưa lại vào danh sách là đẩy người dùng vào đúng cái bẫy vừa gỡ
+    for (const p of BASE_URL_PRESETS) {
+      assert.ok(!laUrlGemini(p.baseUrl), `${p.label} trỏ vào lớp giả OpenAI của Google`);
+    }
   });
 });

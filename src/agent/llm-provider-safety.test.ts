@@ -80,3 +80,37 @@ describe("doiProviderAnToan", () => {
     });
   });
 });
+
+/**
+ * Google là nhà cung cấp thứ ba, thêm 06/08/2026. Chốt chặn rò khóa phải phủ
+ * nó y như hai nhà kia - thêm provider mà quên nới chốt chặn là đúng kiểu lỗi
+ * chỉ lộ ra khi có người thật cấu hình lệch.
+ */
+describe("doiProviderAnToan - google", () => {
+  const GOOGLE = { provider: "google" as const, model: "gemini-3.5-flash-lite" };
+
+  it("override provider TRÙNG (google/google) thì được nhận", () => {
+    assert.deepEqual(provider.doiProviderAnToan(GOOGLE, { modelProvider: "google", modelName: "gemini-3.6-flash" }), {
+      provider: "google",
+      model: "gemini-3.6-flash",
+    });
+  });
+
+  it("chung là router, agent khai google -> BỎ QUA, không gửi khóa router sang Google", () => {
+    const r = provider.doiProviderAnToan(CHUNG, {
+      modelProvider: "google" as never,
+      modelName: "gemini-3.5-flash-lite",
+    });
+    assert.equal(r.provider, "openai-compatible");
+    assert.equal(r.model, "gpt-combo", "tên model của Google gửi sang router chỉ nhận 400");
+  });
+
+  it("chung là google, agent khai router -> BỎ QUA chiều ngược lại", () => {
+    const r = provider.doiProviderAnToan(GOOGLE, {
+      modelProvider: "openai-compatible" as never,
+      modelName: "gpt-combo",
+    });
+    assert.equal(r.provider, "google");
+    assert.equal(r.model, "gemini-3.5-flash-lite");
+  });
+});

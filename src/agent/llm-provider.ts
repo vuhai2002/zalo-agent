@@ -1,7 +1,9 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 import { getEffectiveLlmSettings } from "../config/runtime-llm-settings.js";
+import type { LlmProviderKind } from "../config/llm-provider-kind.js";
 import { createLogger } from "../shared/logger.js";
 import { cacheSessionHeaders } from "./cache-session-id.js";
 import { createSanitizingFetch } from "./llm-response-sanitizer.js";
@@ -54,7 +56,7 @@ export function doiProviderAnToan<P extends string>(
 }
 
 export type ModelOverride = {
-  modelProvider?: "openai-compatible" | "anthropic" | null;
+  modelProvider?: LlmProviderKind | null;
   modelName?: string | null;
   /** Mức suy nghĩ riêng của agent; null/undefined = theo mức mặc định chung */
   reasoningEffort?: ReasoningEffort | null;
@@ -135,7 +137,55 @@ export function resolveLanguageModel(
       const provider = createAnthropic({ apiKey: settings.apiKey, headers: sessionHeaders });
       return provider(settings.model);
     }
+    case "google": {
+      // PHẢI đi provider riêng của Google, KHÔNG dùng shim OpenAI của họ qua
+      // `openai-compatible`. Gemini 3 trả kèm mỗi function call một
+      // "thought_signature" và BẮT BUỘC nhận lại nó ở lượt sau; shim đưa chữ ký
+      // đó ở `tool_calls[].extra_content.google.thought_signature`, mà
+      // `@ai-sdk/openai-compatible` chỉ đọc các trường chuẩn OpenAI nên vứt mất.
+      // Hệ quả đo thật 06/08/2026: mọi lượt CÓ GỌI TOOL chết bằng 400
+      // "Function call is missing a thought_signature in functionCall parts",
+      // chat chay thì vẫn sống. Provider này giữ chữ ký giúp (vercel/ai#10344,
+      // #11413 - đã đóng).
+      const provider = createGoogleGenerativeAI({
+        apiKey: settings.apiKey,
+        headers: sessionHeaders,
+        // Bỏ trống thì SDK tự dùng endpoint của Google - xem `baseUrlChoGoogle`
+        ...(baseUrlChoGoogle(settings.baseUrl) ? { baseURL: baseUrlChoGoogle(settings.baseUrl)! } : {}),
+      });
+      return provider(settings.model);
+    }
   }
+}
+
+/**
+ * Base URL dùng được cho provider Google, hoặc `undefined` để SDK tự dùng
+ * endpoint mặc định của hãng.
+ *
+ * Làm HAI việc, cả hai đều vì base URL cũ nằm lại trong DB khi người dùng đổi ô
+ * "Kiểu kết nối":
+ *
+ * 1. GỠ ĐUÔI "/openai". Google có hai endpoint trên cùng host: API riêng ở
+ *    `/v1beta` và lớp giả OpenAI ở `/v1beta/openai`. Provider này nói API
+ *    riêng, trỏ vào lớp giả kia là 404. Nút chọn nhanh "Google Gemini" trước
+ *    đây điền đúng cái đuôi ấy, nên cấu hình đang lưu chắc chắn có.
+ * 2. BỎ HẲN base URL của hãng KHÁC. Người đang chạy OpenRouter hay 9Router mà
+ *    đổi sang Google thì URL cũ vẫn còn - gửi khóa Google sang đó là vừa lộ
+ *    khóa sang bên thứ ba vừa nhận 401 khó hiểu. Cùng loại tai nạn mà
+ *    `doiProviderAnToan` chặn ở tầng provider, nên chặn theo cùng cách: thà bỏ
+ *    qua cấu hình lệch để rơi về trạng thái chạy được.
+ */
+export function baseUrlChoGoogle(baseUrl: string | undefined): string | undefined {
+  if (!baseUrl) return undefined;
+  const sach = baseUrl.trim().replace(/\/+$/, "").replace(/\/openai$/i, "");
+  if (!sach) return undefined;
+  try {
+    // Chỉ nhận đúng host của Google; chuỗi không parse được cũng bỏ qua
+    if (!/(^|\.)googleapis\.com$/i.test(new URL(sach).hostname)) return undefined;
+  } catch {
+    return undefined;
+  }
+  return sach;
 }
 
 /**
@@ -162,7 +212,7 @@ export function resolveReasoningOptions(override?: ModelOverride) {
  * `override?.modelProvider ?? base.provider` - đó là cách bốn chỗ trong repo
  * từng trôi khỏi nhau.
  */
-export function modelHieuLuc(override?: ModelOverride): { provider: string; model: string } {
+export function modelHieuLuc(override?: ModelOverride): { provider: LlmProviderKind; model: string } {
   return doiProviderAnToan(getEffectiveLlmSettings(), override);
 }
 

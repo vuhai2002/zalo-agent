@@ -1,6 +1,7 @@
 import { db } from "../conversation/database.js";
 import type { ReasoningEffort } from "../agent/reasoning-options.js";
 import { parseDisabledTools } from "./parse-disabled-tools.js";
+import type { LlmProviderKind } from "./llm-provider-kind.js";
 
 /** Não của bot: persona + model override. Gắn vào account qua accounts.agent_id. */
 export type AgentProfile = {
@@ -9,7 +10,7 @@ export type AgentProfile = {
   name: string;
   persona: string;
   /** Override model riêng; null = dùng cấu hình Providers chung */
-  modelProvider: "openai-compatible" | "anthropic" | null;
+  modelProvider: LlmProviderKind | null;
   modelName: string | null;
   maxSteps: number | null;
   /** Mức suy nghĩ riêng; null = dùng mức mặc định ở trang Cấu hình */

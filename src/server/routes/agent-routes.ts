@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { LLM_PROVIDER_KINDS } from "../../config/llm-provider-kind.js";
 import {
   createAgent,
   deleteAgent,
@@ -39,7 +40,7 @@ const patchSchema = z.object({
   icon: z.string().min(1).max(8).optional(),
   persona: z.string().max(8000).optional(),
   // null = bỏ override, quay về cấu hình Providers chung
-  modelProvider: z.enum(["openai-compatible", "anthropic"]).nullable().optional(),
+  modelProvider: z.enum(LLM_PROVIDER_KINDS).nullable().optional(),
   modelName: z.string().min(1).nullable().optional(),
   maxSteps: z.number().int().min(1).max(30).nullable().optional(),
   reasoningEffort: z.enum(["off", "low", "medium", "high", "xhigh"]).nullable().optional(),

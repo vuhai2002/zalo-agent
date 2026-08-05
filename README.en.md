@@ -20,7 +20,7 @@ Provider-agnostic: any OpenAI-compatible endpoint or Anthropic.
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-1479%20passing-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-1498%20passing-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -158,7 +158,7 @@ account plus QR login.
 pnpm dev                    # bot (watch mode) + dashboard
 pnpm build:web              # build the UI; the bot serves it at http://127.0.0.1:3900
 pnpm zalo-login acc-main    # QR login from the CLI (the web flow is easier)
-pnpm test                   # 1479 tests
+pnpm test                   # 1498 tests
 pnpm typecheck
 pnpm eval                   # 16 cases against a REAL model; no message ever reaches real Zalo
 ```
@@ -168,7 +168,10 @@ pnpm eval                   # 16 cases against a REAL model; no message ever rea
 Swappable via `LLM_PROVIDER`, changeable at runtime from the dashboard:
 
 - `openai-compatible` - any OpenAI-shaped endpoint (proxy routers, OpenRouter, LM Studio, Ollama, ...)
-- `anthropic` - direct
+- `anthropic` - direct to Anthropic's own API
+- `google` - direct to Google's own API (Gemini). Required over their
+  OpenAI-compatible shim, which drops `thought_signature` and breaks every turn
+  that calls a tool
 
 Image generation and the vision sidecar are configured separately, also OpenAI-compatible.
 
@@ -187,7 +190,7 @@ Image generation and the vision sidecar are configured separately, also OpenAI-c
 
 | | |
 |---|---|
-| Unit + integration tests | **1479**, on `node:test`, no external framework |
+| Unit + integration tests | **1498**, on `node:test`, no external framework |
 | Eval cases against a real model | **16** - measuring what tests cannot: does it research instead of guessing, ask when information is missing, format readably |
 | Source | ~31,700 lines excluding tests, across 273 files |
 

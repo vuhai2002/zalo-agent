@@ -12,6 +12,8 @@
  * Module thuần (không import env) để test không cần setupTestEnv.
  */
 
+import type { LlmProviderKind } from "../config/llm-provider-kind.js";
+
 export type ReasoningEffort = "off" | "low" | "medium" | "high" | "xhigh";
 
 /**
@@ -22,7 +24,7 @@ export type ReasoningEffort = "off" | "low" | "medium" | "high" | "xhigh";
 type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
 export type ReasoningOptions = Record<string, Record<string, JsonValue>>;
 
-export type ProviderKind = "openai-compatible" | "anthropic";
+export type ProviderKind = LlmProviderKind;
 
 /**
  * Trùng với `name` truyền vào createOpenAICompatible trong llm-provider.ts.
@@ -44,6 +46,20 @@ export const ROUTER_PROVIDER_OPTIONS_KEY = "llmRouter";
  * - "off": anthropic tắt hẳn thinking; openai-compatible bỏ tham số (mỗi router
  *   một kiểu giá trị "tắt", bỏ hẳn là an toàn nhất)
  */
+/**
+ * Mức nghĩ của Gemini chỉ có 4 nấc: minimal / low / medium / high.
+ *
+ * "off" thành "minimal" chứ KHÔNG bỏ tham số: Gemini 3 không tắt hẳn nghĩ được,
+ * bỏ tham số là để model tự chọn - đúng thứ mà mức "off" muốn tránh. "xhigh"
+ * hạ về "high" vì không có nấc nào cao hơn; im lặng hạ mức vẫn hơn là gửi giá
+ * trị lạ rồi ăn 400 cho cả lượt.
+ */
+function mucNghiCuaGoogle(effort: ReasoningEffort): "minimal" | "low" | "medium" | "high" {
+  if (effort === "off") return "minimal";
+  if (effort === "xhigh") return "high";
+  return effort;
+}
+
 export function reasoningProviderOptions(
   provider: ProviderKind,
   effort: ReasoningEffort,
@@ -51,6 +67,10 @@ export function reasoningProviderOptions(
   if (provider === "anthropic") {
     if (effort === "off") return { anthropic: { thinking: { type: "disabled" } } };
     return { anthropic: { thinking: { type: "adaptive" }, effort } };
+  }
+
+  if (provider === "google") {
+    return { google: { thinkingConfig: { thinkingLevel: mucNghiCuaGoogle(effort) } } };
   }
 
   if (effort === "off") return undefined;

@@ -39,9 +39,20 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   yêu cầu đã đủ rõ.
 - Dải cảnh báo trên trang Tổng quan khi chưa cấu hình LLM - trước đó bot vẫn
   khởi động bình thường nên dashboard xanh trong khi mọi tin nhắn đều hỏng.
+- **Google (Gemini) thành nhà cung cấp hạng nhất** (`LLM_PROVIDER=google`, hoặc
+  chọn ở trang Cấu hình). Trước đây Gemini chỉ dùng được qua lớp giả OpenAI của
+  Google, mà lớp đó làm rơi `thought_signature` nên mọi lượt CÓ GỌI CÔNG CỤ đều
+  chết bằng 400 - chat chay thì vẫn sống, nên lỗi rất khó đoán. Nút chọn nhanh
+  trỏ vào lớp giả đã bị bỏ, và ai còn cấu hình cũ sẽ thấy cảnh báo ngay trên
+  form kèm cách sửa. Base URL sót lại của hãng khác bị bỏ qua thay vì gửi khóa
+  Google sang bên thứ ba.
 
 ### Sửa
 
+- Một lỗi 4xx bất kỳ trên cuộc trò chuyện TỪNG có ảnh bị quy cho ảnh, khiến bot
+  ghi nhớ nhầm "model không đọc được ảnh" rồi bỏ pixel suốt 10 phút sau đó. Nay
+  đường gọi thẳng hãng (Anthropic, Google) không bao giờ bị đánh dấu - Claude và
+  Gemini đều đọc được ảnh, nên 4xx ở đó chắc chắn là chuyện khác.
 - Chọn Google Gemini làm nhà cung cấp LLM thì bot CÂM HOÀN TOÀN: mọi tin nhắn
   chết bằng HTTP 400 trước khi model kịp nghĩ gì. Căn nguyên là `z.tuple()`
   trong schema của `create_excel_file` - nó dịch ra JSON Schema draft-07 với

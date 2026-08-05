@@ -1,4 +1,5 @@
 import { db } from "../conversation/database.js";
+import type { LlmProviderKind } from "./llm-provider-kind.js";
 import { env } from "./env.js";
 import { decryptSecret, encryptSecret, maskSecret } from "./secret-cipher.js";
 import { createLogger } from "../shared/logger.js";
@@ -11,7 +12,7 @@ import { createLogger } from "../shared/logger.js";
  */
 
 export type LlmSettings = {
-  provider: "openai-compatible" | "anthropic";
+  provider: LlmProviderKind;
   baseUrl: string | undefined;
   model: string;
   apiKey: string;
@@ -96,7 +97,7 @@ export function getEffectiveLlmSettings(): LlmSettings {
 }
 
 export type LlmSettingsUpdate = {
-  provider?: "openai-compatible" | "anthropic";
+  provider?: LlmProviderKind;
   baseUrl?: string;
   model?: string;
   /** Bỏ trống = giữ key hiện tại */

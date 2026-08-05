@@ -2,6 +2,7 @@ import { streamText } from "ai";
 import { chayStream } from "../../agent/stream-text-result.js";
 import { Hono } from "hono";
 import { z } from "zod";
+import { LLM_PROVIDER_KINDS } from "../../config/llm-provider-kind.js";
 import {
   clearLlmSettings,
   getEffectiveLlmSettings,
@@ -24,7 +25,7 @@ const log = createLogger("provider-routes");
 const oRong = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v);
 
 const updateSchema = z.object({
-  provider: z.enum(["openai-compatible", "anthropic"]).optional(),
+  provider: z.enum(LLM_PROVIDER_KINDS).optional(),
   baseUrl: z.preprocess(oRong, z.string().startsWith("http", "phải bắt đầu bằng http").optional()),
   model: z.preprocess(oRong, z.string().min(1).optional()),
   // Bỏ trống = giữ key cũ. Key mới đi 1 chiều lên server, lưu DB mã hóa.

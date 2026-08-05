@@ -1,5 +1,12 @@
 /** Fetch wrapper: JSON + cookie session; 401 thì đẩy về trang login */
 
+/**
+ * Giữ KHỚP TAY với LLM_PROVIDER_KINDS ở src/config/llm-provider-kind.ts.
+ * Dashboard build riêng, không import được module backend - thêm nhà cung cấp
+ * mới thì phải sửa cả hai chỗ.
+ */
+export type LlmProviderKind = "openai-compatible" | "anthropic" | "google";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -402,7 +409,7 @@ export type ManagedAgent = {
   icon: string;
   name: string;
   persona: string;
-  modelProvider: "openai-compatible" | "anthropic" | null;
+  modelProvider: LlmProviderKind | null;
   modelName: string | null;
   maxSteps: number | null;
   /** Mức suy nghĩ riêng; null = theo mức mặc định ở trang Cấu hình */
@@ -426,7 +433,7 @@ export type MemoryFactItem = {
 };
 
 export type ProviderSettings = {
-  provider: "openai-compatible" | "anthropic";
+  provider: LlmProviderKind;
   baseUrl: string;
   model: string;
   apiKeyMasked: string;

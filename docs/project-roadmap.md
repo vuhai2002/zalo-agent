@@ -2711,3 +2711,95 @@ với đủ 13 tool ra 200.
 - "Test kết nối" vẫn không gửi tool nên vẫn mù với lớp lỗi này. Muốn nó phát
   hiện được thì phải cho gửi kèm bộ tool thật - chưa làm, vì test hiện tại rẻ và
   nhanh, còn bộ quét schema đã chặn từ phía CI rồi.
+
+## V3.7.2 - Google (Gemini) thành nhà cung cấp hạng nhất (2026-08-06)
+
+Sửa xong lỗi schema Excel thì lượt Gemini đi tới được step 2 rồi chết ở đó:
+
+```
+Function call is missing a thought_signature in functionCall parts.
+```
+
+### Căn nguyên
+
+Gemini 3.x trả kèm mỗi function call một chữ ký suy luận và BẮT BUỘC nhận lại nó
+ở lượt sau. Qua lớp giả OpenAI của Google, chữ ký nằm ở
+`tool_calls[].extra_content.google.thought_signature` - trường NGOÀI chuẩn
+OpenAI, nên `@ai-sdk/openai-compatible` bỏ mất khi parse.
+
+Hệ quả: **mọi lượt có gọi tool đều chết, chat chay thì sống**. Bot này gọi tool ở
+gần như mọi lượt, nên gần như câm hoàn toàn - nhưng vì chat chay vẫn trả lời nên
+nhìn từ ngoài rất khó đoán.
+
+| Phép đo | Kết quả |
+|---|---|
+| Gửi trả `extra_content` | 200 OK |
+| Bỏ `extra_content` | 400 |
+| Bỏ `reasoning_effort`, hoặc để `low` | vẫn 400 |
+| `reasoning_effort: "none"` | 400 khác (`invalid argument`) |
+| Assistant thường (không tool) rồi user | 200 |
+
+Không có đường vòng nào ở phía tham số.
+
+### Vì sao chọn provider native chứ không vá ở tầng fetch
+
+Bản đầu tôi đề xuất bọc `fetch` để tự giữ và gắn lại chữ ký - seam đó đã có sẵn
+(`llm-provider.ts` truyền `fetch: sanitizingFetch`). Người dùng hỏi lại vì sao
+không dùng provider chính chủ, và câu hỏi đó đúng: tra ra
+[vercel/ai#10344](https://github.com/vercel/ai/issues/10344) và
+[#11413](https://github.com/vercel/ai/issues/11413) - cả hai ĐÃ ĐÓNG, `@ai-sdk/google`
+lo phần chữ ký. Tự vá lại thứ thư viện chính chủ đã lo là ôm nợ kỹ thuật không
+có lý do.
+
+Đo lại bằng vòng lặp tool thật trước khi dựng: 2 step, 1 lần gọi tool, trả lời
+tiếng Việt, không lỗi nào.
+
+### Bản dựng
+
+- **Gom kiểu provider về một chỗ** (`config/llm-provider-kind.ts`). Union này
+  từng chép tay ở bốn nơi (env, runtime settings, override của agent, reasoning
+  options); thêm nhà cung cấp là sửa cả bốn. Giờ thêm một dòng.
+- **Nhánh `google`** trong `resolveLanguageModel`, dùng `@ai-sdk/google` 4.0.33.
+- **`baseUrlChoGoogle`** làm hai việc, cả hai vì base URL cũ NẰM LẠI trong DB khi
+  người dùng đổi ô "Kiểu kết nối" (form chỉ ẩn ô, không xóa giá trị):
+  gỡ đuôi `/openai` (lớp giả, trỏ vào là 404 - mà nút chọn nhanh cũ điền đúng
+  URL đó nên người dùng cũ chắc chắn có), và BỎ HẲN base URL của hãng khác
+  (OpenRouter, 9Router) thay vì gửi khóa Google sang bên thứ ba. Khớp host bằng
+  neo `(^|\.)googleapis\.com$` chứ không phải "có chứa" - `googleapis.com.evil.example`
+  lọt qua phép khớp lỏng.
+- **Mức nghĩ**: Gemini có 4 nấc còn bot có 5. `off` -> `minimal` (Gemini 3 không
+  tắt hẳn nghĩ được; bỏ tham số là để model tự chọn, đúng thứ `off` muốn tránh),
+  `xhigh` -> `high`. Gửi giá trị ngoài danh sách là 400 cả lượt.
+- **Bỏ preset "Google Gemini"** khỏi danh sách chọn nhanh của OpenAI-compatible -
+  nó dẫn thẳng vào cái bẫy. Ai còn cấu hình cũ thì form hiện cảnh báo kèm cách
+  sửa, vì bỏ preset chỉ chặn người mới.
+- **Chốt chặn rò khóa** (`doiProviderAnToan`) và **phát hiện vision** đều phủ
+  provider mới; `laGoiThangHang` gom hai nhà gọi thẳng lại một khái niệm.
+
+### Lỗi phụ sửa kèm
+
+Log lượt hỏng có dòng "Ghi nhớ model không đọc được ảnh" trong khi lượt đó
+`images: 0`. Lý do: `isImageRejectionError` khớp MỌI 4xx trừ 401/403/429, còn
+`hasImageParts` nhìn cả LỊCH SỬ chứ không riêng tin mới - thread đó có ảnh cũ.
+Một lỗi 400 chẳng liên quan gì tới ảnh bị quy cho ảnh, và Gemini (đọc ảnh được)
+bị ghi là mù trong 10 phút. Nay đường gọi thẳng hãng không bao giờ bị đánh dấu.
+
+### Kiểm chứng
+
+1498 test xanh (+19), typecheck sạch (cả backend lẫn dashboard). Phá code 8 phép,
+cả 8 đều đỏ: bỏ lá chắn host, khớp host kiểu "có chứa", không gỡ `/openai`, sai
+quy đổi `off`, sai quy đổi `xhigh`, Google lại đi tra `/models` của router, đưa
+preset bẫy trở lại, chốt chặn rò khóa quên nhánh google.
+
+Nghiệm thu cuối chạy ĐÚNG đường sản xuất (`resolveLanguageModel` +
+`reasoningProviderOptions` thật, base URL cố ý để nguyên đuôi `/openai` như cấu
+hình cũ): 2 step, 1 lần gọi tool, trả lời tiếng Việt, không 400.
+
+### Việc còn treo
+
+- Gemini qua ROUTER (9Router proxy) vẫn sẽ dính lỗi chữ ký, vì đường đó là
+  `openai-compatible`. Chưa gặp nên chưa làm; nếu cần thì seam `fetch` ở
+  `llm-provider.ts` là chỗ để vá.
+- `isImageRejectionError` vẫn khớp mọi 4xx cho nhánh router. Suy luận chắc hơn
+  là chỉ ghi "model mù" khi lượt thử lại KHÔNG kèm pixel thật sự thành công -
+  chưa làm, để tránh gộp việc ngoài phạm vi đã duyệt.
