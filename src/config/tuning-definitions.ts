@@ -381,6 +381,12 @@ const TUNING_BY_KEY = {
     hint: "Ảnh người dùng gửi được tải ở cỡ này để bot xem. Nét nhất thì đắt gấp mấy lần token, nhỏ nhất thì rẻ nhưng hay mất chữ số trên giấy tờ.",
     options: ["thumb", "normal", "hd"],
   },
+  ZALO_RICH_TEXT_ENABLED: {
+    kind: "boolean",
+    group: "sending",
+    label: "Định dạng chữ trên Zalo",
+    hint: "Dịch in đậm, tiêu đề, danh sách của model thành định dạng thật của Zalo thay vì xóa đi. Tắt thì quay lại chữ phẳng.",
+  },
   ZALO_MAX_MESSAGE_CHARS: {
     kind: "number",
     group: "sending",

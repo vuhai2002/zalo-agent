@@ -10,7 +10,7 @@ import { withNamedTempFile } from "../../shared/temp-file-store.js";
 import { CREATE_IMAGE_DESCRIPTION } from "./create-image-tool-description.js";
 import { collectRecentImagePaths } from "./read-image-tool.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
-import { capTionSach } from "./clean-tool-caption.js";
+import { guiFileKemCaption } from "./send-attachment-with-caption.js";
 import { ghiChuDaGuiAnh, ghiChuDaGuiChu } from "./sent-by-tool-note.js";
 import type { ToolContext } from "./index.js";
 
@@ -148,12 +148,13 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
         const image = await generate({ prompt, refImage, transparentBackground });
         const fileName = `anh-${Date.now()}.${image.ext}`;
         await withNamedTempFile(fileName, image.data, (filePath) =>
-          enqueueSend(threadKey, () =>
-            ctx.api.sendMessage(
-              { msg: capTionSach(caption) ?? "", attachments: [filePath] },
-              ctx.message.threadId,
-              ctx.message.threadType,
-            ),
+          guiFileKemCaption(
+            ctx.api,
+            threadKey,
+            ctx.message.threadId,
+            ctx.message.threadType,
+            filePath,
+            caption,
           ),
         );
         ctx.ghiNhanDaGui?.(ghiChuDaGuiAnh(1, caption));

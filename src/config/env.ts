@@ -214,6 +214,7 @@ const envSchema = z.object({
   // repo tham khảo zalo-personal chốt 4000 làm trần cứng và 2000 mỗi đoạn gửi.
   // Để 2000 cho có biên (phòng khi Zalo tính theo BYTE - tiếng Việt 1 ký tự
   // ~1.4 byte). Nâng lên thì ít tin hơn nhưng gần ngưỡng vỡ hơn.
+  ZALO_RICH_TEXT_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
   ZALO_MAX_MESSAGE_CHARS: z.coerce.number().int().min(500).max(4000).default(2000),
   // Trần số tin cho 1 lượt trả lời. Bắn quá nhiều tin liên tiếp là hành vi dễ
   // bị Zalo đánh dấu spam; vượt trần thì đoạn cuối kèm ghi chú "phần sau còn dài".

@@ -76,8 +76,11 @@ export const CASE_CACH_NOI: EvalCase[] = [
     ten: "dinh-dang",
     lyDo:
       "Yêu cầu 'lập bảng' là cái bẫy markdown tự nhiên nhất - model được huấn luyện để trả về bảng " +
-      "markdown. Zalo không render markdown nên nó hiện ra nguyên ký tự. Đây là phép thử ĐẦU-CUỐI " +
-      "cho lớp làm sạch của phase 06, khác với test đơn vị vốn tự dựng chuỗi đầu vào.",
+      "markdown, mà Zalo không có bảng. Đây là phép thử ĐẦU-CUỐI trên chữ THẬT SỰ tới sendMessage, " +
+      "khác với test đơn vị vốn tự dựng chuỗi đầu vào. GIỚI HẠN đã biết: từ khi lớp gửi DỊCH " +
+      "markdown thành Style thay vì xóa, ca này chỉ còn chứng minh 'không rò ký tự định dạng ra " +
+      "chữ' - nó KHÔNG chứng minh định dạng tới nơi, vì kiemTraText chỉ nhận text chứ không nhận " +
+      "styles. Phần đó do test đầu-cuối ở message-turn-sanitize.test.ts gánh.",
     tinNhan: "lập bảng so sánh 3 loại cà phê: đen, sữa, bạc xỉu - giá và độ đậm",
     disabledTools: ["create_image", "create_word_document", "create_excel_file"],
     mongDoi: {

@@ -25,6 +25,7 @@ let processor: typeof import("./message-turn-processor.js");
 let accountStore: typeof import("../config/account-store.js");
 let historyStore: typeof import("../conversation/history-store.js");
 let database: typeof import("../conversation/database.js");
+let tuning: typeof import("../config/runtime-tuning-settings.js");
 
 const ACC = "acc-sanitize";
 const THREAD = "t-sanitize";
@@ -35,6 +36,7 @@ before(async () => {
   accountStore = await import("../config/account-store.js");
   historyStore = await import("../conversation/history-store.js");
   database = await import("../conversation/database.js");
+  tuning = await import("../config/runtime-tuning-settings.js");
   accountStore.createAccount({ id: ACC, label: "Test" });
 });
 
@@ -44,8 +46,12 @@ after(() => {
 });
 
 let daGui: string[] = [];
+/** Style đi kèm từng tin - bắt luôn để chứng minh nó THẬT SỰ tới `sendMessage` */
+let daGuiStyle: (unknown[] | undefined)[] = [];
 beforeEach(() => {
   daGui = [];
+  daGuiStyle = [];
+  tuning.setTuning("ZALO_RICH_TEXT_ENABLED", null);
   database.db.prepare("DELETE FROM messages WHERE thread_id = ?").run(THREAD);
 });
 
@@ -66,8 +72,9 @@ const config: AccountConfig = {
 
 const api = {
   getOwnId: () => "self-1",
-  sendMessage: async (payload: { msg: string }) => {
+  sendMessage: async (payload: { msg: string; styles?: unknown[] }) => {
     daGui.push(payload.msg);
+    daGuiStyle.push(payload.styles);
     return { msgId: `m-${daGui.length}` };
   },
   sendTypingEvent: async () => ({}),
@@ -107,7 +114,7 @@ async function chayLuot(textCuaModel: string): Promise<void> {
 }
 
 describe("processBatch - làm sạch đầu ra trước khi gửi", () => {
-  it("markdown bị dọn, nội dung và URL giữ nguyên", async () => {
+  it("dấu markdown biến khỏi chữ, nội dung và URL giữ nguyên", async () => {
     await chayLuot("**Bảng giá** mới nhất:\n# Cà phê\nXem [chi tiết](https://vd.test/gia) nhé");
 
     assert.equal(daGui.length, 1);
@@ -116,6 +123,20 @@ describe("processBatch - làm sạch đầu ra trước khi gửi", () => {
     assert.ok(!text.includes("# "), `còn tiêu đề: ${text}`);
     assert.match(text, /Bảng giá mới nhất/);
     assert.match(text, /chi tiết \(https:\/\/vd\.test\/gia\)/);
+  });
+
+  it("ĐẦU-CUỐI: định dạng tới được `sendMessage` chứ không chỉ nằm trong bộ dịch", async () => {
+    // Test đơn vị chứng minh bộ dịch đúng, nhưng đường dây từ agent-loop xuống
+    // zca-js đi qua 4 module - đứt ở bất cứ khớp nào là tin vẫn phẳng như cũ.
+    await chayLuot("## Bảng giá\nCà phê **45.000đ** nhé");
+
+    const styles = daGuiStyle[0] as { start: number; len: number; st: string }[] | undefined;
+    assert.ok(styles && styles.length > 0, "không có style nào tới sendMessage");
+
+    const text = daGui[0]!;
+    const doanTo = styles.map((s) => text.slice(s.start, s.start + s.len));
+    assert.ok(doanTo.includes("Bảng giá"), `tiêu đề không được tô: ${JSON.stringify(doanTo)}`);
+    assert.ok(doanTo.includes("45.000đ"), `số tiền không được tô đậm: ${JSON.stringify(doanTo)}`);
   });
 
   it("history ghi đúng chữ ĐÃ GỬI, không phải chữ gốc của model", async () => {
@@ -141,11 +162,39 @@ describe("processBatch - làm sạch đầu ra trước khi gửi", () => {
     assert.equal(cuaBot.length, 0);
   });
 
-  it("câu trả lời tiếng Việt bình thường đi qua KHÔNG ĐỔI một ký tự", async () => {
-    const goc = "Chào anh Hải ạ.\n- Cà phê: 45.000\n- Trà: 30.000\nAnh cần thêm gì không ạ?";
+  it("văn xuôi tiếng Việt KHÔNG có dấu markdown đi qua không đổi một ký tự", async () => {
+    const goc = "Chào anh Hải ạ.\nCà phê 45.000, trà 30.000.\nAnh cần thêm gì không ạ?";
     await chayLuot(goc);
 
     assert.equal(daGui.length, 1);
     assert.equal(daGui[0], goc);
+    assert.equal(daGuiStyle[0], undefined, "chữ trơn thì không đính styles");
+  });
+
+  it("TẮT cấu hình: quay về chữ phẳng, dấu markdown bị XÓA và không gửi styles", async () => {
+    // Đường lui phải còn sống thật. Nếu nút tắt chỉ là trang trí thì lúc định
+    // dạng gây phiền, người dùng gạt công tắc mà không có gì đổi.
+    tuning.setTuning("ZALO_RICH_TEXT_ENABLED", false);
+    await chayLuot("## Bảng giá\n- Cà phê **45.000đ**");
+
+    const text = daGui[0]!;
+    assert.ok(!text.includes("**"), `còn dấu sao: ${text}`);
+    assert.ok(text.includes("- Cà phê"), "chữ '- ' phải giữ nguyên vì Zalo không tự vẽ nữa");
+    assert.equal(daGuiStyle[0], undefined, "tắt rồi thì tuyệt đối không đính styles");
+  });
+
+  it("gạch đầu dòng thành DANH SÁCH của Zalo - ký tự '- ' nhường chỗ cho style", async () => {
+    // Đổi hành vi có chủ đích: trước đây ký tự "- " đi thẳng xuống Zalo dưới
+    // dạng chữ. Giờ Zalo tự vẽ dấu đầu dòng, nên giữ lại "- " là ra hai dấu.
+    await chayLuot("Chào anh Hải ạ.\n- Cà phê: 45.000\n- Trà: 30.000");
+
+    const text = daGui[0]!;
+    assert.ok(!text.includes("- Cà phê"), `còn ký tự gạch đầu dòng: ${text}`);
+    assert.ok(text.includes("Cà phê: 45.000"), "nội dung dòng phải còn nguyên");
+
+    const styles = daGuiStyle[0] as { start: number; len: number; st: string }[] | undefined;
+    assert.ok(styles, "phải có style danh sách bù lại cho ký tự đã bỏ");
+    const doanTo = styles.map((s) => text.slice(s.start, s.start + s.len));
+    assert.deepEqual(doanTo, ["Cà phê: 45.000", "Trà: 30.000"]);
   });
 });

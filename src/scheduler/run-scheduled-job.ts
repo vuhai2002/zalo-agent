@@ -28,7 +28,7 @@ import { blockedByGuard, sendAndConclude } from "./scheduled-job-send.js";
 import type { ScheduledJob } from "./scheduled-job-store.js";
 import { isSilentResponse } from "./silent-sentinel.js";
 import { phanLoaiLoiProvider } from "../agent/provider-error-classifier.js";
-import { lamSachTraLoi } from "../zalo/sanitize-reply-text.js";
+import { lamSachTheoCauHinh } from "../zalo/prepare-outgoing-text.js";
 
 const log = createLogger("run-scheduled-job");
 
@@ -145,7 +145,7 @@ async function runMessageJob(
   // chạy và phục hồi `next_run_at` cho job `once`, nên người dùng sửa lại nội
   // dung là lịch chạy tiếp - đúng bất biến "một lời nhắc chưa từng gửi được thì
   // không bao giờ được coi là đã chạy".
-  const sach = lamSachTraLoi(job.payload);
+  const sach = lamSachTheoCauHinh(job.payload);
   if (sach.chan || !sach.text.trim()) {
     log.error(
       { jobId: job.id, chan: sach.chan, dauText: job.payload.slice(0, 200) },
@@ -218,7 +218,7 @@ async function runAgentJob(
       // Làm sạch SAU nhánh [SILENT] ở trên: chạy trước thì bộ lọc bỏ mất chính
       // cái nhãn mà nhánh đó dựa vào để quyết im lặng, và job "không có gì mới"
       // sẽ nhắn mỗi sáng đúng thứ nó sinh ra để tránh.
-      const sach = lamSachTraLoi(text);
+      const sach = lamSachTheoCauHinh(text);
       if (sach.chan) {
         // Lượt theo lịch KHÔNG nhắn câu lỗi (job hỏng thì im - đúng nếp nhánh
         // catch bên dưới), nhưng phải chốt run 'error' để dashboard thấy.

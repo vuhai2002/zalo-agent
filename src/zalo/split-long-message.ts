@@ -68,32 +68,79 @@ function findCutIndex(text: string, limit: number): number {
 }
 
 /**
- * Chia text thành các tin nhắn gửi tuần tự. Text ngắn trả về đúng 1 phần tử,
- * text rỗng trả về mảng rỗng (caller khỏi phải tự kiểm).
+ * Một đoạn đã cắt, kèm vị trí của nó trong chuỗi GỐC.
+ *
+ * `batDau` tính trên chuỗi ĐƯA VÀO (trước `.trim()` của hàm này), để caller
+ * dời được các span định dạng sang offset của từng đoạn. Không có nó thì không
+ * cách nào suy ngược: `trimEnd`/`trimStart` XÓA ký tự ở ranh giới, nên đếm lại
+ * từ ngoài chắc chắn lệch.
  */
-export function splitLongMessage(text: string, { maxChars, maxParts }: SplitOptions): string[] {
+export type DoanDaCat = {
+  text: string;
+  batDau: number;
+  /**
+   * Số ký tự của chuỗi GỐC mà đoạn này phủ, tính từ `batDau`.
+   *
+   * Thường bằng `text.length`, TRỪ đoạn cuối bị dán thêm ghi chú "còn nữa":
+   * ghi chú là chữ thêm vào, không có trong chuỗi gốc. Lấy `text.length` làm
+   * phạm vi ở đoạn đó thì span nằm trong phần BỊ CẮT BỎ sẽ rơi trúng ghi chú.
+   */
+  phuGoc: number;
+};
+
+/**
+ * Bản trả về KÈM MỐC - dùng khi tin có định dạng (`Style[]`) cần dời theo.
+ *
+ * `splitLongMessage` bên dưới chỉ là lớp mỏng bọc hàm này. MỘT thuật toán cắt
+ * duy nhất: nhân bản ra hai bản sẽ trôi khỏi nhau, và bản ít được để mắt hơn
+ * sẽ là bản sai.
+ */
+export function splitLongMessageWithOffsets(
+  text: string,
+  { maxChars, maxParts }: SplitOptions,
+): DoanDaCat[] {
   const trimmed = text.trim();
   if (!trimmed) return [];
-  if (trimmed.length <= maxChars) return [trimmed];
+  // `.trim()` cắt đầu chuỗi nên mọi mốc phải cộng lại phần đã mất
+  const lech = text.indexOf(trimmed);
+  if (trimmed.length <= maxChars) {
+    return [{ text: trimmed, batDau: lech, phuGoc: trimmed.length }];
+  }
 
-  const parts: string[] = [];
+  const parts: DoanDaCat[] = [];
   let rest = trimmed;
+  let viTri = lech;
 
   while (rest.length > maxChars) {
     // Đã tới đoạn cuối được phép mà vẫn còn dài: cắt kèm ghi chú "còn nữa"
     if (parts.length + 1 >= maxParts) {
       const room = Math.max(1, maxChars - OVERFLOW_NOTE.length);
       const cut = findCutIndex(rest, room);
-      parts.push(rest.slice(0, cut).trimEnd() + OVERFLOW_NOTE);
+      const than = rest.slice(0, cut).trimEnd();
+      // Ghi chú "còn nữa" là chữ THÊM VÀO, không có trong chuỗi gốc - `phuGoc`
+      // chỉ tính phần thân, và nó nằm ở CUỐI nên không đẩy lệch span nào phía trước.
+      parts.push({ text: than + OVERFLOW_NOTE, batDau: viTri, phuGoc: than.length });
       return parts;
     }
 
     const cut = findCutIndex(rest, maxChars);
     const chunk = rest.slice(0, cut).trimEnd();
-    if (chunk) parts.push(chunk);
-    rest = rest.slice(cut).trimStart();
+    if (chunk) parts.push({ text: chunk, batDau: viTri, phuGoc: chunk.length });
+
+    const conLai = rest.slice(cut);
+    const daCatDau = conLai.length - conLai.trimStart().length;
+    viTri += cut + daCatDau;
+    rest = conLai.trimStart();
   }
 
-  if (rest) parts.push(rest);
+  if (rest) parts.push({ text: rest, batDau: viTri, phuGoc: rest.length });
   return parts;
+}
+
+/**
+ * Chia text thành các tin nhắn gửi tuần tự. Text ngắn trả về đúng 1 phần tử,
+ * text rỗng trả về mảng rỗng (caller khỏi phải tự kiểm).
+ */
+export function splitLongMessage(text: string, options: SplitOptions): string[] {
+  return splitLongMessageWithOffsets(text, options).map((p) => p.text);
 }

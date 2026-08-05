@@ -1905,3 +1905,131 @@ Tìm căn nguyên bằng cách chèn log vào từng điểm quyết định: m�
 
 - [ ] Ảnh và file bot đã gửi TRƯỚC bản vá này vẫn không có trong history - chỉ
   ghi từ giờ trở đi, không dựng lại quá khứ.
+
+---
+
+## V3.5 - Tin Zalo có định dạng thật: in đậm, tiêu đề, danh sách (2026-08-05)
+
+Người dùng chỉ ra: Zalo có sẵn in đậm / cỡ chữ / danh sách, nhưng bot trả lời
+một khối chữ phẳng nên tin dài rất khó đọc.
+
+### Căn nguyên
+
+`sanitize-reply-text.ts` XÓA mọi dấu markdown, với lý do ghi trong docstring là
+"Zalo không render markdown". Điều đó đúng với KÝ TỰ markdown nhưng SAI với định
+dạng: `sendMessage` của zca-js nhận `styles: Style[]` và Zalo render bình thường
+(`zca-js/src/apis/sendMessage.ts`, enum `TextStyle`). Persona lại dặn "không
+markdown", nên hai lớp cùng ép model về chữ phẳng.
+
+### Đã làm
+
+- `markdown-to-zalo-styles.ts` - DỊCH markdown thành `Style` thay vì xóa. Phỏng
+  theo `zalo-personal/src/send.ts` (MIT), gồm cả cách token hóa bằng ký tự mốc
+  mà bản đó đã trả giá để tìm ra (pass sau xóa ký tự nằm trước span pass trước
+  đã ghi -> span cũ trôi mà không ai chỉnh lại).
+- `split-styled-message.ts` - cắt tin dài KÈM định dạng. Bản tham chiếu KHÔNG
+  giải bài này (nó cắt cụt ở 4000 ký tự, repo mình chẻ nhiều tin). Hai việc:
+  dời mốc về đầu mỗi đoạn, và CHẺ ĐÔI span nằm vắt qua chỗ cắt.
+- `splitLongMessageWithOffsets` - bản trả về kèm mốc; `splitLongMessage` giờ chỉ
+  là lớp mỏng bọc nó. MỘT thuật toán cắt duy nhất, không nhân bản.
+- Mức A (theo lựa chọn của người dùng): đậm / nghiêng / gạch ngang / tiêu đề
+  to-đậm / danh sách / thụt cấp. KHÔNG dùng màu - Zalo có 4 màu nhưng tô màu
+  trong hội thoại đọc như tin quảng cáo.
+- Caption của 3 tool gửi file/ảnh cũng qua lớp này (`tinKemFile`).
+- Lượt theo lịch dùng chung đường (`prepare-outgoing-text.ts`), không bị bỏ lại
+  với chữ phẳng.
+- Nút tắt `ZALO_RICH_TEXT_ENABLED` trên trang Cấu hình, mặc định BẬT.
+
+### Quyết định đã chốt - đừng lật lại nếu không có bằng chứng mới
+
+- Offset đếm theo đơn vị UTF-16 (`String.length` của JS), KHÔNG phải code point.
+  zca-js gói thẳng `start`/`len` vào `textProperties` JSON nên phải khớp cách
+  Zalo Web đếm. Emoji là cặp surrogate = 2 đơn vị: "sửa cho đúng" thành đếm ký
+  tự thật sẽ lệch toàn bộ phần sau emoji đầu tiên, mà tin nhắn thật đầy emoji.
+- CỐ Ý bỏ qua `__đậm__` và `_nghiêng_`: gạch dưới sống đầy trong tên file và URL
+  thật (`bao_gia_2026.pdf`). Giữ nguyên quyết định cũ của lớp làm sạch.
+- Nội dung trong khối code đi thẳng, không qua bước khối hay inline - nếu không
+  thì `# Tính tổng` trong đoạn Python bị hiểu là tiêu đề, đúng lỗi mà
+  `sanitize-code-block.ts` đã được viết ra để chữa.
+- `DoanDaCat.phuGoc` tách khỏi `text.length` vì đoạn cuối bị dán thêm ghi chú
+  "còn nữa" - chữ THÊM VÀO, không có trong chuỗi gốc. Lấy `text.length` làm phạm
+  vi thì span thuộc phần BỊ CẮT BỎ rơi trúng ghi chú.
+- Caption có khoảng trắng thừa hai đầu thì BỎ định dạng chứ không gửi mốc đã
+  lệch: tô nhầm chỗ nhìn như lỗi, mất đậm thì chỉ là nhạt hơn.
+
+### Kiểm chứng
+
+- 1386 test xanh, chạy cả bộ 3 lần liên tiếp đều xanh
+- `pnpm eval` 11/11 đạt với model thật
+- Phá code kiểm test 8 lần: 5 bị bắt ngay; 3 lọt và mỗi lần lọt đều lộ ra một lỗ
+  hổng test thật, đã vá rồi kiểm lại đều bắt:
+  - `phuGoc` -> `text.length`: test cũ chỉ kiểm "span trong biên", mà lớp kẹp
+    cuối giữ biên đúng ngay cả khi span đã trượt vào ghi chú. Bất biến thật là
+    "không span nào chạm vùng ghi chú".
+  - Caption mất định dạng: KHÔNG có test nào cho caption -> viết mới 6 ca.
+  - Nút tắt bị bỏ qua: đường TẮT của lớp gửi chưa ai kiểm -> viết mới 1 ca.
+- Gọi model THẬT một lượt để trả lời câu hỏi mà eval không trả lời được: model
+  có dùng markdown sau khi đổi persona không. Có - ra 13 span (3 danh sách,
+  10 đậm) cho một câu so sánh giá cà phê.
+
+### Còn treo
+
+- [ ] Màu chữ (Zalo có 4 màu) chưa dùng - để dành cho ca thông báo, chưa quyết.
+- [ ] `kiemTraText` của eval chỉ nhận text chứ không nhận styles, nên ca
+  `dinh-dang` chỉ còn chứng minh "không rò ký tự định dạng ra chữ". Phần "định
+  dạng tới nơi" do test đầu-cuối ở `message-turn-sanitize.test.ts` gánh.
+
+### Vá ngay sau khi dùng thật: Zalo trả mã 112 vì span chồng nhau (2026-08-05)
+
+Ngay lượt đầu chạy thật có tiêu đề, Zalo từ chối cả tin. Người dùng mất trọn câu
+trả lời sau 8 lượt tra web và 119k token, chỉ nhận lại câu "trục trặc kỹ thuật".
+
+**Căn nguyên.** Dòng `## 1. Vé Tiền Giang - số **418512**` sinh HAI span `b`
+chồng nhau: một từ luật tiêu đề (phủ cả dòng), một từ luật inline (phủ dãy số).
+Mã 112 của Zalo nghĩa là "tham số không hợp lệ".
+
+**Bằng chứng.** Dựng lại 20 bước của 12 lượt gần đó từ `agent_steps`: 9 tin gửi
+được đều có 0 span chồng trùng loại; lượt hỏng có 3. Nó cũng là lượt duy nhất có
+tiêu đề. Bản tham chiếu `zalo-personal` dùng Big+Bold cho tiêu đề và chạy thật,
+nên `f_18` vô can - bản đó chỉ chưa gặp ca tiêu đề CÓ in đậm bên trong.
+
+**Lỗi thứ hai lộ ra khi đào.** Span `Indent` phát sau các span inline nên mảng
+không còn theo thứ tự vị trí (`0:lst_1 7:b 13:lst_1 25:b 13:ind_$`).
+
+**Đã sửa.**
+
+- `normalize-zalo-styles.ts` - gộp span chồng/chạm nhau CÙNG kiểu, sắp theo
+  `start`. Khóa gộp tính cả `indentSize` (hai cấp thụt là hai định dạng khác
+  nhau, gộp là làm phẳng danh sách lồng).
+- Gửi lại KHÔNG kèm styles khi máy chủ từ chối, ở CẢ hai đường: câu trả lời
+  (`sendReplyInParts`) và caption gửi kèm file (`guiFileKemCaption`).
+- 3 tool gửi file/ảnh gom về một hàm `guiFileKemCaption` - lưới an toàn phải nằm
+  ở một chỗ, rải ba nơi thì sớm muộn có nơi bị bỏ quên.
+
+**Quyết định đã chốt - đừng lật lại nếu không có bằng chứng mới**
+
+- CHỈ gửi lại khi lỗi có `code` dạng số (máy chủ đã trả lời và từ chối => chắc
+  chắn không có tin nào lọt qua). Lỗi mạng không có `code`: tin CÓ THỂ đã tới,
+  gửi lại là nhân đôi tin/file trước mặt người dùng. Đã cân nhắc hướng "cứ thử
+  lại mọi lỗi" và BÁC.
+- Đường lui đặt ở tầng gửi chứ không phải sửa cho hết mọi luật kiểm của Zalo:
+  luật đó là hộp đen, không liệt kê đủ được. Hạ mức hậu quả thay vì đoán cho
+  đúng - tổ hợp style lạ chỉ làm tin NHẠT ĐI, không làm mất nội dung.
+- Chuẩn hóa đặt trong `markdownSangStyleZalo` (nguồn duy nhất sinh span), không
+  đặt ở nơi gửi. Bộ cắt tin chỉ CẮT span có sẵn nên không tạo được chồng lấn mới.
+
+**Kiểm chứng**
+
+- 1404 test xanh, chạy cả bộ 3 lần liên tiếp; `pnpm eval` 11/11
+- Chính đoạn chữ đã làm hỏng lượt 116, dựng lại từ `agent_steps`: trước 25 span
+  / 3 cặp chồng, sau 22 span / 0 cặp chồng / đã sắp thứ tự
+- Phá code kiểm test 5 lần (bỏ gộp, gộp bừa mọi kiểu, thử lại mọi loại lỗi, bỏ
+  đường lui của câu trả lời, bỏ đường lui của caption). Lần cuối KHÔNG bị bắt ->
+  lộ ra đường caption chưa ai kiểm, đã viết 4 ca rồi kiểm lại thì bắt được.
+
+**Còn treo**
+
+- [ ] Chưa tách bạch được bằng thực nghiệm giữa "chồng span" và "cứ có tiêu đề
+  là hỏng" - dữ liệu log không có ca tiêu đề KHÔNG kèm in đậm. Muốn chắc hẳn thì
+  phải gửi thử hai tin ngắn vào một luồng thật. Đường lui khiến việc này không
+  còn cấp bách.

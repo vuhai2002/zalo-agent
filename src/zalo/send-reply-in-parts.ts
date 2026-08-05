@@ -1,7 +1,7 @@
-import type { API, ThreadType } from "zca-js";
+import type { API, Style, ThreadType } from "zca-js";
 import { enqueueSend } from "../middleware/rate-limiter.js";
 import { createLogger } from "../shared/logger.js";
-import { splitLongMessage } from "./split-long-message.js";
+import { splitStyledMessage } from "./split-styled-message.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
@@ -66,23 +66,85 @@ export type ReplyResult = {
   error?: unknown;
 };
 
-/** Gửi 1 tin qua hàng đợi của thread (giữ thứ tự + delay ngẫu nhiên) */
-function sendOne(target: ReplyTarget, text: string): Promise<unknown> {
+/**
+ * Gửi 1 tin qua hàng đợi của thread (giữ thứ tự + delay ngẫu nhiên).
+ *
+ * Chỉ đính `styles` khi thật sự có - `sendMessage` của zca-js chỉ dựng
+ * `textProperties` khi trường này khác rỗng, gửi mảng rỗng là thêm việc thừa.
+ */
+function sendOne(target: ReplyTarget, text: string, styles?: Style[]): Promise<unknown> {
+  const msg = styles && styles.length > 0 ? { msg: text, styles } : { msg: text };
   return enqueueSend(target.threadKey, () =>
-    target.api.sendMessage({ msg: text }, target.threadId, target.threadType),
+    target.api.sendMessage(msg, target.threadId, target.threadType),
   );
+}
+
+/**
+ * Máy chủ Zalo có TRẢ LỜI và từ chối, hay là lỗi đường truyền không rõ kết cục?
+ *
+ * Phân biệt được điều này mới dám gửi lại: máy chủ đã từ chối nghĩa là KHÔNG có
+ * tin nào lọt qua, gửi lại là an toàn. Còn timeout hay đứt mạng thì tin có thể
+ * đã tới nơi - gửi lại là nhân đôi tin trước mặt người dùng.
+ *
+ * Dấu hiệu: zca-js gắn `code` dạng số cho lỗi do máy chủ trả về
+ * (`ZaloApiError`), lỗi mạng thì không có.
+ */
+export function laLoiMayChuTuChoi(err: unknown): boolean {
+  return typeof (err as { code?: unknown } | null)?.code === "number";
+}
+
+/**
+ * Gửi một đoạn; bị máy chủ từ chối thì thử lại đúng MỘT lần, bỏ định dạng.
+ *
+ * Vì sao cần: 2026-08-05 một câu trả lời có tiêu đề kèm in đậm sinh ra hai span
+ * `b` chồng nhau, Zalo trả mã 112 và người dùng mất trọn câu trả lời sau 8 lượt
+ * tra web. `chuanHoaStyles` đã bịt đúng ca đó, nhưng luật kiểm của Zalo là hộp
+ * đen - không có cách nào liệt kê cho đủ. Nên thay vì đoán cho hết, hạ mức hậu
+ * quả: tổ hợp style lạ chỉ còn làm tin NHẠT ĐI, không làm mất nội dung.
+ *
+ * Chỉ thử lại khi thật sự CÓ style để bỏ - không thì lần hai y hệt lần đầu và
+ * chỉ tổ nhân đôi một lời gọi API không chính thức.
+ */
+async function sendOneCoDuongLui(
+  target: ReplyTarget,
+  text: string,
+  styles: Style[],
+): Promise<unknown> {
+  try {
+    return await sendOne(target, text, styles);
+  } catch (err) {
+    if (styles.length === 0 || !laLoiMayChuTuChoi(err)) throw err;
+
+    // WARN chứ không debug: mất định dạng là hỏng thầm lặng, người vận hành
+    // phải thấy được để còn lần ra tổ hợp style nào bị Zalo chê.
+    log.warn(
+      { threadId: target.threadId, soStyle: styles.length, err },
+      "Zalo từ chối tin có định dạng - gửi lại dạng chữ trơn",
+    );
+    return await sendOne(target, text);
+  }
 }
 
 /**
  * Cắt (nếu cần) rồi gửi lần lượt. Một tin hỏng thì dừng luôn phần còn lại -
  * gửi tiếp các đoạn sau sẽ ra một câu trả lời thủng lỗ chỗ, khó đọc hơn là
  * dừng và báo lỗi.
+ *
+ * `styles` tính trên TOÀN VĂN nên phải chẻ theo đúng chỗ cắt - việc đó nằm ở
+ * `splitStyledMessage`, không tự làm ở đây.
  */
-export async function sendReplyInParts(target: ReplyTarget, text: string): Promise<ReplyResult> {
-  const parts = splitLongMessage(text, {
-    maxChars: getTuning("ZALO_MAX_MESSAGE_CHARS"),
-    maxParts: getTuning("ZALO_MAX_MESSAGE_PARTS"),
-  });
+export async function sendReplyInParts(
+  target: ReplyTarget,
+  text: string,
+  styles: Style[] = [],
+): Promise<ReplyResult> {
+  const parts = splitStyledMessage(
+    { text, styles },
+    {
+      maxChars: getTuning("ZALO_MAX_MESSAGE_CHARS"),
+      maxParts: getTuning("ZALO_MAX_MESSAGE_PARTS"),
+    },
+  );
 
   if (parts.length === 0) return { deliveredText: "", sentParts: 0 };
 
@@ -96,8 +158,8 @@ export async function sendReplyInParts(target: ReplyTarget, text: string): Promi
   const delivered: string[] = [];
   for (const part of parts) {
     try {
-      await sendOne(target, part);
-      delivered.push(part);
+      await sendOneCoDuongLui(target, part.text, part.styles);
+      delivered.push(part.text);
     } catch (err) {
       log.error(
         { threadId: target.threadId, partIndex: delivered.length + 1, total: parts.length, err },

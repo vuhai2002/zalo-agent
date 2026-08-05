@@ -79,8 +79,10 @@ after(() => {
  * lưu lại callback). Gọi lại nhiều lần trong cùng file AN TOÀN: attachAccount
  * tự thay thế lượt gắn trước.
  */
-function attachOnline(sendMessageImpl?: (msg: string, threadId: string) => unknown): { threadId: string; text: string }[] {
-  const sent: { threadId: string; text: string }[] = [];
+function attachOnline(
+  sendMessageImpl?: (msg: string, threadId: string) => unknown,
+): { threadId: string; text: string; styles?: { start: number; len: number }[] }[] {
+  const sent: { threadId: string; text: string; styles?: { start: number; len: number }[] }[] = [];
   const config: AccountConfig = {
     id: ACC,
     label: "Test",
@@ -98,8 +100,11 @@ function attachOnline(sendMessageImpl?: (msg: string, threadId: string) => unkno
   const api = {
     getOwnId: () => "self-1",
     listener: { on: () => {}, onConnected: () => {}, onError: () => {}, onClosed: () => {}, start: () => {}, stop: () => {} },
-    sendMessage: async (payload: { msg: string }, threadId: string) => {
-      sent.push({ threadId, text: payload.msg });
+    sendMessage: async (
+      payload: { msg: string; styles?: { start: number; len: number }[] },
+      threadId: string,
+    ) => {
+      sent.push({ threadId, text: payload.msg, styles: payload.styles });
       if (sendMessageImpl) return sendMessageImpl(payload.msg, threadId);
       return { msgId: `m-${sent.length}` };
     },
@@ -446,7 +451,7 @@ describe("runScheduledJob - kind=agent", () => {
     assert.equal(lastRunOf(job.id).status, "silent");
   });
 
-  it("payload của job kind='message' cũng được dọn markdown", async () => {
+  it("payload của job kind='message' cũng qua lớp định dạng", async () => {
     // `payload` là chữ MODEL viết lúc đặt lịch qua tool schedule_task, gửi
     // nguyên văn lúc tới giờ - trước đây nó đi vòng qua lớp làm sạch hoàn toàn
     const sent = attachOnline();
@@ -454,10 +459,15 @@ describe("runScheduledJob - kind=agent", () => {
 
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, now: new Date() });
 
-    assert.equal(sent.at(-1)!.text, "Nhắc: họp lúc 9h nhé");
+    const tin = sent.at(-1)!;
+    assert.equal(tin.text, "Nhắc: họp lúc 9h nhé", "dấu markdown không được lọt ra chữ");
+    // Lịch hẹn KHÔNG được là đường bị bỏ quên: tin theo lịch cũng là tin người
+    // dùng đọc trên Zalo, phẳng hơn tin chat là lệch pha thấy rõ.
+    const doanTo = (tin.styles ?? []).map((s) => tin.text.slice(s.start, s.start + s.len));
+    assert.deepEqual(doanTo, ["Nhắc", "9h"], "phải tô đậm đúng hai đoạn đã đánh dấu");
   });
 
-  it("markdown của model bị dọn TRƯỚC khi tin ra Zalo", async () => {
+  it("markdown của model thành định dạng Zalo TRƯỚC khi tin ra ngoài", async () => {
     const sent = attachOnline();
     const job = makeJob({ kind: "agent", payload: "Tóm tắt tin công nghệ" });
     const { model } = mockModel(() =>
@@ -466,12 +476,19 @@ describe("runScheduledJob - kind=agent", () => {
 
     await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model, now: new Date() });
 
-    const text = sent.at(-1)!.text;
+    const tin = sent.at(-1)!;
+    const text = tin.text;
     assert.ok(!text.includes("**"), `còn in đậm: ${text}`);
     assert.ok(!text.includes("`"), `còn nháy đơn: ${text}`);
     assert.ok(!text.includes("# "), `còn tiêu đề: ${text}`);
     assert.match(text, /Tin nóng: giá vàng tăng 2 triệu/);
     assert.match(text, /đây \(https:\/\/vd\.test\/a\)/, "URL phải còn - đó là thông tin thật");
+
+    // Dấu markdown biến mất là ĐÚNG một nửa: nửa còn lại là định dạng phải TỚI
+    // NƠI. Chỉ kiểm "không còn **" thì một bộ xóa trắng cũng qua được.
+    const doanTo = (tin.styles ?? []).map((s) => text.slice(s.start, s.start + s.len));
+    assert.ok(doanTo.includes("Tin nóng"), `không tô đậm "Tin nóng": ${JSON.stringify(doanTo)}`);
+    assert.ok(doanTo.includes("Chi tiết"), `không tô tiêu đề "Chi tiết": ${JSON.stringify(doanTo)}`);
     assert.equal(lastRunOf(job.id).status, "ok");
   });
 

@@ -7,6 +7,7 @@
 
 import { appendMessage } from "../conversation/history-store.js";
 import { createLogger } from "../shared/logger.js";
+import { dinhDangNeuBat } from "../zalo/prepare-outgoing-text.js";
 import { sendReplyInParts, type ReplyResult, type ReplyTarget } from "../zalo/send-reply-in-parts.js";
 import {
   checkAccountAndThreadReady,
@@ -90,7 +91,10 @@ export async function sendAndConclude(
   turnId?: number,
 ): Promise<void> {
   const reply = await deliverProactively(target.threadKey, async () => {
-    const r = await sendReplyInParts(target, text);
+    // Dịch markdown SÁT lúc gửi, không sớm hơn: chữ ghi vào history bên dưới
+    // phải đúng bằng chữ người dùng thấy trên Zalo.
+    const { text: chuGui, styles } = dinhDangNeuBat(text);
+    const r = await sendReplyInParts(target, chuGui, styles);
     if (r.deliveredText) {
       try {
         appendMessage(job.accountId, job.threadId, { role: "assistant", content: r.deliveredText });

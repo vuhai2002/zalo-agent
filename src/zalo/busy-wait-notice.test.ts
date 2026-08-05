@@ -93,9 +93,14 @@ describe("maybeNotifyBusyWait", () => {
   });
 
   it("không nhắc lại trong cùng quãng chờ - nói hai lần chỉ làm người ta sốt ruột thêm", async () => {
-    tuning.setTuning("BUSY_ACK_AFTER_MS", 20);
+    // Ngưỡng ở đây ĐỒNG THỜI là khoảng lặng chống nhắc lại, nên nó phải rộng
+    // hơn thời gian một lượt `maybeNotifyBusyWait` chạy xong. Để 20ms thì lúc
+    // chạy cả bộ test (nhiều tiến trình tranh CPU) một lượt thỉnh thoảng vượt
+    // 20ms, lời gọi thứ hai hết bị chặn và ca này đỏ ngẫu nhiên - đã bắt được
+    // 2 lần trên 4 lượt chạy cả bộ. Đây là lỗi của phép đo, không phải của luật.
+    tuning.setTuning("BUSY_ACK_AFTER_MS", 200);
     const nha = chiemThread("k-nhac-lai");
-    await sleep(60);
+    await sleep(250);
 
     await notice.maybeNotifyBusyWait(muc("k-nhac-lai"));
     await notice.maybeNotifyBusyWait(muc("k-nhac-lai"));

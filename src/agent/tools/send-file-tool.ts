@@ -3,12 +3,11 @@ import path from "node:path";
 import { tool } from "ai";
 import { z } from "zod";
 import { dataDir } from "../../config/env.js";
-import { enqueueSend } from "../../middleware/rate-limiter.js";
 import { downloadFromPublicUrl } from "../../shared/safe-remote-download.js";
 import { withTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
-import { capTionSach } from "./clean-tool-caption.js";
+import { guiFileKemCaption } from "./send-attachment-with-caption.js";
 import { ghiChuDaGuiFile } from "./sent-by-tool-note.js";
 
 /**
@@ -29,12 +28,13 @@ export function createSendFileTool({ api, account, message, ghiNhanDaGui }: Tool
   // Ghi history NGAY TRONG hàm gửi để hai nhánh (URL và kho shared-files) không
   // thể quên: tin này không đi qua `deliverChatReply` nên không ai ghi hộ.
   const sendAttachment = async (filePath: string, caption: string | undefined, tenHienThi: string) => {
-    await enqueueSend(`${account.id}:${message.threadId}`, () =>
-      api.sendMessage(
-        { msg: capTionSach(caption) ?? "", attachments: [filePath] },
-        message.threadId,
-        message.threadType,
-      ),
+    await guiFileKemCaption(
+      api,
+      `${account.id}:${message.threadId}`,
+      message.threadId,
+      message.threadType,
+      filePath,
+      caption,
     );
     ghiNhanDaGui?.(ghiChuDaGuiFile(tenHienThi, caption));
   };

@@ -231,3 +231,27 @@ export function lamSachTraLoi(text: string): KetQuaLamSach {
 
   return { text: traKhoiCodeVe(ra, khoi), daSua, chan: false };
 }
+
+/**
+ * Bản làm sạch cho đường GIỮ ĐỊNH DẠNG: chỉ giữ hai lá chắn thật sự là lá chắn,
+ * bỏ hết các bước XÓA markdown.
+ *
+ * Vì sao tách hàm chứ không thêm cờ vào `lamSachTraLoi`: hai đường có tập bước
+ * khác hẳn nhau, nhét cờ vào giữa một chuỗi 7 bước là mời gọi nhánh sai lặng lẽ.
+ * Đường cũ vẫn còn nguyên và là đường lui khi tắt cấu hình định dạng.
+ *
+ * Bước XÓA markdown chuyển hết sang `markdownSangStyleZalo` - ở đó dấu markdown
+ * không bị vứt mà được DỊCH thành `Style` của Zalo. Riêng khối code thì bộ dịch
+ * tự bảo vệ (giữ nguyên xi từng dòng), nên không cần `tachKhoiCode` ở đây nữa.
+ */
+export function lamSachGiuDinhDang(text: string): KetQuaLamSach {
+  // Kiểm rò prompt trên chữ GỐC - cùng lý do đã ghi ở `lamSachTraLoi`
+  if (coDauHieuRoPrompt(text)) {
+    return { text: "", daSua: ["CHẶN: rò system prompt"], chan: true };
+  }
+
+  const daSua: string[] = [];
+  // NUL không phải markdown, là rác - không có lý do gì gửi nó lên Zalo
+  const sachNul = text.includes(MOC_KHOI) ? text.split(MOC_KHOI).join("") : text;
+  return { text: boSentinel(sachNul, daSua), daSua, chan: false };
+}

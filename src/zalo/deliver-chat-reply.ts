@@ -1,6 +1,6 @@
 import { appendMessage } from "../conversation/history-store.js";
 import { createLogger } from "../shared/logger.js";
-import { lamSachTraLoi } from "./sanitize-reply-text.js";
+import { dinhDangNeuBat, lamSachTheoCauHinh } from "./prepare-outgoing-text.js";
 import { notifyTechnicalError, sendReplyInParts, type ReplyTarget } from "./send-reply-in-parts.js";
 
 /**
@@ -31,8 +31,10 @@ export async function deliverChatReply(
   threadId: string,
   text: string,
 ): Promise<KetQuaGiao> {
-  // Lớp làm sạch CUỐI trước khi chữ ra Zalo
-  const sach = lamSachTraLoi(text);
+  // Lớp làm sạch CUỐI trước khi chữ ra Zalo. Hai đường khác nhau ở chỗ dấu
+  // markdown bị XÓA hay được DỊCH thành định dạng thật của Zalo; lá chắn rò
+  // system prompt và luật `[SILENT]` thì cả hai đều có.
+  const sach = lamSachTheoCauHinh(text);
 
   if (sach.chan) {
     // Câu trả lời rò system prompt. Cắt bớt rồi gửi phần còn lại là gửi nửa
@@ -44,18 +46,23 @@ export async function deliverChatReply(
   }
 
   if (sach.daSua.length > 0) {
-    // Sửa chữ của model rồi im lặng là tự bịt mắt mình lúc chẩn đoán: persona
-    // đã dặn "không markdown", nên mỗi lần phải dọn là một lần lời dặn không ăn
+    // Sửa chữ của model rồi im lặng là tự bịt mắt mình lúc chẩn đoán
     log.warn({ daSua: sach.daSua }, "Đã làm sạch câu trả lời trước khi gửi");
   }
 
-  if (!sach.text.trim()) {
+  // Dịch markdown thành `Style` của Zalo. Chữ TRẦN sau bước này mới là chữ
+  // người dùng thấy, nên nó cũng là chữ ghi vào history bên dưới.
+  const { text: chuGui, styles } = dinhDangNeuBat(sach.text);
+
+  // Kiểm rỗng SAU khi dịch: câu chỉ toàn dấu markdown (vd đúng một hàng rào
+  // code trống) còn chữ trước bước này nhưng rỗng sau, gửi đi là gửi tin trắng.
+  if (!chuGui.trim()) {
     log.debug("Câu trả lời rỗng sau khi làm sạch - không gửi");
     return { daGui: "", hong: false };
   }
 
   // Tin dài bị Zalo chặn (error_code 118) nên phải cắt thành nhiều đoạn
-  const reply = await sendReplyInParts(target, sach.text);
+  const reply = await sendReplyInParts(target, chuGui, styles);
 
   // Chỉ ghi phần ĐÃ gửi được: history phải khớp cái người dùng nhìn thấy. Ghi
   // chữ ĐÃ LÀM SẠCH chứ không phải chữ gốc - lệch thì lượt sau model đọc lại
