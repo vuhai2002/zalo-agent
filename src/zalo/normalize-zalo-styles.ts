@@ -57,6 +57,10 @@ export function chuanHoaStyles(styles: Style[]): Style[] {
     nhom.sort((a, b) => a.start - b.start);
     let dangGom = { ...nhom[0]! };
     for (const s of nhom.slice(1)) {
+      // CỐ Ý chỉ gộp span CHẠM hoặc CHỒNG nhau, không gộp qua ký tự xuống dòng.
+      // Đã thử gộp span danh sách qua dòng để tiết kiệm byte: Zalo Web hiện
+      // đúng nhưng Zalo trên điện thoại chỉ vẽ MỘT dấu đầu dòng cho cả span.
+      // Giờ danh sách đi bằng chữ "- " thường nên không còn span nào để gộp.
       if (s.start <= dangGom.start + dangGom.len) {
         // Chồng hoặc chạm: nới đuôi ra tới điểm xa nhất của hai span
         const cuoi = Math.max(dangGom.start + dangGom.len, s.start + s.len);

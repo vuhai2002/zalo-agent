@@ -387,6 +387,15 @@ const TUNING_BY_KEY = {
     label: "Định dạng chữ trên Zalo",
     hint: "Dịch in đậm, tiêu đề, danh sách của model thành định dạng thật của Zalo thay vì xóa đi. Tắt thì quay lại chữ phẳng.",
   },
+  ZALO_RICH_TEXT_MAX_PAYLOAD_BYTES: {
+    kind: "number",
+    group: "sending",
+    label: "Trần byte tin có định dạng",
+    hint: "Zalo từ chối tin khi chữ + định dạng cộng lại quá lớn. Đo thật: 3281 byte gửi được, 3712 byte bị chối. Vượt trần thì tin tự cắt nhỏ hơn.",
+    min: 1000,
+    max: 3600,
+    unit: "byte",
+  },
   ZALO_MAX_MESSAGE_CHARS: {
     kind: "number",
     group: "sending",

@@ -215,6 +215,11 @@ const envSchema = z.object({
   // Để 2000 cho có biên (phòng khi Zalo tính theo BYTE - tiếng Việt 1 ký tự
   // ~1.4 byte). Nâng lên thì ít tin hơn nhưng gần ngưỡng vỡ hơn.
   ZALO_RICH_TEXT_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
+  // 2800 chứ không phải 3000: mốc cao nhất ĐO ĐƯỢC là gửi được là 2867 byte,
+  // mốc thấp nhất đo được là bị chối là 3712. Lấy ngay dưới mốc đã chứng minh
+  // thay vì đoán giữa khoảng - phần dư dành cho sai số giữa JSON mình tính và
+  // JSON zca-js thật sự gửi (nó còn đổi `ind_$` thành `ind_10`).
+  ZALO_RICH_TEXT_MAX_PAYLOAD_BYTES: z.coerce.number().int().min(1000).max(3600).default(3250),
   ZALO_MAX_MESSAGE_CHARS: z.coerce.number().int().min(500).max(4000).default(2000),
   // Trần số tin cho 1 lượt trả lời. Bắn quá nhiều tin liên tiếp là hành vi dễ
   // bị Zalo đánh dấu spam; vượt trần thì đoạn cuối kèm ghi chú "phần sau còn dài".

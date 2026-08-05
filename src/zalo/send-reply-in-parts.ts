@@ -1,7 +1,7 @@
 import type { API, Style, ThreadType } from "zca-js";
 import { enqueueSend } from "../middleware/rate-limiter.js";
 import { createLogger } from "../shared/logger.js";
-import { splitStyledMessage } from "./split-styled-message.js";
+import { chiaTheoNganSachByte, demDoanBoDinhDang } from "./split-styled-message.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
@@ -138,11 +138,12 @@ export async function sendReplyInParts(
   text: string,
   styles: Style[] = [],
 ): Promise<ReplyResult> {
-  const parts = splitStyledMessage(
+  const parts = chiaTheoNganSachByte(
     { text, styles },
     {
       maxChars: getTuning("ZALO_MAX_MESSAGE_CHARS"),
       maxParts: getTuning("ZALO_MAX_MESSAGE_PARTS"),
+      maxPayloadBytes: getTuning("ZALO_RICH_TEXT_MAX_PAYLOAD_BYTES"),
     },
   );
 
@@ -152,6 +153,19 @@ export async function sendReplyInParts(
     log.info(
       { threadId: target.threadId, length: text.length, parts: parts.length },
       "Câu trả lời dài - cắt thành nhiều tin",
+    );
+  }
+
+  // Bộ cắt có quyền bỏ định dạng của một đoạn khi co hết cỡ vẫn không lọt ngân
+  // sách byte. Nhánh đó phải KÊU LÊN: bản đầu làm việc này lặng lẽ, và lỗi chỉ
+  // lộ ra vì người dùng nhìn thấy tin đầu phẳng lì - log không hề nhắc gì.
+  // Đếm theo CỜ, không theo `styles.length === 0`: đoạn cuối thường chỉ là văn
+  // xuôi nên vốn không có span nào, mà suy ra từ độ dài thì đó là báo động giả.
+  const doanMatDinhDang = demDoanBoDinhDang(parts);
+  if (doanMatDinhDang > 0) {
+    log.warn(
+      { threadId: target.threadId, doanMatDinhDang, tongDoan: parts.length },
+      "Đoạn quá nặng so với trần byte của Zalo - gửi đoạn đó dạng chữ trơn",
     );
   }
 

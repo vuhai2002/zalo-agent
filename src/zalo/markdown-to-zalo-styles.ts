@@ -13,8 +13,9 @@ import { chuanHoaStyles } from "./normalize-zalo-styles.js";
  * tin Zalo thật có in đậm và tiêu đề, còn bot thì trả lời một khối chữ phẳng.
  *
  * MỨC ĐỘ: cố ý CHỈ dùng nhóm không màu - đậm, nghiêng, gạch ngang, tiêu đề
- * to-đậm, danh sách. Zalo có sẵn 4 màu nhưng bot trả lời hội thoại mà tô màu
- * thì đọc như tin quảng cáo; màu để dành cho ca thông báo, quyết định sau.
+ * to-đậm. Zalo có sẵn 4 màu nhưng bot trả lời hội thoại mà tô màu thì đọc như
+ * tin quảng cáo; màu để dành cho ca thông báo, quyết định sau. Danh sách CỐ Ý
+ * không dùng style của Zalo - xem docstring `laDongKhoi`.
  *
  * OFFSET ĐẾM THEO ĐƠN VỊ UTF-16 (`String.length` của JS), KHÔNG phải code
  * point. zca-js gói thẳng `start`/`len` vào `textProperties` JSON, không đổi gì,
@@ -27,6 +28,34 @@ import { chuanHoaStyles } from "./normalize-zalo-styles.js";
  *
  * Module THUẦN: không env, không logger, không DB.
  */
+
+const TIEU_DE_RE = /^(#{1,6})[ \t]+(.+)$/;
+
+const DANH_SACH_RE = /^\s*(?:[-*+]|\d+\.)[ \t]+\S/;
+
+/** Dòng này là một mục danh sách (gạch đầu dòng hoặc đánh số) */
+function laDongDanhSach(dong: string | undefined): boolean {
+  return dong !== undefined && DANH_SACH_RE.test(dong);
+}
+
+/**
+ * VÌ SAO KHÔNG DÙNG `lst_1`/`lst_2` CỦA ZALO - đo trên máy thật 2026-08-05:
+ * hai client render KHÁC NHAU. Zalo Web vẽ một dấu đầu dòng cho mỗi dòng nằm
+ * trong span; Zalo trên điện thoại chỉ vẽ MỘT dấu cho cả span rồi thụt các dòng
+ * sau vào như xuống dòng mềm. Danh sách 9 mục hiện thành 1 mục trên điện thoại.
+ *
+ * Đã thử hướng "mỗi dòng một span" - đúng trên cả hai client, nhưng một danh
+ * sách 40 dòng là 40 span, mà JSON định dạng vốn đã ngốn gấp đôi chữ và Zalo
+ * chặn theo TỔNG byte. Trả giá bằng thêm tin cho người dùng phải đọc.
+ *
+ * Nên: GIỮ NGUYÊN ký tự "- " và "1. " làm chữ thường. Chữ thường hiện y hệt
+ * nhau ở mọi client, tốn 0 span, và người dùng thấy dễ đọc hơn dấu chấm tròn.
+ * Đây là lựa chọn của người dùng sau khi nhìn cả hai bản.
+ */
+function laDongKhoi(dong: string | undefined): boolean {
+  if (dong === undefined) return false;
+  return TIEU_DE_RE.test(dong);
+}
 
 export type KetQuaDinhDang = { text: string; styles: Style[] };
 
@@ -77,6 +106,25 @@ export function markdownSangStyleZalo(input: string): KetQuaDinhDang {
     // hẳn dòng, giữ nguyên các dòng dữ liệu. Giữ lại hành vi của lớp làm sạch cũ.
     if (/^\s*\|?[-:|\s]*--[-:|\s]*\|?\s*$/.test(dong) && dong.includes("-")) continue;
 
+    // Dòng TRỐNG: giữ hay bỏ tùy hai bên nó là gì. Luật này dựng theo đúng chỗ
+    // người dùng chỉ trên ảnh chụp màn hình thật, không phải suy đoán.
+    //
+    //   BỎ - ngay SAU dòng tiêu đề: tiêu đề và câu dẫn của nó thuộc về nhau.
+    //   BỎ - giữa một đoạn văn và DANH SÁCH ngay dưới nó: danh sách là phần
+    //        khai triển của chính câu đó ("Đối chiếu vé 645300:" rồi tới các
+    //        mục), tách ra là làm rời hai thứ đi liền nhau.
+    //   GIỮ - ngay TRƯỚC dòng tiêu đề: đó là ranh giới giữa hai mục, thiếu nó
+    //        thì "Kết luận: Không trúng." dính luôn vào tiêu đề mục sau.
+    //   GIỮ - mọi chỗ còn lại (giữa hai đoạn văn, sau một khối danh sách).
+    if (dong.trim() === "") {
+      const truoc = dongs[i - 1];
+      const sau = dongs[i + 1];
+      if (laDongKhoi(truoc)) continue;
+      if (laDongDanhSach(sau) && truoc !== undefined && truoc.trim() !== "" && !laDongDanhSach(truoc)) {
+        continue;
+      }
+    }
+
     // [chữ](url) -> "chữ (url)" để URL vẫn bấm được; trùng nhau thì chỉ giữ url.
     // Làm TỪNG DÒNG chứ không trên cả đoạn, để dòng trong khối code không bị đụng.
     // Bỏ khoảng trắng CUỐI dòng: trong markdown hai dấu cách cuối dòng nghĩa là
@@ -88,50 +136,27 @@ export function markdownSangStyleZalo(input: string): KetQuaDinhDang {
       (_ca, chu: string, url: string) => (chu.trim() === url.trim() ? url : `${chu} (${url})`),
     );
 
-    let noiDung = dongLink;
-    let thutLe = "";
-    const khoi: Exclude<TextStyle, TextStyle.Indent>[] = [];
-
-    const mTieuDe = /^(#{1,6})[ \t]+(.+)$/.exec(dongLink);
-    const mGach = !mTieuDe && /^(\s*)[-*+][ \t]+(.+)$/.exec(dongLink);
-    const mSo = !mTieuDe && !mGach && /^(\s*)\d+\.[ \t]+(.+)$/.exec(dongLink);
-
-    if (mTieuDe) {
-      noiDung = mTieuDe[2]!.trimEnd();
-      // Big cho to hơn thấy rõ, Bold thêm độ đậm cho client cũ
-      khoi.push(TextStyle.Big, TextStyle.Bold);
-    } else if (mGach) {
-      thutLe = mGach[1]!;
-      noiDung = mGach[2]!;
-      khoi.push(TextStyle.UnorderedList);
-    } else if (mSo) {
-      thutLe = mSo[1]!;
-      noiDung = mSo[2]!;
-      khoi.push(TextStyle.OrderedList);
-    }
+    // CÙNG biểu thức mà `laDongKhoi` dùng - hai nơi lệch nhau thì việc bỏ dòng
+    // trống sẽ nhắm sai dòng, mà lỗi đó không lộ ra ở đâu ngoài mắt người đọc.
+    //
+    // Chỉ còn TIÊU ĐỀ là khối: gạch đầu dòng và đánh số cố ý đi qua đây như chữ
+    // thường, giữ nguyên ký tự "- " / "1. " - lý do ở docstring `laDongKhoi`.
+    const mTieuDe = TIEU_DE_RE.exec(dongLink);
+    const noiDung = mTieuDe ? mTieuDe[2]!.trimEnd() : dongLink;
 
     const { text: daInline, spans } = apDungInline(noiDung);
-    const batDauDong = conTro + thutLe.length;
-    const chuCuaDong = `${thutLe}${daInline}`;
-    phan.push(chuCuaDong);
+    phan.push(daInline);
 
     if (daInline.length > 0) {
-      for (const st of khoi) styles.push({ start: batDauDong, len: daInline.length, st });
-      for (const s of spans) styles.push({ start: batDauDong + s.start, len: s.len, st: s.st });
-
-      // Danh sách lồng: mỗi 2 khoảng trắng là một cấp. zca-js mã hóa Indent
-      // bằng cách thay "$" trong "ind_$" thành `${indentSize}0`.
-      if ((mGach || mSo) && thutLe.length >= 2) {
-        styles.push({
-          start: batDauDong,
-          len: daInline.length,
-          st: TextStyle.Indent,
-          indentSize: Math.floor(thutLe.length / 2),
-        });
+      // Big cho to hơn thấy rõ, Bold thêm độ đậm cho client cũ
+      if (mTieuDe) {
+        styles.push({ start: conTro, len: daInline.length, st: TextStyle.Big });
+        styles.push({ start: conTro, len: daInline.length, st: TextStyle.Bold });
       }
+      for (const s of spans) styles.push({ start: conTro + s.start, len: s.len, st: s.st });
     }
 
-    conTro += chuCuaDong.length;
+    conTro += daInline.length;
     if (i < dongs.length - 1) {
       phan.push("\n");
       conTro += 1;

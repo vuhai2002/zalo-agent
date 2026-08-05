@@ -183,18 +183,22 @@ describe("processBatch - làm sạch đầu ra trước khi gửi", () => {
     assert.equal(daGuiStyle[0], undefined, "tắt rồi thì tuyệt đối không đính styles");
   });
 
-  it("gạch đầu dòng thành DANH SÁCH của Zalo - ký tự '- ' nhường chỗ cho style", async () => {
-    // Đổi hành vi có chủ đích: trước đây ký tự "- " đi thẳng xuống Zalo dưới
-    // dạng chữ. Giờ Zalo tự vẽ dấu đầu dòng, nên giữ lại "- " là ra hai dấu.
-    await chayLuot("Chào anh Hải ạ.\n- Cà phê: 45.000\n- Trà: 30.000");
+  it("gạch đầu dòng đi xuống Zalo dưới dạng CHỮ, không phải style", async () => {
+    // `lst_1` của Zalo render khác nhau giữa Web và điện thoại (điện thoại chỉ
+    // vẽ MỘT dấu cho cả span), nên danh sách đi bằng chữ "- " thường - hiện y
+    // hệt nhau ở mọi client và tốn 0 span.
+    await chayLuot("Chào anh Hải ạ.\n- Cà phê: **45.000**\n- Trà: 30.000");
 
     const text = daGui[0]!;
-    assert.ok(!text.includes("- Cà phê"), `còn ký tự gạch đầu dòng: ${text}`);
-    assert.ok(text.includes("Cà phê: 45.000"), "nội dung dòng phải còn nguyên");
+    assert.ok(text.includes("- Cà phê: 45.000"), `mất ký tự gạch đầu dòng: ${text}`);
+    assert.ok(text.includes("- Trà: 30.000"), "dòng thứ hai cũng phải giữ dấu gạch");
 
+    // Vẫn phải còn in đậm bên TRONG dòng danh sách
     const styles = daGuiStyle[0] as { start: number; len: number; st: string }[] | undefined;
-    assert.ok(styles, "phải có style danh sách bù lại cho ký tự đã bỏ");
-    const doanTo = styles.map((s) => text.slice(s.start, s.start + s.len));
-    assert.deepEqual(doanTo, ["Cà phê: 45.000", "Trà: 30.000"]);
+    assert.ok(styles, "in đậm trong dòng danh sách phải tới nơi");
+    assert.deepEqual(
+      styles.map((s) => text.slice(s.start, s.start + s.len)),
+      ["45.000"],
+    );
   });
 });

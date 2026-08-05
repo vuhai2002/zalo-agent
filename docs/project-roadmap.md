@@ -2033,3 +2033,229 @@ không còn theo thứ tự vị trí (`0:lst_1 7:b 13:lst_1 25:b 13:ind_$`).
   là hỏng" - dữ liệu log không có ca tiêu đề KHÔNG kèm in đậm. Muốn chắc hẳn thì
   phải gửi thử hai tin ngắn vào một luồng thật. Đường lui khiến việc này không
   còn cấp bách.
+
+### Căn nguyên THẬT của mã 112: trần TỔNG BYTE của tin có định dạng (2026-08-05)
+
+Bản vá "gộp span chồng" ở trên KHÔNG phải căn nguyên - lượt 117 và 118 chạy trên
+code đã vá, 0 span chồng, vẫn bị Zalo chối. Chẩn đoán đúng chỉ có được sau 4
+vòng gửi thử vào Zalo thật.
+
+**Các giả thuyết đã BÁC bằng đo, không phải bằng suy luận**
+
+| Giả thuyết | Phép bác |
+|---|---|
+| `f_18` (cỡ chữ to) bị chối | gửi `## Thử 2: cỡ to` -> ĐƯỢC, chữ hiện to thật |
+| Trần theo SỐ SPAN | 330 ký tự + 80 span -> ĐƯỢC |
+| Một nhóm style nào đó | bỏ `lst_1` / bỏ `f_18` / bỏ `b` / chỉ `lst_1` -> HỎNG hết |
+| Trần theo ĐỘ DÀI CHỮ | 1600 ký tự + style -> ĐƯỢC |
+| Trần theo SỐ DÒNG | 1, 30, 60 dòng -> ĐƯỢC hết |
+
+**Căn nguyên: TỔNG byte (chữ UTF-8 + JSON textProperties).**
+
+| byte chữ + byte style | kết quả |
+|---|---|
+| 1642 + 572 = 2214 | được |
+| 2321 + 0 = 2321 | được |
+| 320 + 2412 = 2732 | được |
+| 2321 + 546 = 2867 | được |
+| 2321 + 1391 = 3712 | HỎNG (112) |
+| 2321 + 1580 = 3901 | HỎNG (112) |
+
+Hai dòng cuối dùng ĐÚNG đoạn chữ của dòng 2321+0 - khác mỗi chỗ có style hay
+không. Trần nằm giữa 2867 và 3712.
+
+**Đã sửa.** `chiaTheoNganSachByte` co dần trần ký tự cho tới khi mọi tin lọt
+ngân sách byte, rồi mới cắt. Nút chỉnh `ZALO_RICH_TEXT_MAX_PAYLOAD_BYTES` mặc
+định 2800.
+
+**Quyết định đã chốt - đừng lật lại nếu không có bằng chứng mới**
+
+- Mặc định 2800 chứ không phải 3000 hay 3200: lấy ngay dưới mốc CAO NHẤT đã
+  chứng minh là gửi được (2867), không đoán giữa khoảng 2867-3712. Phần dư dành
+  cho sai số giữa JSON mình tính và JSON zca-js thật sự gửi (nó đổi `ind_$`
+  thành `ind_10`).
+- Vượt trần thì CẮT NHỎ HƠN, không bỏ định dạng: nhận thêm một tin thì vẫn đọc
+  được, mất định dạng là mất đúng thứ vừa làm ra. Chỉ khi co tới trần SỐ TIN
+  (cắt tiếp là vứt chữ) mới bỏ định dạng của riêng đoạn đó.
+- Trần byte CHỈ áp cho tin có định dạng. Tin chữ trơn giữ nguyên luật cũ theo
+  số ký tự - đã đo: 2321 byte chữ trơn gửi tốt.
+- Đếm theo BYTE UTF-8, không theo số ký tự. Dấu tiếng Việt tốn 2-3 byte mỗi ký
+  tự nên đếm ký tự sẽ lọt trần trên giấy mà vẫn bị Zalo chối.
+
+**Kiểm chứng**
+
+- 1410 test xanh; `pnpm eval` 11/11
+- Dựng lại đúng tin đã hỏng (nhân 4 cho đúng quy mô): trước 1 tin 6025 byte ->
+  sau 3 tin 2172 / 1490 / 2309 byte, GIỮ NGUYÊN định dạng cả 3, chữ còn 1715/1719
+- Phá code kiểm test 3 lần (bỏ vòng co, bỏ lưới an toàn cuối, đếm ký tự thay vì
+  byte) - cả 3 đều bị bắt
+- Bản đầu của chính test mới khẳng định SAI ("mọi tin phải dưới trần") - nó đỏ
+  ở ca chữ trần đã nặng hơn trần, mà ca đó đúng. Bất biến thật là "tin nào vượt
+  trần thì BẮT BUỘC rỗng style"
+
+**Còn treo**
+
+- [ ] Trần thật nằm đâu đó trong 2867-3712, chưa thu hẹp thêm. Muốn dùng ngân
+  sách rộng hơn thì dò thêm một vòng; hiện chưa đáng vì 2800 đã đủ cho tin dài.
+
+### Vá tiếp: bộ cắt tự bỏ định dạng dù còn suất tin (2026-08-05)
+
+Ngay lượt chạy thật đầu tiên sau bản trần byte, tin ĐẦU về phẳng lì trong khi
+tin sau có định dạng. Log KHÔNG có mã 112 - Zalo nhận cả 3 tin. Tức là chính bộ
+cắt tự bỏ định dạng, và bỏ trong im lặng.
+
+**Căn nguyên: chốt chặn đo sai đại lượng.** Vòng co viết `if (thu.length >=
+maxParts) break` với ý chống mất chữ, nhưng chạm ĐÚNG trần số tin không phải là
+mất chữ - `splitLongMessage` chỉ vứt bớt khi cần NHIỀU HƠN maxParts. Soi vòng
+lặp trên tin thật:
+
+```
+kyTu=979 -> 3 tin 3754/2297/884
+kyTu=685 -> 5 tin 1616/2141/1366/1567/256 | chữ 2159  <-- BREAK vì 5 >= 5
+chốt: 3 tin, tin đầu 3754 byte vượt trần -> bỏ định dạng
+```
+
+Bước 685 cho kết quả tốt về mọi mặt (mọi tin dưới trần, không hụt chữ) nhưng bị
+vứt đi.
+
+**Hướng sửa đã thử và SAI:** so tổng số ký tự giữa hai lần cắt. Cắt mịn hơn thì
+`trimEnd` ở mỗi ranh giới ăn vài ký tự trắng (2167 -> 2165 -> 2163 -> 2159) nên
+phép so luôn báo "mất chữ" và vòng co thoát ngay bước đầu - ra 2 tin, tệ hơn cả
+lúc chưa sửa.
+
+**Bản đúng:** dấu hiệu mất chữ THẬT là ghi chú "còn nữa" (`OVERFLOW_NOTE`), chỉ
+được dán khi phải bỏ chữ vì hết chỗ. Kết quả trên tin thật của lượt 123:
+maxParts=5 -> 5 tin, 0 tin mất định dạng, chữ 2159/2167.
+
+**Thêm:** `sendReplyInParts` giờ ghi WARN khi có đoạn bị bỏ định dạng. Bản đầu
+làm việc này lặng lẽ - lỗi lộ ra vì người dùng nhìn thấy, log không nhắc gì.
+
+**Kiểm chứng:** 1412 test xanh. Phá code 2 lần (dựng lại chốt chặn cũ, dựng lại
+hướng so tổng ký tự) - cả 2 đều bị bắt. Phép phá đầu tiên KHÔNG bị bắt bởi
+fixture 38 dòng, phải dò tới 60 dòng mới chạm được nhánh hỏng - fixture nhẹ hơn
+xanh với cả bản đúng lẫn bản sai, tức là không kiểm được gì.
+
+### Bớt số tin và bỏ khe hở đôi (2026-08-05)
+
+Người dùng: một câu trả lời ra 4 tin thì lười đọc, và giữa các khối có dòng
+trống thừa.
+
+**Dòng trống thừa.** Markdown cần dòng trống ngăn đoạn văn với danh sách, nhưng
+Zalo TỰ chèn khoảng cách cho khối `lst_1`/`lst_2` và dòng cỡ `f_18`. Hai thứ
+cộng lại thành khe hở đôi. Giờ bỏ dòng trống nằm sát khối danh sách hoặc tiêu
+đề; dòng trống giữa hai đoạn văn thường vẫn giữ (ở đó Zalo không thêm gì).
+
+**Số tin.** Đo ra nguyên nhân bất ngờ: JSON định dạng ngốn GẤP ĐÔI chữ (163 span
+~5200 byte so với ~2500 byte chữ), mà trần của Zalo tính theo TỔNG byte. Ba việc:
+
+- Gộp span danh sách LIỀN NHAU thành một span phủ cả khối. ĐÃ ĐO THẬT: một span
+  `lst_1` phủ 5 dòng hiện đủ 5 dấu đầu dòng, giống hệt 5 span riêng. Danh sách
+  40 dòng: 40 span còn 1.
+- Bước co trần ký tự đổi từ 30% xuống 10%. Co quá tay là THÊM một tin: đo trên
+  tin thật, ở mức 980 ký tự tin chỉ vượt trần 50 byte mà bước 30% nhảy thẳng
+  xuống 686 và đẻ ra tin thứ ba không cần thiết.
+- Nâng trần byte 2800 -> 3250 sau khi đo thêm: 3281 byte gửi được (mốc cao nhất
+  chứng minh được), 3712 bị chối.
+
+**Persona: in đậm phải tiết kiệm.** Model đang bôi đậm cả 3 con số mỗi dòng.
+Siết lại còn "mỗi dòng nhiều nhất một chỗ" - đây là dòng tự viết ở đợt trước,
+KHÔNG đụng tới luật "trình bày đầy đủ" của người dùng.
+
+**Hiệu quả đo được** (cùng nội dung, chỉ khác mật độ in đậm):
+
+| Nội dung | Span | Byte | Số tin |
+|---|---|---|---|
+| 20 dòng, đậm dày | 64 | 3223 | 1 |
+| 20 dòng, đậm tiết kiệm | 24 | 1985 | 1 |
+| 40 dòng, đậm dày | 124 | 6264 | 3 |
+| 40 dòng, đậm tiết kiệm | 44 | 3746 | 2 |
+
+Trước loạt sửa này, bản 40 dòng ra 4 tin và một tin mất định dạng.
+
+**Kiểm chứng.** 1417 test xanh (3 lượt); `pnpm eval` 11/11. Phá code 3 lần (bỏ
+mọi dòng trống / quên tính danh sách là khối / không gộp qua dòng) đều bị bắt.
+
+Ca eval `ngay-co-san` đỏ ngẫu nhiên ở lượt chạy cả bộ (chạy riêng 3/3 đạt). ĐÃ
+KIỂM bằng cách tạm hoàn persona về bản cũ rồi chạy lại: vẫn đỏ đúng ca đó, nên
+đây là flake CÓ SẴN, không phải hồi quy của dòng persona mới.
+
+**Còn treo**
+
+- [ ] Ca eval `ngay-co-san` đỏ ngẫu nhiên trong lượt chạy cả bộ, chưa tìm căn nguyên.
+- [ ] Test `run-scheduled-job-trial` cũng đỏ ngẫu nhiên một lần (chạy riêng xanh).
+- [ ] Trần byte thật nằm trong 3281-3712, chưa thu hẹp thêm.
+
+### Danh sách bỏ style Zalo, quay về ky tu gach ngang (2026-08-05)
+
+Người dùng phát hiện tin hiện ĐÚNG trên Zalo Web nhưng HỎNG trên điện thoại:
+chỉ dòng đầu mỗi khối có dấu chấm tròn, các dòng sau thụt vào không dấu.
+
+**Căn nguyên: hai client render `lst_1` khác nhau.** Zalo Web vẽ một dấu đầu
+dòng cho MỖI DÒNG nằm trong span; Zalo trên điện thoại chỉ vẽ MỘT dấu cho cả
+span rồi coi các dòng sau là xuống dòng mềm. Danh sách 9 mục hiện thành 1 mục.
+
+Đây là hồi quy từ bản gộp span danh sách vừa làm - và là lỗi của cách nghiệm
+thu: phép thử A1 chỉ được xem trên bản Web rồi kết luận "gộp được". MỘT client
+không đủ để chốt hành vi render.
+
+**Đã chốt: KHÔNG dùng `lst_1`/`lst_2`/`Indent` nữa.** Giữ nguyên ký tự "- " và
+"1. " làm chữ thường (đề xuất của người dùng sau khi nhìn cả hai bản). Được ba
+thứ cùng lúc:
+
+- Chữ thường hiện y hệt nhau ở mọi client - hết hẳn lớp rủi ro này.
+- Tốn 0 span cho danh sách, mà JSON định dạng chính là thứ đẩy tin vượt trần byte.
+- Người dùng thấy "-" dễ đọc hơn dấu chấm tròn.
+
+Hệ quả kèm theo: dòng trống quanh danh sách giờ phải GIỮ (trước thì bỏ, vì Zalo
+tự chèn khoảng cách cho khối `lst_1`). Chỉ còn dòng trống quanh TIÊU ĐỀ là bỏ,
+vì `f_18` vẫn tự có khoảng cách riêng.
+
+**Số tin đo lại** (trần byte 3250, mật độ in đậm tiết kiệm theo persona mới):
+
+| Nội dung | Span | Byte | Số tin |
+|---|---|---|---|
+| 20 dòng | 23 | 1992 | 1 |
+| 40 dòng | 43 | 3792 | 2 |
+| 60 dòng | 63 | 5592 | 2 |
+
+Trước cả loạt sửa hôm nay, bản 40 dòng ra 4 tin và một tin mất định dạng.
+
+**Kiểm chứng.** 1418 test xanh (2 lượt liên tiếp); `pnpm eval` 11/11. Phá code:
+dựng lại luật "coi gạch đầu dòng là khối" thì 5 test đỏ.
+
+**Bài học ghi lại.** Hành vi render của Zalo phải nghiệm thu trên CẢ Web lẫn
+điện thoại trước khi chốt. Web là thứ dễ chụp màn hình nhất nên rất dễ dừng ở đó.
+
+### Báo động giả và luật dòng trống đặt ngược (2026-08-05)
+
+**1. Cảnh báo "đoạn quá nặng so với trần byte" là BÁO ĐỘNG GIẢ.** Dựng lại đúng
+đoạn chữ của lượt 129 rồi quét mọi mật độ span (10 tới 80): không lần nào có
+đoạn bị bỏ định dạng. Lỗi nằm trong chính dòng cảnh báo - nó đếm
+`styles.length === 0`, mà một đoạn VỐN KHÔNG có chữ nào cần tô thì cũng rỗng.
+Đúng ca đó: tin thứ hai chỉ là văn xuôi ("Xấp vé phía trên..." + "Nguồn đối
+chiếu...") nên không có span nào.
+
+Sửa: thêm cờ `boDinhDang` do `chiaTheoNganSachByte` đánh dấu, và tách hàm
+`demDoanBoDinhDang` để phép phá code chạm được vào logic đếm - bản đầu để một
+dòng `filter` ở nơi gửi nên phá code không bắt được.
+
+**2. Luật dòng trống đặt NGƯỢC với thứ người dùng cần.** Bản trước bỏ dòng trống
+quanh tiêu đề và giữ dòng trống quanh danh sách. Nhìn ảnh chụp thật thì phải
+ngược lại - giả định "Zalo tự chèn khoảng cách cho `f_18`" là SAI, tiêu đề chỉ
+là chữ to hơn chứ không có khoảng cách riêng. Luật mới dựng theo đúng chỗ người
+dùng khoanh trên ảnh:
+
+| Vị trí dòng trống | Xử lý | Lý do |
+|---|---|---|
+| Ngay TRƯỚC tiêu đề | GIỮ | ranh giới hai mục; thiếu thì câu kết dính vào tiêu đề mục sau |
+| Ngay SAU tiêu đề | BỎ | tiêu đề và câu dẫn của nó thuộc về nhau |
+| Giữa đoạn văn và DANH SÁCH ngay dưới | BỎ | danh sách là phần khai triển của chính câu đó |
+| Sau khối danh sách | GIỮ | ranh giới sang ý khác |
+| Giữa hai đoạn văn | GIỮ | - |
+
+**Kiểm chứng.** 1423 test xanh (2 lượt). Phá code 3 lần: đếm theo
+`styles.length` thay vì cờ (2 test đỏ), bỏ luôn dòng trống trước tiêu đề (1 test
+đỏ), coi gạch đầu dòng là khối (nhiều test đỏ).
+
+**Bài học.** Phép phá code chỉ chạm được thứ có test. Logic một dòng nằm trong
+hàm lớn thì phá không tới - tách ra hàm nhỏ mới kiểm được.

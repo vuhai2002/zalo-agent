@@ -93,21 +93,39 @@ describe("markdownSangStyleZalo - khối", () => {
     assert.equal(doanCua(ket, 0), "Bảng giá hôm nay");
   });
 
-  it("gạch đầu dòng và đánh số thành danh sách của Zalo", () => {
+  it('gạch đầu dòng GIỮ NGUYÊN ký tự "- ", KHÔNG sinh style danh sách', () => {
+    // Đã đo trên máy thật 2026-08-05: `lst_1` render KHÁC NHAU giữa hai client.
+    // Zalo Web vẽ một dấu cho mỗi dòng, Zalo trên điện thoại chỉ vẽ MỘT dấu cho
+    // cả span rồi thụt các dòng sau vào - danh sách 9 mục thành 1 mục.
+    // Chữ "- " thường thì hiện y hệt nhau ở mọi client và tốn 0 span.
     const ket = markdownSangStyleZalo("- cà phê đen\n- cà phê sữa");
-    assert.equal(ket.text, "cà phê đen\ncà phê sữa", "dấu gạch đầu dòng do Zalo tự vẽ");
-    assert.equal(ket.styles.length, 2);
-    assert.equal(doanCua(ket, 0), "cà phê đen");
-    assert.equal(doanCua(ket, 1), "cà phê sữa", "dòng THỨ HAI phải cộng dồn offset qua ký tự xuống dòng");
-    for (const s of ket.styles) assert.equal(s.st, TextStyle.UnorderedList);
+    assert.equal(ket.text, "- cà phê đen\n- cà phê sữa", "ký tự gạch đầu dòng phải còn nguyên");
+    assert.deepEqual(ket.styles, [], "không được phát style danh sách nào");
   });
 
-  it("danh sách lồng sinh thêm Indent theo cấp", () => {
-    const ket = markdownSangStyleZalo("- cha\n  - con");
-    const indent = ket.styles.find((s) => s.st === TextStyle.Indent);
-    assert.ok(indent, "dòng lồng phải có Indent");
-    assert.equal((indent as { indentSize?: number }).indentSize, 1);
+  it('đánh số cũng giữ nguyên ký tự "1. "', () => {
+    const ket = markdownSangStyleZalo("1. một\n2. hai");
+    assert.equal(ket.text, "1. một\n2. hai");
+    assert.deepEqual(ket.styles, []);
   });
+
+  it("danh sách lồng giữ khoảng trắng thụt đầu dòng", () => {
+    // Không còn span `Indent` nào - cấp lồng nằm ở chính khoảng trắng của chữ.
+    const ket = markdownSangStyleZalo("- cha\n  - con");
+    assert.equal(ket.text, "- cha\n  - con");
+    assert.deepEqual(ket.styles, []);
+  });
+
+  it("in đậm TRONG dòng danh sách vẫn tô đúng chỗ", () => {
+    // Bỏ style danh sách không được kéo theo mất định dạng bên trong dòng.
+    const ket = markdownSangStyleZalo("- Giải 8: **87**\n- Giải 7: **110**");
+    assert.equal(ket.text, "- Giải 8: 87\n- Giải 7: 110");
+    assert.deepEqual(
+      ket.styles.map((s) => ket.text.slice(s.start, s.start + s.len)),
+      ["87", "110"],
+    );
+  });
+
 
   it("nhiều dòng trộn khối và inline - mọi span vẫn trỏ đúng chỗ", () => {
     const ket = markdownSangStyleZalo("# Tiêu đề\nMở đầu **quan trọng** ở đây\n- mục **một**");
@@ -118,6 +136,46 @@ describe("markdownSangStyleZalo - khối", () => {
     }
     assert.ok(ket.text.includes("quan trọng"));
     assert.ok(!ket.text.includes("**"), "không còn dấu ** trong chữ cuối");
+  });
+
+  it("GIỮ dòng trống TRƯỚC tiêu đề, BỎ dòng trống ngay sau nó", () => {
+    // Trước tiêu đề là ranh giới hai mục - thiếu nó thì câu kết của mục trên
+    // dính luôn vào tiêu đề mục dưới. Sau tiêu đề thì câu dẫn thuộc về nó.
+    const ket = markdownSangStyleZalo("Kết luận: xong.\n\n## Mục sau\n\nCâu dẫn.");
+    assert.equal(ket.text, "Kết luận: xong.\n\nMục sau\nCâu dẫn.");
+  });
+
+  it("BỎ dòng trống giữa đoạn văn và DANH SÁCH ngay dưới nó", () => {
+    // Danh sách là phần khai triển của chính câu đó ("Đối chiếu vé 645300:" rồi
+    // tới các mục) - tách ra là làm rời hai thứ vốn đi liền nhau.
+    const ket = markdownSangStyleZalo("Đối chiếu vé 645300:\n\n- Hai số cuối 00\n- Ba số cuối 300");
+    assert.equal(ket.text, "Đối chiếu vé 645300:\n- Hai số cuối 00\n- Ba số cuối 300");
+  });
+
+  it("GIỮ dòng trống SAU khối danh sách - đó là ranh giới sang ý khác", () => {
+    const ket = markdownSangStyleZalo("- một\n- hai\n\nKết luận: xong.");
+    assert.equal(ket.text, "- một\n- hai\n\nKết luận: xong.");
+  });
+
+  it("dòng trống giữa hai ĐOẠN VĂN thường vẫn giữ - Zalo không tự thêm gì ở đó", () => {
+    // Chỗ này mà cũng bỏ thì hai đoạn dính liền, đọc còn tệ hơn khe hở đôi.
+    const ket = markdownSangStyleZalo("Đoạn một.\n\nĐoạn hai.");
+    assert.equal(ket.text, "Đoạn một.\n\nĐoạn hai.");
+  });
+
+  it("bỏ dòng trống KHÔNG làm lệch span của những dòng phía sau", () => {
+    // Bỏ dòng là dời mọi thứ phía sau sang trái. Quên trừ con trỏ thì toàn bộ
+    // span sau chỗ bỏ trôi đi - mà đây là ca thường gặp nhất trong tin thật.
+    const ket = markdownSangStyleZalo("Mở đầu:\n\n- mục **một**\n\n## Tiêu đề **đậm**\n\n- mục **hai**");
+    for (const s of ket.styles) {
+      const doan = ket.text.slice(s.start, s.start + s.len);
+      assert.ok(doan.length > 0, "span trỏ vào chuỗi rỗng - lệch offset");
+      assert.ok(!doan.includes("\n"), `span trùm qua ký tự xuống dòng: ${JSON.stringify(doan)}`);
+    }
+    const dam = ket.styles.filter((s) => s.st === TextStyle.Bold);
+    const doanDam = dam.map((s) => ket.text.slice(s.start, s.start + s.len));
+    assert.ok(doanDam.includes("một"), `mất hoặc lệch "một": ${JSON.stringify(doanDam)}`);
+    assert.ok(doanDam.includes("hai"), `mất hoặc lệch "hai": ${JSON.stringify(doanDam)}`);
   });
 
   it("dòng kẻ ngăn của bảng bị bỏ, dòng dữ liệu giữ nguyên", () => {
