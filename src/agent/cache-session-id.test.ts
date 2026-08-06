@@ -60,3 +60,37 @@ describe("cacheSessionHeaders", () => {
     assert.equal(CACHE_SESSION_HEADER, "x-session-id");
   });
 });
+
+/**
+ * Epoch là số lần ngữ cảnh thread bị xóa sạch. Nó ở trong phần băm để mỗi lần
+ * xóa mở một PHIÊN MỚI với router - cùng cách goclaw gọi `ResetCLISession` sau
+ * /reset và Hermes xoay `session_id`. Thiếu nó thì xóa xong vẫn gửi đúng khóa
+ * cũ, và router giữ tiền tố đã cache của cuộc trò chuyện vừa bị xóa.
+ */
+describe("cacheSessionId - epoch sau khi xóa ngữ cảnh", () => {
+  it("epoch khác nhau thì khóa khác nhau", () => {
+    const truoc = cacheSessionId("acc", "th", 0);
+    const sau = cacheSessionId("acc", "th", 1);
+    assert.notEqual(truoc, sau, "xóa ngữ cảnh xong phải là phiên mới");
+  });
+
+  it("KHÔNG truyền epoch thì giữ nguyên khóa cũ - thread chưa từng xóa không mất cache", () => {
+    assert.equal(cacheSessionId("acc", "th"), cacheSessionId("acc", "th", 0));
+  });
+
+  it("cùng epoch thì vẫn ổn định - trong một phiên cache phải trúng", () => {
+    assert.equal(cacheSessionId("acc", "th", 3), cacheSessionId("acc", "th", 3));
+  });
+
+  it("epoch không lẫn sang phần account/thread", () => {
+    // Ghép chuỗi ẩu ("acc:th" + "1" so với "acc:th1" + "") là hai thread khác
+    // nhau ra cùng khóa, tức là cache của người này chảy sang người kia
+    assert.notEqual(cacheSessionId("acc", "th", 1), cacheSessionId("acc", "th1", 0));
+  });
+
+  it("header cũng đổi theo epoch, không chỉ hàm băm", () => {
+    const h0 = cacheSessionHeaders(true, "acc", "th", 0)[CACHE_SESSION_HEADER];
+    const h1 = cacheSessionHeaders(true, "acc", "th", 1)[CACHE_SESSION_HEADER];
+    assert.notEqual(h0, h1, "quên truyền epoch xuống header là vá nửa vời");
+  });
+});

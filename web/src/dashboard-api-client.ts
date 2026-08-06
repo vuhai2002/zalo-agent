@@ -126,6 +126,13 @@ export const api = {
       `/api/threads/${encodeURIComponent(threadId)}/summary?accountId=${encodeURIComponent(accountId)}`,
       { method: "DELETE" },
     ),
+  /** Xóa sạch ngữ cảnh; `xoaTriNho` mới đụng tới fact bền đã học trong thread */
+  xoaNguCanhThread: (accountId: string, threadId: string, xoaTriNho: boolean) =>
+    request<{ ok: true; tinNhan: number; anh: number; triNho: number }>(
+      `/api/threads/${encodeURIComponent(threadId)}/history` +
+        `?accountId=${encodeURIComponent(accountId)}&xoaTriNho=${xoaTriNho}`,
+      { method: "DELETE" },
+    ),
 
   contacts: (accountId: string, q: string, page: number) =>
     request<{ items: ContactItem[]; hasMore: boolean }>(

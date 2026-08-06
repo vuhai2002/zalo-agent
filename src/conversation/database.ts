@@ -260,6 +260,13 @@ function runMigrations(): void {
   addColumnIfMissing("threads", "summary", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing("threads", "summary_covers_to_message_id", "INTEGER NOT NULL DEFAULT 0");
 
+  // Số lần ngữ cảnh của thread bị xóa sạch. Vào khóa phiên gửi router
+  // (`cache-session-id.ts`) để lần xóa nào cũng mở một phiên MỚI - cùng cách
+  // goclaw gọi `ResetCLISession` và Hermes xoay `session_id` khi /reset. Không
+  // xoay thì router vẫn coi đây là phiên cũ và giữ tiền tố đã cache của cuộc
+  // trò chuyện vừa bị xóa. Mặc định 0 để mọi thread cũ giữ nguyên khóa đang có.
+  addColumnIfMissing("threads", "context_epoch", "INTEGER NOT NULL DEFAULT 0");
+
   // Phản hồi tức thì: thả reaction + báo "đang nhập" khi bot bắt đầu xử lý
   addColumnIfMissing("accounts", "auto_react_enabled", "INTEGER NOT NULL DEFAULT 1");
   addColumnIfMissing("accounts", "auto_react_icon", "TEXT NOT NULL DEFAULT 'heart'");

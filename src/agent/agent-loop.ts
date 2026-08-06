@@ -5,7 +5,7 @@ import { getAgentForAccount } from "../config/agent-store.js";
 import { isSidecarConfigured } from "../config/runtime-vision-settings.js";
 import { getRecentMessages } from "../conversation/history-store.js";
 import { getMemoriesForContext } from "../conversation/memory-store.js";
-import { getThreadSummary } from "../conversation/thread-store.js";
+import { getThreadContextEpoch, getThreadSummary } from "../conversation/thread-store.js";
 import { createLogger } from "../shared/logger.js";
 import { TECHNICAL_ERROR_REPLY } from "../zalo/send-reply-in-parts.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
@@ -154,6 +154,11 @@ export async function runAgentTurn({
 }: AgentTurnParams): Promise<AgentTurnResult> {
   // Tin cuối đại diện cho lượt: tools (thả reaction, quote) tác động lên tin này
   const latest = batch[batch.length - 1]!;
+
+  // Đọc MỘT lần cho cả lượt: khóa phiên gửi router phải giống nhau ở mọi step,
+  // kể cả lượt chốt. Đọc lại giữa lượt là tự đổi phiên giữa chừng nếu có ai xóa
+  // ngữ cảnh đúng lúc đó - vừa mất cache vừa khó truy nguyên nhân.
+  const contextEpoch = getThreadContextEpoch(account.id, latest.threadId);
 
   // Não của account: persona + model/maxSteps override (fallback cấu hình chung)
   const agent = getAgentForAccount(account.agentId);
@@ -318,6 +323,7 @@ export async function runAgentTurn({
           model: resolveModel(agent, {
             accountId: account.id,
             threadId: latest.threadId,
+            contextEpoch,
           }),
           system: buildSystemPrompt(agent, latest, memory, account, isolated),
           messages: nguCanh,
@@ -435,7 +441,11 @@ export async function runAgentTurn({
     const r = await chayStream(
       (onError) =>
         streamText({
-          model: resolveModel(agent, { accountId: account.id, threadId: latest.threadId }),
+          model: resolveModel(agent, {
+            accountId: account.id,
+            threadId: latest.threadId,
+            contextEpoch,
+          }),
           system: buildSystemPrompt(agent, latest, memory, account, isolated),
           messages: tinChot,
           maxOutputTokens: getTuning("LLM_MAX_OUTPUT_TOKENS"),

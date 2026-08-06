@@ -39,6 +39,13 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   yêu cầu đã đủ rõ.
 - Dải cảnh báo trên trang Tổng quan khi chưa cấu hình LLM - trước đó bot vẫn
   khởi động bình thường nên dashboard xanh trong khi mọi tin nhắn đều hỏng.
+- **Xóa sạch ngữ cảnh một cuộc trò chuyện** từ trang Sessions: tin nhắn, bản
+  tóm tắt, trace từng bước, ảnh đã tải và mô tả ảnh. Ô tick riêng để xóa thêm
+  những điều bot đã ghi nhớ học được trong cuộc trò chuyện đó. Lịch hẹn đang
+  chờ và tên hiển thị vẫn giữ - đây là "reset" chứ không phải xóa hội thoại.
+  Mỗi lần xóa còn mở một phiên cache MỚI với router, để nó không giữ tiền tố
+  của cuộc trò chuyện vừa bỏ đi.
+  Lịch sử token KHÔNG bị đụng: nó là sổ chi tiêu, không phải nội dung hội thoại.
 - **Google (Gemini) thành nhà cung cấp hạng nhất** (`LLM_PROVIDER=google`, hoặc
   chọn ở trang Cấu hình). Trước đây Gemini chỉ dùng được qua lớp giả OpenAI của
   Google, mà lớp đó làm rơi `thought_signature` nên mọi lượt CÓ GỌI CÔNG CỤ đều

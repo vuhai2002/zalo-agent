@@ -8,6 +8,8 @@ import {
   setThreadSummary,
 } from "../../conversation/thread-store.js";
 import { getThreadUsageTotals } from "../../conversation/usage-store.js";
+import { xoaNguCanhThread } from "../../conversation/wipe-thread-context.js";
+import { huyBatchCuaThread } from "../../middleware/message-batcher.js";
 
 /** /api/threads - màn Sessions: list, xem hội thoại, bật/tắt bot per thread */
 export const threadRoutes = new Hono()
@@ -73,4 +75,28 @@ export const threadRoutes = new Hono()
 
     setThreadSummary(accountId, c.req.param("threadId"), "", 0);
     return c.json({ ok: true });
+  })
+
+  /**
+   * Xóa SẠCH ngữ cảnh cuộc trò chuyện: tin nhắn, tóm tắt, trace, ảnh đã tải.
+   * `xoaTriNho=true` xóa thêm fact bền đã học trong thread này.
+   *
+   * Hủy hàng chờ TRƯỚC khi xóa DB: đảo thứ tự thì một batch đang đỗ có thể
+   * chạy xen vào giữa và ghi lại tin cũ vào lịch sử vừa dọn.
+   *
+   * KHÔNG có lệnh tương ứng trong chat (goclaw có `/reset` nhưng phải giới hạn
+   * "chỉ writer trong nhóm"). Bot này đọc tin người lạ, nên một lệnh xóa qua
+   * chat là bề mặt tấn công không đáng đánh đổi - dashboard đã có mật khẩu.
+   */
+  .delete("/:threadId/history", (c) => {
+    const accountId = c.req.query("accountId") ?? "";
+    if (!accountId) return c.json({ error: "Thiếu accountId" }, 400);
+    const threadId = c.req.param("threadId");
+
+    const tinDangCho = huyBatchCuaThread(`${accountId}:${threadId}`);
+    const ketQua = xoaNguCanhThread(accountId, threadId, {
+      xoaTriNho: c.req.query("xoaTriNho") === "true",
+    });
+
+    return c.json({ ok: true, ...ketQua, tinDangCho });
   });

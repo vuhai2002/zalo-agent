@@ -115,6 +115,22 @@ export function setThreadSummary(
   setSummaryStmt.run(summary, coversTo, accountId, threadId);
 }
 
+const getEpochStmt = db.prepare(
+  "SELECT context_epoch FROM threads WHERE account_id = ? AND thread_id = ?",
+);
+
+/**
+ * Số lần ngữ cảnh thread này đã bị xóa sạch. Vào khóa phiên gửi router để mỗi
+ * lần xóa mở một phiên mới - xem `cache-session-id.ts` và cột `context_epoch`.
+ *
+ * Thread chưa có dòng nào (tin đầu tiên chưa ghi xong) trả 0, cùng giá trị với
+ * thread chưa từng bị xóa - đúng ý, vì cả hai đều là "chưa có gì để bỏ đi".
+ */
+export function getThreadContextEpoch(accountId: string, threadId: string): number {
+  const row = getEpochStmt.get(accountId, threadId) as { context_epoch?: number } | undefined;
+  return row?.context_epoch ?? 0;
+}
+
 const listStmt = db.prepare(`
   SELECT account_id, thread_id, thread_type, display_name, bot_enabled,
          message_count, last_message_at, last_sender_name

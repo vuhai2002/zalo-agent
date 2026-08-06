@@ -3051,3 +3051,110 @@ Bộ eval được chỉnh trên model của router; chạy trên `gemini-3.5-fl
 mấy case đo THÓI QUEN trình bày dao động mạnh. Chưa quyết: hạ kỳ vọng, hay ghim
 model cho eval, hay chấp nhận đỏ dao động - mà lựa chọn cuối là tệ nhất vì bộ
 eval đỏ ngẫu nhiên thì người ta ngừng đọc nó.
+
+## V3.8 - Xóa sạch ngữ cảnh một cuộc trò chuyện (2026-08-06)
+
+Người dùng xóa hội thoại trên Zalo nhưng bot vẫn nhớ, vì lịch sử nằm trong DB
+của bot. Cần đường xóa hẳn để trả nick test về sạch, hoặc để người dùng bỏ ngữ
+cảnh cũ.
+
+### Hai bẫy tìm ra khi rà codebase
+
+**1. DB KHÔNG có khóa ngoại nào.** Kiểm cả 14 bảng: 0 foreign key, nên không có
+cascade - mỗi bảng phải xóa tay. Dữ liệu một thread nằm ở 6 nơi trong DB cộng
+một thư mục trên đĩa.
+
+**2. `image_descriptions` chỉ khóa theo `rel_path`**, không có cột
+account/thread. Đường duy nhất biết mô tả nào thuộc thread nào là liệt kê file
+trong thư mục media của thread đó - nên phải liệt kê TRƯỚC khi xóa thư mục.
+Đảo thứ tự là mất dấu và mô tả nằm lại vĩnh viễn.
+
+Ghi lại một lỗi có sẵn phát hiện trong lúc rà, CHƯA sửa: `deleteAccount`
+(`account-store.ts`) đúng một câu `DELETE FROM accounts`. Xóa nick xong thì tin
+nhắn, thread, contact, trace, trí nhớ, lịch hẹn và thư mục ảnh nằm lại mồ côi,
+không giao diện nào thấy để dọn. Người dùng chốt để đợt sau.
+
+### Hermes và goclaw làm thế nào
+
+Cả hai đều có, cùng một mô hình: **reset** = xóa lịch sử nhưng GIỮ session,
+**delete** = xóa hẳn. goclaw có `/reset` trong chat, `sessions.reset` RPC và
+lệnh CLI; trong nhóm thì `/reset` chỉ writer được dùng.
+
+Điểm học được quan trọng nhất: **reset không chỉ là xóa dòng, mà là đổi DANH
+TÍNH phiên.** goclaw gọi `ResetCLISession` sau khi xóa; Hermes xoay `session_id`
+rồi báo mọi provider bộ nhớ refresh cache theo phiên.
+
+Áp vào đây rất cụ thể: `cacheSessionId()` băm `sha256(accountId:threadId)` - cố
+định vĩnh viễn, nên xóa lịch sử xong vẫn gửi đúng khóa phiên cũ lên router. Thêm
+cột `threads.context_epoch`, băm kèm nó, mỗi lần xóa tăng 1.
+
+### Đã làm
+
+Gom vào MỘT module `wipe-thread-context.ts`. Xóa: `messages`, summary +
+`summary_covers_to_message_id`, `agent_steps`,
+`proactive_send_counters`, thư mục media, `image_descriptions` tương ứng.
+
+**Giữ có chủ đích:** dòng `threads` (tên hiển thị, công tắc bot), lịch hẹn -
+lời đã hứa khác hẳn ngữ cảnh - và `contacts`.
+
+**Trí nhớ chỉ xóa khi tick riêng**, lọc theo `learned_in_thread_id` nên fact học
+ở thread khác về cùng người vẫn còn. Ô tick đứng TRƯỚC nút chứ không nằm trong
+hộp xác nhận: đó là quyết định khác hẳn, phải chọn có ý thức.
+
+**Hủy hàng chờ TRƯỚC khi xóa DB** (`huyBatchCuaThread`). Không có bước này thì
+batch đang đỗ vẫn chạy và ghi ngược tin cũ vào lịch sử vừa dọn.
+
+Phần DB chạy trong MỘT giao dịch - chỗ đầu tiên của repo dùng giao dịch, viết
+tay vì `node:sqlite` không có `db.transaction()` như better-sqlite3. File trên
+đĩa xóa SAU khi DB đã cam kết: mất file mà DB còn dòng chỉ là ảnh hỏng, ngược
+lại là dòng trỏ vào hư vô.
+
+**KHÔNG làm lệnh `/reset` trong chat.** goclaw phải giới hạn "chỉ writer trong
+nhóm" đúng vì lý do này - bot đọc tin người lạ, một lệnh xóa qua chat là bề mặt
+tấn công. Dashboard đã có mật khẩu.
+
+### Lỗi bắt được khi người dùng xóa thử trên máy thật
+
+Bản đầu xóa cả `agent_turns`. Mà đó là bảng nguồn DUY NHẤT của thống kê token
+(`usage-store.ts:59` cho từng thread, `:79` cho biểu đồ Tổng quan). Sau 4 lần
+xóa thử, đo trên DB thật: `agent_turns` còn lại hôm nay **0 lượt, null token**.
+Trang Tổng quan báo hôm nay dùng 0 token trong khi bot chạy ~30 lượt và đốt
+hàng trăm nghìn token; riêng lần xóa đầu cuốn theo 162 lượt.
+
+Căn nguyên là gộp hai thứ khác bản chất vào một lệnh xóa. Cột của `agent_turns`
+chỉ có `input_tokens/output_tokens/created_at/source` - KHÔNG một chữ nào của
+hội thoại; toàn bộ nội dung nguyên văn nằm ở `agent_steps`. Lịch sử token là
+SỔ CHI TIÊU: xóa một cuộc trò chuyện thì phải quên nội dung, nhưng không có lý
+do gì để viết lại số tiền đã tiêu.
+
+Nay chỉ xóa `agent_steps`. Đổi lại tab Trace của thread đã xóa liệt kê lượt cũ
+mà mở ra không có step - giao diện đã có sẵn dòng "Lượt này không có step nào
+được ghi" (`session-trace-view.tsx:71`), không vỡ. Như vậy còn trung thực hơn:
+lượt đó có chạy thật và có tốn ngần ấy token.
+
+Bài học: rà codebase tìm ra được hai bẫy, nhưng thứ này chỉ lộ ra khi có người
+bấm nút trên dữ liệu thật rồi nhìn một trang KHÁC - không phép kiểm nào trong
+chính module xóa phát hiện được.
+
+### Kiểm chứng
+
+1556 test xanh (+30), typecheck sạch. Mười phép phá, cả mười đều đỏ: bỏ điều
+kiện `account_id` khi xóa tin, xóa trí nhớ dù không tick, bỏ lọc theo thread khi
+xóa trí nhớ, quên tăng epoch, XÓA LUÔN `agent_turns`, quên trả danh sách ảnh, epoch
+không vào hàm băm, header không nhận epoch, quên `clearTimeout`, route coi mọi
+giá trị là bật.
+
+### Ba phép phá đầu tiên của tôi là phép phá HỤT
+
+Đáng ghi vì cùng một họ với bài học cũ:
+
+- Neo nhiều dòng dùng `
+` trên file CRLF - im lặng báo "không thấy", đọc ra y
+  hệt test rỗng. `wipe-thread-context.ts` là LF còn `message-batcher.ts` là
+  CRLF, ngay trong cùng một lượt sửa.
+- Phép phá "xóa thư mục trước khi liệt kê" chèn thêm một lệnh xóa nhưng
+  `readdirSync` đã chạy xong từ trước, nên nó không phá được gì. Phải phá đúng
+  thứ mình muốn đo: cho hàm trả về mảng rỗng.
+- Test `clearTimeout` ban đầu chỉ đo hành vi (handler có chạy không) nên xanh cả
+  khi bỏ `clearTimeout` - vì xóa entry khỏi Map đã đủ chặn handler. Phải đo thứ
+  khác hẳn: đếm handle `Timeout` còn sống bằng `process.getActiveResourcesInfo()`.

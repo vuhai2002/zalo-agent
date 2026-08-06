@@ -20,7 +20,7 @@ Provider-agnostic: any OpenAI-compatible endpoint or Anthropic.
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-1526%20passing-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-1556%20passing-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -92,7 +92,7 @@ Hono + React + Tailwind, served by the bot process itself at `http://127.0.0.1:3
 | Overview | Daily input/output tokens across all accounts |
 | Accounts | Add Zalo accounts, **scan the QR login right in the browser**, enable/disable each |
 | Agents | One brain per account: its own persona, model, and tool set |
-| Sessions | Replay any conversation, read the bot's own rolling summary, mute per thread |
+| Sessions | Replay any conversation, read the bot's own rolling summary, mute per thread, **wipe a conversation's context** |
 | Contacts | People the bot has met |
 | Memory | Inspect, edit, delete anything the bot remembers |
 | Schedule | All jobs, dry-run now, per-run history |
@@ -158,7 +158,7 @@ account plus QR login.
 pnpm dev                    # bot (watch mode) + dashboard
 pnpm build:web              # build the UI; the bot serves it at http://127.0.0.1:3900
 pnpm zalo-login acc-main    # QR login from the CLI (the web flow is easier)
-pnpm test                   # 1526 tests
+pnpm test                   # 1556 tests
 pnpm typecheck
 pnpm eval                   # 17 cases against a REAL model; no message ever reaches real Zalo
 ```
@@ -190,7 +190,7 @@ Image generation and the vision sidecar are configured separately, also OpenAI-c
 
 | | |
 |---|---|
-| Unit + integration tests | **1526**, on `node:test`, no external framework |
+| Unit + integration tests | **1556**, on `node:test`, no external framework |
 | Eval cases against a real model | **17** - measuring what tests cannot: does it research instead of guessing, ask when information is missing, format readably |
 | Source | ~31,700 lines excluding tests, across 273 files |
 

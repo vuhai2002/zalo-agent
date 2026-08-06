@@ -204,6 +204,25 @@ export function activeThreadCount(): number {
   return pending.size + soThreadDangChay();
 }
 
+/**
+ * Hủy tin đang chờ của ĐÚNG một thread. Dùng khi xóa sạch ngữ cảnh thread đó.
+ *
+ * Không có bước này thì xóa xong, cái batch đang đỗ trong hàng chờ vẫn chạy
+ * tiếp và ghi ngược tin cũ vào lịch sử vừa dọn - người dùng bấm xóa rồi vẫn
+ * thấy tin xuất hiện lại, không hiểu vì sao.
+ *
+ * KHÔNG đụng tới lượt đang CHẠY: cắt ngang giữa chừng thì tool đang gửi file
+ * hay đang vẽ ảnh bị bỏ dở, mà lượt đó vẫn ghi kết quả lúc kết thúc. Lượt đang
+ * chạy tự kết thúc rồi thôi; chỗ này chỉ chặn phần chưa bắt đầu.
+ */
+export function huyBatchCuaThread(threadKey: string): number {
+  const batch = pending.get(threadKey);
+  if (!batch) return 0;
+  if (batch.timer) clearTimeout(batch.timer);
+  pending.delete(threadKey);
+  return batch.messages.length;
+}
+
 /** Hủy toàn bộ tin đang chờ - dùng khi shutdown để không treo process */
 export function clearPendingBatches(): void {
   for (const batch of pending.values()) {

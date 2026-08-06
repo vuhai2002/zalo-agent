@@ -421,3 +421,67 @@ describe("runOnThreadChain", () => {
     await assert.rejects(run, /job hỏng/);
   });
 });
+
+/**
+ * Hủy hàng chờ của một thread - dùng khi xóa sạch ngữ cảnh thread đó. Không có
+ * bước này thì xóa xong, batch đang đỗ vẫn chạy và ghi ngược tin cũ vào lịch sử
+ * vừa dọn: người dùng bấm xóa rồi vẫn thấy tin xuất hiện lại.
+ */
+describe("huyBatchCuaThread", () => {
+  it("tin đang chờ bị hủy - handler KHÔNG bao giờ chạy", async () => {
+    let daChay = 0;
+    const handler = async () => {
+      daChay++;
+    };
+    batcher.enqueueMessage("k-huy", makeMessage("a"), handler, 30);
+    batcher.enqueueMessage("k-huy", makeMessage("b"), handler, 30);
+
+    const soTin = batcher.huyBatchCuaThread("k-huy");
+
+    assert.equal(soTin, 2, "phải báo đúng số tin vừa hủy");
+    await sleep(80); // quá hạn debounce - nếu timer còn sống thì handler đã chạy
+    assert.equal(daChay, 0, "hủy rồi mà vẫn chạy là ghi lại tin vào lịch sử vừa xóa");
+  });
+
+  it("KHÔNG đụng hàng chờ của thread khác", async () => {
+    let chayKhac = 0;
+    const handler = async () => {
+      chayKhac++;
+    };
+    batcher.enqueueMessage("k-huy-2", makeMessage("x"), async () => {}, 30);
+    batcher.enqueueMessage("k-con-lai", makeMessage("y"), handler, 30);
+
+    batcher.huyBatchCuaThread("k-huy-2");
+
+    await sleep(80);
+    assert.equal(chayKhac, 1, "thread khác phải chạy bình thường");
+  });
+
+  it("thread không có gì trong hàng chờ thì trả 0, không nổ", () => {
+    assert.equal(batcher.huyBatchCuaThread("k-khong-co-gi"), 0);
+  });
+
+  it("hủy xong thì thread đó không còn giữ chỗ trong bộ nhớ", async () => {
+    const truoc = batcher.activeThreadCount();
+    batcher.enqueueMessage("k-ro-ri", makeMessage("z"), async () => {}, 5000);
+    assert.equal(batcher.activeThreadCount(), truoc + 1);
+
+    batcher.huyBatchCuaThread("k-ro-ri");
+    assert.equal(batcher.activeThreadCount(), truoc, "còn entry là còn giữ timer 5 giây");
+  });
+
+  it("hủy xong KHÔNG để lại timer sống - process phải thoát được ngay", () => {
+    // Xóa entry khỏi Map là đủ để handler không chạy, nên chỉ đo hành vi thì
+    // quên `clearTimeout` vẫn xanh. Timer bị bỏ quên giữ event loop sống tới
+    // khi hết hạn - đúng lý do `clearPendingBatches` phải dọn timer lúc tắt bot.
+    const demTimer = () =>
+      process.getActiveResourcesInfo().filter((r) => r === "Timeout").length;
+
+    const truoc = demTimer();
+    batcher.enqueueMessage("k-timer", makeMessage("t"), async () => {}, 30_000);
+    assert.equal(demTimer(), truoc + 1, "phải gieo được đúng một timer thì phép đo mới có nghĩa");
+
+    batcher.huyBatchCuaThread("k-timer");
+    assert.equal(demTimer(), truoc, "timer 30 giây bị bỏ quên là process không thoát được");
+  });
+});

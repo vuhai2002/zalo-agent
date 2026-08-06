@@ -20,7 +20,7 @@ mỗi account một "não" riêng, 13 công cụ, dashboard web đầy đủ. T�
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-1526%20xanh-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-1556%20xanh-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -89,7 +89,7 @@ Hono + React + Tailwind, phục vụ ngay từ chính tiến trình bot tại `h
 | Tổng quan | Token vào/ra theo ngày, gộp mọi account |
 | Accounts | Thêm tài khoản Zalo, **quét QR login ngay trên web**, bật/tắt từng account |
 | Agents | Mỗi account một "não": persona riêng, model riêng, bộ công cụ riêng |
-| Sessions | Đọc lại từng cuộc trò chuyện, xem tóm tắt bot tự dựng, bật/tắt bot theo thread |
+| Sessions | Đọc lại từng cuộc trò chuyện, xem tóm tắt bot tự dựng, bật/tắt bot theo thread, **xóa sạch ngữ cảnh** một cuộc trò chuyện |
 | Contacts | Danh bạ đã gặp |
 | Memory | Xem, sửa, xóa từng điều bot đã nhớ |
 | Lịch hẹn | Danh sách lịch, chạy thử ngay, lịch sử từng lần chạy |
@@ -159,7 +159,7 @@ pnpm dev                    # bot (watch mode) + dashboard
 pnpm build:web              # build UI -> web/dist, bot tự serve tại http://127.0.0.1:3900
 pnpm dev:web                # dev UI dashboard (Vite, proxy vào API)
 pnpm zalo-login acc-chinh   # login QR bằng CLI (cách cũ - trên web tiện hơn)
-pnpm test                   # 1526 test
+pnpm test                   # 1556 test
 pnpm typecheck              # bắt buộc chạy trước khi báo hoàn thành
 pnpm eval                   # 17 case chạy MODEL THẬT, không tin nào ra Zalo thật
 ```
@@ -192,7 +192,7 @@ Vẽ ảnh và model vision phụ cấu hình riêng, cũng theo chuẩn OpenAI-
 
 | | |
 |---|---|
-| Test đơn vị + tích hợp | **1526**, chạy bằng `node:test`, không framework ngoài |
+| Test đơn vị + tích hợp | **1556**, chạy bằng `node:test`, không framework ngoài |
 | Case eval chạy model THẬT | **17** - đo thứ test không đo nổi: có tra cứu thay vì đoán không, có hỏi lại khi thiếu thông tin không, trình bày có dễ đọc không |
 | Nguồn | ~31.700 dòng (không tính test), 273 file |
 

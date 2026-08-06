@@ -129,7 +129,13 @@ export function SessionsPage({ accounts }: { accounts: AccountInfo[] }) {
         ))}
       </TableShell>
 
-      {openThread && <SessionDetailDrawer thread={openThread} onClose={() => setOpenThread(null)} />}
+      {openThread && (
+        <SessionDetailDrawer
+          thread={openThread}
+          onClose={() => setOpenThread(null)}
+          onDoiDuLieu={reload}
+        />
+      )}
     </div>
   );
 }

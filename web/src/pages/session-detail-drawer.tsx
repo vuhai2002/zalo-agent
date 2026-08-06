@@ -14,9 +14,12 @@ import { SessionTraceView } from "./session-trace-view";
 export function SessionDetailDrawer({
   thread,
   onClose,
+  onDoiDuLieu,
 }: {
   thread: ThreadItem;
   onClose: () => void;
+  /** Gọi khi dữ liệu thread đổi (xóa ngữ cảnh) để danh sách ngoài tải lại */
+  onDoiDuLieu?: () => void;
 }) {
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [hasOlder, setHasOlder] = useState(false);
@@ -25,6 +28,10 @@ export function SessionDetailDrawer({
   const [tomTat, setTomTat] = useState(thread.summary);
   const [moTomTat, setMoTomTat] = useState(false);
   const [dangXoa, setDangXoa] = useState(false);
+  // Ô tick RIÊNG chứ không gộp vào hộp xác nhận: trí nhớ gắn với con người, xóa
+  // nó là một quyết định khác hẳn xóa lịch sử, phải chọn có ý thức trước khi bấm
+  const [cungXoaTriNho, setCungXoaTriNho] = useState(false);
+  const [dangXoaNguCanh, setDangXoaNguCanh] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
@@ -82,6 +89,29 @@ export function SessionDetailDrawer({
       setTomTat("");
     } finally {
       setDangXoa(false);
+    }
+  }
+
+  async function xoaNguCanh() {
+    const ok = await confirm({
+      title: "Xóa sạch ngữ cảnh cuộc trò chuyện này?",
+      message:
+        "Toàn bộ tin nhắn, bản tóm tắt, trace từng bước và ảnh đã tải của cuộc trò chuyện này sẽ bị xóa. " +
+        (cungXoaTriNho
+          ? "KÈM những điều bot đã ghi nhớ về người này học được TRONG cuộc trò chuyện này. "
+          : "Bot vẫn giữ những điều đã ghi nhớ về người này. ") +
+        "Lịch hẹn đang chờ vẫn giữ nguyên. Không hoàn tác được.",
+    });
+    if (!ok) return;
+    setDangXoaNguCanh(true);
+    try {
+      await api.xoaNguCanhThread(thread.accountId, thread.threadId, cungXoaTriNho);
+      setMessages([]);
+      setTomTat("");
+      setHasOlder(false);
+      onDoiDuLieu?.();
+    } finally {
+      setDangXoaNguCanh(false);
     }
   }
 
@@ -223,6 +253,34 @@ export function SessionDetailDrawer({
             <p className="py-10 text-center text-[14px] text-ink-soft/60">Chưa có tin nhắn</p>
           )}
         </div>
+
+        {/* Chân drawer - chỉ ở tab Chat, vì đây là thao tác lên chính hội thoại.
+            Ô tick đứng TRƯỚC nút: người dùng phải thấy lựa chọn trí nhớ trước
+            khi bấm, chứ không phải đọc nó trong hộp xác nhận rồi mới quay ra. */}
+        {tab === "chat" && (
+          <div className="border-t border-line bg-surface px-5 py-3">
+            <label className="mb-2 flex cursor-pointer items-start gap-2 text-[12px] leading-snug text-ink-soft">
+              <input
+                type="checkbox"
+                checked={cungXoaTriNho}
+                onChange={(e) => setCungXoaTriNho(e.target.checked)}
+                className="mt-0.5 cursor-pointer accent-rose-600"
+              />
+              <span>Xóa luôn những điều bot đã ghi nhớ học được trong cuộc trò chuyện này</span>
+            </label>
+            <button
+              type="button"
+              onClick={xoaNguCanh}
+              disabled={dangXoaNguCanh}
+              className="rounded-lg border border-rose-200 dark:border-rose-900 px-3 py-1.5 text-[13px] font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-50"
+            >
+              {dangXoaNguCanh ? "Đang xóa..." : "Xóa sạch ngữ cảnh"}
+            </button>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-soft/70">
+              Bot quên hẳn cuộc trò chuyện này và bắt đầu lại từ đầu. Lịch hẹn đang chờ vẫn giữ.
+            </p>
+          </div>
+        )}
       </div>
       {confirmDialog}
     </div>

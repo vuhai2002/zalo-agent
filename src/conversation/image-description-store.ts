@@ -29,6 +29,19 @@ export function saveImageDescription(relPath: string, description: string, model
  * một câu chuyện: quá hạn thì cả pixel lẫn mô tả đều rơi về text "[gửi kèm N ảnh]".
  * Trả về số row đã xóa.
  */
+const deleteByPathStmt = db.prepare("DELETE FROM image_descriptions WHERE rel_path = ?");
+
+/**
+ * Xóa mô tả của đúng những ảnh này. Nhận danh sách đường dẫn vì bảng chỉ khóa
+ * theo `rel_path` - không có cột account/thread để lọc, nên caller phải lấy
+ * danh sách từ `xoaMediaCuaThread` rồi truyền vào.
+ */
+export function xoaMoTaAnhTheoDuongDan(relPaths: string[]): number {
+  let n = 0;
+  for (const p of relPaths) n += Number(deleteByPathStmt.run(p).changes);
+  return n;
+}
+
 export function pruneExpiredImageDescriptions(retentionDays: number): number {
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
   return Number(pruneStmt.run(cutoff).changes);

@@ -76,7 +76,7 @@ export function resolveLanguageModel(
    * caching. Bỏ trống (summarizer, nút test kết nối) thì không gửi header:
    * đó là lượt một lần, không có prefix nào để tái dùng.
    */
-  thread?: { accountId: string; threadId: string },
+  thread?: { accountId: string; threadId: string; contextEpoch?: number },
 ): LanguageModel {
   const base = getEffectiveLlmSettings();
   const settings = { ...base, ...doiProviderAnToan(base, override) };
@@ -102,7 +102,12 @@ export function resolveLanguageModel(
   }
 
   const sessionHeaders = thread
-    ? cacheSessionHeaders(getTuning("LLM_CACHE_SESSION_ENABLED"), thread.accountId, thread.threadId)
+    ? cacheSessionHeaders(
+        getTuning("LLM_CACHE_SESSION_ENABLED"),
+        thread.accountId,
+        thread.threadId,
+        thread.contextEpoch ?? 0,
+      )
     : {};
 
   switch (settings.provider) {

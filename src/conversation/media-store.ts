@@ -97,6 +97,40 @@ export function imagePathsOf(images: { localPath?: string }[]): string[] {
  * Đọc ảnh đã lưu theo đường dẫn tương đối trong DB. File mất (đã bị dọn theo
  * MEDIA_RETENTION_DAYS) hoặc đường dẫn thoát khỏi data/media đều trả null.
  */
+/**
+ * Xóa toàn bộ ảnh đã tải của MỘT thread, trả về danh sách `relPath` vừa xóa.
+ *
+ * Trả danh sách chứ không trả số lượng vì `image_descriptions` khóa theo
+ * `rel_path` và KHÔNG có cột account/thread - đây là đường duy nhất biết được
+ * mô tả nào thuộc thread nào. Nên phải liệt kê TRƯỚC khi xóa thư mục; đảo thứ
+ * tự là mất dấu và mô tả ảnh nằm lại vĩnh viễn.
+ *
+ * Dùng đúng `sanitizeSegment` của đường ghi, không tự ghép tay: lệch một phép
+ * chuẩn hóa là xóa nhầm thư mục khác hoặc không xóa gì mà vẫn báo thành công.
+ */
+export function xoaMediaCuaThread(accountId: string, threadId: string): string[] {
+  const thuMuc = path.join(mediaDir, sanitizeSegment(accountId), sanitizeSegment(threadId));
+  let ten: string[] = [];
+  try {
+    ten = fs.readdirSync(thuMuc, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name);
+  } catch {
+    // Thread chưa từng có ảnh thì không có thư mục - không phải lỗi
+    return [];
+  }
+
+  const relPaths = ten.map((n) =>
+    ["media", sanitizeSegment(accountId), sanitizeSegment(threadId), n].join("/"),
+  );
+  try {
+    fs.rmSync(thuMuc, { recursive: true, force: true });
+  } catch (err) {
+    // Xóa file hỏng (file đang mở, quyền) KHÔNG được làm hỏng cả lượt xóa: phần
+    // trong DB mới là thứ quyết định bot còn nhớ gì
+    log.warn({ err, accountId, threadId }, "Không xóa được thư mục ảnh của thread");
+  }
+  return relPaths;
+}
+
 export function loadStoredImage(relPath: string): { base64: string; mediaType: string } | null {
   try {
     const absPath = path.resolve(dataDir, relPath);

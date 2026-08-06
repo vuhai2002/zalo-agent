@@ -29,9 +29,15 @@ export const CACHE_SESSION_HEADER = "x-session-id";
  * Khóa ổn định cho 1 thread của 1 account. Băm thay vì ghép thẳng id: thread
  * id Zalo là định danh người dùng thật, không nên rò ra log/telemetry của
  * router. Cùng thread luôn ra cùng khóa, khác thread chắc chắn khác khóa.
+ *
+ * `epoch` là số lần ngữ cảnh thread bị xóa sạch (cột `threads.context_epoch`).
+ * Nó nằm trong phần băm để mỗi lần xóa mở một PHIÊN MỚI với router: không có
+ * nó thì xóa xong vẫn gửi đúng khóa cũ, và router giữ tiền tố đã cache của cuộc
+ * trò chuyện vừa bị xóa. Cùng cách goclaw gọi `ResetCLISession` sau /reset và
+ * Hermes xoay `session_id`. Mặc định 0 để mọi call site cũ giữ nguyên khóa.
  */
-export function cacheSessionId(accountId: string, threadId: string): string {
-  const digest = createHash("sha256").update(`${accountId}:${threadId}`).digest("hex");
+export function cacheSessionId(accountId: string, threadId: string, epoch = 0): string {
+  const digest = createHash("sha256").update(`${accountId}:${threadId}:${epoch}`).digest("hex");
   return `zalo-agent-${digest.slice(0, 32)}`;
 }
 
@@ -43,7 +49,8 @@ export function cacheSessionHeaders(
   enabled: boolean,
   accountId: string,
   threadId: string,
+  epoch = 0,
 ): Record<string, string> {
   if (!enabled || !accountId || !threadId) return {};
-  return { [CACHE_SESSION_HEADER]: cacheSessionId(accountId, threadId) };
+  return { [CACHE_SESSION_HEADER]: cacheSessionId(accountId, threadId, epoch) };
 }
