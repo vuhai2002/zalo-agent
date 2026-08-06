@@ -26,11 +26,20 @@ import { buildTable, buildTwoColumns } from "./render-docx-tables.js";
 /** Tham chiếu numbering dùng chung cho mọi block bullets trong tài liệu */
 const BULLET_REFERENCE = "bullet-list";
 
-const HEADING_BY_LEVEL = {
-  1: HeadingLevel.HEADING_1,
-  2: HeadingLevel.HEADING_2,
-  3: HeadingLevel.HEADING_3,
-} as const;
+/**
+ * Cấp tiêu đề -> HeadingLevel của docx.
+ *
+ * Là HÀM chứ không phải bảng tra, vì schema khai `level` là khoảng số (xem
+ * `document-content-schema.ts` về lý do không dùng union literal) nên kiểu ở
+ * đây là `number`, index thẳng vào bảng `as const` không biên dịch được. Viết
+ * hàm có nhánh mặc định rõ ràng thay vì ép kiểu: nới khoảng ở schema về sau
+ * thì chỗ này vẫn ra tiêu đề hợp lệ chứ không ra `undefined`.
+ */
+function headingCuaCap(level: number): (typeof HeadingLevel)[keyof typeof HeadingLevel] {
+  if (level <= 1) return HeadingLevel.HEADING_1;
+  if (level >= 3) return HeadingLevel.HEADING_3;
+  return HeadingLevel.HEADING_2;
+}
 
 const ALIGNMENT = {
   left: AlignmentType.LEFT,
@@ -47,7 +56,7 @@ function blockToElements(block: DocumentBlock): (Paragraph | Table)[] {
     case "heading":
       // Dùng HeadingLevel built-in (đã restyle đen trong DOCX_STYLES) để mục
       // lục (TOC) nhận ra được nếu sau này cần
-      return [new Paragraph({ text: block.text, heading: HEADING_BY_LEVEL[block.level] })];
+      return [new Paragraph({ text: block.text, heading: headingCuaCap(block.level) })];
 
     case "paragraph":
       // Model có thể nhét "\n" vào - tách thành nhiều Paragraph vì docx bỏ qua

@@ -2854,3 +2854,57 @@ Một phép phá dùng mỏ neo NHIỀU DÒNG với `
 im lặng báo "không tìm thấy" thay vì chạy. Nếu bộ chạy không khẳng định mỏ neo
 tồn tại thì kết quả "không đỏ" đọc ra y hệt test rỗng. Mỏ neo phải một dòng, và
 luôn khẳng định chuỗi cần thay có thật.
+
+## V3.7.4 - Enum số: cái bẫy thứ hai cùng họ, và một bộ quét suýt vô dụng (2026-08-06)
+
+Đổi xong sang provider native của Google thì lượt thật vẫn chết:
+
+```
+Invalid value at 'tools[0].function_declarations[7].parameters.properties[2]
+  .value.items.one_of[0].properties[2].value.any_of[0].enum[0]' (TYPE_STRING), 1
+```
+
+`document-content-schema.ts`: cấp tiêu đề khai
+`z.union([z.literal(1), z.literal(2), z.literal(3)])`. `Schema.enum` của Google
+là `repeated string`, không nhận số.
+
+### Quét cả bộ thay vì vá từng cái
+
+Ba lượt liên tiếp đều là "sửa xong lại lỗi tiếp", nên lần này bắn TỪNG tool sang
+API native của Google trước khi sửa: **12 qua, đúng `create_word_document` hỏng**.
+Đó là chỗ cuối. Sau khi sửa quét lại: **13/13 qua, và cả bộ 13 tool cùng lúc
+cũng qua**.
+
+### Bản sửa
+
+`level: z.number().int().min(1).max(3).default(2)` - ra
+`{"type":"integer","minimum":1,"maximum":3}`, không sinh `const`/`enum` nên
+không vướng, mà vẫn chặn 0, 4 và số lẻ y như union.
+
+Kiểu TS đổi từ `1|2|3` sang `number` nên `HEADING_BY_LEVEL[block.level]` không
+index được. KHÔNG ép kiểu: thay bằng `headingCuaCap()` có nhánh mặc định rõ
+ràng, để nới khoảng ở schema về sau thì chỗ này vẫn ra tiêu đề hợp lệ chứ không
+ra `undefined`.
+
+### Bộ quét lần trước đóng sai lỗ
+
+Bộ quét viết ở V3.7.1 chỉ kiểm MỘT luật (`items` không được là mảng). Nó đóng
+đúng cái lỗ vừa gặp chứ không đóng cả lớp, nên lỗi kế tiếp cùng họ vẫn ra tới
+người dùng. Nay kiểm hai luật.
+
+**Và luật mới suýt vô dụng.** Bản đầu chỉ nhìn `enum`, vì câu lỗi của Google nói
+`enum[0]`. Phá code mới lộ ra: trả `level` về union literal mà bộ quét KHÔNG đỏ.
+Lý do - zod sinh `anyOf: [{type:"number",const:1}...]`, KHÔNG hề có `enum`;
+chính provider Google trong AI SDK mới gộp `const` thành `enum` lúc dựng
+`functionDeclarations`. Luật phải nhìn `const`. Đây là ca mà đọc câu lỗi của
+nhà cung cấp rồi suy ngược ra hình dạng dữ liệu mình gửi đi là SAI.
+
+### Kiểm chứng
+
+1513 test xanh (+5), typecheck sạch. Bảy phép phá: sáu phép đỏ đúng như cần
+(trả về union literal, bỏ `.int()`, bỏ khoảng, mất mặc định, hàm tra cấp trả
+nhầm, bỏ khẳng định chống rỗng), một phép ĐỐI CHỨNG cố ý kỳ vọng XANH - bỏ
+nhánh `const` rồi đưa lại union literal thì bộ quét không bắt được, đúng bằng
+chứng cho thấy nhánh `const` mới là thứ làm việc.
+
+Nghiệm thu thật trên Google: 13/13 tool, và cả bộ cùng lúc.

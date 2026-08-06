@@ -49,6 +49,11 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- Cấp tiêu đề của tool tạo file Word khai bằng union literal SỐ, dịch ra
+  `const: 1` rồi được provider Google gộp thành `enum: [1]` - mà `Schema.enum`
+  của Google chỉ nhận chuỗi, nên chối cả request bằng 400. Cùng họ với lỗi
+  `z.tuple()` ở ô công thức Excel. Đổi sang khoảng số; bộ quét schema nay kiểm
+  cả `const` lẫn `enum` chứ không riêng `items`.
 - Đổi ô "Kiểu kết nối" ở trang Cấu hình không dọn Model và Base URL của nhà
   cung cấp cũ, nên lưu được tổ hợp vô nghĩa (Anthropic + tên model của Gemini)
   và bot chết ở lượt kế tiếp. Nay đổi nhà cung cấp là dọn cả hai ô; quay VỀ nhà

@@ -15,7 +15,17 @@ import { XLSX_THEME_NAMES } from "./xlsx-themes.js";
 const headingBlock = z.object({
   type: z.literal("heading"),
   text: z.string().min(1),
-  level: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(2),
+  /**
+   * Cấp tiêu đề 1-3. CỐ Ý dùng khoảng số chứ KHÔNG dùng union của literal, dù
+   * union diễn tả đúng ý hơn: schema này bay thẳng sang nhà cung cấp LLM, mà
+   * union literal số dịch ra `enum: [1]` - trong khi `Schema.enum` của Google
+   * là `repeated string`, chỉ nhận chuỗi. Nó chối cả request bằng 400
+   * "(TYPE_STRING), 1", và vì bộ tool đi kèm mọi lượt nên bot câm hoàn toàn
+   * (đã dính thật 06/08/2026, cùng họ với vụ `z.tuple()` ở ô công thức Excel).
+   * Khoảng số ra `{"type":"integer","minimum":1,"maximum":3}` - không có `enum`
+   * nên không vướng, mà vẫn chặn 0, 4 và số lẻ y như union.
+   */
+  level: z.number().int().min(1).max(3).default(2),
 });
 
 const paragraphBlock = z.object({

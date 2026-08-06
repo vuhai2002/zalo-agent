@@ -131,3 +131,31 @@ describe("documentBlockSchema", () => {
     }
   });
 });
+
+/**
+ * `level` từng là union literal (1|2|3) nên độ rộng do KIỂU giữ. Nay là khoảng
+ * số - đổi để Google chịu nhận schema, xem `tool-schema-provider-compat.test.ts`
+ * - nên ràng buộc thành chuyện LÚC CHẠY và phải có người canh. Lọt cấp 0 hay 4
+ * thì hàm tra ở render-docx trả về cấp gần nhất, tức file ra sai cấp mà không
+ * ai báo.
+ */
+describe("headingBlock - cấp tiêu đề", () => {
+  it("nhận đúng 1, 2, 3", () => {
+    for (const level of [1, 2, 3]) {
+      const ket = documentBlockSchema.safeParse({ type: "heading", text: "M", level });
+      assert.equal(ket.success, true, `cấp ${level} lẽ ra phải nhận`);
+    }
+  });
+
+  it("chối cấp ngoài khoảng và số lẻ", () => {
+    for (const level of [0, 4, 1.5, -1]) {
+      const ket = documentBlockSchema.safeParse({ type: "heading", text: "M", level });
+      assert.equal(ket.success, false, `cấp ${level} lẽ ra phải bị chối`);
+    }
+  });
+
+  it("bỏ trống thì mặc định cấp 2", () => {
+    const ket = documentBlockSchema.parse({ type: "heading", text: "M" });
+    assert.deepEqual(ket, { type: "heading", text: "M", level: 2 });
+  });
+});

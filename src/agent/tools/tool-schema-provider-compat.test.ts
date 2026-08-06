@@ -117,6 +117,42 @@ describe("schema tool - hình dạng mà nhà cung cấp soi chặt vẫn nhận
     );
   });
 
+  /**
+   * `Schema.enum` trong API của Google là `repeated string`, chỉ nhận chuỗi.
+   *
+   * PHẢI kiểm CẢ `const` chứ không chỉ `enum`, và đây là chỗ suýt viết sai: zod
+   * dịch `z.union([z.literal(1), ...])` ra `anyOf: [{type:"number",const:1}...]`,
+   * KHÔNG ra `enum`. Chính provider Google trong AI SDK mới gộp `const` thành
+   * `enum: [1]` lúc dựng `functionDeclarations` - nên câu lỗi của Google nói
+   * `any_of[0].enum[0]` trong khi schema mình gửi đi chẳng có `enum` nào. Một
+   * luật chỉ nhìn `enum` sẽ XANH ngay cả khi lỗi thật đang nằm đó (đã kiểm bằng
+   * cách phá code: trả `level` về union literal mà luật không đỏ).
+   */
+  it("MỌI `const` và `enum` phải là chuỗi - Google dựng enum từ chúng và chỉ nhận chuỗi", () => {
+    const pham: string[] = [];
+
+    for (const { ten, schema } of schemaCuaTungTool()) {
+      for (const { duongDan, nut } of moiNut(schema, ten)) {
+        if ("const" in nut && typeof nut.const !== "string") {
+          pham.push(`${duongDan}.const = ${JSON.stringify(nut.const)}`);
+        }
+        if (!Array.isArray(nut.enum)) continue;
+        for (let i = 0; i < nut.enum.length; i++) {
+          const v = nut.enum[i];
+          if (typeof v !== "string") pham.push(`${duongDan}.enum[${i}] = ${JSON.stringify(v)}`);
+        }
+      }
+    }
+
+    assert.deepEqual(
+      pham,
+      [],
+      `Chỗ này thường dịch từ union literal SỐ. Đổi sang khoảng số ` +
+        `(z.number().int().min(a).max(b)) - không sinh const/enum mà ràng buộc vẫn tương đương:\n  ` +
+        pham.join("\n  "),
+    );
+  });
+
   it("bộ quét ĐI TỚI được chỗ sâu nhất, không dừng ở tầng mặt", () => {
     // Ô công thức nhân nằm ở sheets[].rows[][].anyOf[n] - chính chỗ đã hỏng.
     // Không có khẳng định này thì một bộ quét chỉ nhìn tầng một vẫn xanh.
@@ -127,5 +163,16 @@ describe("schema tool - hình dạng mà nhà cung cấp soi chặt vẫn nhận
       (x) => x.nut.pattern === "^[A-Za-z]{1,2}$",
     );
     assert.ok(coCotNhan, "bộ quét không chạm tới schema chữ cái cột - nó đang bỏ sót nhánh sâu");
+  });
+
+  it("bộ quét THẤY được cả nút `const` lẫn nút `enum` - không thì luật kia đúng rỗng", () => {
+    // Luật "const/enum phải là chuỗi" xanh cả khi bộ quét không tìm ra nút nào.
+    // Khẳng định này phân biệt "không có vi phạm" với "không nhìn thấy gì".
+    const nut = schemaCuaTungTool().flatMap(({ ten, schema }) => [...moiNut(schema, ten)]);
+    const soConst = nut.filter((x) => "const" in x.nut).length;
+    const soEnum = nut.filter((x) => Array.isArray(x.nut.enum)).length;
+
+    assert.ok(soConst > 0, "không thấy nút const nào trong cả 13 tool - bộ quét đang mù");
+    assert.ok(soEnum > 0, "không thấy nút enum nào trong cả 13 tool - bộ quét đang mù");
   });
 });

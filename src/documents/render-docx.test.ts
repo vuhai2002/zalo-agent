@@ -35,7 +35,12 @@ describe("renderDocx", () => {
     for (const text of ["Tiêu đề chính", "Phần một", "Phần hai", "Phần ba"]) {
       assert.ok(xml.includes(text), `thiếu "${text}"`);
     }
-    assert.ok(/Heading1/.test(xml) && /Heading2/.test(xml), "phải dùng HeadingLevel built-in");
+    // Khẳng định CẢ BA cấp: chỉ kiểm Heading1 với Heading2 thì một phép tra
+    // ánh xạ cấp 3 về nhầm chỗ vẫn xanh, mà từ khi `level` là khoảng số thì
+    // phép tra đó là hàm tự viết chứ không còn là bảng do trình biên dịch canh.
+    for (const cap of [1, 2, 3]) {
+      assert.ok(new RegExp(`Heading${cap}`).test(xml), `thiếu Heading${cap}`);
+    }
   });
 
   it("bullets dùng numbering, KHÔNG chèn ký tự • vào text", async () => {
