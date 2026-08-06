@@ -17,6 +17,15 @@ export type MongDoi = {
   /** TUYỆT ĐỐI không được gọi */
   khongGoiTool?: string[];
   /**
+   * Số lần TỐI THIỂU phải gọi một tool.
+   *
+   * `goiTool` so bằng Set nên chỉ trả lời được "có gọi không", không phân biệt
+   * ĐỌC MỘT BÀI với ĐỌC BA BÀI - mà đó đúng là khác biệt giữa bản tin có nguồn
+   * riêng cho từng mục và bản tin gom một dòng nguồn chung ở cuối. Đã đo trên
+   * Zalo thật: model mở đúng một bài rồi dừng, vì luật cũ chỉ đòi "ít nhất một".
+   */
+  goiToolItNhat?: Record<string, number>;
+  /**
    * CHỈ dùng cho tính chất CẤU TRÚC: kết thúc bằng dấu hỏi, không chứa `**`,
    * độ dài dưới N.
    *

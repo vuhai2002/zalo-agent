@@ -1,3 +1,4 @@
+import { canTraCuuWeb, kiemTraTienDeTraCuu } from "./preflight-web-search.js";
 import { dungEvalEnv } from "./eval-env.js";
 import { EVAL_CASES } from "./eval-cases.js";
 import { taoFakeZaloApi } from "./fake-zalo-api.js";
@@ -61,6 +62,36 @@ async function main(): Promise<void> {
   console.log(`Số case: ${danhSach.length}${chiChay.length > 0 ? ` (lọc từ ${EVAL_CASES.length})` : ""}\n`);
 
   // Import ĐỘNG, sau setupTestEnv
+  const toolSettings = await import("../src/config/runtime-tool-settings.js");
+
+  // Chép cấu hình TRA CỨU từ DB thật sang DB tạm. Không chép thì eval rơi về
+  // DuckDuckGo trong khi bot thật chạy Brave - đo một stack khác hẳn, và ngày
+  // DuckDuckGo bị chặn thì mọi case nghiên cứu đỏ vì lý do sai.
+  // Xem `read-real-search-settings.ts`.
+  const traCuu = env.traCuu;
+  if (traCuu.braveApiKey) toolSettings.updateSearchSettings({ braveApiKey: traCuu.braveApiKey });
+  if (traCuu.provider === "brave" || traCuu.provider === "duckduckgo") {
+    toolSettings.updateSearchSettings({ provider: traCuu.provider });
+  }
+  const nhaTraCuu = toolSettings.getSearchSettings().provider;
+  console.log(
+    `Tra cứu: ${nhaTraCuu}${traCuu.tuDb.length > 0 ? ` - nguồn dashboard: ${traCuu.tuDb.join(", ")}` : " - mặc định"}`,
+  );
+
+  // Tiền đề: tra cứu phải còn sống, nếu không thì bảng kết quả nói dối
+  if (danhSach.some(canTraCuuWeb)) {
+    const { searchWeb } = await import("../src/shared/web-search-providers.js");
+    const braveKey = nhaTraCuu === "brave" ? toolSettings.getBraveApiKey() : undefined;
+    const tienDe = await kiemTraTienDeTraCuu(
+      async (query) => (await searchWeb(query, { maxResults: 5, braveApiKey: braveKey })).length,
+      nhaTraCuu,
+    );
+    if (!tienDe.ok) {
+      console.error(`\n${tienDe.loi}\n`);
+      process.exit(1);
+    }
+  }
+
   const accountStore = await import("../src/config/account-store.js");
   const agentStore = await import("../src/config/agent-store.js");
   const threadStore = await import("../src/conversation/thread-store.js");

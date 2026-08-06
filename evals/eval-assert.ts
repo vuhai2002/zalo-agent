@@ -90,6 +90,14 @@ export function chamCase(c: EvalCase, qs: QuanSat): KetQuaCham {
     if (daGoi.has(t)) lyDoHong.push(`Không được gọi "${t}" nhưng đã gọi`);
   }
 
+  // Đếm trên MẢNG chứ không trên Set - cả điểm của phép đo này là số lần
+  for (const [t, soLanCan] of Object.entries(c.mongDoi.goiToolItNhat ?? {})) {
+    const soLanThuc = qs.toolDaGoi.filter((x) => x === t).length;
+    if (soLanThuc < soLanCan) {
+      lyDoHong.push(`Phải gọi "${t}" ít nhất ${soLanCan} lần, thực tế ${soLanThuc} lần`);
+    }
+  }
+
   const kt = c.mongDoi.kiemTraText;
   if (kt && !kt.dat(qs.traLoi)) {
     lyDoHong.push(`Câu trả lời không đạt yêu cầu cấu trúc: ${kt.moTa}`);
@@ -122,6 +130,7 @@ export function chamCase(c: EvalCase, qs: QuanSat): KetQuaCham {
   if (
     !c.mongDoi.goiTool?.length &&
     !c.mongDoi.khongGoiTool?.length &&
+    !Object.keys(c.mongDoi.goiToolItNhat ?? {}).length &&
     !c.mongDoi.kiemTraText &&
     !c.mongDoi.kiemTraDinhDang &&
     !c.mongDoi.kiemTraToolArgs

@@ -54,7 +54,12 @@ export const CASE_TOOL: EvalCase[] = [
     tinNhan: "tóm tắt giúp tôi vài tin kinh tế thị trường nổi bật hôm nay",
     disabledTools: ["create_image", "create_word_document", "create_excel_file"],
     mongDoi: {
-      goiTool: ["web_search", "web_fetch"],
+      goiTool: ["web_search"],
+      // ÍT NHẤT HAI bài, không phải "có đọc là được": đo trên Zalo thật, luật cũ
+      // chỉ đòi một bài nên model mở đúng một rồi dừng, và cả 10 mục dùng chung
+      // một dòng nguồn ở cuối. Bản chạy qua router mở 4 bài nên mỗi mục có nguồn
+      // riêng - đó mới là thứ người dùng so sánh.
+      goiToolItNhat: { web_fetch: 2 },
     },
   },
 

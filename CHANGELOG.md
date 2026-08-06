@@ -49,6 +49,11 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- Bộ eval đo một stack tra cứu KHÁC bot thật: nó chạy DB tạm nên mất cấu hình
+  tìm kiếm của dashboard và rơi về DuckDuckGo, trong khi bot chạy Brave. Ngày
+  DuckDuckGo trả 0 kết quả, case nghiên cứu đỏ với lý do "không gọi web_fetch" -
+  chẩn đoán sai hoàn toàn. Nay eval chép cấu hình tra cứu từ DB thật, và DỪNG
+  HẲN kèm câu chỉ đúng bệnh nếu dịch vụ tìm kiếm trả 0 kết quả.
 - Tóm tắt tin tức ra toàn ý chung chung không số liệu: bot tìm kiếm xong là
   viết luôn từ đoạn trích, chưa mở bài nào. Thêm luật buộc `web_fetch` ít nhất
   một bài trước khi tóm tắt, mỗi ý phải neo được vào bài đã đọc. Đo A/B trên

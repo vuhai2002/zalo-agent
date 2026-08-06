@@ -2979,3 +2979,75 @@ lịch sử), và bộ eval này vốn được chỉnh trên model của router
 KHÔNG chứng minh được là "do model yếu": key tạm của 9router đã bị thu hồi (401)
 nên không chạy đối chứng trên model router được. Để ngỏ, đừng chép lại như thể
 đã kết luận.
+
+## V3.7.6 - Bộ eval đo nhầm stack tra cứu, và một giờ đi lạc (2026-08-06)
+
+Nâng luật persona lên "đọc 2-3 bài từ nguồn khác nhau" rồi đo lại: 0/3. Đo tiếp
+câu CŨ để so: cũng 0/3, trong khi chính nó buổi sáng 3/3. Tôi đã báo với người
+dùng rằng câu mới làm model tệ đi. **Sai.**
+
+### Thứ thật sự hỏng
+
+Bot trả lời trong chính lượt eval đó: *"Hệ thống tìm kiếm thông tin đang tạm gặp
+sự cố"*. Đo thẳng hai đường:
+
+| Đường tra cứu | Kết quả |
+|---|---|
+| Brave (DB thật - bot đang chạy) | 6/6 OK |
+| DuckDuckGo (eval rơi về đây) | **0 kết quả, 3/3** |
+
+`eval-env.ts` chép cấu hình LLM từ DB thật, kèm hẳn comment "đọc riêng .env là
+đo một hệ thống khác với hệ thống đang chạy". Nhưng nó KHÔNG chép cấu hình tra
+cứu. Bot thật đặt `search_provider = brave` trên dashboard; eval chạy DB tạm
+rỗng nên rơi về DuckDuckGo. Cùng một bài học, chỉ khác chỗ đau - và lần này nó
+tốn gần một giờ cùng một kết luận sai gửi tới người dùng.
+
+Tệ nhất không phải việc eval đỏ, mà là nó đỏ với LÝ DO SAI: "không gọi
+web_fetch". Người đọc bảng kết quả sẽ đi sửa persona, sửa model, sửa luật -
+trong khi thứ hỏng nằm ở chỗ khác hẳn.
+
+### Bản sửa
+
+- `read-real-search-settings.ts`: chép nhà cung cấp + khóa Brave từ DB thật sang
+  DB tạm. PHẢI đọc TRƯỚC `setupTestEnv` - hàm đó trỏ `DATA_DIR` sang thư mục
+  tạm, đọc sau là đọc nhầm DB rỗng rồi tưởng dashboard không cấu hình gì (đã
+  dính đúng bẫy này lúc viết, bản đầu in ra "duckduckgo - mặc định").
+- `preflight-web-search.ts`: trước khi chạy case, thử 2 truy vấn. Cùng rỗng thì
+  DỪNG HẲN kèm câu nói rõ đây là lỗi tra cứu chứ không phải lỗi model. Hai truy
+  vấn chứ không một - một truy vấn rỗng có thể chỉ là truy vấn xấu.
+- Runner in thêm dòng `Tra cứu: <nhà cung cấp> - nguồn ...`, cùng nếp với dòng
+  `Model: ...` vốn có.
+- `goiToolItNhat` trong mong đợi của case: `goiTool` so bằng Set nên không phân
+  biệt được đọc MỘT bài với đọc BA bài - mà đó đúng là khác biệt giữa bản tin có
+  nguồn riêng từng mục và bản tin gom một dòng chung ở cuối.
+
+### Đo lại cho tử tế, sau khi eval hết nói dối
+
+Case `tin-tuc-phai-mo-bai` đòi `web_fetch` ÍT NHẤT 2 lần:
+
+| Câu luật | Kết quả |
+|---|---|
+| "2-3 bài từ nguồn KHÁC NHAU, gọi cùng lúc, ghi nguồn NGAY DƯỚI mỗi mục" | **3/3 đạt** |
+| "ít nhất một bài, ghi nguồn ở cuối" | **1/3 đạt** |
+
+Mẫu nhỏ (n=3 mỗi bên) nên đọc là dấu hiệu, không phải bằng chứng chắc. Nhưng nó
+khớp với cơ chế: luật cũ đặt sàn ở MỘT bài và model dừng đúng tại sàn.
+
+### Kiểm chứng
+
+1526 test xanh (+12), typecheck sạch. Năm phép phá, cả năm đều đỏ: đếm
+`goiToolItNhat` trên Set, bỏ nó khỏi bộ chặn case rỗng, tiền đề bỏ sót
+`goiToolItNhat`, tiền đề dừng ngay khi một truy vấn rỗng, tiền đề để lỗi mạng
+ném ra ngoài.
+
+`pnpm eval` 14/17. Ba case đỏ đều KHÔNG phải hồi quy: `ngay-co-san` và
+`luat-thang-lich-su-cu` đỏ y hệt trên code cũ (đã kiểm bằng cách cất thay đổi
+đi), còn `danh-sach-de-luot-mat` chạy riêng thì 3/3 xanh - dao động của
+`gemini-3.5-flash-lite`.
+
+### Việc còn treo
+
+Bộ eval được chỉnh trên model của router; chạy trên `gemini-3.5-flash-lite` thì
+mấy case đo THÓI QUEN trình bày dao động mạnh. Chưa quyết: hạ kỳ vọng, hay ghim
+model cho eval, hay chấp nhận đỏ dao động - mà lựa chọn cuối là tệ nhất vì bộ
+eval đỏ ngẫu nhiên thì người ta ngừng đọc nó.

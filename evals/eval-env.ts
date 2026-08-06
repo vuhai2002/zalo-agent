@@ -1,5 +1,6 @@
 import { setupTestEnv } from "../src/shared/test-env-setup.js";
 import { docLlmTuDbThat } from "./read-real-llm-settings.js";
+import { docTraCuuTuDbThat, type TraCuuThat } from "./read-real-search-settings.js";
 
 /**
  * Dựng env cho bộ eval: DB TẠM nhưng cấu hình LLM THẬT.
@@ -23,7 +24,7 @@ export type CauHinhLlm = {
 };
 
 export type KetQuaDungEnv =
-  | { ok: true; dataDir: string; llm: CauHinhLlm }
+  | { ok: true; dataDir: string; llm: CauHinhLlm; traCuu: TraCuuThat }
   | { ok: false; loi: string };
 
 export function dungEvalEnv(): KetQuaDungEnv {
@@ -38,6 +39,9 @@ export function dungEvalEnv(): KetQuaDungEnv {
   // qua dashboard nằm ở DB, còn .env chỉ là lớp dự phòng và rất hay để lại giá
   // trị cũ.
   const db = docLlmTuDbThat();
+  // PHẢI đọc trước `setupTestEnv`: hàm đó trỏ DATA_DIR sang thư mục tạm, đọc
+  // sau là đọc nhầm DB tạm rỗng rồi tưởng dashboard không cấu hình gì.
+  const traCuu = docTraCuuTuDbThat();
   const provider = db.provider ?? process.env.LLM_PROVIDER ?? "";
   const model = db.model ?? process.env.LLM_MODEL ?? "";
   const apiKey = db.apiKey ?? process.env.LLM_API_KEY ?? "";
@@ -89,5 +93,6 @@ export function dungEvalEnv(): KetQuaDungEnv {
     ok: true,
     dataDir,
     llm: { provider, model, baseUrl: baseUrl || undefined, tuDb: db.tuDb },
+    traCuu,
   };
 }

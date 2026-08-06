@@ -231,3 +231,53 @@ describe("chamCase - kiemTraDinhDang", () => {
     assert.match(kq.lyDoHong.join(" "), /không cung cấp/);
   });
 });
+
+/**
+ * `goiTool` so bằng Set nên chỉ trả lời được "có gọi không". Đọc MỘT bài với
+ * đọc BA bài là khác biệt giữa bản tin có nguồn riêng từng mục và bản tin gom
+ * một dòng nguồn chung - đúng thứ người dùng phàn nàn ngày 06/08/2026.
+ */
+describe("chamCase - goiToolItNhat", () => {
+  it("đủ số lần thì đạt", () => {
+    const kq = chamCase(
+      caseGoc({ goiToolItNhat: { web_fetch: 2 } }),
+      qs({ toolDaGoi: ["web_search", "web_fetch", "web_fetch"] }),
+    );
+    assert.equal(kq.dat, true);
+  });
+
+  it("gọi NHIỀU HƠN vẫn đạt - đây là sàn, không phải trần", () => {
+    const kq = chamCase(
+      caseGoc({ goiToolItNhat: { web_fetch: 2 } }),
+      qs({ toolDaGoi: ["web_fetch", "web_fetch", "web_fetch"] }),
+    );
+    assert.equal(kq.dat, true);
+  });
+
+  it("THIẾU một lần là hỏng - đây là chỗ goiTool mù", () => {
+    const kq = chamCase(
+      caseGoc({ goiToolItNhat: { web_fetch: 2 } }),
+      qs({ toolDaGoi: ["web_search", "web_fetch"] }),
+    );
+    assert.equal(kq.dat, false);
+    assert.match(kq.lyDoHong.join(" "), /ít nhất 2 lần, thực tế 1 lần/);
+  });
+
+  it("không gọi lần nào cũng hỏng", () => {
+    const kq = chamCase(
+      caseGoc({ goiToolItNhat: { web_fetch: 1 } }),
+      qs({ toolDaGoi: ["web_search"] }),
+    );
+    assert.equal(kq.dat, false);
+  });
+
+  it("case CHỈ khai goiToolItNhat vẫn là case có mong đợi - không bị coi là rỗng", () => {
+    // Quên nới bộ chặn "case rỗng" thì case hợp lệ bị báo vô nghĩa
+    const kq = chamCase(
+      caseGoc({ goiToolItNhat: { web_fetch: 1 } }),
+      qs({ toolDaGoi: ["web_fetch"] }),
+    );
+    assert.equal(kq.dat, true);
+    assert.equal(kq.lyDoHong.length, 0);
+  });
+});
