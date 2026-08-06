@@ -2908,3 +2908,74 @@ nhánh `const` rồi đưa lại union literal thì bộ quét không bắt đư
 chứng cho thấy nhánh `const` mới là thứ làm việc.
 
 Nghiệm thu thật trên Google: 13/13 tool, và cả bộ cùng lúc.
+
+## V3.7.5 - Bot tìm mà không đọc, và trần bước quá chật (2026-08-06)
+
+Chạy Gemini xong, câu trả lời "tóm tắt 10 tin kinh tế" ra 10 mục toàn ý chung
+chung: không con số, không mốc thời gian, không nguồn. Người dùng hỏi đây là
+giới hạn model hay thinking không chạy.
+
+### Ba nghi ngờ, ba số đo
+
+| Nghi ngờ | Số đo (log lượt 188) | Kết luận |
+|---|---|---|
+| Không thinking được? | `reasoningTokens: 1414` so với `textTokens: 778`, effort high | CÓ nghĩ, nghĩ nhiều hơn viết |
+| Bị chặn số bước? | trần 8, lượt dùng 3 | Không chạm trần, model tự dừng |
+| Trace hiện `reasoning: ""` | Gemini mã hóa phần suy nghĩ, không trả về chữ | Ô trống là bình thường |
+
+Nguyên nhân thật: lượt đó gọi **2 lần `web_search`, 0 lần `web_fetch`**. Model
+viết 10 mục từ ~4.5k ký tự đoạn trích tìm kiếm. Mô tả của `web_search` đã ghi
+sẵn "muốn đọc chi tiết thì gọi web_fetch", và tool đó đang bật đủ - model chỉ
+đơn giản không dùng.
+
+### A/B model: đổi model không phải thuốc
+
+Cùng prompt, cùng bộ tool đọc, thinkingLevel high, trần 8:
+
+| Model | steps | tool đã gọi | ký tự | reasoning tokens |
+|---|---|---|---|---|
+| `gemini-3.5-flash-lite` | 7 | 6, TOÀN `web_search` | 2571 | 2472 |
+| `gemini-3.5-flash` | 8 (chạm trần) | 8, TOÀN `web_search` | 0 | 1554 |
+| `gemini-3.6-flash` | - | quota vượt hạn mức | - | - |
+
+**Không model nào chịu gọi `web_fetch`.** Còn model to hơn thì đốt sạch trần bước
+mà vẫn chỉ tìm kiếm. (Phép đo gọi `streamText` trần nên ra 0 ký tự; bot thật có
+lượt chốt ép trả lời, nhưng câu chốt viết khi chưa đọc gì thì cũng mỏng như vậy.)
+
+### Bản sửa
+
+**Luật persona** đặt trong `persona-tool-rules.ts` gắn với cặp
+`web_search`/`web_fetch`, KHÔNG đặt trong `BASE_PERSONA`. Bản đầu tôi viết vào
+`BASE_PERSONA` và test có sẵn bắt ngay: luật nhắc tên tool phải biến mất khỏi
+prompt khi tool đó tắt, không thì bot được dạy dùng thứ nó không có.
+
+**Trần bước 8 -> 10.** Kèm một hệ quả đáng ghi: `nguongTheoTranStep` kẹp ngưỡng
+xuống `tranStep - 1`, nên từ trần 10 thì `TOOL_LOOP_SAME_TOOL_BLOCK=8` lần đầu
+tiên nằm DƯỚI trần và tự nổ được - trước đó nó đứng đúng bằng trần, tức là ngưỡng
+chết. Phép kẹp vẫn giữ vì nó nhắm cấu hình đặt tay xuống thấp, không nhắm mặc định.
+
+### Kiểm chứng
+
+**A/B trên model thật, cùng case eval `tin-tuc-phai-mo-bai`:**
+
+| | kết quả | tool đã gọi |
+|---|---|---|
+| CÓ luật | **3/3 đạt** | `web_search` (1-2 lần) + `web_fetch` |
+| BỎ luật | **0/3 đạt** | chỉ `web_search`, 2-3 lần |
+
+Đây là quan hệ nhân quả chứ không phải tương quan - khác hẳn case
+`luat-thang-lich-su-cu` vốn không tái hiện được khi phá.
+
+1514 test xanh, typecheck sạch. `pnpm eval` 15/17.
+
+### Hai case eval đỏ - KHÔNG phải hồi quy
+
+`ngay-co-san` và `luat-thang-lich-su-cu` đỏ. Đã kiểm bằng cách cất thay đổi đi
+rồi chạy lại: **đỏ y hệt trên code cũ**. Cả hai đều là case đo thói quen của model
+(gọi tool thừa khi ngày đã có sẵn trong prompt; chép lại kiểu trình bày cũ trong
+lịch sử), và bộ eval này vốn được chỉnh trên model của router chứ không phải
+`gemini-3.5-flash-lite`.
+
+KHÔNG chứng minh được là "do model yếu": key tạm của 9router đã bị thu hồi (401)
+nên không chạy đối chứng trên model router được. Để ngỏ, đừng chép lại như thể
+đã kết luận.

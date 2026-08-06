@@ -36,7 +36,12 @@ const envSchema = z.object({
   // hiểu nhầm: giá trị cũ nằm lại trong `.env` mà DB đang gánh, người đọc file
   // tưởng đó là model đang chạy. Cùng nếp với LLM_API_KEY.
   LLM_MODEL: z.string().default(""),
-  LLM_MAX_STEPS: z.coerce.number().int().min(1).max(30).default(8),
+  // Mặc định 10 (trước là 8). Đo trên Gemini 06/08/2026 với yêu cầu "tóm tắt 10
+  // tin": model tiêu 6-8 bước chỉ để TÌM rồi hết bước, chưa kịp mở bài nào bằng
+  // web_fetch, nên câu trả lời toàn ý chung chung không số liệu. 10 để một lượt
+  // nghiên cứu còn chỗ vừa tìm vừa đọc. Không nới hơn: mỗi bước là một lần gọi
+  // model, mà trần token ngữ cảnh và trần thời gian lượt vẫn phải gánh phần sau.
+  LLM_MAX_STEPS: z.coerce.number().int().min(1).max(30).default(10),
   // Trần token cho phần INPUT của một lần gọi model. Trước khi có nó, ngữ cảnh
   // chỉ bị chặn bằng SỐ TIN (HISTORY_CONTEXT_LIMIT) - mà một tin Zalo dài tùy
   // ý, nên đó là đếm nhầm đơn vị. Đo trên DB thật: đã có lượt cộng dồn 184.835
@@ -44,17 +49,17 @@ const envSchema = z.object({
   // agent chạy model khác đặt riêng được ở trang Agents.
   LLM_CONTEXT_WINDOW: z.coerce.number().int().min(4_000).max(2_000_000).default(128_000),
   // Chặn vòng lặp tool. Trước khi có ba biến này, chặn trên duy nhất là
-  // LLM_MAX_STEPS: model gọi cùng một tool lỗi 5 lần liên tiếp thì đốt 5/8 step
-  // mà không ai chặn. Số mặc định lấy đúng của `tool_guardrails.py` (Hermes),
-  // vốn đã chạy thật ở đó. Ngưỡng CẢNH BÁO suy ra bằng nửa ngưỡng chặn nên
-  // không thêm ba biến nữa.
+  // LLM_MAX_STEPS: model gọi cùng một tool lỗi 5 lần liên tiếp thì đốt nửa số
+  // bước mà không ai chặn. Số mặc định lấy đúng của `tool_guardrails.py`
+  // (Hermes), vốn đã chạy thật ở đó. Ngưỡng CẢNH BÁO suy ra bằng nửa ngưỡng
+  // chặn nên không thêm ba biến nữa.
   //
   // RÀNG BUỘC CHÉO với LLM_MAX_STEPS: ngưỡng cao BẰNG trần step là ngưỡng không
   // bao giờ tới lượt (mỗi step một lệnh gọi thì stepCountIs dừng trước). Ở Hermes
-  // ba số này sống chung với max_iterations=90 nên 8 chỉ là 9% ngân sách; ở đây
-  // trần mặc định là 8 nên SAME_TOOL_BLOCK=8 đứng đúng bằng trần. Không hạ mặc
-  // định (người đặt LLM_MAX_STEPS=30 vẫn nên được đúng ba số của Hermes) mà kẹp
-  // lúc dựng guard - xem `nguongTheoTranStep` trong `tool-loop-guard.ts`.
+  // ba số này sống chung với max_iterations=90 nên 8 chỉ là 9% ngân sách. Từ khi
+  // trần mặc định lên 10 thì SAME_TOOL_BLOCK=8 đã nằm dưới trần và tự nổ được;
+  // phép kẹp trong `nguongTheoTranStep` vẫn giữ, vì trần đặt tay xuống thấp
+  // (agent chạy model rẻ) lại đưa ngưỡng ra ngoài tầm với ngay.
   TOOL_LOOP_SAME_ARGS_BLOCK: z.coerce.number().int().min(2).max(30).default(5),
   TOOL_LOOP_SAME_TOOL_BLOCK: z.coerce.number().int().min(2).max(50).default(8),
   TOOL_LOOP_NO_PROGRESS_BLOCK: z.coerce.number().int().min(2).max(30).default(5),

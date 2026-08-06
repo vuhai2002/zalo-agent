@@ -49,6 +49,14 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- Tóm tắt tin tức ra toàn ý chung chung không số liệu: bot tìm kiếm xong là
+  viết luôn từ đoạn trích, chưa mở bài nào. Thêm luật buộc `web_fetch` ít nhất
+  một bài trước khi tóm tắt, mỗi ý phải neo được vào bài đã đọc. Đo A/B trên
+  model thật: có luật 3/3 lần mở bài, bỏ luật 3/3 lần không mở.
+- Số bước tối đa mỗi lượt mặc định lên **10** (trước là 8): một lượt nghiên cứu
+  tiêu 6-8 bước chỉ để tìm là hết bước, chưa kịp đọc. Kèm hệ quả tốt - ngưỡng
+  chặn vòng lặp `TOOL_LOOP_SAME_TOOL_BLOCK=8` nay nằm dưới trần nên tự nổ được,
+  trước đó nó đứng đúng bằng trần và không bao giờ tới lượt.
 - Cấp tiêu đề của tool tạo file Word khai bằng union literal SỐ, dịch ra
   `const: 1` rồi được provider Google gộp thành `enum: [1]` - mà `Schema.enum`
   của Google chỉ nhận chuỗi, nên chối cả request bằng 400. Cùng họ với lỗi

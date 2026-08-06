@@ -30,18 +30,18 @@ export function canhBaoTu(nguongChan: number): number {
  *
  * Ba số mặc định (5/8/5) bê nguyên từ `tool_guardrails.py` của Hermes - nhưng bê
  * thiếu ngữ cảnh: ở Hermes `max_iterations` mặc định là **90**, nên 8 chỉ là 9%
- * ngân sách. Ở đây `LLM_MAX_STEPS` mặc định là **8**, nên ngưỡng 8 đứng đúng
- * bằng trần: mỗi step một lệnh gọi thì `stepCountIs` luôn dừng trước, bộ đếm
- * chạm 8 là chuyện không thể xảy ra.
+ * ngân sách. Ở đây `LLM_MAX_STEPS` mặc định là **10**, nên ngưỡng 8 đã nằm dưới
+ * trần và tự nổ được - phép kẹp không đụng tới cấu hình mặc định nữa.
  *
- * Kẹp ở đây chứ không hạ mặc định trong env: người đặt `LLM_MAX_STEPS=30` vẫn
- * được đúng ba con số của Hermes, còn người để mặc định thì guard vẫn nổ được.
- * Sàn 2 để không kẹp xuống 1 - chặn ngay lần lỗi đầu là quá tay.
+ * VẪN GIỮ phép kẹp, vì nó nhắm cấu hình ĐẶT TAY chứ không phải mặc định: hạ
+ * `LLM_MAX_STEPS` xuống 5 cho agent chạy model rẻ là ngưỡng 8 lập tức ra ngoài
+ * tầm với (mỗi step một lệnh gọi thì `stepCountIs` luôn dừng trước, bộ đếm chạm
+ * 8 là chuyện không thể xảy ra). Kẹp ở đây chứ không hạ mặc định trong env:
+ * người đặt `LLM_MAX_STEPS=30` vẫn được đúng ba con số của Hermes. Sàn 2 để
+ * không kẹp xuống 1 - chặn ngay lần lỗi đầu là quá tay.
  *
- * Nói cho đúng mức lợi: với trần mặc định 8 thì phép kẹp chỉ đưa
- * `chanCungToolLoi` từ 8 xuống 7, tức sớm hơn ĐÚNG một step, và lượt hết step
- * vốn đã đi vào lượt chốt sẵn. Giá trị thật của guard nằm ở chỗ nó ĐẾM ĐƯỢC
- * nhánh hỏng không-ném; kẹp chỉ để ngưỡng không nằm ngoài tầm với.
+ * Giá trị thật của guard nằm ở chỗ nó ĐẾM ĐƯỢC nhánh hỏng không-ném; kẹp chỉ để
+ * ngưỡng không nằm ngoài tầm với.
  */
 export function nguongTheoTranStep(nguong: NguongGuard, tranStep: number): NguongGuard {
   const kep = (n: number) => Math.max(2, Math.min(n, tranStep - 1));

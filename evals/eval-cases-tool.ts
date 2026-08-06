@@ -41,6 +41,24 @@ export const CASE_TOOL: EvalCase[] = [
   },
 
   {
+    ten: "tin-tuc-phai-mo-bai",
+    lyDo:
+      "Đo trên Zalo thật 06/08/2026 với Gemini: yêu cầu tóm tắt tin thị trường ra 2 lần " +
+      "web_search, 0 lần web_fetch. Model viết 10 mục từ đoạn trích tìm kiếm nên toàn ý chung " +
+      "chung, không con số, không mốc thời gian, không nguồn. Mô tả của web_search đã ghi sẵn " +
+      "\"muốn đọc chi tiết thì gọi web_fetch\" mà model vẫn không dùng - đây là nết cần luật " +
+      "persona ép, không phải thứ tự sửa được bằng đổi model (đo A/B: gemini-3.5-flash cũng " +
+      "đốt hết 8 bước mà vẫn chỉ tìm kiếm).\n" +
+      "Khẳng định trên HÀNH VI (có mở bài không) chứ không trên câu chữ, vì nội dung tin đổi " +
+      "mỗi ngày.",
+    tinNhan: "tóm tắt giúp tôi vài tin kinh tế thị trường nổi bật hôm nay",
+    disabledTools: ["create_image", "create_word_document", "create_excel_file"],
+    mongDoi: {
+      goiTool: ["web_search", "web_fetch"],
+    },
+  },
+
+  {
     ten: "tra-cuu",
     lyDo:
       "Câu hỏi về số liệu thay đổi hàng ngày. Model KHÔNG được trả lời bằng trí nhớ huấn luyện - " +

@@ -78,6 +78,15 @@ const RULES_TRA_CUU: PersonaRule[] = [
     text: "- web_search cho danh sách trang; cần dữ liệu chi tiết thì web_fetch trang cụ thể. Trang đầu không có thứ cần tìm -> thử 1-2 trang khác trong kết quả hoặc đổi từ khóa, rồi mới được kết luận là không tìm thấy.",
   },
   {
+    // Đo trên Zalo thật 06/08/2026: yêu cầu tóm tắt tin thị trường ra 2 lần
+    // web_search, 0 lần web_fetch - model viết 10 mục từ đoạn trích tìm kiếm
+    // nên toàn ý chung chung, không số liệu, không nguồn. Luật ngay trên đã nói
+    // "cần dữ liệu chi tiết thì web_fetch" nhưng model không tự coi tóm tắt tin
+    // là "cần chi tiết", nên phải nói thẳng vào đúng loại việc đó.
+    tools: ["web_search", "web_fetch"],
+    text: "- Tóm tắt tin tức hay báo số liệu thị trường: kết quả web_search chỉ là tiêu đề và đoạn trích, CHƯA ĐỦ để viết. Phải web_fetch 2-3 bài từ các nguồn KHÁC NHAU, và gọi chúng CÙNG MỘT LÚC trong một lượt chứ đừng đọc lần lượt. Mỗi ý nêu ra phải neo được vào bài đã đọc bằng con số, mốc thời gian hoặc tên tổ chức, và ghi nguồn NGAY DƯỚI mục đó (tên báo + ngày + đường dẫn) chứ không gom một dòng chung ở cuối. Ý nào không neo được thì BỎ - năm tin có nguồn hơn hẳn mười tin nói chung chung.",
+  },
+  {
     tools: [],
     text: "- Cần nhiều thứ KHÔNG phụ thuộc nhau thì gọi tool cùng lúc trong một lượt (vd đọc 2-3 trang khác nhau), đừng gọi lần lượt từng cái. Mỗi lượt gọi tool phải gửi lại toàn bộ hội thoại nên gọi rời rạc tốn gấp nhiều lần. Chỉ làm tuần tự khi bước sau cần kết quả của bước trước.",
   },

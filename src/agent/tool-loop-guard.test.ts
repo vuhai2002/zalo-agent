@@ -309,13 +309,20 @@ describe("ToolLoopGuard - kết quả ĐÁNH DẤU HỎNG được đếm như l
 
 describe("nguongTheoTranStep", () => {
   it("kẹp ngưỡng xuống DƯỚI trần step - ngưỡng bằng trần là ngưỡng không bao giờ tới", () => {
-    // Đúng cấu hình mặc định của repo: LLM_MAX_STEPS=8 và SAME_TOOL_BLOCK=8.
-    // Mỗi step một lệnh gọi thì stepCountIs(8) luôn dừng trước, bộ đếm không bao
+    // Trần ĐẶT TAY xuống 8 (agent chạy model rẻ) trong khi SAME_TOOL_BLOCK=8:
+    // mỗi step một lệnh gọi thì stepCountIs(8) luôn dừng trước, bộ đếm không bao
     // giờ chạm 8. Ba số này bê từ Hermes, nơi max_iterations mặc định là 90.
     const kep = nguongTheoTranStep(NGUONG, 8);
     assert.equal(kep.chanCungToolLoi, 7, "8 phải bị kẹp xuống dưới trần");
     assert.equal(kep.chanLoiGiongHet, 5, "5 đã dưới trần thì giữ nguyên");
     assert.equal(kep.chanKhongTienTrien, 5);
+  });
+
+  it("với trần MẶC ĐỊNH 10 thì không số nào bị kẹp - cả ba tự nổ được", () => {
+    // Từ 06/08/2026 trần mặc định là 10, nên ngưỡng 8 đã nằm dưới trần. Test này
+    // là thứ báo động nếu ai đó hạ mặc định về 8 mà quên rằng lúc đó ngưỡng 8
+    // trở lại thành ngưỡng chết.
+    assert.deepEqual(nguongTheoTranStep(NGUONG, 10), NGUONG);
   });
 
   it("trần step rộng thì giữ nguyên đúng ba số của Hermes", () => {

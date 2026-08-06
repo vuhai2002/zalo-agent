@@ -20,7 +20,7 @@ mỗi account một "não" riêng, 13 công cụ, dashboard web đầy đủ. T�
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-1513%20xanh-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-1514%20xanh-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -159,9 +159,9 @@ pnpm dev                    # bot (watch mode) + dashboard
 pnpm build:web              # build UI -> web/dist, bot tự serve tại http://127.0.0.1:3900
 pnpm dev:web                # dev UI dashboard (Vite, proxy vào API)
 pnpm zalo-login acc-chinh   # login QR bằng CLI (cách cũ - trên web tiện hơn)
-pnpm test                   # 1513 test
+pnpm test                   # 1514 test
 pnpm typecheck              # bắt buộc chạy trước khi báo hoàn thành
-pnpm eval                   # 16 case chạy MODEL THẬT, không tin nào ra Zalo thật
+pnpm eval                   # 17 case chạy MODEL THẬT, không tin nào ra Zalo thật
 ```
 
 ## Nhà cung cấp LLM
@@ -192,8 +192,8 @@ Vẽ ảnh và model vision phụ cấu hình riêng, cũng theo chuẩn OpenAI-
 
 | | |
 |---|---|
-| Test đơn vị + tích hợp | **1513**, chạy bằng `node:test`, không framework ngoài |
-| Case eval chạy model THẬT | **16** - đo thứ test không đo nổi: có tra cứu thay vì đoán không, có hỏi lại khi thiếu thông tin không, trình bày có dễ đọc không |
+| Test đơn vị + tích hợp | **1514**, chạy bằng `node:test`, không framework ngoài |
+| Case eval chạy model THẬT | **17** - đo thứ test không đo nổi: có tra cứu thay vì đoán không, có hỏi lại khi thiếu thông tin không, trình bày có dễ đọc không |
 | Nguồn | ~31.700 dòng (không tính test), 273 file |
 
 Eval nhìn thấy được **cả định dạng thật sự gửi lên Zalo**, không chỉ chữ trần - nên lỗi trình bày
