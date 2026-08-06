@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ProviderSettings } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { useConfirmDialog } from "../shared/confirm-dialog";
+import { baseUrlKhiLuu, oTheoNhaCungCap } from "./provider-form-fields";
 
 export type ProviderForm = { provider: string; baseUrl: string; model: string; apiKey: string };
 export type TrangThai = { tone: "green" | "red"; text: string } | null;
@@ -32,13 +33,32 @@ export function useProviderForm() {
     load().catch(() => setSettings(null));
   }, []);
 
+  /**
+   * Đổi "Kiểu kết nối" thì DỌN luôn hai ô thuộc về nhà cung cấp cũ.
+   *
+   * Trước đây ô này chỉ đổi mỗi `provider`, còn Model và Base URL giữ nguyên -
+   * nên chọn Anthropic mà ô Model vẫn là `gemini-3.5-flash-lite`, bấm Lưu là
+   * lưu được một tổ hợp vô nghĩa và bot chết ở lượt kế tiếp. Mỗi hãng một bộ
+   * tên model, không có giá trị nào mang sang được.
+   *
+   * Quay VỀ nhà cung cấp đang lưu thì khôi phục nguyên giá trị đã lưu: bấm nhầm
+   * rồi bấm lại là chuyện thường, bắt gõ lại tên model chỉ là ma sát.
+   */
+  function doiProvider(provider: string) {
+    setForm({ ...form, provider, ...oTheoNhaCungCap(provider, settings) });
+  }
+
   async function save() {
     setBusy(true);
     setStatus(null);
     try {
       await api.updateProvider({
         provider: form.provider as ProviderSettings["provider"],
-        baseUrl: form.baseUrl || undefined,
+        // `null` = XÓA hẳn. Base URL chỉ có nghĩa với openai-compatible; để lại
+        // URL của nhà cũ thì nó nằm trong DB vĩnh viễn rồi hiện lại lúc quay về,
+        // đọc ra như dashboard hỏng. Bỏ trống ở nhánh openai-compatible vẫn là
+        // `undefined` (giữ nguyên) như cũ.
+        baseUrl: baseUrlKhiLuu(form.provider, form.baseUrl),
         model: form.model,
         apiKey: form.apiKey || undefined,
       });
@@ -93,5 +113,5 @@ export function useProviderForm() {
     }
   }
 
-  return { settings, form, setForm, status, busy, save, test, reset, confirmDialog };
+  return { settings, form, setForm, doiProvider, status, busy, save, test, reset, confirmDialog };
 }

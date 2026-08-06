@@ -26,7 +26,11 @@ const oRong = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefi
 
 const updateSchema = z.object({
   provider: z.enum(LLM_PROVIDER_KINDS).optional(),
-  baseUrl: z.preprocess(oRong, z.string().startsWith("http", "phải bắt đầu bằng http").optional()),
+  // `null` = XÓA base URL đang lưu (dashboard gửi khi đổi sang nhà cung cấp gọi
+  // thẳng hãng). Khác hẳn bỏ trống, vốn nghĩa là giữ nguyên - xem
+  // `LlmSettingsUpdate.baseUrl`. `oRong` vẫn biến chuỗi rỗng thành undefined để
+  // ô để trống không vô tình xóa mất cấu hình.
+  baseUrl: z.preprocess(oRong, z.string().startsWith("http", "phải bắt đầu bằng http").nullish()),
   model: z.preprocess(oRong, z.string().min(1).optional()),
   // Bỏ trống = giữ key cũ. Key mới đi 1 chiều lên server, lưu DB mã hóa.
   apiKey: z.string().optional(),

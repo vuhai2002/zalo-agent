@@ -326,7 +326,12 @@ export const api = {
   },
 
   provider: () => request<ProviderSettings>("/api/provider"),
-  updateProvider: (update: Partial<ProviderSettings> & { apiKey?: string }) =>
+  // `baseUrl: null` = XÓA base URL đang lưu; bỏ trường đi = giữ nguyên. Phải
+  // Omit trước rồi mới khai lại: giao với `Partial<ProviderSettings>` thì
+  // `string & (string | null)` rút về `string` và `null` bị chặn.
+  updateProvider: (
+    update: Omit<Partial<ProviderSettings>, "baseUrl"> & { apiKey?: string; baseUrl?: string | null },
+  ) =>
     request<ProviderSettings & { ok: true }>("/api/provider", {
       method: "PATCH",
       body: JSON.stringify(update),

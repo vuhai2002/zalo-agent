@@ -10,6 +10,7 @@ before(async () => {
   dataDir = setupTestEnv({
     LLM_PROVIDER: "anthropic",
     LLM_MODEL: "env-model",
+    LLM_BASE_URL: "https://env.test/v1",
     LLM_API_KEY: "sk-env-key-123456",
   });
   settings = await import("./runtime-llm-settings.js");
@@ -71,5 +72,43 @@ describe("runtime-llm-settings", () => {
   it("maskApiKey đủ nhận diện nhưng không dùng lại được", () => {
     assert.equal(settings.maskApiKey("sk-abcdefghijklmnop"), "sk-ab...mnop");
     assert.equal(settings.maskApiKey("ngan"), "***");
+  });
+});
+
+/**
+ * Base URL chỉ có nghĩa với `openai-compatible`. Không phân biệt được "giữ
+ * nguyên" với "xóa" thì URL của nhà cũ nằm lại trong DB vĩnh viễn: đổi sang
+ * Anthropic/Google rồi quay lại là thấy endpoint của hãng đã bỏ hiện lại trong
+ * ô, đọc ra như dashboard hỏng. Người dùng đã báo đúng ca này 06/08/2026.
+ */
+describe("updateLlmSettings - phân biệt giữ nguyên với xóa base URL", () => {
+  it("undefined = GIỮ NGUYÊN base URL đang lưu", () => {
+    settings.updateLlmSettings({ baseUrl: "https://router.test/v1" });
+    settings.updateLlmSettings({ model: "doi-model-thoi" });
+    assert.equal(settings.getEffectiveLlmSettings().baseUrl, "https://router.test/v1");
+  });
+
+  it("null = XÓA hẳn, rơi về env", () => {
+    settings.updateLlmSettings({ baseUrl: "https://router.test/v1" });
+    assert.equal(settings.getEffectiveLlmSettings().baseUrl, "https://router.test/v1");
+
+    settings.updateLlmSettings({ baseUrl: null });
+    // Xóa OVERRIDE chứ không nuốt luôn cấu hình máy chủ: phải rơi về env
+    assert.equal(settings.getEffectiveLlmSettings().baseUrl, "https://env.test/v1");
+  });
+
+  it("xóa rồi lưu lại được - không phải đường một chiều", () => {
+    settings.updateLlmSettings({ baseUrl: null });
+    settings.updateLlmSettings({ baseUrl: "https://khac.test/v1" });
+    assert.equal(settings.getEffectiveLlmSettings().baseUrl, "https://khac.test/v1");
+    settings.updateLlmSettings({ baseUrl: null });
+  });
+
+  it("xóa base URL KHÔNG đụng tới model hay API key", () => {
+    settings.updateLlmSettings({ baseUrl: "https://router.test/v1", model: "m-1", apiKey: "sk-giu-lai" });
+    settings.updateLlmSettings({ baseUrl: null });
+    const s = settings.getEffectiveLlmSettings();
+    assert.equal(s.model, "m-1");
+    assert.equal(s.apiKey, "sk-giu-lai");
   });
 });

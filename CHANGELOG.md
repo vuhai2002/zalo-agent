@@ -49,6 +49,13 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- Đổi ô "Kiểu kết nối" ở trang Cấu hình không dọn Model và Base URL của nhà
+  cung cấp cũ, nên lưu được tổ hợp vô nghĩa (Anthropic + tên model của Gemini)
+  và bot chết ở lượt kế tiếp. Nay đổi nhà cung cấp là dọn cả hai ô; quay VỀ nhà
+  đang lưu thì khôi phục nguyên giá trị đã lưu.
+- Base URL của nhà cung cấp cũ nằm lại trong DB vĩnh viễn khi chuyển sang
+  Anthropic hoặc Google, rồi hiện lại lúc quay về - đọc ra như dashboard hỏng.
+  Lớp cấu hình nay phân biệt "giữ nguyên" (bỏ trường) với "xóa hẳn" (null).
 - Một lỗi 4xx bất kỳ trên cuộc trò chuyện TỪNG có ảnh bị quy cho ảnh, khiến bot
   ghi nhớ nhầm "model không đọc được ảnh" rồi bỏ pixel suốt 10 phút sau đó. Nay
   đường gọi thẳng hãng (Anthropic, Google) không bao giờ bị đánh dấu - Claude và

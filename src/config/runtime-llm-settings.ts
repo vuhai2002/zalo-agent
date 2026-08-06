@@ -98,7 +98,15 @@ export function getEffectiveLlmSettings(): LlmSettings {
 
 export type LlmSettingsUpdate = {
   provider?: LlmProviderKind;
-  baseUrl?: string;
+  /**
+   * `undefined` = GIỮ NGUYÊN giá trị đang lưu, `null` = XÓA hẳn.
+   *
+   * Cần phân biệt hai thứ đó vì base URL chỉ có nghĩa với `openai-compatible`.
+   * Khi chỉ có "giữ nguyên", đổi sang Anthropic hay Google là URL của nhà cũ
+   * nằm lại trong DB vĩnh viễn rồi hiện lại lúc quay về - người dùng thấy ô
+   * Base URL vẫn là endpoint của hãng đã bỏ và tưởng dashboard hỏng.
+   */
+  baseUrl?: string | null;
   model?: string;
   /** Bỏ trống = giữ key hiện tại */
   apiKey?: string;
@@ -106,7 +114,8 @@ export type LlmSettingsUpdate = {
 
 export function updateLlmSettings(update: LlmSettingsUpdate): void {
   if (update.provider !== undefined) setStmt.run("llm_provider", update.provider);
-  if (update.baseUrl !== undefined) setStmt.run("llm_base_url", update.baseUrl);
+  if (update.baseUrl === null) delStmt.run("llm_base_url");
+  else if (update.baseUrl !== undefined) setStmt.run("llm_base_url", update.baseUrl);
   if (update.model !== undefined) setStmt.run("llm_model", update.model);
   if (update.apiKey !== undefined && update.apiKey !== "") {
     setStmt.run("llm_api_key", encryptSecret(update.apiKey));

@@ -12,7 +12,7 @@ import { useProviderForm } from "./use-provider-form";
  * còn của nhà cũ là bot gọi sai suốt quãng giữa.
  */
 export function ProvidersSection() {
-  const { settings, form, setForm, status, busy, save, test, reset, confirmDialog } =
+  const { settings, form, setForm, doiProvider, status, busy, save, test, reset, confirmDialog } =
     useProviderForm();
 
   if (!settings) return <p className="text-[13px] text-ink-soft">Đang tải...</p>;
@@ -46,7 +46,7 @@ export function ProvidersSection() {
               { value: "anthropic", label: "Anthropic" },
               { value: "google", label: "Google (Gemini)" },
             ]}
-            onChange={(provider) => setForm({ ...form, provider })}
+            onChange={doiProvider}
           />
           {form.provider === "openai-compatible" && laUrlGemini(form.baseUrl) && (
             <p className="mt-1.5 text-[13px] text-amber-600 dark:text-amber-500">

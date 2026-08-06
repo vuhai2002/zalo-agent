@@ -2803,3 +2803,54 @@ hình cũ): 2 step, 1 lần gọi tool, trả lời tiếng Việt, không 400.
 - `isImageRejectionError` vẫn khớp mọi 4xx cho nhánh router. Suy luận chắc hơn
   là chỉ ghi "model mù" khi lượt thử lại KHÔNG kèm pixel thật sự thành công -
   chưa làm, để tránh gộp việc ngoài phạm vi đã duyệt.
+
+## V3.7.3 - Form nhà cung cấp: ô của hãng cũ nằm lại sau khi đổi (2026-08-06)
+
+Sau khi lưu Google, người dùng bấm thử Anthropic thì ô Model vẫn là
+`gemini-3.5-flash-lite`; quay về OpenAI-compatible thì Base URL vẫn là endpoint
+của Google và cảnh báo vàng nổi lên. Nhìn như dashboard hỏng.
+
+**Cấu hình đã lưu thì đúng** - DB ghi `llm_provider = google`. Cái thấy trên màn
+là BẢN NHÁP chưa lưu: ô "Kiểu kết nối" chỉ đổi mỗi `form.provider`, còn Model và
+Base URL là hai ô riêng giữ nguyên giá trị nạp lúc mở trang. F5 là về đúng.
+
+Nhưng đào ra hai lỗi thật đứng sau:
+
+1. **Lưu được tổ hợp vô nghĩa.** Chọn Anthropic rồi bấm Lưu ngay là DB nhận
+   `provider=anthropic` + `model=gemini-3.5-flash-lite`, bot chết ở lượt kế
+   tiếp. Chính comment trong file viết "bốn giá trị này phải đi cùng nhau",
+   nhưng đổi nhà cung cấp lại không dọn hai ô vốn thuộc về nhà cũ.
+2. **Base URL của nhà cũ nằm lại VĨNH VIỄN.** `updateLlmSettings` coi
+   `undefined` là "giữ nguyên", mà form gửi `form.baseUrl || undefined`. Nên
+   chuyển sang Anthropic/Google không xóa được URL cũ, và nó hiện lại mỗi lần
+   quay về. Đây là lý do cảnh báo vàng cứ nổi lên.
+
+Đây là hành vi có sẵn từ trước; thêm nhà cung cấp thứ ba mới làm nó lộ ra.
+
+### Bản sửa
+
+- Lớp cấu hình phân biệt **"giữ nguyên" (bỏ trường) với "xóa hẳn" (`null`)**.
+  `LlmSettingsUpdate.baseUrl?: string | null`; route nhận `nullish()`. Xóa
+  override chứ không nuốt luôn cấu hình máy chủ - vẫn rơi về env.
+- Đổi "Kiểu kết nối" thì **dọn cả Model lẫn Base URL**. Quay VỀ nhà cung cấp
+  đang lưu thì khôi phục nguyên giá trị đã lưu: bấm nhầm rồi bấm lại là chuyện
+  thường, bắt gõ lại tên model chỉ là ma sát.
+- Lưu nhà cung cấp gọi thẳng hãng thì gửi `baseUrl: null`, tức xóa hẳn. Ô để
+  trống ở nhánh `openai-compatible` VẪN là "giữ nguyên" như cũ - đổi chỗ đó
+  thành xóa là ô trống sẽ thổi bay cấu hình đang chạy.
+- Hai quyết định trên tách ra module thuần `provider-form-fields.ts` để test
+  được: hook React không test được bằng `node:test` trần.
+
+### Kiểm chứng
+
+1508 test xanh (+10), typecheck sạch. Phá code 6 phép, cả 6 đều đỏ: không dọn ô,
+dọn cả khi quay về nhà đang lưu, gửi `undefined` thay `null`, ô trống thành
+xóa, `null` bị coi là giữ nguyên, xóa base URL xóa lây cả model.
+
+### Bài học về chính phép phá
+
+Một phép phá dùng mỏ neo NHIỀU DÒNG với `
+` không khớp vì file là CRLF, và nó
+im lặng báo "không tìm thấy" thay vì chạy. Nếu bộ chạy không khẳng định mỏ neo
+tồn tại thì kết quả "không đỏ" đọc ra y hệt test rỗng. Mỏ neo phải một dòng, và
+luôn khẳng định chuỗi cần thay có thật.
