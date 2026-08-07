@@ -98,6 +98,7 @@ function tinNhan(text: string, msgId: string): ParsedMessage {
     cliMsgId: `c-${msgId}`,
     isSelf: false,
     mentionsMe: false,
+    sentAt: new Date().toISOString(),
     // `toReceiptParams` (message-receipts.ts) đọc từ ĐÂY chứ không đọc các
     // trường cấp trên. Để rỗng thì mọi biên nhận bị bỏ lặng lẽ và test "đã
     // xem" sẽ xanh giả - nó đo 0 lần gọi và tưởng là đúng.

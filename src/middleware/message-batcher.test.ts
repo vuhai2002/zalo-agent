@@ -38,6 +38,7 @@ function makeMessage(text: string): ParsedMessage {
     cliMsgId: `c-${text}`,
     isSelf: false,
     mentionsMe: false,
+    sentAt: new Date().toISOString(),
     rawData: {},
   };
 }

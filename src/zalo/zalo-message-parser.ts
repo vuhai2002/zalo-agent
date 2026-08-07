@@ -1,5 +1,6 @@
 import { ThreadType } from "zca-js";
 import { pickImageVariant, type ImageQuality } from "./zalo-image-variant.js";
+import { mocGuiCuaTinZalo } from "./zalo-message-timestamp.js";
 
 export type IncomingImage = {
   url: string;
@@ -20,6 +21,15 @@ export type ParsedMessage = {
   cliMsgId: string;
   isSelf: boolean;
   mentionsMe: boolean;
+  /**
+   * ISO UTC - giờ NGƯỜI TA GỬI, đọc từ `data.ts` (xem `zalo-message-timestamp.ts`).
+   *
+   * Đây là mốc giờ DUY NHẤT của tin này: nó vừa được ghi vào `created_at` lúc
+   * lưu history, vừa là nhãn `[dd/mm hh:mm]` mà model đọc. Một nguồn nên hai
+   * chỗ không thể lệch nhau - trước đây `created_at` là giờ KẾT THÚC lượt nên
+   * lượt dài làm nhãn lệch mấy phút so với lúc bấm gửi.
+   */
+  sentAt: string;
   /** data gốc của zca-js - dùng cho quote khi trả lời */
   rawData: Record<string, unknown>;
 };
@@ -45,6 +55,7 @@ export function parseIncomingMessage(
   selfId: string,
   message: any,
   imageQuality: ImageQuality = "normal",
+  nhanLuc: Date = new Date(),
 ): ParsedMessage {
   const data = message?.data ?? {};
   const content = data.content;
@@ -84,6 +95,7 @@ export function parseIncomingMessage(
     cliMsgId: String(data.cliMsgId ?? ""),
     isSelf: Boolean(message?.isSelf),
     mentionsMe,
+    sentAt: mocGuiCuaTinZalo(data.ts, nhanLuc),
     rawData: data,
   };
 }

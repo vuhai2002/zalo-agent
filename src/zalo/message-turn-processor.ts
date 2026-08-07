@@ -185,6 +185,10 @@ async function xuLyLuot(
         senderName: msg.senderName,
         senderId: msg.senderId,
         images: imagePathsOf(msg.images),
+        // Giờ NGƯỜI TA BẤM GỬI, không phải giờ chạy tới dòng này: hàm này gọi ở
+        // CUỐI lượt, mà lượt dài thì cách lúc gửi tới vài phút. Cùng một giá
+        // trị đã dùng làm nhãn giờ trong prompt, nên hai chỗ không lệch nhau.
+        createdAt: msg.sentAt,
       });
     }
     // Ghi trong CÙNG hàm này để không thể quên ở nhánh lỗi: lượt chết sau khi

@@ -63,6 +63,7 @@ function message(overrides: Partial<ParsedMessage> = {}, raw: Record<string, unk
     cliMsgId: "cli-1",
     isSelf: false,
     mentionsMe: false,
+    sentAt: new Date().toISOString(),
     rawData: {
       msgId: "msg-1",
       cliMsgId: "cli-1",

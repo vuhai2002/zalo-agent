@@ -51,6 +51,7 @@ function batchMsg(threadId: string, images: { url: string; localPath?: string }[
     cliMsgId: "c1",
     isSelf: false,
     mentionsMe: false,
+    sentAt: new Date().toISOString(),
     rawData: {},
   };
 }

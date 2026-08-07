@@ -181,7 +181,7 @@ async function runAgentJob(
   timeZone: string,
   options: RunScheduledJobOptions,
 ): Promise<void> {
-  const message = buildSyntheticMessage(job);
+  const message = buildSyntheticMessage(job, options.now);
   const trace: StepTrace[] = [];
   const turnId = openAgentTurn(job.accountId, job.threadId, "schedule");
   // Đánh dấu ĐÃ chốt usage THẬT (result.usage) - nếu catch bên dưới bắt được

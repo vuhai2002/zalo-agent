@@ -136,3 +136,46 @@ describe("history-store", () => {
     assert.deepEqual(rows[0]!.images, ["media/acc-1/t-paged/m2-0.jpg"]);
   });
 });
+
+/**
+ * Tin đến từ Zalo được ghi ở CUỐI lượt, nên để DB tự sinh `created_at` là lấy
+ * giờ KẾT THÚC lượt - lượt 249 giây làm mốc lệch 4 phút so với lúc người ta bấm
+ * gửi. Mà chính mốc này là nhãn `[dd/mm hh:mm]` model đọc.
+ */
+describe("history-store - created_at tường minh", () => {
+  it("truyền createdAt thì lưu ĐÚNG giá trị đó, không phải giờ ghi", () => {
+    const guiLuc = "2026-08-07T16:30:00.000Z";
+    store.appendMessage("acc-1", "t-createdat", {
+      role: "user",
+      content: "tin gửi lúc 16:30 UTC",
+      senderName: "Hải",
+      createdAt: guiLuc,
+    });
+
+    assert.equal(readAll("acc-1", "t-createdat")[0]!.createdAt, guiLuc);
+  });
+
+  it("bỏ trống createdAt thì DB tự sinh giờ hiện tại - đường cũ không đổi", () => {
+    const truoc = Date.now();
+    store.appendMessage("acc-1", "t-createdat-mac-dinh", { role: "user", content: "x" });
+    const sau = Date.now();
+
+    const ghiLuc = Date.parse(readAll("acc-1", "t-createdat-mac-dinh")[0]!.createdAt!);
+    assert.ok(Number.isFinite(ghiLuc), "phải là mốc thời gian đọc được");
+    // Nới 1 giây mỗi đầu: SQLite `strftime('now')` và Date.now() không cùng
+    // một đồng hồ tới từng milli
+    assert.ok(ghiLuc >= truoc - 1000 && ghiLuc <= sau + 1000, "phải nằm quanh lúc gọi");
+  });
+
+  it("thứ tự đọc ra theo id, KHÔNG theo created_at - tin cũ ghi sau vẫn nằm sau", () => {
+    // Ca thật: listener nối lại sau khi mất mạng, nhận một loạt tin cũ. Sắp xếp
+    // theo created_at sẽ trộn chúng vào giữa cuộc trò chuyện đang diễn ra.
+    store.appendMessage("acc-1", "t-thutu-id", { role: "user", content: "mới", createdAt: "2026-08-07T16:00:00.000Z" });
+    store.appendMessage("acc-1", "t-thutu-id", { role: "user", content: "cũ hơn", createdAt: "2026-08-07T10:00:00.000Z" });
+
+    assert.deepEqual(
+      readAll("acc-1", "t-thutu-id").map((m) => m.content),
+      ["mới", "cũ hơn"],
+    );
+  });
+});

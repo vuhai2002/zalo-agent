@@ -32,6 +32,7 @@ function makeMessage(overrides: Partial<ParsedMessage> = {}): ParsedMessage {
     cliMsgId: "c1",
     isSelf: false,
     mentionsMe: false,
+    sentAt: new Date().toISOString(),
     rawData: {},
     ...overrides,
   };

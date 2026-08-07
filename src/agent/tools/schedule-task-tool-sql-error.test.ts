@@ -57,6 +57,7 @@ function msg(overrides: Partial<ParsedMessage> = {}): ParsedMessage {
     cliMsgId: "c1",
     isSelf: false,
     mentionsMe: true,
+    sentAt: new Date().toISOString(),
     rawData: {},
     ...overrides,
   };

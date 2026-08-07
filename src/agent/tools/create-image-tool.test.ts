@@ -91,6 +91,7 @@ function batchMsg(images: { url: string; localPath?: string }[]): ParsedMessage 
     cliMsgId: "c1",
     isSelf: false,
     mentionsMe: false,
+    sentAt: new Date().toISOString(),
     rawData: {},
   };
 }

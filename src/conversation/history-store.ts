@@ -8,13 +8,32 @@ export type StoredMessage = {
   senderId?: string;
   /** Đường dẫn ảnh đã lưu trong data/media (tương đối DATA_DIR) - nạp lại cho model xem */
   images?: string[];
-  /** ISO UTC - có sẵn khi đọc; khi ghi do DB tự sinh */
+  /**
+   * ISO UTC - có sẵn khi đọc.
+   *
+   * Khi GHI: truyền vào thì lấy đúng giá trị đó, bỏ trống thì DB tự sinh giờ
+   * hiện tại. Tin đến từ Zalo PHẢI truyền `msg.sentAt` (giờ người ta bấm gửi):
+   * tin được ghi ở CUỐI lượt nên để DB tự sinh là lấy giờ KẾT THÚC lượt - một
+   * lượt 249 giây làm mốc lệch 4 phút, mà chính mốc này là nhãn `[dd/mm hh:mm]`
+   * model đọc để hiểu "vừa nãy", "sáng nay".
+   */
   createdAt?: string;
 };
 
 const insertStmt = db.prepare(
   `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content, images)
    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+);
+
+/**
+ * Bản có `created_at` tường minh. Hai câu lệnh riêng thay vì một câu dùng
+ * `COALESCE(?, strftime(...))`: viết COALESCE là chép lại biểu thức mặc định
+ * của schema ở chỗ thứ hai, đổi một bên quên bên kia thì hai đường ghi ra hai
+ * định dạng khác nhau mà không gì đỏ.
+ */
+const insertWithCreatedAtStmt = db.prepare(
+  `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content, images, created_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const recentStmt = db.prepare(
@@ -51,7 +70,7 @@ export function appendMessage(
   threadId: string,
   message: StoredMessage,
 ): number {
-  const result = insertStmt.run(
+  const cot = [
     accountId,
     threadId,
     message.role,
@@ -59,7 +78,10 @@ export function appendMessage(
     message.senderId ?? null,
     message.content,
     message.images && message.images.length > 0 ? JSON.stringify(message.images) : null,
-  );
+  ] as const;
+  const result = message.createdAt
+    ? insertWithCreatedAtStmt.run(...cot, message.createdAt)
+    : insertStmt.run(...cot);
   // Dọn ngay thread vừa ghi: không cần cron, và thread im lặng thì không tốn gì
   pruneStmt.run(accountId, threadId, accountId, threadId, getTuning("HISTORY_MAX_MESSAGES_PER_THREAD"));
   return Number(result.lastInsertRowid);

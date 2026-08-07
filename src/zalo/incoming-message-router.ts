@@ -116,6 +116,7 @@ function ghiVaoHistory(accountId: string, msg: ParsedMessage): void {
     content: describeForHistory(msg),
     senderName: msg.senderName,
     senderId: msg.senderId,
+    createdAt: msg.sentAt,
   });
   if (msg.images.length > 0) {
     void persistBatchImages(accountId, [msg]).then(() => {

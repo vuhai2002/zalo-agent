@@ -56,6 +56,7 @@ const message = (isGroup = true): ParsedMessage =>
     cliMsgId: "c0",
     isSelf: false,
     mentionsMe: true,
+    sentAt: new Date().toISOString(),
     rawData: {},
   }) as ParsedMessage;
 

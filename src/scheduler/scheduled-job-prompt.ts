@@ -20,8 +20,13 @@ KHÔNG HỎI LẠI: không có ai đang ngồi chờ để trả lời câu hỏ
  * kích hoạt lượt này. `msgId`/`cliMsgId` RỖNG có chủ đích: đây chính là lý do
  * `add_reaction` bị loại khỏi lượt theo lịch (`tool-registry.ts`) - không có
  * tin thật để mà thả reaction vào.
+ *
+ * `now` KHÔNG có giá trị mặc định, cùng luật với `proactive-send-guard.ts`: cả
+ * lượt theo lịch dùng CHUNG một mốc thời gian chốt ở đầu tick
+ * (`RunScheduledJobOptions.now`), và cách duy nhất để trình biên dịch canh việc
+ * đó là không cho phép quên truyền.
  */
-export function buildSyntheticMessage(job: ScheduledJob): ParsedMessage {
+export function buildSyntheticMessage(job: ScheduledJob, now: Date): ParsedMessage {
   const isGroup = job.threadType === ThreadType.Group;
   return {
     accountId: job.accountId,
@@ -36,6 +41,7 @@ export function buildSyntheticMessage(job: ScheduledJob): ParsedMessage {
     cliMsgId: "",
     isSelf: false,
     mentionsMe: false,
+    sentAt: now.toISOString(),
     rawData: {},
   };
 }

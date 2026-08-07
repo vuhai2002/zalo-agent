@@ -121,3 +121,39 @@ describe("parseIncomingMessage", () => {
     assert.equal(msg.msgId, "m42");
   });
 });
+
+/**
+ * `sentAt` là mốc giờ DUY NHẤT của một tin: vừa vào `created_at` lúc lưu
+ * history, vừa thành nhãn `[dd/mm hh:mm]` model đọc. Parser là nơi duy nhất
+ * sinh ra nó cho tin thật, nên thiếu ở đây là cả hai chỗ kia cùng sai.
+ */
+describe("parseIncomingMessage - mốc giờ gửi", () => {
+  const NHAN_LUC = new Date("2026-08-07T16:37:00.000Z");
+
+  it("đọc giờ gửi từ data.ts chứ không lấy giờ nhận", () => {
+    const guiLuc = Date.parse("2026-08-07T16:30:00.000Z");
+    const msg = parseIncomingMessage(
+      "acc-test",
+      SELF_ID,
+      { threadId: "t", data: { content: "hi", uidFrom: "u1", ts: String(guiLuc) } },
+      "normal",
+      NHAN_LUC,
+    );
+
+    assert.equal(msg.sentAt, new Date(guiLuc).toISOString());
+    assert.notEqual(msg.sentAt, NHAN_LUC.toISOString(), "không được lấy giờ nhận khi đã có giờ gửi");
+  });
+
+  it("payload thiếu ts vẫn có sentAt (rơi về giờ nhận) - trường này KHÔNG bao giờ rỗng", () => {
+    const msg = parseIncomingMessage("acc-test", SELF_ID, {}, "normal", NHAN_LUC);
+    assert.equal(msg.sentAt, NHAN_LUC.toISOString());
+  });
+
+  it("sentAt luôn là ISO UTC hợp lệ - cùng định dạng với cột created_at", () => {
+    const msg = parseIncomingMessage("acc-test", SELF_ID, {
+      threadId: "t",
+      data: { content: "hi", ts: String(Date.now()) },
+    });
+    assert.match(msg.sentAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  });
+});

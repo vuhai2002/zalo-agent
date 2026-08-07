@@ -106,6 +106,7 @@ const tinNhan = (): ParsedMessage => ({
   cliMsgId: "c1",
   isSelf: false,
   mentionsMe: false,
+  sentAt: new Date().toISOString(),
   rawData: {},
 });
 
