@@ -40,25 +40,45 @@ services:
       - ALL
     # Không chia sẻ vùng nhớ IPC với container khác trên cùng máy chủ
     ipc: private
-    # Trần số tiến trình: một lỗi đẻ tiến trình vô hạn chỉ giết được chính
-    # container này, không kéo sập cả máy chủ. Bot không fork gì nên 256 là dư.
-    pids_limit: 256
-
-    # KHÔNG bật `read_only`, và đây là quyết định có chủ đích: bot ghi liên tục
-    # vào /data (SQLite, ảnh tải về, log file xoay theo ngày). Khác các dịch vụ
-    # stateless vốn bật được read_only.
+    # Hệ thống file gốc chỉ đọc. Bot ghi nhiều, nhưng đã truy hết đường ghi và
+    # MỌI đường đều nằm trong dataDir, tức là volume /data - volume vẫn ghi được
+    # bình thường khi rootfs read-only:
     #
-    # Vẫn cho /tmp riêng và có trần: file Word/Excel/ảnh vẽ ra được ghi tạm ở
-    # đây trước khi gửi. Để nó nằm trong lớp ghi của container thì file rác tích
-    # lại tới lúc hết đĩa; tmpfs nằm trong RAM và mất khi container khởi động lại.
+    #   shared/temp-file-store.ts   -> dataDir/tmp  (file .docx/.xlsx/ảnh tạm)
+    #   shared/logger.ts            -> dataDir/logs (pino-roll xoay theo ngày)
+    #   zalo/zalo-credential-store  -> dataDir      (cookie đã mã hóa)
+    #   conversation/media-store.ts -> dataDir/media
+    #
+    # Giá trị của dòng này: bot đọc tin nhắn của người lạ, nên prompt injection
+    # là mối lo có thật. read_only làm /app và /usr không ghi được, kẻ tấn công
+    # không thả được payload vào cây code hay node_modules để sống qua restart.
+    #
+    # Nếu sau này thêm thư viện ghi ra ngoài /data thì container sẽ chết với
+    # EROFS ngay lần deploy đó - lỗi hiện rõ, sửa bằng cách bỏ dòng này.
+    read_only: true
+
+    # Ổ ghi được duy nhất ngoài /data. Hiện code KHÔNG ghi gì vào /tmp (file tạm
+    # nằm ở dataDir/tmp - xem bảng trên), nhưng vẫn giữ vì read_only cần một chỗ
+    # cho thư viện bên thứ ba xả file tạm, và vì nằm trong RAM nên không có
+    # đường tích rác ra đĩa.
+    # mode=1777 để user zalo (uid 1001) ghi được - mặc định của Docker là root.
     tmpfs:
-      - /tmp:size=128m
+      - /tmp:size=64m,mode=1777
 
     deploy:
       resources:
         limits:
           memory: 768M
           cpus: "1"
+          # Trần số tiến trình: một lỗi đẻ tiến trình vô hạn chỉ giết được
+          # chính container này, không kéo sập cả máy chủ. Bot không fork gì
+          # nên 256 là dư.
+          #
+          # Phải khai ở ĐÂY chứ không phải bằng `pids_limit` cấp trên: đặt cả
+          # hai (kể cả khi chỉ đặt `pids_limit` còn khối `deploy.resources` để
+          # trống mục pids) thì Compose v5 từ chối cả file với lỗi "can't set
+          # distinct values on 'pids_limit' and 'deploy.resources.limits.pids'".
+          pids: 256
         reservations:
           # Giữ chỗ để khi máy chủ chật, bot không bị bóp xuống mức không chạy nổi
           memory: 256M
