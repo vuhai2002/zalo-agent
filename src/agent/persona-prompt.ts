@@ -137,9 +137,13 @@ export function buildSystemPrompt(
     sections.push(khoiDieuDaNho(memory.facts));
   }
 
+  // "MỌI tin của người dùng" chứ không phải "tin trong lịch sử": tin của lượt
+  // đang chạy nay cũng mang nhãn giờ (`agent-turn-content.ts` dùng chung hàm
+  // dựng dòng với lịch sử). Nói "lịch sử" là dạy model rằng câu nó đang đọc
+  // KHÔNG có giờ - đúng cái hiểu nhầm đã khiến nó lấy mốc của tin trước đó.
   const context = msg.isGroup
-    ? `Bối cảnh: bạn đang ở trong nhóm chat Zalo, được "${msg.senderName}" nhắc đến. Lịch sử có tin nhắn của nhiều người, định dạng "[ngày/tháng giờ:phút] Tên: nội dung". Nhiều tin trong lịch sử là thành viên nói chuyện với nhau chứ không phải nói với bạn - dùng làm ngữ cảnh, chỉ trả lời tin nhắc đến bạn.`
-    : `Bối cảnh: bạn đang chat riêng với "${msg.senderName}". Tin nhắn trong lịch sử có kèm thời gian gửi dạng "[ngày/tháng giờ:phút]" - để ý khoảng cách thời gian, đừng nối chuyện cũ như vừa nhắn xong nếu đã lâu.`;
+    ? `Bối cảnh: bạn đang ở trong nhóm chat Zalo, được "${msg.senderName}" nhắc đến. MỌI tin của người dùng đều có định dạng "[ngày/tháng giờ:phút] Tên: nội dung", kể cả tin mới nhất - đó là giờ họ gửi, dùng nó thay vì đoán. Nhiều tin trong lịch sử là thành viên nói chuyện với nhau chứ không phải nói với bạn - dùng làm ngữ cảnh, chỉ trả lời tin nhắc đến bạn.`
+    : `Bối cảnh: bạn đang chat riêng với "${msg.senderName}". MỌI tin của người dùng đều kèm giờ gửi dạng "[ngày/tháng giờ:phút]", kể cả tin mới nhất - đó là giờ họ gửi, dùng nó thay vì đoán. Để ý khoảng cách thời gian, đừng nối chuyện cũ như vừa nhắn xong nếu đã lâu.`;
   sections.push(context);
 
   return sections.join("\n\n");

@@ -17,7 +17,8 @@ import { nganSachAnToan } from "./token-estimate.js";
 import { catNguCanhTheoNganSach, type KetQuaCat } from "./trim-context-to-budget.js";
 import { describeImage, ensureDescriptionsFor } from "./vision-sidecar.js";
 
-import { getTuning } from "../config/runtime-tuning-settings.js";
+import { botTimeZone, getTuning } from "../config/runtime-tuning-settings.js";
+import { dongTinCuaLuot } from "./batch-to-user-lines.js";
 
 /**
  * Dựng input cho 1 lượt agent theo 4 chế độ ảnh (mô hình auto|native|text của
@@ -111,6 +112,7 @@ export async function buildTurnMessages(params: {
     params.history,
     imageLimit,
     loadStoredImage,
+    botTimeZone(),
     historyRendering(imageMode),
     params.allowlist ? senderTrustFrom(params.allowlist) : undefined,
   );
@@ -176,11 +178,7 @@ export async function buildCurrentTurnContent(
     parts.push({ type: "text", text: blindImageNote(totalImages) });
   }
 
-  const texts = batch.map((m) => m.text.trim()).filter(Boolean);
-  const latest = batch[batch.length - 1]!;
-  const label = latest.isGroup ? `${latest.senderName}: ` : "";
-  const body = texts.length > 0 ? texts.join("\n") : "(người dùng gửi ảnh, không kèm chữ)";
-  parts.push({ type: "text", text: `${label}${body}` });
+  parts.push({ type: "text", text: dongTinCuaLuot(batch) });
 
   return parts;
 }

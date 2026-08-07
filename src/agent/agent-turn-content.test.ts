@@ -10,6 +10,8 @@ let content: typeof import("./agent-turn-content.js");
 let visionStore: typeof import("../config/runtime-vision-settings.js");
 let descriptionStore: typeof import("../conversation/image-description-store.js");
 let database: typeof import("../conversation/database.js");
+let tuning: typeof import("../config/runtime-tuning-settings.js");
+let history: typeof import("./history-to-model-messages.js");
 
 // 1x1 PNG hợp lệ để loadStoredImage đọc từ đĩa thật
 const PNG_BYTES = Buffer.from(
@@ -23,6 +25,8 @@ before(async () => {
   visionStore = await import("../config/runtime-vision-settings.js");
   descriptionStore = await import("../conversation/image-description-store.js");
   database = await import("../conversation/database.js");
+  tuning = await import("../config/runtime-tuning-settings.js");
+  history = await import("./history-to-model-messages.js");
 });
 
 after(() => {
@@ -62,6 +66,17 @@ function msgWithImages(
 
 function partsOf(value: unknown): { type: string; text?: string; data?: unknown }[] {
   return value as { type: string; text?: string; data?: unknown }[];
+}
+
+/** Tin không ảnh, đặt được tên người gửi và mốc giờ - dùng cho các test dựng dòng */
+function msgTu(senderName: string, text: string, sentAt: string, isGroup = true): ParsedMessage {
+  return { ...msgWithImages(text, []), senderName, sentAt, isGroup, senderId: `u-${senderName}` };
+}
+
+/** Phần text CUỐI của content - phần chữ mà `dongTinCuaLuot` dựng */
+function chuCuaLuot(parts: { type: string; text?: string }[]): string {
+  const text = parts.filter((p) => p.type === "text");
+  return text[text.length - 1]!.text!;
 }
 
 describe("buildCurrentTurnContent", () => {
@@ -145,6 +160,109 @@ describe("buildCurrentTurnContent", () => {
 
     assert.equal(parts.filter((p) => p.type === "file").length, 1);
     assert.ok(!parts.some((p) => p.type === "text" && /trục trặc/.test(p.text ?? "")));
+  });
+});
+
+/**
+ * Tin của lượt ĐANG CHẠY phải render y hệt lịch sử: cùng nhãn giờ, cùng cách
+ * dán tên. Lệch nhau đã gây lỗi thật - xem `user-message-line.ts`.
+ */
+describe("buildCurrentTurnContent - nhãn giờ và tên người gửi", () => {
+  it("mỗi tin một dòng, có nhãn giờ lấy từ sentAt của CHÍNH tin đó", async () => {
+    const parts = partsOf(
+      await content.buildCurrentTurnContent(
+        [msgTu("Hải", "chào bot", "2026-08-07T17:12:00.000Z", false)],
+        "native",
+      ),
+    );
+    assert.equal(chuCuaLuot(parts), "[08/08 00:12] Hải: chào bot");
+  });
+
+  it("BATCH NHIỀU NGƯỜI: mỗi dòng mang đúng tên người viết dòng đó", async () => {
+    const parts = partsOf(
+      await content.buildCurrentTurnContent(
+        [
+          msgTu("Hải", "bot ơi tra giúp giá vàng", "2026-08-07T17:12:00.000Z"),
+          msgTu("Nam", "cho mình hỏi thêm tỉ giá USD", "2026-08-07T17:12:30.000Z"),
+        ],
+        "native",
+      ),
+    );
+
+    assert.equal(
+      chuCuaLuot(parts),
+      "[08/08 00:12] Hải: bot ơi tra giúp giá vàng\n[08/08 00:12] Nam: cho mình hỏi thêm tỉ giá USD",
+    );
+  });
+
+  it("lời của người trước KHÔNG bị gán cho người sau", async () => {
+    // Bản cũ nối phẳng rồi dán tên tin CUỐI, cho ra "Nam: bot ơi tra giúp giá
+    // vàng\ncho mình hỏi thêm tỉ giá USD" - đúng câu của Hải mang tên Nam.
+    const chu = chuCuaLuot(
+      partsOf(
+        await content.buildCurrentTurnContent(
+          [
+            msgTu("Hải", "bot ơi tra giúp giá vàng", "2026-08-07T17:12:00.000Z"),
+            msgTu("Nam", "cho mình hỏi thêm tỉ giá USD", "2026-08-07T17:12:30.000Z"),
+          ],
+          "native",
+        ),
+      ),
+    );
+    assert.doesNotMatch(chu, /Nam: bot ơi tra giúp giá vàng/);
+    assert.match(chu, /Hải: bot ơi tra giúp giá vàng/);
+  });
+
+  it("chat riêng cũng có nhãn giờ và tên - khớp đúng cách lịch sử dựng", async () => {
+    const sentAt = "2026-08-07T17:12:00.000Z";
+    const luot = chuCuaLuot(
+      partsOf(await content.buildCurrentTurnContent([msgTu("Hải", "chào bot", sentAt, false)], "native")),
+    );
+    // Chính tin đó ở lượt SAU, khi đã nằm trong lịch sử
+    const trongLichSu = history.historyToModelMessages(
+      [{ role: "user", content: "chào bot", senderName: "Hải", createdAt: sentAt }],
+      0,
+      () => null,
+      tuning.botTimeZone(),
+    )[0]!.content;
+
+    assert.equal(luot, trongLichSu, "cùng một tin phải render y hệt ở hai đường");
+  });
+
+  it("tin chỉ có ảnh vẫn có nhãn giờ và một câu mô tả, không phải dòng trống", async () => {
+    const parts = partsOf(
+      await content.buildCurrentTurnContent(
+        [{ ...msgTu("Hải", "", "2026-08-07T17:12:00.000Z"), images: [{ url: "http://x/0.jpg" }] }],
+        "blind",
+      ),
+    );
+    assert.equal(chuCuaLuot(parts), "[08/08 00:12] Hải: (gửi ảnh, không kèm chữ)");
+  });
+
+  it("nhãn giờ theo BOT_TIMEZONE trên dashboard, không phải giờ máy chạy bot", async () => {
+    const goc = process.env.TZ;
+    try {
+      process.env.TZ = "UTC"; // đúng cấu hình container node:24-alpine
+      tuning.setTuning("BOT_TIMEZONE", "Asia/Tokyo");
+      const nhat = chuCuaLuot(
+        partsOf(
+          await content.buildCurrentTurnContent([msgTu("Hải", "x", "2026-08-07T17:12:00.000Z", false)], "native"),
+        ),
+      );
+      assert.equal(nhat, "[08/08 02:12] Hải: x", "phải theo Tokyo (UTC+9), không theo TZ tiến trình");
+
+      tuning.setTuning("BOT_TIMEZONE", "Asia/Ho_Chi_Minh");
+      const viet = chuCuaLuot(
+        partsOf(
+          await content.buildCurrentTurnContent([msgTu("Hải", "x", "2026-08-07T17:12:00.000Z", false)], "native"),
+        ),
+      );
+      assert.equal(viet, "[08/08 00:12] Hải: x");
+    } finally {
+      tuning.setTuning("BOT_TIMEZONE", null);
+      if (goc === undefined) delete process.env.TZ;
+      else process.env.TZ = goc;
+    }
   });
 });
 

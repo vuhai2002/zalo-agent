@@ -3375,3 +3375,147 @@ Phép phá thứ ba lộ ra một lỗ trong chính test vừa viết: câu hư�
 trường, nên `assert.match(loi, /schedule/)` vẫn XANH kể cả khi phần nêu đích danh
 bị gỡ. Đã sửa thành đọc riêng phần động rồi so bằng `deepEqual` - test giờ phân
 biệt được "nêu đúng trường thiếu" với "đọc thuộc lòng danh sách yêu cầu".
+
+## V3.11 - Mốc giờ tin nhắn: model đọc nhãn của tin trước đó (2026-08-08)
+
+Model tự nói trong phần suy nghĩ: *"Hôm nay là thứ Bảy, 08/08/2026. Nhưng tin
+nhắn gửi lúc 23:37 ngày 07/08."* Tin thật gửi lúc 00:12. Model không bịa - nó
+đọc đúng thứ mình đưa cho nó.
+
+Ba lỗi, một cái đang lộ, hai cái nằm im.
+
+### 1. Tin của lượt hiện tại KHÔNG có nhãn giờ
+
+Lịch sử có nhãn `[dd/mm hh:mm]` (`history-to-model-messages.ts`), tin của lượt
+đang chạy thì không (`agent-turn-content.ts` chỉ ghép `${label}${body}`).
+System prompt cũng chỉ có NGÀY, cố ý bỏ giờ để không vỡ prompt cache mỗi phút.
+
+Nên mốc giờ MỚI NHẤT model nhìn thấy luôn là của tin TRƯỚC ĐÓ. Bình thường
+khoảng cách vài phút nên không ai để ý; lần này nó vắt qua nửa đêm - 23:37 là
+lượt chết vì lỗi DeepSeek 400 (`writeBatchToHistory` gọi ở CẢ nhánh lỗi nên tin
+vẫn vào lịch sử đúng giờ đó).
+
+Model phải tốn một bước gọi `get_datetime` để gỡ. Đó là hành vi đúng của model,
+nhưng nó đang trả giá cho thiếu sót của mình.
+
+### 2. Nhãn giờ lịch sử theo giờ MÁY, không theo `BOT_TIMEZONE`
+
+`formatTimestamp` dùng `d.getHours()`/`d.getDate()` - giờ local của tiến trình.
+Quét cả `src/`: đây là nơi **duy nhất** dựng mốc thời gian cho model đọc mà
+không qua `BOT_TIMEZONE`, tức chỗ duy nhất qua mặt được ô "Múi giờ của bot" trên
+dashboard. (18 điểm gọi khác - system prompt, `get_datetime`, parse lịch hẹn,
+tính lần chạy kế của cron, thống kê ngày - đều nghe setting đó.)
+
+Máy dev Windows chạy múi Việt Nam nên trùng với setting, đúng do trùng hợp. Đo
+cùng một mốc `2026-08-07T16:37:00Z`:
+
+```
+TZ=UTC -> [07/08 16:37]      TZ=Asia/Ho_Chi_Minh -> [07/08 23:37]
+```
+
+Container `node:24-alpine` chạy UTC (không có `TZ=` trong Dockerfile lẫn
+compose). Nên trên VPS model nhận một prompt tự mâu thuẫn: dòng "Hôm nay là thứ
+Bảy 08/08" đúng, còn nhãn lịch sử lệch 7 tiếng. Tệ hơn cả sai đều, vì không có
+cách nào biết bên nào đúng.
+
+Test cũ mù ca này: nó khẳng định bằng regex `\[\d{2}\/\d{2} \d{2}:\d{2}\]`, chỉ
+kiểm HÌNH DẠNG. Cố ý để test không phụ thuộc TZ máy chạy, nhưng hệ quả là nó
+xanh với bất kỳ giờ nào.
+
+### 3. Batch nhiều người gửi chỉ được dán MỘT tên
+
+`enqueueMessage` gom theo THREAD chứ không theo người gửi. Trong nhóm, hai người
+cùng trong allowlist cùng @mention bot trong `MESSAGE_BATCH_DEBOUNCE_MS` (mặc
+định 2500ms) vào chung một batch, mà `buildCurrentTurnContent` nối phẳng hết chữ
+rồi dán tên của tin CUỐI:
+
+```
+Nam: câu của Hải
+câu của Nam
+```
+
+Lời của Hải mang tên Nam. Không hiếm: lúc bot bận, batch dồn suốt cả lượt (tới
+`LLM_TURN_TIMEOUT_MS` = 15 phút).
+
+Comment ở `mid-turn-injection.ts` đã nhận ra một nửa vấn đề nhưng dừng ở chỗ "đã
+có nhãn tên ở dưới" - nhãn đó chỉ đúng cho một người.
+
+### Hai repo tham khảo làm gì
+
+**Hermes** (`gateway/message_timestamps.py` + `gateway/run.py:13831-13865`) lấy
+`event.timestamp` của nền tảng, lưu content SẠCH còn mốc giờ là metadata, và
+render là bước riêng. Docstring nói thẳng lý do tách: *"persisted message content
+should stay clean so replay does not accumulate `[timestamp] [timestamp] ...`
+prefixes across turns"*. Quan trọng nhất: **một công tắc chi phối CẢ tin hiện
+tại LẪN lịch sử replay** (`run.py:13855` và `run.py:21872` gọi cùng một hàm) -
+đúng cái bất biến mình đang vi phạm. Timezone của họ cũng từ cấu hình
+(`hermes_time.get_timezone()`), không phải giờ máy.
+
+**goclaw** (`channels/telegram/handlers.go:311`) cũng lấy giờ nền tảng
+(`time.Unix(message.Date)`), nhưng chống nhầm bằng nhãn CẤU TRÚC thay vì đóng
+dấu tin hiện tại:
+
+```
+[Chat messages since your last reply - for context]
+  Tên [15:04]: nội dung
+[Your current message]
+<tin hiện tại>
+```
+
+Cách khác, cùng một nhận thức: ranh giới đó phải được nói ra bằng cách nào đó.
+
+### Cách sửa
+
+**Một mốc giờ duy nhất cho mỗi tin.** `ParsedMessage.sentAt` trích từ `data.ts`
+của payload Zalo (`zalo-message-timestamp.ts`), rồi dùng cho CẢ hai chỗ: ghi vào
+`created_at` lúc lưu history, và làm nhãn model đọc. Một nguồn nên không lệch
+được.
+
+Sửa luôn một sai lệch có sẵn: `created_at` trước nay là giờ KẾT THÚC lượt (tin
+ghi ở cuối lượt), nên lượt 249 giây làm mốc lệch 4 phút so với lúc bấm gửi.
+
+**Đơn vị của `data.ts` phải đo, không đoán**: các repo tham khảo hiểu khác nhau -
+`zalo-personal/src/monitor.ts` coi là GIÂY, `zalo-agent-cli` và `deplao-builder`
+coi là MILLI. Phân biệt bằng ĐỘ LỚN (năm 2026: giây là 10 chữ số, milli là 13) và
+test cả hai dạng. Kẹp quanh giờ nhận (7 ngày về quá khứ, 5 phút về tương lai) để
+giá trị rác không làm model tin sai ngày - rộng về quá khứ có chủ đích, vì
+listener nối lại sau khi mất mạng nhận một loạt tin cũ và giữ đúng giờ gửi thật
+của chúng chính là giá trị của cả module.
+
+**Một hàm dựng dòng dùng chung** (`user-message-line.ts`) cho cả lịch sử lẫn tin
+của lượt hiện tại - đúng cách Hermes làm. Nhãn giờ đi qua `BOT_TIMEZONE`. Mỗi
+tin một dòng, mỗi dòng mang tên người viết chính dòng đó. Dán tên cả trong chat
+riêng để hai đường render y hệt nhau; nhờ vậy cùng một tin không đổi hình dạng
+giữa lượt này và lượt sau.
+
+Persona đổi theo: "Lịch sử có định dạng..." thành "MỌI tin của người dùng đều
+có...". Nói "lịch sử" là dạy model rằng câu nó đang đọc KHÔNG có giờ - đúng cái
+hiểu nhầm cần chữa.
+
+Hệ quả phụ đáng ghi: "Tin nhắn hôm nay" trên trang Tổng quan
+(`overview-stats.ts`) nay đếm theo giờ GỬI thay vì giờ kết thúc lượt. Tin gửi
+23:59 mà lượt xong lúc 00:03 nay tính vào đúng ngày đã gửi.
+
+### Kiểm chứng
+
+1603 test xanh (+35), typecheck sạch.
+
+Bất biến đắt nhất nằm ở `message-turn-timestamp.test.ts`: cho một tin đi TRỌN
+HAI LƯỢT rồi so nhãn giờ model thấy ở lượt 1 với nhãn nó thấy cho chính tin đó ở
+lượt 2. Test đơn vị của từng đường không bắt được - mỗi đường tự nó đều "đúng".
+
+Bảy phép phá, cả bảy đều đỏ đúng chỗ:
+
+| Phá gì | Test đỏ |
+|---|---|
+| Nhãn giờ quay về giờ máy | 3 test múi giờ, cả history lẫn lượt hiện tại |
+| Tin lượt hiện tại gộp phẳng như cũ | 4 test nhãn giờ + nhiều người gửi |
+| Bỏ riêng nhãn giờ, giữ tên | 4 test nhãn giờ + bất biến hai lượt |
+| `appendMessage` bỏ qua `createdAt` | test created_at + bất biến hai lượt |
+| Parser lấy giờ nhận thay `data.ts` | test đọc giờ gửi |
+| Coi mọi `data.ts` là milli | 2 test đơn vị |
+| Bỏ kẹp quanh giờ nhận | 2 test kẹp |
+
+Đáng nói: trước khi phá, đổi hẳn cách dựng tin của lượt hiện tại mà **không test
+nào đỏ** - vùng đó chỉ được khẳng định bằng substring (`/dò giúp em/`). Đó là lý
+do phải viết test mới trước rồi mới tin vào màu xanh.

@@ -68,6 +68,21 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- Bot hiểu sai giờ của câu vừa hỏi: tin trong lịch sử có nhãn `[ngày/tháng
+  giờ:phút]` còn tin của lượt đang chạy thì không, nên mốc giờ mới nhất model
+  thấy luôn là của tin TRƯỚC ĐÓ. Vắt qua nửa đêm là nó tin câu hỏi lúc 00:12
+  được gửi từ hôm trước. Nay mỗi tin mang đúng giờ NGƯỜI TA GỬI (đọc từ payload
+  Zalo), dùng chung cho cả nhãn model đọc lẫn `created_at` lưu xuống - một
+  nguồn nên hai chỗ không lệch được. Sửa luôn chuyện `created_at` trước nay là
+  giờ KẾT THÚC lượt, lệch vài phút với lượt dài.
+- Nhãn giờ trong lịch sử đọc giờ của MÁY chạy bot thay vì "Múi giờ của bot" trên
+  dashboard - nơi duy nhất trong mã nguồn qua mặt được setting đó. Trên máy dev
+  (múi Việt Nam) đúng do trùng hợp; trong container Docker (chạy UTC) thì lệch 7
+  tiếng so với dòng "Hôm nay là..." trong cùng một prompt.
+- Nhiều người cùng nhắn trong một nhịp gộp thì lời của người trước bị gán cho
+  người sau: bộ gộp gom theo cuộc trò chuyện chứ không theo người gửi, mà phần
+  chữ lại nối phẳng rồi dán một cái tên. Nay mỗi tin một dòng, mỗi dòng mang tên
+  người viết chính dòng đó.
 - Đổi sang DeepSeek là bot câm mọi tin nhắn: schema của `schedule_task` đặt
   `z.discriminatedUnion` ở nút GỐC, dịch ra `oneOf` không kèm khóa `type`, mà
   DeepSeek đòi `parameters.type` phải là `"object"` nên chối cả request. Đi vòng

@@ -1,5 +1,6 @@
 import type { ModelMessage, UserContent } from "ai";
 import type { StoredMessage } from "../conversation/history-store.js";
+import { dongTinNguoiDung } from "./user-message-line.js";
 
 /** Đọc ảnh đã lưu từ đĩa - inject được để test không cần filesystem */
 export type StoredImageLoader = (relPath: string) => { base64: string; mediaType: string } | null;
@@ -22,14 +23,6 @@ export type HistoryImageRendering = {
   describe: ImageDescriptionLookup;
   keepPixels: boolean;
 };
-
-/** "[25/07 14:30]" theo giờ máy chạy bot - đủ cho model cảm nhận khoảng cách thời gian */
-export function formatTimestamp(isoUtc: string): string {
-  const d = new Date(isoUtc);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `[${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}]`;
-}
 
 /**
  * Chia ngân sách ảnh từ tin mới nhất ngược lên: tin càng gần càng đáng được kèm
@@ -97,6 +90,7 @@ export function historyToModelMessages(
   history: StoredMessage[],
   imageLimit: number,
   loadImage: StoredImageLoader,
+  timeZone: string,
   rendering?: HistoryImageRendering,
   senderTrust?: SenderTrust,
 ): ModelMessage[] {
@@ -108,15 +102,19 @@ export function historyToModelMessages(
     }
 
     // Kèm thời gian gửi để model biết khoảng cách giữa các đoạn hội thoại
-    // (người quay lại sau 3 ngày không bị nối chuyện như vừa nhắn xong)
-    const ts = message.createdAt ? formatTimestamp(message.createdAt) : "";
-    const name = message.senderName ? `${message.senderName}: ` : "";
+    // (người quay lại sau 3 ngày không bị nối chuyện như vừa nhắn xong).
+    //
     // Người ngoài allowlist vẫn được ghi vào lịch sử (nhánh recordOnly và
     // groupPassiveListen) rồi phát lại cho model ở lượt sau. Không đánh dấu thì
     // chữ họ viết nằm trong lịch sử y hệt chữ của chủ bot - một tin soạn khéo
     // trong nhóm là đủ để thử điều khiển model ở lượt sau.
-    const nhan = senderTrust?.isUnverified(message.senderId) ? `${UNVERIFIED_TAG} ` : "";
-    const text = `${ts} ${nhan}${name}${message.content}`.trim();
+    const text = dongTinNguoiDung({
+      createdAt: message.createdAt,
+      timeZone,
+      senderName: message.senderName,
+      nhanChuaXacMinh: senderTrust?.isUnverified(message.senderId) ? UNVERIFIED_TAG : undefined,
+      noiDung: message.content,
+    });
 
     const take = imageBudgetByIndex.get(index) ?? 0;
     if (take === 0) return { role: "user", content: text };

@@ -43,7 +43,7 @@ const log = createLogger("agent-loop");
  * chen có thể đến từ thành viên khác với người mở lượt. Cả hai đều đã qua cùng
  * một cửa lọc nên mức tin cậy ngang nhau, nhưng khẳng định sai danh tính sẽ
  * khiến model gộp hai người thành một - đúng lúc `buildCurrentTurnContent` đã
- * dán nhãn tên người gửi khác ở ngay dưới.
+ * dán tên và giờ gửi của TỪNG tin ở ngay dưới.
  *
  * Nói rõ "đang làm dở" vì không có câu này model dễ đọc tin chen như một yêu
  * cầu MỚI hoàn toàn rồi bỏ ngang việc đang làm.
