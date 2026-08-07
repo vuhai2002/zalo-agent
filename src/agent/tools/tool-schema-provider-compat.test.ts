@@ -100,6 +100,40 @@ describe("schema tool - hình dạng mà nhà cung cấp soi chặt vẫn nhận
     assert.ok(ds.length >= 13, `chỉ dựng được ${ds.length} tool - bộ quét đang nhìn hụt`);
   });
 
+  /**
+   * Nút GỐC là chỗ nhà cung cấp soi trước tiên, và cũng là chỗ duy nhất union
+   * KHÔNG được phép nằm: zod dịch `z.union`/`z.discriminatedUnion` ở gốc ra
+   * `{"$schema":..., "oneOf":[...]}`, không có khóa `type`.
+   *
+   * Đã trả giá thật 07/08/2026: `schedule_task` dùng `z.discriminatedUnion` ở
+   * gốc, DeepSeek trả 400 "schema must be a JSON Schema of 'type: object', got
+   * 'type: null'" cho MỌI tin nhắn (`steps: 0`) vì bộ tool đi kèm mọi lượt.
+   * 9router không cứu được - đường openai-compatible sang openai-compatible
+   * chuyển tiếp `parameters` nguyên xi.
+   *
+   * Luật chỉ áp cho GỐC là cố ý: union LỒNG trong một object thì hợp lệ ở mọi
+   * nhà cung cấp (đo cùng lần: `schedule`, `documentBlockSchema`,
+   * `spreadsheetCellSchema` đều qua DeepSeek).
+   */
+  it("GỐC của mọi tool phải là `type: \"object\"` - thiếu là DeepSeek chối cả request", () => {
+    const pham: string[] = [];
+
+    for (const { ten, schema } of schemaCuaTungTool()) {
+      const goc = (schema ?? {}) as Record<string, unknown>;
+      if (goc.type !== "object") {
+        pham.push(`${ten}: type=${JSON.stringify(goc.type)}, khóa gốc=[${Object.keys(goc).join(",")}]`);
+      }
+    }
+
+    assert.deepEqual(
+      pham,
+      [],
+      `Chỗ này thường dịch từ union Ở GỐC. Giữ union làm hợp đồng nội bộ, còn ` +
+        `inputSchema đưa ra một z.object phẳng rồi parse lại trong execute ` +
+        `(mẫu ở schedule-task-tool.ts):\n  ${pham.join("\n  ")}`,
+    );
+  });
+
   it("KHÔNG tool nào có `items` dạng mảng (tuple draft-07) - Google chối cả request", () => {
     const pham: string[] = [];
 

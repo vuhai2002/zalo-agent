@@ -388,8 +388,28 @@ describe("schedule_task - schema đầu vào (đi qua inputSchema thật)", () =
     assert.equal(parse({ action: "delete" }).success, false);
   });
 
-  it("create thiếu schedule bị chặn ngay ở schema", () => {
-    assert.equal(parse({ action: "create", name: "x", kind: "message", payload: "y" }).success, false);
+  /**
+   * Ràng buộc chéo theo action CỐ Ý không nằm ở schema (xem
+   * `scheduleTaskWireSchema`): schema từ chối thì AI SDK dựng lỗi đầu vào
+   * trước khi `execute` chạy, model mất đường đọc câu lỗi để tự sửa. Hai
+   * khẳng định dưới ghi lại đúng ranh giới đó - đổi hướng là chúng đỏ.
+   */
+  it("thiếu trường theo action thì schema VẪN NHẬN - chốt chặn nằm ở execute, không ở schema", () => {
+    assert.equal(parse({ action: "create" }).success, true, "create trống phải lọt qua schema");
+    assert.equal(parse({ action: "cancel" }).success, true, "cancel thiếu id phải lọt qua schema");
+  });
+
+  it("GỐC của schema là object phẳng, KHÔNG phải oneOf - DeepSeek chối cả request nếu là oneOf", async () => {
+    const { asSchema } = await import("ai");
+    const goc = asSchema((toolModule.createScheduleTaskTool(makeCtx()) as any).inputSchema).jsonSchema as Record<
+      string,
+      unknown
+    >;
+    assert.equal(goc.type, "object");
+    assert.ok(!("oneOf" in goc) && !("anyOf" in goc), "union phải nằm lồng bên trong, không được ở nút gốc");
+    // Union LỒNG vẫn hợp lệ - khẳng định luôn để không ai "sửa" nhầm cả cây
+    const lich = (goc.properties as Record<string, Record<string, unknown>>).schedule;
+    assert.ok(Array.isArray(lich.anyOf), "schedule vẫn phải là union 4 dạng");
   });
 
   it("schedule.kind='once' nhận cả 2 dạng date+time và inMinutes (không phải discriminatedUnion, không ném lỗi)", () => {
@@ -415,10 +435,6 @@ describe("schedule_task - schema đầu vào (đi qua inputSchema thật)", () =
     );
   });
 
-  it("cancel thiếu id bị chặn ngay ở schema", () => {
-    assert.equal(parse({ action: "cancel" }).success, false);
-  });
-
   it("inMinutes vượt trần 525600 (1 năm) bị chặn ngay ở schema, không lọt xuống tới new Date() gây RangeError (Mục M3)", () => {
     assert.equal(
       parse({
@@ -430,5 +446,77 @@ describe("schedule_task - schema đầu vào (đi qua inputSchema thật)", () =
       }).success,
       false,
     );
+  });
+});
+
+/**
+ * Schema phẳng nhường phần ràng buộc chéo cho `execute`. Đây là nơi kiểm phần
+ * nhường đó có thật sự bắt - thiếu nó thì `doCreate` nhận `name: undefined` và
+ * ghi thẳng vào DB một job không tên.
+ */
+describe("schedule_task - thiếu tham số theo action bị chặn ở execute", () => {
+  /**
+   * Đọc riêng phần ĐỘNG của câu báo lỗi - danh sách trường zod thật sự bắt được.
+   *
+   * Phải tách ra thay vì `assert.match(loi, /schedule/)`: câu hướng dẫn TĨNH đi
+   * kèm (`action='create' cần đủ: name, kind, payload, schedule.`) đã chứa sẵn
+   * tên cả 4 trường, nên một khẳng định dò chữ trên cả chuỗi vẫn XANH ngay cả
+   * khi phần nêu đích danh bị gỡ mất. Đã kiểm bằng cách phá code đúng chỗ đó.
+   */
+  function truongThieu(loi: string): string[] {
+    const m = /Thiếu hoặc sai tham số: ([^.]*)\./.exec(loi);
+    return m ? m[1]!.split(",").map((s) => s.trim()) : [];
+  }
+
+  it("create thiếu schedule: nêu ĐÍCH DANH trường thiếu, KHÔNG tạo job", async () => {
+    const ctx = makeCtx({ message: msg({ threadId: "t-thieu-schedule" }) });
+    const result = await run(ctx, { action: "create", name: "x", kind: "message", payload: "y" });
+
+    const loi = loiCuaTool(result);
+    assert.deepEqual(truongThieu(loi), ["schedule"], "phải nêu đúng trường thiếu để model gọi lại đúng ngay lần sau");
+    assert.match(loi, /cần đủ/, "kèm cả câu nhắc yêu cầu của action");
+    assert.equal(store.listJobsForThread("acc-1", "t-thieu-schedule").length, 0, "không được ghi job nào");
+  });
+
+  it("create thiếu cả name lẫn payload: liệt kê ĐỦ, không dừng ở trường đầu tiên", async () => {
+    const ctx = makeCtx({ message: msg({ threadId: "t-thieu-nhieu" }) });
+    const result = await run(ctx, { action: "create", kind: "message", schedule: { kind: "every", minutes: 30 } });
+
+    assert.deepEqual(truongThieu(loiCuaTool(result)), ["name", "payload"]);
+    assert.equal(store.listJobsForThread("acc-1", "t-thieu-nhieu").length, 0);
+  });
+
+  it("cancel thiếu id: nêu đích danh id, kèm lối ra (gọi list), không throw", async () => {
+    const result = await run(makeCtx({ message: msg({ threadId: "t-thieu-id" }) }), { action: "cancel" });
+
+    const loi = loiCuaTool(result);
+    assert.deepEqual(truongThieu(loi), ["id"]);
+    assert.match(loi, /list/, "phải chỉ đường lấy id thay vì để model tự đoán");
+  });
+
+  it("update thiếu id cũng bị chặn - không âm thầm sửa nhầm job khác", async () => {
+    const result = await run(makeCtx({ message: msg({ threadId: "t-update-thieu-id" }) }), {
+      action: "update",
+      payload: "nội dung mới",
+    });
+
+    assert.deepEqual(truongThieu(loiCuaTool(result)), ["id"]);
+  });
+
+  it("trường THỪA không thuộc action bị bỏ qua, không làm hỏng lượt gọi hợp lệ", async () => {
+    // Schema phẳng cho phép gửi kèm `id` lúc create; union nghiêm strip nó đi.
+    // Nếu chỗ thu hẹp kiểu dùng `.strict()` thì lượt gọi đúng này sẽ hỏng oan.
+    const ctx = makeCtx({ message: msg({ threadId: "t-truong-thua" }) });
+    const result = await run(ctx, {
+      action: "create",
+      id: "id-thừa-model-tự-thêm",
+      name: "x",
+      kind: "message",
+      payload: "y",
+      schedule: { kind: "every", minutes: 30 },
+    });
+
+    assert.match(result, /Đã tạo lịch/);
+    assert.equal(store.listJobsForThread("acc-1", "t-truong-thua").length, 1);
   });
 });

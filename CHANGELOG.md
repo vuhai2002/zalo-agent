@@ -68,6 +68,14 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- Đổi sang DeepSeek là bot câm mọi tin nhắn: schema của `schedule_task` đặt
+  `z.discriminatedUnion` ở nút GỐC, dịch ra `oneOf` không kèm khóa `type`, mà
+  DeepSeek đòi `parameters.type` phải là `"object"` nên chối cả request. Đi vòng
+  qua 9router không cứu được - đường openai-compatible chuyển tiếp schema nguyên
+  xi. Nay schema gửi ra là object phẳng, ràng buộc theo action ép lại trong
+  `execute` để model đọc được câu lỗi và tự gọi lại thay vì chết cả lượt. Bẫy
+  thứ ba cùng họ với `z.tuple()` và enum số; bộ quét schema nay có thêm luật gốc
+  phải là `type: "object"`.
 - Bộ eval đo một stack tra cứu KHÁC bot thật: nó chạy DB tạm nên mất cấu hình
   tìm kiếm của dashboard và rơi về DuckDuckGo, trong khi bot chạy Brave. Ngày
   DuckDuckGo trả 0 kết quả, case nghiên cứu đỏ với lý do "không gọi web_fetch" -

@@ -3272,3 +3272,106 @@ ngay lần deploy đó - lỗi hiện rõ, không âm thầm.
 ### Việc còn treo
 
 Không còn. Đã deploy thật, bot chạy ổn trên VPS: quét QR, trả lời tin nhắn.
+
+## V3.10 - Đổi sang DeepSeek là bot câm: union ở nút gốc của schema (2026-08-07)
+
+Bẫy thứ ba cùng họ với V3.7.1 (`z.tuple()`) và V3.7.4 (enum số): một chi tiết
+hình dạng JSON Schema mà nhà cung cấp cũ nuốt được, nhà cung cấp mới thì chối cả
+request. Lần này là DeepSeek, cả khi gọi thẳng lẫn khi đi vòng qua 9router.
+
+```
+400 Invalid schema for function 'schedule_task':
+    schema must be a JSON Schema of 'type: "object"', got 'type: null'.
+```
+
+`steps: 0` - lượt tắt trước khi model kịp nghĩ gì, y hệt hai lần trước.
+
+### Nguyên nhân
+
+`scheduleTaskInputSchema` là `z.discriminatedUnion("action", [...])` **ở nút
+GỐC**. Zod dịch union ra `{"$schema":..., "oneOf":[...]}` - không có khóa `type`.
+DeepSeek đọc `parameters.type` thấy rỗng nên báo `got 'type: null'`.
+
+Quét cả 13 tool bằng đúng đường mà AI SDK dịch
+(`asSchema(tool.inputSchema).jsonSchema`) thì `schedule_task` là tool DUY NHẤT
+thiếu `type` ở gốc. Ba tool khác cũng dùng union (`documentBlockSchema`,
+`spreadsheetCellSchema`, và chính `scheduleInputSchema` lồng trong tool này)
+nhưng đều nằm BÊN TRONG một object nên gốc vẫn là `object` - ràng buộc chỉ áp
+cho nút gốc.
+
+### 9router không cứu được
+
+Đọc `zalo-agent-references/9router`: chỉ ba đường có bước chuẩn hóa schema
+(`openai-responses.js`, `antigravity-to-openai.js`, `openai-to-gemini.js`).
+Đường openai-compatible sang openai-compatible - chính là đường tới DeepSeek -
+chuyển tiếp `parameters` nguyên xi. Nên bật/tắt round-robin hay đổi kết nối đều
+vô ích: cùng một body tới cùng một API.
+
+### Đo trên api.deepseek.com thật (deepseek-v4-flash)
+
+| Gửi gì | Kết quả |
+|---|---|
+| Đủ 13 tool như cũ | **400** - đúng câu lỗi trên |
+| Chỉ mình `schedule_task` như cũ | **400** - cô lập được thủ phạm |
+| Chỉ mình `schedule_task` phẳng | **200** |
+| Đủ 13 tool, `schedule_task` phẳng | **200** |
+| Đủ 13 tool phẳng + yêu cầu đặt lịch thật | **200**, model gọi tool, args qua được union nghiêm |
+
+Phép thứ tư là phép đáng giá nhất: nó chứng minh 12 tool còn lại KHÔNG có vấn đề
+nào khác với DeepSeek, tức sửa một chỗ là hết bệnh chứ không phải sửa xong lộ ra
+lỗi kế tiếp.
+
+### Cách sửa: tách hình dạng ĐI RA khỏi hợp đồng THẬT
+
+`inputSchema` đưa ra một `z.object` phẳng (`scheduleTaskWireSchema`): `action` là
+enum 4 giá trị, mọi trường còn lại `.optional()`. `execute` parse lại bằng
+`scheduleTaskInputSchema` (union nghiêm) ngay dòng đầu để thu hẹp kiểu. Nhờ vậy
+`schedule-task-actions.ts` và mọi kiểu suy ra từ union không phải đổi một dòng.
+
+**Cố ý KHÔNG dùng `.superRefine`** để ép ràng buộc chéo ngay ở schema: schema mà
+từ chối thì AI SDK dựng lỗi đầu vào TRƯỚC khi `execute` chạy, tức mất luôn đường
+trả `ketQuaLoi` cho model đọc rồi tự gọi lại trong cùng lượt. Đặt chốt ở
+`execute` biến một lỗi cứng thành một vòng tự sửa.
+
+### Rủi ro của hướng phẳng: đo rồi, không xảy ra
+
+Schema phẳng bỏ mất tín hiệu "trường nào bắt buộc theo action" (`required` chỉ
+còn `["action"]`). Bắn 4 dạng yêu cầu x 2 lần rồi ép kết quả qua union nghiêm:
+
+```
+"Nhắc mình 30 phút nữa nhé"              -> {once, inMinutes:30}   ĐẠT x2
+"Sáng nào 7h cũng nhắc mình tập thể dục" -> {cron, "0 7 * * *"}    ĐẠT x2
+"Mình đang có những lịch hẹn nào?"       -> {action:"list"}        ĐẠT x2
+"Hủy cái lịch nhắc uống thuốc đi"        -> {action:"list"}        ĐẠT x2
+```
+
+8/8 đạt. Ca cuối đáng chú ý: bảo "hủy" nhưng model tự gọi `list` trước để lấy id
+thay vì bịa - đúng cái mô tả trường đang dặn. Mô tả gánh được phần việc mà
+`required` bỏ lại.
+
+Chạy lại end-to-end sau khi sửa (bộ tool thật, gọi luôn `execute`): tạo được job
+`once` sau 45 phút và job `cron` "0 7 * * 1", quy đổi giờ Việt Nam đúng.
+
+### Kiểm chứng
+
+1568 test xanh (+6), typecheck sạch.
+
+Luật mới trong `tool-schema-provider-compat.test.ts`: **gốc của mọi tool phải là
+`type: "object"`**. Đây là luật lẽ ra đã bắt được lỗi này - bộ quét cũ chỉ nhìn
+`items` dạng mảng và `const`/`enum` phi chuỗi, đúng hai bẫy đã gặp, nên nó luôn
+đi sau một bước.
+
+Bốn phép phá, cả bốn đều đỏ đúng chỗ:
+
+| Phá gì | Test đỏ |
+|---|---|
+| Trả `inputSchema` về union ở gốc | luật gốc `type: "object"` |
+| Bỏ chốt thu hẹp kiểu trong `execute` | 3 test thiếu tham số |
+| Bỏ phần nêu tên trường trong câu báo lỗi | 3 test thiếu tham số |
+| Đổi thu hẹp kiểu sang `.strict()` | test trường thừa |
+
+Phép phá thứ ba lộ ra một lỗ trong chính test vừa viết: câu hướng dẫn TĨNH
+(`action='create' cần đủ: name, kind, payload, schedule.`) đã chứa sẵn tên cả 4
+trường, nên `assert.match(loi, /schedule/)` vẫn XANH kể cả khi phần nêu đích danh
+bị gỡ. Đã sửa thành đọc riêng phần động rồi so bằng `deepEqual` - test giờ phân
+biệt được "nêu đúng trường thiếu" với "đọc thuộc lòng danh sách yêu cầu".
