@@ -1,0 +1,68 @@
+# ============================================================
+# Khối Caddy cho zalo-agent.
+#
+# Thay <tên-miền> và <cổng-host> bằng giá trị của bạn, rồi nối vào
+# /etc/caddy/Caddyfile trên máy chủ:
+#
+#     sudo caddy validate --config /etc/caddy/Caddyfile
+#     sudo systemctl reload caddy        # reload, KHÔNG restart
+#
+# Mặc định bên dưới là setup TRỰC TIẾP (không có proxy đứng trước): Caddy tự
+# xin và gia hạn cert Let's Encrypt. Cần mở cổng 80 cho thử thách HTTP-01 và
+# DNS đã trỏ về máy chủ.
+#
+# Đứng sau Cloudflare dạng proxied (đám mây cam) thì xem phần cuối file.
+# ============================================================
+
+<tên-miền> {
+	reverse_proxy 127.0.0.1:<cổng-host> {
+		# Che quãng container khởi động lại lúc deploy: thử lại upstream trong
+		# 15 giây thay vì trả 502 ngay. Bot khởi động mất vài giây (mở SQLite,
+		# chạy migration, nối lại phiên Zalo) nên quãng này là có thật.
+		lb_try_duration 15s
+		lb_try_interval 250ms
+	}
+
+	encode gzip zstd
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# Giấu việc mình chạy gì phía sau
+		-Server
+	}
+}
+
+# ------------------------------------------------------------
+# Đứng sau Cloudflare (proxied / cam)?
+# ------------------------------------------------------------
+# ACME ở trên KHÔNG chạy khi có proxy đứng trước - thử thách không tới được
+# origin. Sửa lại khối trên như sau:
+#
+# 1. Thêm dòng TLS ở đầu khối (chọn một):
+#
+#        tls internal
+#        # ^ Caddy tự ký. CHỈ dùng khi Cloudflare để chế độ Full.
+#        #   Ở Full (strict) nó trả lỗi 526.
+#
+#        tls /etc/caddy/certs/<tên>.pem /etc/caddy/certs/<tên>.key
+#        # ^ Cloudflare Origin Certificate, dùng cho Full (strict).
+#        #   File key phải chmod 640 và thuộc nhóm caddy - để 600 root thì
+#        #   Caddy chạy dưới user `caddy` đọc không được và reload thất bại.
+#
+# 2. Bên trong reverse_proxy, khôi phục IP thật của khách:
+#
+#        header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+#
+#    KHÔNG có dòng này thì mọi khách qua cùng một điểm mạng của Cloudflare bị
+#    gom vào chung một khóa rate-limit đăng nhập: một người gõ sai mật khẩu
+#    nhiều lần là những người khác cũng bị chặn theo.
+#
+#    (Ứng dụng đã lấy entry PHẢI NHẤT của X-Forwarded-For nên không bị client
+#    bịa IP - xem src/server/client-ip.ts. Dòng trên chỉ để lấy đúng người,
+#    không phải để vá lỗ hổng.)
+#
+# 3. Giới hạn tường lửa 80/443 chỉ cho dải IP của Cloudflare.
+# 4. Bản ghi DNS để Proxied (cam).

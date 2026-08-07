@@ -269,6 +269,18 @@ const envSchema = z.object({
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),
+  /**
+   * Địa chỉ dashboard lắng nghe. Mặc định `127.0.0.1` - chạy trên máy hay chạy
+   * thẳng trên VPS thì không bao giờ tự phơi ra internet.
+   *
+   * TRONG DOCKER PHẢI ĐẶT `0.0.0.0`, và đây là chỗ dễ mất cả buổi để hiểu:
+   * `127.0.0.1` bên trong container là loopback CỦA CONTAINER, Docker không
+   * chuyển tiếp cổng vào đó được, nên reverse proxy chỉ nhận connection
+   * refused. Việc chặn phơi ra ngoài chuyển sang phía HOST bằng cách publish
+   * `127.0.0.1:<cổng host>:<cổng container>` - đúng chỗ nó nên nằm, vì Docker
+   * ghi thẳng iptables và đi vòng qua UFW.
+   */
+  DASHBOARD_HOST: z.string().min(1).default("127.0.0.1"),
   DASHBOARD_PASSWORD: z.preprocess(
     emptyToUndefined,
     z.string().min(8, "tối thiểu 8 ký tự").optional(),

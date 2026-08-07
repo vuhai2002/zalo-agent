@@ -1,0 +1,44 @@
+# Build context gửi cho Docker daemon - càng nhỏ càng nhanh, và quan trọng hơn:
+# đây là hàng rào chặn dữ liệu thật lọt vào image.
+
+# DỮ LIỆU THẬT - tuyệt đối không vào image. `data/` chứa cookie Zalo đã mã hóa,
+# SQLite lịch sử hội thoại và ảnh người dùng gửi. Image build ra có thể bị đẩy
+# đi nơi khác; lọt thư mục này là rò cả phiên đăng nhập lẫn nội dung chat.
+data/
+logs/
+
+# Env thật (khóa mã hóa, mật khẩu dashboard). Container nhận cấu hình qua
+# `env_file` lúc CHẠY, không phải nướng vào image lúc build.
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Cấu hình account thật: user id, persona riêng
+config/accounts.json
+
+# Ghi chú triển khai riêng của người vận hành - xem .gitignore
+*.local.md
+
+node_modules/
+dist/
+web/dist/
+web/node_modules/
+
+.git/
+.gitignore
+.github/
+.claude/
+.mcp.json
+
+# Tài liệu và test không tham gia vào ảnh chạy production
+docs/
+plans/
+evals/
+**/*.test.ts
+README.md
+README.en.md
+CHANGELOG.md
+
+# QR login tạm, ảnh chụp màn hình
+qr*.png

@@ -39,6 +39,15 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   yêu cầu đã đủ rõ.
 - Dải cảnh báo trên trang Tổng quan khi chưa cấu hình LLM - trước đó bot vẫn
   khởi động bình thường nên dashboard xanh trong khi mọi tin nhắn đều hỏng.
+- **Triển khai bằng Docker**: `Dockerfile` bốn stage (runner chỉ có dependency
+  production, chạy bản biên dịch chứ không mang theo TypeScript),
+  `docker-compose.prod.yml`, `deploy.sh` có kiểm tra sức khỏe, và
+  `docs/deployment-guide.md`. Toàn bộ trạng thái nằm trong MỘT volume - bot
+  không cần cơ sở dữ liệu ngoài.
+- Thêm `DASHBOARD_HOST` (mặc định `127.0.0.1`). Trước đó địa chỉ lắng nghe bị
+  ghi cứng, mà `127.0.0.1` bên trong container là loopback của chính container
+  nên reverse proxy chỉ nhận connection refused - Docker sẽ hỏng câm. Việc chặn
+  phơi ra internet chuyển sang phía host bằng publish `127.0.0.1:<host>:<container>`.
 - **Xóa sạch ngữ cảnh một cuộc trò chuyện** từ trang Sessions: tin nhắn, bản
   tóm tắt, trace từng bước, ảnh đã tải và mô tả ảnh. Ô tick riêng để xóa thêm
   những điều bot đã ghi nhớ học được trong cuộc trò chuyện đó. Lịch hẹn đang

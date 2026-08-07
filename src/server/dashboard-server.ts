@@ -225,8 +225,12 @@ export function startDashboardServer(): void {
     return;
   }
   server = serve(
-    { fetch: buildDashboardApp().fetch, port: env.DASHBOARD_PORT, hostname: "127.0.0.1" },
-    (info) => log.info({ port: info.port }, "Dashboard sẵn sàng tại http://127.0.0.1:" + info.port),
+    { fetch: buildDashboardApp().fetch, port: env.DASHBOARD_PORT, hostname: env.DASHBOARD_HOST },
+    (info) =>
+      log.info(
+        { port: info.port, host: env.DASHBOARD_HOST },
+        `Dashboard sẵn sàng tại http://${env.DASHBOARD_HOST}:${info.port}`,
+      ),
   );
 }
 

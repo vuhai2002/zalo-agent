@@ -19,3 +19,8 @@ qr*.png
 
 # Cấu hình MCP server của máy dev (đường dẫn tuyệt đối, có thể chứa token)
 .mcp.json
+
+# Ghi chú riêng của người vận hành: IP máy chủ, cổng SSH, tên miền, đường dẫn.
+# Repo này công khai nên hạ tầng cá nhân KHÔNG lên GitHub. Tài liệu triển khai
+# chung (dùng chỗ trống thay cho giá trị thật) nằm ở docs/deployment-guide.md.
+*.local.md

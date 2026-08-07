@@ -1,0 +1,96 @@
+# Triển khai production. Chạy qua `bash deploy.sh`, đừng gọi tay `docker compose
+# up` - script còn lo phần kiểm tra và dọn dẹp.
+#
+# Cấu hình riêng của từng máy chủ (cổng host, đường dẫn dữ liệu) đưa ra biến môi
+# trường, KHÔNG sửa thẳng file này: sửa thẳng là lần `git pull` sau xung đột.
+# Đặt chúng trong `.env` cạnh file này - Compose tự đọc `.env` để thay biến, và
+# `.env` đã nằm trong .gitignore. Lưu ý `.env` này CHỈ để Compose thay biến;
+# biến cho ứng dụng nằm ở `.env.production` bên dưới.
+
+services:
+  zalo-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zalo-agent:latest
+    container_name: zalo-agent
+    restart: unless-stopped
+
+    # CHỈ 127.0.0.1, KHÔNG BAO GIỜ 0.0.0.0. Docker tự ghi iptables và đi vòng
+    # qua UFW, nên bind 0.0.0.0 là phơi dashboard ra internet bất kể firewall
+    # cấu hình thế nào. Reverse proxy trên host là cổng công khai duy nhất.
+    ports:
+      - "127.0.0.1:${ZALO_AGENT_HOST_PORT:-3900}:3900"
+
+    env_file:
+      - .env.production
+
+    # MỘT instance duy nhất, không bao giờ scale. Zalo chỉ cho một listener mỗi
+    # tài khoản: chạy hai bản là chúng đá nhau ra liên tục.
+    #
+    # Dữ liệu (SQLite, cookie Zalo đã mã hóa, ảnh tải về) nằm ở volume - phải
+    # sống qua mọi lần deploy. Mặc định là named volume để cài mới chạy được
+    # ngay; muốn đặt ra đường dẫn ngoài thì đổi ZALO_AGENT_DATA_DIR.
+    volumes:
+      - "${ZALO_AGENT_DATA_DIR:-zalo-agent-data}:/data"
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Không chia sẻ vùng nhớ IPC với container khác trên cùng máy chủ
+    ipc: private
+    # Trần số tiến trình: một lỗi đẻ tiến trình vô hạn chỉ giết được chính
+    # container này, không kéo sập cả máy chủ. Bot không fork gì nên 256 là dư.
+    pids_limit: 256
+
+    # KHÔNG bật `read_only`, và đây là quyết định có chủ đích: bot ghi liên tục
+    # vào /data (SQLite, ảnh tải về, log file xoay theo ngày). Khác các dịch vụ
+    # stateless vốn bật được read_only.
+    #
+    # Vẫn cho /tmp riêng và có trần: file Word/Excel/ảnh vẽ ra được ghi tạm ở
+    # đây trước khi gửi. Để nó nằm trong lớp ghi của container thì file rác tích
+    # lại tới lúc hết đĩa; tmpfs nằm trong RAM và mất khi container khởi động lại.
+    tmpfs:
+      - /tmp:size=128m
+
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1"
+        reservations:
+          # Giữ chỗ để khi máy chủ chật, bot không bị bóp xuống mức không chạy nổi
+          memory: 256M
+
+    # 768M chứ không phải 512M như mặc định nhà: một lượt agent có thể ôm ảnh
+    # gốc dạng base64 để gửi cho model vision, cộng ngữ cảnh vài chục nghìn
+    # token. 512M là chỗ dễ bị OOM-kill đúng lúc đang trả lời.
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # `127.0.0.1` chứ KHÔNG phải `localhost`: Alpine phân giải localhost ra cả
+    # ::1 lẫn 127.0.0.1, thử IPv6 trước, trong khi server bind IPv4 -> báo
+    # unhealthy oan. Dùng node http.get chứ không `wget --spider` (spider gửi
+    # HEAD, router chỉ đăng ký GET thì trả 405 -> cũng báo oan).
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3900/api/health',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Bot còn phải mở SQLite, chạy migration và nối lại phiên Zalo trước khi
+      # dashboard trả lời - 20s là đo dư cho máy nhỏ.
+      start_period: 20s
+
+volumes:
+  zalo-agent-data:

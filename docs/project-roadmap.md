@@ -3158,3 +3158,61 @@ giá trị là bật.
 - Test `clearTimeout` ban đầu chỉ đo hành vi (handler có chạy không) nên xanh cả
   khi bỏ `clearTimeout` - vì xóa entry khỏi Map đã đủ chặn handler. Phải đo thứ
   khác hẳn: đếm handle `Timeout` còn sống bằng `process.getActiveResourcesInfo()`.
+
+## V3.9 - Đóng gói Docker để deploy lên VPS (2026-08-07)
+
+### Vì sao bot này không giống 11 dịch vụ đã deploy trước đó
+
+Chuẩn triển khai sẵn có (Caddy native trên host -> container bind loopback ->
+Postgres native) phủ được phần khung, nhưng bốn điểm phải làm khác:
+
+| Điểm khác | Xử lý |
+|---|---|
+| KHÔNG dùng Postgres - trạng thái là SQLite + file trong `DATA_DIR` | Một volume duy nhất, bỏ hẳn phần provisioning Postgres |
+| Ghi liên tục (SQLite, ảnh tải về, log) | KHÔNG bật `read_only` - khác các dịch vụ stateless |
+| Zalo chỉ cho MỘT listener mỗi tài khoản | Đúng một container, không bao giờ scale |
+| `node:sqlite` còn thử nghiệm | Ghim `node:24-alpine`: Node 22 phải thêm cờ `--experimental-sqlite`, Node 24 import thẳng được |
+
+### Chặn thật tìm ra khi rà: dashboard bind cứng loopback
+
+`dashboard-server.ts` gọi `serve({ hostname: "127.0.0.1" })`. Trong container đó
+là loopback CỦA CONTAINER - Docker không chuyển tiếp cổng vào đó được, nên
+reverse proxy chỉ nhận connection refused. Bot vẫn chạy, log không một dòng lỗi.
+
+Thêm `DASHBOARD_HOST` mặc định `127.0.0.1`; Dockerfile đặt `0.0.0.0`. Việc chặn
+phơi ra internet chuyển sang phía HOST bằng publish `127.0.0.1:<host>:<container>`
+- đúng chỗ nó nên nằm, vì Docker ghi thẳng iptables và đi vòng qua UFW.
+
+Mặc định phải là loopback chứ không phải `0.0.0.0`: đổi mặc định cho "Docker
+chạy ngay" là phơi dashboard của mọi bản cài chạy thẳng trên máy chủ.
+
+### Hai lớp tài liệu
+
+Repo công khai nên hạ tầng cá nhân không lên GitHub:
+
+- `docs/deployment-guide.md` - hướng dẫn CHUNG, mọi giá trị riêng viết thành
+  `<chỗ-trống>`. Cấu hình theo máy chủ đi qua biến (`ZALO_AGENT_HOST_PORT`,
+  `ZALO_AGENT_DATA_DIR`) chứ không sửa thẳng compose - sửa thẳng là lần
+  `git pull` sau xung đột.
+- `*.local.md` vào `.gitignore` cho ghi chú riêng của người vận hành (IP, cổng
+  SSH, tên miền, khối Caddy).
+
+### Kiểm chứng
+
+1560 test xanh (+4), typecheck sạch. Bốn phép phá, cả bốn đều đỏ: mặc định
+schema thành `0.0.0.0`, Dockerfile quên đặt `0.0.0.0`, compose publish
+`0.0.0.0`, và server bind cứng lại.
+
+Phép phá thứ tư ban đầu XANH - ba khẳng định đầu chỉ đọc schema/Dockerfile/
+compose nên không bắt được ai bind cứng trong code. Đã thêm khẳng định thứ tư
+đọc `dashboard-server.ts` để bịt.
+
+Nghiệm thu được KHÔNG có Docker: bản biên dịch `node dist/src/index.js` chạy tới
+lúc mở dashboard (chỉ dừng vì cổng đang bận), `bash -n deploy.sh` sạch, compose
+parse được, mọi file Dockerfile COPY đều tồn tại.
+
+### Việc còn treo
+
+**Chưa build thử image thật** - máy dev không có Docker. Lần deploy đầu trên VPS
+là lần đầu tiên `docker build` chạy, nên hãy chạy tay và đọc log thay vì tin là
+xong.
