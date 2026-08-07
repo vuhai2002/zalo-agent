@@ -39,6 +39,9 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   yêu cầu đã đủ rõ.
 - Dải cảnh báo trên trang Tổng quan khi chưa cấu hình LLM - trước đó bot vẫn
   khởi động bình thường nên dashboard xanh trong khi mọi tin nhắn đều hỏng.
+- Rootfs của container chạy `read_only`: mọi đường ghi của bot đều nằm trong
+  volume dữ liệu, nên bật được. Bot đọc tin của người lạ, nên chặn ghi vào cây
+  code và `node_modules` là một lớp phòng thủ thật chứ không phải hình thức.
 - **Triển khai bằng Docker**: `Dockerfile` bốn stage (runner chỉ có dependency
   production, chạy bản biên dịch chứ không mang theo TypeScript),
   `docker-compose.prod.yml`, `deploy.sh` có kiểm tra sức khỏe, và

@@ -53,6 +53,47 @@ describe("DASHBOARD_HOST - hai đầu phải ngược nhau", () => {
     );
   });
 
+  /**
+   * BIẾN TRONG `env_file` THẮNG `ENV` CỦA DOCKERFILE.
+   *
+   * Đây là cái bẫy đã tốn một lần deploy thật (07/08/2026), và nó hỏng theo kiểu
+   * tệ nhất: healthcheck chạy BÊN TRONG container nên vẫn xanh, `deploy.sh` báo
+   * thành công, mà reverse proxy thì nhận connection refused -> 502. Không một
+   * dòng log nào chỉ ra nguyên nhân.
+   *
+   * Dòng đó nay bị comment trong file mẫu. Hai khẳng định dưới đây chặn người
+   * sau "sửa cho gọn" rồi dựng lại đúng cái bẫy.
+   */
+  it(".env.production.example KHÔNG được có dòng DASHBOARD_HOST đang bật", () => {
+    const mau = doc(".env.production.example");
+    const dongBat = mau
+      .split("\n")
+      .filter((d) => /^\s*DASHBOARD_HOST\s*=/.test(d));
+
+    assert.deepEqual(
+      dongBat,
+      [],
+      "bỏ comment dòng này là container bind loopback của chính nó -> proxy 502, mà healthcheck vẫn xanh",
+    );
+  });
+
+  it("DATA_DIR trong file mẫu production phải là đường dẫn TUYỆT ĐỐI", () => {
+    // `./data` giải ra `/app/data` bên trong container - nơi uid 1001 không ghi
+    // được vì `/app` thuộc root. Container chết lúc mở SQLite, và volume mount ở
+    // `/data` không hề được dùng tới.
+    const dong = doc(".env.production.example")
+      .split("\n")
+      .find((d) => /^\s*DATA_DIR\s*=/.test(d));
+
+    assert.ok(dong, "thiếu hẳn DATA_DIR thì phép đo này đang rỗng");
+    const giaTri = dong.split("=")[1]?.trim() ?? "";
+    assert.match(
+      giaTri,
+      /^\//,
+      `DATA_DIR="${giaTri}" - đường dẫn tương đối giải ra /app/data, uid 1001 không ghi được`,
+    );
+  });
+
   it("compose publish cổng CHỈ trên 127.0.0.1 của host", () => {
     // Đây mới là chỗ chặn phơi ra internet. Docker ghi thẳng iptables nên bind
     // 0.0.0.0 ở đây là lộ ra ngoài bất kể UFW cấu hình thế nào.

@@ -3169,7 +3169,7 @@ Postgres native) phủ được phần khung, nhưng bốn điểm phải làm k
 | Điểm khác | Xử lý |
 |---|---|
 | KHÔNG dùng Postgres - trạng thái là SQLite + file trong `DATA_DIR` | Một volume duy nhất, bỏ hẳn phần provisioning Postgres |
-| Ghi liên tục (SQLite, ảnh tải về, log) | KHÔNG bật `read_only` - khác các dịch vụ stateless |
+| Ghi liên tục (SQLite, ảnh tải về, log) | Mọi đường ghi nằm trong volume `/data`, nên rootfs VẪN `read_only` được - xem mục dưới |
 | Zalo chỉ cho MỘT listener mỗi tài khoản | Đúng một container, không bao giờ scale |
 | `node:sqlite` còn thử nghiệm | Ghim `node:24-alpine`: Node 22 phải thêm cờ `--experimental-sqlite`, Node 24 import thẳng được |
 
@@ -3211,8 +3211,64 @@ Nghiệm thu được KHÔNG có Docker: bản biên dịch `node dist/src/index
 lúc mở dashboard (chỉ dừng vì cổng đang bận), `bash -n deploy.sh` sạch, compose
 parse được, mọi file Dockerfile COPY đều tồn tại.
 
+### Deploy thật: ba lỗi chỉ lộ ra trên máy chủ (07/08/2026)
+
+Đã deploy thành công và bot chạy ổn trên VPS. Nhưng lần `docker build` đầu tiên
+cũng là lần đầu ba lỗi này lộ ra - không phép kiểm nào ở máy dev bắt được, vì
+máy dev không có Docker.
+
+**1. `pids_limit` xung đột với khối `deploy.resources`.** Compose v5 từ chối cả
+file: *"can't set distinct values on 'pids_limit' and
+'deploy.resources.limits.pids'"* - kể cả khi chỉ đặt `pids_limit` còn mục `pids`
+để trống. Deploy chết ngay lệnh đầu với một thông báo không liên quan gì tới
+nguyên nhân. Gộp vào `deploy.resources.limits.pids`.
+
+**2 và 3 cùng một gốc: BIẾN TRONG `env_file` THẮNG `ENV` CỦA DOCKERFILE.**
+
+`.env.production.example` ship sẵn `DASHBOARD_HOST=127.0.0.1` và `DATA_DIR=./data`
+ở trạng thái ACTIVE, kèm hẳn comment "đừng ghi đè ở đây" - mà vẫn để dòng đó
+bật. Ai copy file mẫu là dính cả hai:
+
+- `DASHBOARD_HOST=127.0.0.1` -> server bind loopback của chính container.
+  **Healthcheck chạy BÊN TRONG container nên vẫn xanh**, `deploy.sh` báo deploy
+  thành công, còn reverse proxy nhận connection refused -> 502. Không một dòng
+  log nào chỉ ra nguyên nhân.
+- `DATA_DIR=./data` -> giải ra `/app/data`, nơi uid 1001 không ghi được vì
+  `/app` thuộc root. Container chết lúc mở SQLite, và volume mount ở `/data`
+  không hề được dùng tới.
+
+Nay `DASHBOARD_HOST` bị comment (chỉ mở khi chạy thẳng trên máy chủ) và
+`DATA_DIR=/data`. Thêm hai khẳng định vào `dashboard-host-binding.test.ts` chặn
+người sau "sửa cho gọn" rồi dựng lại đúng cái bẫy: file mẫu production KHÔNG
+được có dòng `DASHBOARD_HOST` đang bật, và `DATA_DIR` phải là đường dẫn tuyệt đối.
+
+**Bài học:** cả ba đều là loại lỗi mà đọc code không thấy. Cái đắt nhất không
+phải lỗi cấu hình, mà là hai lỗi đó hỏng CÂM - healthcheck xanh và script báo
+thành công trong khi dịch vụ không phục vụ được ai.
+
+### Bật được `read_only` sau khi truy hết đường ghi
+
+Bản đầu ghi "KHÔNG bật `read_only` vì bot ghi liên tục". Truy lại thì sai: bot
+ghi nhiều nhưng MỌI đường đều giải ra `dataDir`, tức volume `/data` - volume vẫn
+ghi bình thường khi rootfs chỉ đọc.
+
+| Chỗ ghi | Giải ra |
+|---|---|
+| `shared/temp-file-store.ts` | `dataDir/tmp` (file .docx/.xlsx/ảnh tạm) |
+| `shared/logger.ts` | `dataDir/logs` (pino-roll) |
+| `zalo/zalo-credential-store.ts` | `dataDir/accounts/...` (cookie đã mã hóa) |
+| `conversation/media-store.ts` | `dataDir/media` |
+| `scripts/login-account.ts` | `dataDir/accounts/.../qr-login.png` |
+
+Kiểm thêm: `zca-js` không tự ghi file nào, SQLite ghi journal/WAL cạnh file DB
+(cũng trong `/data`).
+
+Giá trị của `read_only` ở đây không phải chuẩn chung mà là mối lo cụ thể: bot đọc
+tin của người lạ nên prompt injection là chuyện có thật. `/app` và `/usr` không
+ghi được thì không thả được payload vào cây code hay `node_modules` để sống qua
+restart. Thêm thư viện nào ghi ra ngoài `/data` thì container chết bằng EROFS
+ngay lần deploy đó - lỗi hiện rõ, không âm thầm.
+
 ### Việc còn treo
 
-**Chưa build thử image thật** - máy dev không có Docker. Lần deploy đầu trên VPS
-là lần đầu tiên `docker build` chạy, nên hãy chạy tay và đọc log thay vì tin là
-xong.
+Không còn. Đã deploy thật, bot chạy ổn trên VPS: quét QR, trả lời tin nhắn.
