@@ -61,7 +61,10 @@ services:
     # nằm ở dataDir/tmp - xem bảng trên), nhưng vẫn giữ vì read_only cần một chỗ
     # cho thư viện bên thứ ba xả file tạm, và vì nằm trong RAM nên không có
     # đường tích rác ra đĩa.
-    # mode=1777 để user zalo (uid 1001) ghi được - mặc định của Docker là root.
+    # mode=1777 là ghi rõ ra thứ Docker vốn đã mặc định (đo lại: `size=` một
+    # mình vẫn cho ra drwxrwxrwt). Giữ vì read_only làm /tmp thành ổ ghi duy
+    # nhất ngoài /data, nên quyền của nó đáng được nói thẳng thay vì để người
+    # đọc phải tra tài liệu Docker.
     tmpfs:
       - /tmp:size=64m,mode=1777
 
