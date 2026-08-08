@@ -2,7 +2,7 @@
 
 <p align="center">
 A self-hosted AI agent that lives inside <strong>Zalo</strong> on a personal account.<br/>
-Multi-account in one process, a separate "brain" per account, 13 tools, full web dashboard.<br/>
+Multi-account in one process, a separate "brain" per account, 14 tools, full web dashboard.<br/>
 Provider-agnostic: any OpenAI-compatible endpoint or Anthropic.
 </p>
 
@@ -20,7 +20,7 @@ Provider-agnostic: any OpenAI-compatible endpoint or Anthropic.
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-1562%20passing-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-1793%20passing-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -36,12 +36,13 @@ marker that tells the model it is *data*, never an instruction.
 
 ## What the bot can do
 
-13 tools, each toggleable per account from the dashboard.
+14 tools, each toggleable per account from the dashboard.
 
 | Tool | Purpose |
 |---|---|
 | `web_search` | Web search over a provider chain (Brave -> DuckDuckGo). DuckDuckGo needs no API key |
 | `web_fetch` | Read one public URL. Blocks private IPs and cloud metadata endpoints (SSRF defense) |
+| `kb_search` | Search documents the bot owner uploaded (policies, price lists, guides) - FTS5 + bm25, merged with RRF |
 | `read_image` | Re-examine an image with a specific question: count items, read fine print |
 | `create_image` | Generate an image, or **edit an image the user just sent** - the rest stays pixel-identical |
 | `create_word_document` | Compose a .docx (headings, paragraphs, tables, two-column layout) and send it in chat |
@@ -95,9 +96,10 @@ Hono + React + Tailwind, served by the bot process itself at `http://127.0.0.1:3
 | Sessions | Replay any conversation, read the bot's own rolling summary, mute per thread, **wipe a conversation's context** |
 | Contacts | People the bot has met |
 | Memory | Inspect, edit, delete anything the bot remembers |
+| Knowledge base | Upload documents or type them in, assign sources per agent for the `kb_search` tool |
 | Schedule | All jobs, dry-run now, per-run history |
-| Tools | Toggle the 13 tools per account; configure image generation and the vision sidecar |
-| Tuning | **54 runtime parameters**, applied live with no restart |
+| Tools | Toggle the 14 tools per account; configure image generation and the vision sidecar |
+| Tuning | **56 runtime parameters**, applied live with no restart |
 | Trace | Step-by-step replay of an agent turn: reasoning, tool calls, arguments |
 | Logs | System log viewer |
 
@@ -158,7 +160,7 @@ account plus QR login.
 pnpm dev                    # bot (watch mode) + dashboard
 pnpm build:web              # build the UI; the bot serves it at http://127.0.0.1:3900
 pnpm zalo-login acc-main    # QR login from the CLI (the web flow is easier)
-pnpm test                   # 1562 tests
+pnpm test                   # 1793 tests
 pnpm typecheck
 pnpm eval                   # 17 cases against a REAL model; no message ever reaches real Zalo
 ```
@@ -190,9 +192,9 @@ Image generation and the vision sidecar are configured separately, also OpenAI-c
 
 | | |
 |---|---|
-| Unit + integration tests | **1562**, on `node:test`, no external framework |
+| Unit + integration tests | **1793**, on `node:test`, no external framework |
 | Eval cases against a real model | **17** - measuring what tests cannot: does it research instead of guessing, ask when information is missing, format readably |
-| Source | ~31,700 lines excluding tests, across 273 files |
+| Source | ~34,500 lines excluding tests, across 299 files |
 
 Evals can inspect **the actual formatting sent to Zalo**, not just plain text, so presentation bugs
 are caught by machine rather than by the user noticing.
@@ -204,10 +206,10 @@ green test proves nothing if it is also green when the logic is wrong.
 
 ```
 src/
-├── config/        env (Zod), account store, agent store, 54 live-tunable parameters
+├── config/        env (Zod), account store, agent store, 56 live-tunable parameters
 ├── zalo/          QR login, encrypted credentials, listener + reconnect, message parsing,
 │                  sanitizer, markdown -> Zalo styles, byte-budget message splitting
-├── agent/         agent loop (AI SDK), providers, persona, tools/ (13 tools)
+├── agent/         agent loop (AI SDK), providers, persona, tools/ (14 tools)
 ├── scheduler/     schedules: tick, job claiming, proactive-send caps, run history
 ├── conversation/  SQLite: history, threads, contacts, usage, memory, images, summarizer
 ├── middleware/    allowlist + @mention, per-thread batching, send rate limiting

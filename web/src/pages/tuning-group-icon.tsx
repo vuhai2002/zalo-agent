@@ -26,6 +26,7 @@ const ICON_BY_GROUP: Record<string, IconFn> = {
   context: IconDatabase,
   web: IconGlobe,
   documents: IconFileText,
+  kb: IconFileText,
   images: IconImage,
   sending: IconMessage,
   logs: IconClock,

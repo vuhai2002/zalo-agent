@@ -41,6 +41,19 @@ describe("kb-chunk-store - lưu đoạn giữ FTS đồng bộ", () => {
     assert.equal(chunkStore.demDoan(id), 1);
   });
 
+  it("lưu đoạn lần hai KHÔNG để lại hàng FTS mồ côi", () => {
+    // Khẳng định TRÊN demDoan() (đếm kb_chunks) không đủ: nó vẫn ra 1 dù dòng
+    // 31 của kb-chunk-store.ts (xoaFtsCuaNguonStmt.run) bị xóa mất, vì bảng
+    // ẢO kb_chunks_fts tách biệt hoàn toàn khỏi kb_chunks. Thiếu dòng đó thì
+    // mỗi lần cắt lại tài liệu cộng thêm một hàng FTS chết - không JOIN nào
+    // dọn được nó (subquery của xoaFtsCuaNguonStmt tra qua kb_chunks đã trống
+    // sau xoaDoanCuaNguonStmt), index phình vô hạn và IDF của bm25 lệch theo.
+    chunkStore.luuDoan(id, [{ thuTu: 0, tieuDe: "", noiDung: "bản cũ" }]);
+    chunkStore.luuDoan(id, [{ thuTu: 0, tieuDe: "", noiDung: "bản mới" }]);
+    const { n } = database.db.prepare("SELECT COUNT(*) AS n FROM kb_chunks_fts").get() as { n: number };
+    assert.equal(n, 1, "hàng FTS của lần lưu đầu phải bị xóa khi lưu đè lần hai");
+  });
+
   it("cột phang chứa chữ đã bỏ dấu, noi_dung giữ nguyên dấu", () => {
     // `phang` là cột FTS5 index; còn dấu thì phase 03 tìm mãi không ra mà không
     // có gì báo lỗi

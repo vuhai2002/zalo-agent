@@ -63,6 +63,17 @@ export async function xuLyMotVong(): Promise<void> {
   const dangCho = layNguonTheoTrangThai("cho_xu_ly");
   for (const n of dangCho) {
     await xuLyMotNguon(n);
+    // Nhả event loop giữa MỖI nguồn: `xuLyMotNguon` đọc/cắt/lưu đều đồng bộ
+    // (node:sqlite đồng bộ, `catThanhDoan`/regex extractor đều đồng bộ), nhánh
+    // "text" (gõ tay) còn không có await THẬT nào bên trong - cả vòng chạy
+    // liền MỘT khối JS, chặn luôn việc nhận/gửi tin Zalo (cùng tiến trình 1
+    // luồng). Đo trên DB tạm với 3 nguồn gõ tay 20MB: KHÔNG nhả thì cả vòng
+    // chạy liền ~5,1 giây, 0 lần nào khác chen được vào giữa; nhả sau mỗi
+    // nguồn thì độ trễ tối đa tụt xuống dưới mili-giây (chi tiết đo ở
+    // `.superpowers/sdd/plan/final-fix-wave-report.md`, mục 2). Không nhả
+    // thêm giữa từng ĐOẠN trong vòng ghi (`luuDoan`): đã đo, phần tốn thời
+    // gian nhất là `catThanhDoan`+ghi cả nguồn, không phải từng đoạn riêng lẻ.
+    await new Promise((resolve) => setImmediate(resolve));
   }
 }
 

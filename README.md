@@ -2,7 +2,7 @@
 
 <p align="center">
 Bot AI thường trú trên Zalo <strong>tài khoản cá nhân</strong>. Nhiều account chạy chung một tiến trình,<br/>
-mỗi account một "não" riêng, 13 công cụ, dashboard web đầy đủ. Tự host, không phụ thuộc nhà cung cấp LLM nào.
+mỗi account một "não" riêng, 14 công cụ, dashboard web đầy đủ. Tự host, không phụ thuộc nhà cung cấp LLM nào.
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@ mỗi account một "não" riêng, 13 công cụ, dashboard web đầy đủ. T�
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-1787%20xanh-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-1793%20xanh-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -33,12 +33,13 @@ là dữ liệu, không phải mệnh lệnh.
 
 ## Bot làm được gì
 
-13 công cụ, bật/tắt từng cái theo account ngay trên dashboard.
+14 công cụ, bật/tắt từng cái theo account ngay trên dashboard.
 
 | Công cụ | Làm gì |
 |---|---|
 | `web_search` | Tìm web theo chuỗi nguồn (Brave -> DuckDuckGo). DuckDuckGo không cần key |
 | `web_fetch` | Đọc 1 URL công khai. Chặn IP nội bộ và metadata cloud (chống SSRF) |
+| `kb_search` | Tra tài liệu chủ bot tự nạp (chính sách, bảng giá, hướng dẫn) - FTS5 + bm25, hợp nhất bằng RRF |
 | `read_image` | Nhìn kỹ lại ảnh với câu hỏi cụ thể: đếm số lượng, đọc chữ nhỏ, soi chi tiết |
 | `create_image` | Vẽ ảnh AI mới, hoặc **SỬA ảnh người dùng vừa gửi** - phần còn lại giữ nguyên từng pixel |
 | `create_word_document` | Soạn .docx (tiêu đề, đoạn văn, bảng, hai cột) rồi gửi thẳng trong chat |
@@ -92,9 +93,10 @@ Hono + React + Tailwind, phục vụ ngay từ chính tiến trình bot tại `h
 | Sessions | Đọc lại từng cuộc trò chuyện, xem tóm tắt bot tự dựng, bật/tắt bot theo thread, **xóa sạch ngữ cảnh** một cuộc trò chuyện |
 | Contacts | Danh bạ đã gặp |
 | Memory | Xem, sửa, xóa từng điều bot đã nhớ |
+| Kho tri thức | Nạp tài liệu (upload hoặc gõ tay), gán nguồn cho từng agent để tool `kb_search` tra |
 | Lịch hẹn | Danh sách lịch, chạy thử ngay, lịch sử từng lần chạy |
-| Tools | Bật/tắt 13 công cụ theo account, cấu hình vẽ ảnh và model vision |
-| Cấu hình | **54 tham số** vận hành chỉnh nóng, không cần khởi động lại |
+| Tools | Bật/tắt 14 công cụ theo account, cấu hình vẽ ảnh và model vision |
+| Cấu hình | **56 tham số** vận hành chỉnh nóng, không cần khởi động lại |
 | Trace | Xem lại từng bước của một lượt agent: model nghĩ gì, gọi tool nào, tham số ra sao |
 | Logs | Nhật ký hệ thống |
 
@@ -159,7 +161,7 @@ pnpm dev                    # bot (watch mode) + dashboard
 pnpm build:web              # build UI -> web/dist, bot tự serve tại http://127.0.0.1:3900
 pnpm dev:web                # dev UI dashboard (Vite, proxy vào API)
 pnpm zalo-login acc-chinh   # login QR bằng CLI (cách cũ - trên web tiện hơn)
-pnpm test                   # 1787 test
+pnpm test                   # 1793 test
 pnpm typecheck              # bắt buộc chạy trước khi báo hoàn thành
 pnpm eval                   # 17 case chạy MODEL THẬT, không tin nào ra Zalo thật
 ```
@@ -192,9 +194,9 @@ Vẽ ảnh và model vision phụ cấu hình riêng, cũng theo chuẩn OpenAI-
 
 | | |
 |---|---|
-| Test đơn vị + tích hợp | **1787**, chạy bằng `node:test`, không framework ngoài |
+| Test đơn vị + tích hợp | **1793**, chạy bằng `node:test`, không framework ngoài |
 | Case eval chạy model THẬT | **17** - đo thứ test không đo nổi: có tra cứu thay vì đoán không, có hỏi lại khi thiếu thông tin không, trình bày có dễ đọc không |
-| Nguồn | ~31.700 dòng (không tính test), 273 file |
+| Nguồn | ~34.500 dòng (không tính test), 299 file |
 
 Eval nhìn thấy được **cả định dạng thật sự gửi lên Zalo**, không chỉ chữ trần - nên lỗi trình bày
 bị máy bắt chứ không đợi người dùng phát hiện.
@@ -206,10 +208,10 @@ Test xanh không chứng minh gì nếu nó cũng xanh khi logic sai.
 
 ```
 src/
-├── config/        env (Zod), account store, agent store, 54 tham số chỉnh nóng
+├── config/        env (Zod), account store, agent store, 56 tham số chỉnh nóng
 ├── zalo/          login QR, credential mã hóa, listener + reconnect, parse tin,
 │                  lớp làm sạch + dịch markdown sang định dạng Zalo, cắt tin theo byte
-├── agent/         agent loop (AI SDK), provider, persona, tools/ (13 công cụ)
+├── agent/         agent loop (AI SDK), provider, persona, tools/ (14 công cụ)
 ├── scheduler/     lịch hẹn: tick, giành job, trần tin chủ động, lịch sử chạy
 ├── conversation/  SQLite: history, threads, contacts, usage, memory, ảnh, summarizer
 ├── middleware/    allowlist + @mention, gộp tin theo thread, rate limit gửi

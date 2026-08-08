@@ -15,6 +15,25 @@ import zlib from "node:zlib";
 const EOCD_SIGNATURE = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
 const CENTRAL_HEADER_SIGNATURE = 0x02014b50;
 
+/**
+ * Trần dữ liệu ĐÃ GIẢI NÉN của một entry - chặn "zip bomb". Tỉ lệ nén deflate
+ * có thể tới cỡ 1000:1, nên một file nén hợp lệ về magic bytes (`PK`) và nhỏ
+ * hơn trần dung lượng UPLOAD vẫn có thể giải ra hàng GB, cấp phát Buffer
+ * TRƯỚC khi bất kỳ trần dung lượng nào (KB_MAX_FILE_MB, tới 100 MB) kịp chặn.
+ * Lỗi cấu trúc zip thì an toàn (ném RangeError, bắt được), nhưng thiếu trần
+ * này thì OOM giết cả process - không bắt được, mất luôn mọi account đang
+ * chạy chung tiến trình.
+ *
+ * 5000 MB = 50 lần trần file lớn nhất Kho tri thức cho phép (100 MB) - đủ
+ * rộng cho docx/xlsx thật (không tài liệu nào giải nén ra quá vài chục MB) mà
+ * vẫn hữu hạn. Hằng số CỐ ĐỊNH, không đọc trực tiếp từ tuning KB_MAX_FILE_MB:
+ * module này còn phục vụ đường GHI tài liệu của bot (docx/xlsx tự sinh, xem
+ * `render-docx.ts`/`render-xlsx.ts` và test của chúng) - kéo cấu hình DB của
+ * riêng Kho tri thức vào một tiện ích dùng chung là ghép sai tầng, và sẽ buộc
+ * mọi test gọi hàm này phải mở DB thật (xem "Bẫy khi viết test" ở CLAUDE.md).
+ */
+const TRAN_GIAI_NEN_MAC_DINH = 100 * 50 * 1024 * 1024;
+
 type CentralEntry = { name: string; method: number; compSize: number; localOffset: number };
 
 function* centralEntries(buf: Buffer): Generator<CentralEntry> {
@@ -41,8 +60,18 @@ function* centralEntries(buf: Buffer): Generator<CentralEntry> {
   }
 }
 
-/** Nội dung entry đã giải nén, hoặc null nếu không có entry tên đó */
-export function readZipEntry(buf: Buffer, entryName: string): Buffer | null {
+/**
+ * Nội dung entry đã giải nén, hoặc null nếu không có entry tên đó.
+ *
+ * @param maxOutputBytes trần dữ liệu SAU giải nén - mặc định `TRAN_GIAI_NEN_MAC_DINH`.
+ * Tham số hóa để test dựng được ca vượt trần với một con số nhỏ, không cần
+ * dựng bomb thật hàng GB.
+ */
+export function readZipEntry(
+  buf: Buffer,
+  entryName: string,
+  maxOutputBytes: number = TRAN_GIAI_NEN_MAC_DINH,
+): Buffer | null {
   for (const entry of centralEntries(buf)) {
     if (entry.name !== entryName) continue;
     // Độ dài name/extra ở LOCAL header có thể khác central - phải đọc lại từ đó
@@ -50,14 +79,30 @@ export function readZipEntry(buf: Buffer, entryName: string): Buffer | null {
     const extraLen = buf.readUInt16LE(entry.localOffset + 28);
     const start = entry.localOffset + 30 + nameLen + extraLen;
     const data = buf.subarray(start, start + entry.compSize);
-    return entry.method === 0 ? data : zlib.inflateRawSync(data);
+    if (entry.method === 0) return data;
+    try {
+      // maxOutputLength làm zlib kiểm dung lượng NGAY TRONG LÚC giải nén, ném
+      // lỗi sớm thay vì cấp phát bộ nhớ tới khi OOM (không bắt được).
+      return zlib.inflateRawSync(data, { maxOutputLength: maxOutputBytes });
+    } catch (err) {
+      if (err instanceof RangeError && (err as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE") {
+        throw new Error(
+          `Entry "${entryName}" giải nén ra vượt quá giới hạn an toàn (nghi ngờ zip bomb) - đã chặn trước khi giải nén hết`,
+        );
+      }
+      throw err;
+    }
   }
   return null;
 }
 
 /** Đọc entry dạng chuỗi UTF-8; ném lỗi nếu không có (test cần biết ngay) */
-export function readZipEntryText(buf: Buffer, entryName: string): string {
-  const data = readZipEntry(buf, entryName);
+export function readZipEntryText(
+  buf: Buffer,
+  entryName: string,
+  maxOutputBytes: number = TRAN_GIAI_NEN_MAC_DINH,
+): string {
+  const data = readZipEntry(buf, entryName, maxOutputBytes);
   if (!data) throw new Error(`Không tìm thấy "${entryName}" trong file`);
   return data.toString("utf-8");
 }

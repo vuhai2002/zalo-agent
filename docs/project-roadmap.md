@@ -3862,16 +3862,31 @@ SPLADE + Mistral-8B đo được chồng lấn cao hơn không có lợi ích r�
 `k=60` là mặc định Elasticsearch/OpenSearch/Qdrant nhưng `k=10-20` được khuyến
 nghị riêng cho kho cỡ 100-300 trang (mặc định `KB_RRF_K` đặt 20).
 
-### Ca "mấy giờ đóng cửa" trượt - mốc cho đợt vector
+### Ca "mấy giờ đóng cửa" - đo lại ra 4/4 hạng 1, không phải 3/4 như bản đầu
 
 Đo trên 4 câu hỏi kiểu khách hàng thật bằng chế độ OR mọi từ + xếp hạng
-`bm25()`: 3/4 đúng hạng 1 ("phí ship nội thành bao nhiêu", "bảo hành bao lâu
-vậy shop", "đổi trả được không"). Câu thứ 4 **"mấy giờ đóng cửa" trượt**: bỏ
-dấu tiếng Việt làm "đóng" (giờ) và "đồng" (tiền) cùng thành "dong", nên đoạn
-phí vận chuyển bị đẩy lên trên đoạn giờ làm việc - điểm yếu cố hữu của tìm
-theo từ khóa thuần túy. Đây KHÔNG phải lỗi cần vá ngay (RRF đã chừa sẵn chỗ
-nhận thêm một danh sách xếp hạng), mà là **số đo nền** để quyết định lúc nào
-mở đợt vector: chạy thật vài hôm, đo tỉ lệ câu hỏi thật trượt kiểu tương tự,
+`bm25()` trên fixture 4 đoạn: **CẢ 4 câu đều đúng hạng 1**, kể cả "mấy giờ
+đóng cửa" ("phí ship nội thành bao nhiêu", "bảo hành bao lâu vậy shop", "đổi
+trả được không", "mấy giờ đóng cửa") - xem `kb-search.test.ts`, ca "câu hỏi
+giờ mở cửa cũng ra đúng đoạn ở hạng 1 (đã đo, không phải suy luận)". Bản đầu
+của mục này chép theo DỰ ĐOÁN của file phase-05 trong plan (rằng câu thứ 4 sẽ
+trượt), nhưng controller đã ĐO LẠI giữa chừng và siết assertion của test lên
+đúng hạng 1 - lệch giữa roadmap và số đo thật.
+
+Lý do đoạn "Giờ làm việc" THẮNG chứ không thua: nó khớp BA từ khác nhau sau khi
+bỏ dấu ("gio", "dong", "cua" - riêng "cua" xuất hiện 3 lần: "Cửa hàng", "mở
+cửa", "đóng cửa"), trong khi đoạn "Phí vận chuyển" chỉ khớp DUY NHẤT một từ
+("dong", từ "đồng" - đơn vị tiền) dù từ đó lặp lại nhiều lần. `bm25()` cộng
+điểm theo TỪNG TỪ KHÁC NHAU (mỗi từ mang một trọng số IDF riêng), nên khớp đa
+dạng thắng khớp lặp cùng một từ.
+
+Va chạm "đóng" (cửa, giờ) và "đồng" (tiền) cùng bỏ dấu thành "dong" VẪN là một
+rủi ro CÓ THẬT của tìm theo từ khóa thuần túy - điểm yếu cố hữu, không phải đặc
+thù riêng của fixture này - nhưng nó CHƯA kích hoạt trên bộ 4 đoạn hiện có: đoạn
+"Giờ làm việc" luôn thắng nhờ khớp đa dạng. Đây KHÔNG phải lỗi cần vá ngay (RRF
+đã chừa sẵn chỗ nhận thêm một danh sách xếp hạng), mà vẫn là **số đo nền** để
+quyết định lúc nào mở đợt vector: chạy thật vài hôm, đo tỉ lệ câu hỏi thật
+trượt vì va chạm bỏ dấu kiểu tương tự (không nhất thiết đúng cặp "đóng"/"đồng"),
 đủ nhiều thì mở.
 
 ### 5 phase, phase 05 là nơi người vận hành thật sự nạp được tài liệu
@@ -3880,13 +3895,19 @@ mở đợt vector: chạy thật vài hôm, đo tỉ lệ câu hỏi thật tr�
   qua bộ đọc zip tự viết sẵn trong repo, PDF qua `unpdf` - dependency mới duy
   nhất của cả đợt), tìm kiếm FTS5+RRF, tool `kb_search` (không tự nhét, có mặt
   trong schema chỉ khi agent đã được gán nguồn).
-- Phase 05: route CRUD + upload multipart, vòng xử lý NỀN tách khỏi request
-  (đọc PDF 200 trang trong handler chặn cả bot - không nhận tin, không chạy
-  lượt nào), trần dung lượng chặn ở TẦNG ĐỌC (`hono/body-limit`, không đợi gom
-  hết byte vào RAM), kiểm chữ ký thật (magic bytes: PDF phải `%PDF`, docx/xlsx
-  phải `PK`) thay vì tin đuôi tên, lưu file theo id sinh ra chứ không dùng tên
-  người dùng đặt. Tab dashboard: bảng nguồn kèm trạng thái xử lý, modal thêm
-  nguồn (tải file / gõ tay), khối chọn nguồn ở trang sửa agent.
+- Phase 05: route CRUD + upload multipart, vòng xử lý NỀN tách khỏi REQUEST
+  upload (đọc PDF 200 trang trong handler chặn cả bot ngay lúc người vận hành
+  bấm nạp - không nhận tin, không chạy lượt nào). Vòng nền vẫn chạy CHUNG event
+  loop với bot (`node:sqlite` đồng bộ, không có worker thread riêng): nhả nhịp
+  bằng `setImmediate` giữa MỖI nguồn để nhiều nguồn xếp hàng không dồn thành
+  một khối liền, nhưng một nguồn ĐƠN rất lớn (gần trần `KB_MAX_FILE_MB`) vẫn
+  giữ nhịp bot trong lúc ghi - đo: nguồn 100MB tốn ~6s, phần lớn nằm ở vòng ghi
+  `kb_chunks`/FTS (65.700 đoạn), không phải lúc cắt đoạn (198ms). Trần dung
+  lượng chặn ở TẦNG ĐỌC (`hono/body-limit`, không đợi gom hết byte vào RAM),
+  kiểm chữ ký thật (magic bytes: PDF phải `%PDF`, docx/xlsx phải `PK`) thay vì
+  tin đuôi tên, lưu file theo id sinh ra chứ không dùng tên người dùng đặt. Tab
+  dashboard: bảng nguồn kèm trạng thái xử lý, modal thêm nguồn (tải file / gõ
+  tay), khối chọn nguồn ở trang sửa agent.
 
 ### Kiểm chứng
 
@@ -3908,7 +3929,79 @@ type-level thuần túy, không có phép phá runtime tương ứng.
 
 ### Việc còn treo
 
-Chạy thật vài hôm, đo tỉ lệ tra trượt kiểu "mấy giờ đóng cửa" ở trên. Đủ nhiều
-thì mở đợt vector - RRF đã chừa sẵn chỗ, chỉ là truyền thêm một danh sách đã
-xếp hạng. Trần số nguồn / tổng dung lượng kho chưa đặt (chưa có số liệu thật);
-trần theo TỪNG FILE (`KB_MAX_FILE_MB`) đã chặn ca hỏng rõ ràng nhất.
+Chạy thật vài hôm, đo tỉ lệ tra trượt vì va chạm bỏ dấu kiểu "đóng"/"đồng" ở
+trên. Đủ nhiều thì mở đợt vector - RRF đã chừa sẵn chỗ, chỉ là truyền thêm một
+danh sách đã xếp hạng. Trần số nguồn / tổng dung lượng kho chưa đặt (chưa có
+số liệu thật); trần theo TỪNG FILE (`KB_MAX_FILE_MB`) đã chặn ca hỏng rõ ràng
+nhất.
+
+### Việc còn treo của Kho tri thức (vòng rà soát toàn nhánh, dưới mức Important)
+
+31 mục được vòng rà soát toàn nhánh triage: 3 lên mức phải sửa trước merge (đã
+gộp vào phần trên), 8 đóng lại (không đáng làm), 20 còn lại gộp thành các mục
+có nghĩa dưới đây.
+
+**Vòng nền (worker) - đường chỉnh sửa/xóa xen giữa lúc đang xử lý**
+
+- `datTrangThai` ở cuối `xuLyMotNguon` (`kb-ingest-worker.ts`) ghi `san_sang`/
+  `hong` VÔ ĐIỀU KIỆN, không kiểm còn giữ quyền giành như bước CLAIM đầu vòng
+  (`giaNguonChoXuLy`, so sánh-rồi-đổi nguyên tử). `POST /sources/:id/reindex`
+  xen giữa lúc một vòng khác đang xử lý CÙNG nguồn có thể bị worker cũ ghi đè
+  kết quả mới (`hong` của lần xử lý sau) bằng kết quả cũ (`san_sang`).
+- Xóa nguồn (`DELETE`) ngay lúc worker đang trích xuất để lại đoạn + hàng FTS
+  mồ côi - không đọc được qua `timTrongKhoTriThuc` (JOIN qua `kb_sources` nên
+  không rò dữ liệu), nhưng không có đường dọn, index phình dần.
+- `chayMotVongAnToan` có `try/finally` nhưng thiếu nhánh `catch` - khác mẫu
+  `trongGiaoDich`/`scheduler-loop.ts` đã có. Lỗi bất ngờ ngoài `xuLyMotNguon`
+  (vốn đã tự bắt lỗi từng nguồn) sẽ lọt thẳng ra callback `setInterval`.
+- `batDauWorker` không idempotent (gọi hai lần tạo hai interval) - khác
+  `startScheduler` đã kiểm ca này.
+
+**Đọc file**
+
+- `extract-xlsx-text.ts` decode HTML entity HAI LẦN ở nhánh ô kiểu `"s"`
+  (chuỗi dùng chung đã decode một lần lúc dựng `chuoiDungChung`, decode lại
+  lần hai lúc lấy giá trị ô) - lệch với nhánh `inlineStr` chỉ decode một lần.
+  Chưa gây lỗi thấy được (entity kép hiếm gặp trong dữ liệu thật) nhưng dễ vỡ
+  khi gặp `&amp;amp;`.
+- pdfjs (qua `unpdf`) in thẳng ra console (`Warning: Indexing all PDF
+  objects...`), đi vòng qua pino - nên truyền `verbosity: 0` cho
+  `getDocumentProxy`.
+- Chưa có fixture docx/xlsx do Word/Excel THẬT ghi - mọi test round-trip hiện
+  đi qua chính `render-docx.ts`/`render-xlsx.ts` của repo, không phải file
+  người dùng thật tải lên (khác encoding, khác cách Word/Excel ghi XML).
+- Chưa nạp thử PDF thật 200 trang tiếng Việt có dấu - test hiện tại dùng PDF
+  dựng tay, ngắn.
+
+**API/route**
+
+- `POST /sources/:id/reindex` vẫn trả nguyên dòng nguồn kèm toàn văn
+  (`noiDungGoc`) - cùng họ lỗi với "`GET /sources` lộ toàn văn" đã vá ở vòng
+  rà soát thứ nhất, sót lại ở route reindex.
+- `locIdTonTai` không tự cắt khúc danh sách khi dựng câu `IN (...)` - chỉ dựa
+  vào `.max(500)` ở MỘT route gọi nó (`PUT /agents/:id/sources`); caller thứ
+  hai sau này không tự nhớ đặt trần tương tự sẽ mở lại đúng lỗi
+  `SQLITE_LIMIT_VARIABLE_NUMBER` đã vá ở vòng rà soát thứ hai.
+
+**Frontend**
+
+- `web/src/shared/kb-formats.ts` chép tay `DINH_DANG_HO_TRO` trùng với
+  `doc-text-extract.ts` phía backend - không có gì canh hai bên khỏi lệch khi
+  thêm định dạng mới (dashboard build riêng, không import được module backend).
+
+**Test hụt**
+
+- Test 413 (payload quá lớn) chỉ chạm nhánh STREAMING (`app.request` không tự
+  đặt `Content-Length`) - trình duyệt thật LUÔN gửi `Content-Length` nên đi
+  qua nhánh short-circuit theo header, và nhánh đó CHƯA có test riêng. Giá trị
+  cao nhất trong nhóm test hụt: code có thể đúng nhưng chưa ai khóa nó lại.
+- `wrapUntrustedContent` bỏ bọc HOÀN TOÀN khi nội dung dưới 32 ký tự
+  (`TOI_THIEU`) - một đoạn KB rất ngắn (vd "Có, miễn phí.") đi thẳng vào
+  prompt không có ranh giới `<noi_dung_ngoai>`. Rủi ro thấp (đoạn ngắn khó
+  giấu chỉ thị) nhưng là biên chưa được đo.
+
+**Tài liệu**
+
+- `docs/system-architecture.md` chưa có một chữ nào về Kho tri thức - kiến
+  trúc cắt đoạn/FTS5/RRF hiện chỉ nằm trong roadmap này, chưa có bản tóm tắt
+  kiến trúc như các module khác.
