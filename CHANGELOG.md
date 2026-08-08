@@ -10,6 +10,14 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Thêm
 
+- **Kho tri thức**: nạp tài liệu (txt/md/docx/xlsx/pdf hoặc gõ tay) ở trang
+  "Kho tri thức" trên dashboard, bot tra được nội dung qua tool `kb_search`
+  (FTS5 + bm25, hợp nhất bằng RRF - chừa sẵn chỗ cho lớp vector đợt sau). Xử lý
+  (đọc file, cắt đoạn theo ranh giới tiêu đề/đoạn văn) chạy ở vòng nền riêng,
+  upload trả về ngay không chặn bot nhận tin. Mỗi agent chỉ đọc được nguồn đã
+  bật cho nó ở trang sửa agent - mặc định KHÔNG bật nguồn nào. File nạp lên bị
+  kiểm chữ ký thật (magic bytes), không tin đuôi tên; lưu theo id sinh ra chứ
+  không dùng tên người dùng đặt.
 - Agent tự khai được bộ công cụ của mình (`agents.disabled_tools`), GIAO với bộ
   công cụ của tài khoản Zalo. Công cụ dùng được là phần không bên nào tắt - agent
   khai năng lực, tài khoản áp chính sách, không bên nào bật ngược lại được bên

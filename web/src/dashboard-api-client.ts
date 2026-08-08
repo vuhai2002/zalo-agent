@@ -31,6 +31,22 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+/**
+ * Bản riêng của `request()` cho upload multipart - KHÔNG được set header
+ * `content-type` như bản JSON: trình duyệt phải tự sinh nó kèm boundary, tự
+ * gán tay là hỏng luôn phần thân multipart.
+ */
+async function requestFormData<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(path, { method: "POST", body: formData });
+  if (res.status === 401) {
+    if (window.location.pathname !== "/login") window.location.assign("/login");
+    throw new ApiError(401, "Chưa đăng nhập");
+  }
+  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) throw new ApiError(res.status, data.error ?? `Lỗi ${res.status}`);
+  return data as T;
+}
+
 // ===== Types khớp response server =====
 
 export type AccountInfo = { id: string; label: string; enabled: boolean; online: boolean };
@@ -79,6 +95,26 @@ export type MessageItem = {
   senderName?: string;
   content: string;
   createdAt: string;
+};
+
+// ===== Kho tri thức (KB) =====
+
+export type KbSourceStatus = "cho_xu_ly" | "dang_xu_ly" | "san_sang" | "hong";
+export type KbSourceLoai = "file" | "text";
+
+export type KbSourceItem = {
+  id: string;
+  ten: string;
+  loai: KbSourceLoai;
+  dinhDang: string;
+  duongDan: string;
+  noiDungGoc: string;
+  trangThai: KbSourceStatus;
+  loi: string;
+  soDoan: number;
+  soByte: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ContactItem = {
@@ -335,6 +371,34 @@ export const api = {
       request<{ runs: ScheduledJobRunItem[] }>(
         `/api/schedule/${encodeURIComponent(id)}/runs?accountId=${encodeURIComponent(accountId)}&threadId=${encodeURIComponent(threadId)}`,
       ),
+  },
+
+  kb: {
+    sources: () => request<{ items: KbSourceItem[] }>("/api/kb/sources"),
+    createText: (ten: string, noiDung: string) =>
+      request<{ source: KbSourceItem }>("/api/kb/sources/text", {
+        method: "POST",
+        body: JSON.stringify({ ten, noiDung }),
+      }),
+    // Upload trả 202 (xử lý ở worker nền) - không phải 201, nguồn chưa sẵn
+    // sàng ngay lúc response về.
+    uploadFile: (ten: string, file: File) => {
+      const fd = new FormData();
+      fd.append("ten", ten);
+      fd.append("file", file);
+      return requestFormData<{ source: KbSourceItem }>("/api/kb/sources/file", fd);
+    },
+    reindex: (id: string) =>
+      request<{ source: KbSourceItem }>(`/api/kb/sources/${encodeURIComponent(id)}/reindex`, { method: "POST" }),
+    remove: (id: string) =>
+      request<{ ok: true }>(`/api/kb/sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    agentSources: (agentId: string) =>
+      request<{ sourceIds: string[] }>(`/api/kb/agents/${encodeURIComponent(agentId)}/sources`),
+    setAgentSources: (agentId: string, sourceIds: string[]) =>
+      request<{ sourceIds: string[] }>(`/api/kb/agents/${encodeURIComponent(agentId)}/sources`, {
+        method: "PUT",
+        body: JSON.stringify({ sourceIds }),
+      }),
   },
 
   provider: () => request<ProviderSettings>("/api/provider"),

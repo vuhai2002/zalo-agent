@@ -283,6 +283,10 @@ const envSchema = z.object({
   // Trần ký tự cho TOÀN BỘ chuỗi kết quả tool kb_search (thẻ bọc + tên nguồn +
   // nội dung), không phải riêng từng đoạn.
   KB_MAX_RESULT_CHARS: z.coerce.number().int().min(500).max(20_000).default(4000),
+  // Trần dung lượng mỗi file nạp lên Kho tri thức - chặn ở TẦNG ĐỌC (middleware
+  // hono/body-limit đọc theo luồng, huỷ ngay khi vượt trần) chứ không đợi đọc
+  // hết vào RAM rồi mới báo quá lớn.
+  KB_MAX_FILE_MB: z.coerce.number().int().min(1).max(100).default(20),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

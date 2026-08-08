@@ -54,6 +54,7 @@ Nằm ngoài project tại `D:\source-code\zalo-agent-references\`:
 - 5 tool gửi thẳng qua `enqueueSend` (`send_file`, 2 tool tài liệu, `create_image`, `tag_member`) phải **ghi nhận qua `ghiNhanDaGui`, KHÔNG tự gọi `appendMessage`**: chỉ `message-turn-processor` biết đủ ngữ cảnh lượt. Nó ghi ngay lúc được gọi. Thiếu đường này thì tin bot gửi mất khỏi cả dashboard lẫn trí nhớ của chính bot ở lượt sau.
 - **KHÔNG tách `agent-loop.ts`** dù nó 657 dòng: ứng viên duy nhất là `runWrapUp`, mà nó ôm 12 biến closure - tách ra là một tham số object to đùng, rủi ro cao mà không thêm tính đúng đắn nào. Đã cân nhắc và chốt giữ nguyên.
 - Câu "trấn an khi bắt chờ" (`BUSY_ACK_AFTER_MS`) mặc định 600s chứ KHÔNG báo bận mọi lúc: người nhắn đã có ba tín hiệu (dấu "đang nhập", "đã xem", auto-react - tin chen cũng nhận đủ cả ba). Khe hở thật là typing tự tắt ở phút 10 còn lượt chạy tới phút 15.
+- Kho tri thức (`src/knowledge/`, tool `kb_search`): nội dung nạp bằng TOOL, KHÔNG tự nhét vào prompt - giữ nguyên khoản đầu tư prompt cache của những lượt không đụng KB. Mặc định agent KHÔNG đọc được nguồn nào (`agent_kb_sources` rỗng nghĩa là đóng, không phải mở hết) - phải gán tường minh ở trang sửa agent.
 
 ## Lệnh hay dùng
 

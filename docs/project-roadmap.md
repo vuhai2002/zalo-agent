@@ -3834,3 +3834,71 @@ Nam ngồi im chờ trọn lượt của Hải.
 
 **Bộ nhớ hàng chờ** giờ là 32 tin nhân số người gửi, mà `ParsedMessage` ôm cả
 `rawData` lẫn danh sách ảnh.
+
+## V3.15 - Kho tri thức: nạp tài liệu, tra bằng bm25+RRF, gán theo agent (2026-08-09, plan: plans/260808-2354-knowledge-base-tra-cuu-tai-lieu/)
+
+Bot tra được tài liệu người vận hành tự nạp (txt/md/docx/xlsx/pdf hoặc gõ tay)
+qua tool `kb_search`, thay vì chỉ trả lời bằng thứ đã học trong persona hoặc
+tìm trên web. Kiến trúc: nguồn -> cắt đoạn theo ranh giới tiêu đề/đoạn văn ->
+FTS5 (bm25, cột đã bỏ dấu vì `remove_diacritics 2` không xử lý được `đ`) ->
+hợp nhất bằng RRF -> tool. Mỗi agent chỉ đọc nguồn đã bật cho nó, mặc định
+KHÔNG bật nguồn nào - đảo ngược là rò tài liệu của agent khác.
+
+### Đối chiếu goclaw/Hermes trước khi thiết kế
+
+Chi tiết đầy đủ: `plans/260808-2354-knowledge-base-tra-cuu-tai-lieu/reports/nghien-cuu-kb-va-thong-so-chuan.md`.
+
+| | goclaw (Knowledge Vault) | Hermes | Quyết định ở đây |
+|---|---|---|---|
+| Cắt đoạn | KHÔNG - một `embedding vector(1536)` cho CẢ tài liệu, họ tự ghi đó là hạn chế ("content requires embeddings") | không có kho tài liệu, chỉ `MemoryProvider` bộ nhớ hội thoại | CÓ cắt đoạn - điều kiện cần để trả lời đúng một câu hỏi cụ thể thay vì trúng/trượt cả tài liệu |
+| Cách nạp ngữ cảnh | tool (`vault_search`) | tự nhét trước lượt (`prefetch_all`) | theo goclaw - tự nhét phá khoản đầu tư prompt cache đã có (`cache-session-id.ts`) và tốn token cả lượt chào hỏi |
+| Hợp nhất nhiều bộ xếp hạng | trọng số cứng đã chuẩn hóa max về 1 | không áp dụng | RRF trên THỨ HẠNG - không phải chuẩn hóa hai thang điểm không so được (bm25 ra số âm, cosine ra 0-1), và đợt vector sau chỉ là truyền thêm một danh sách |
+| Phân quyền nguồn | `tenant_id` + `agent_id` + `scope` (`personal`/`team`/`shared`/`custom`) | không áp dụng | rút gọn còn agent + mặc định ĐÓNG (không có `shared` ngầm định như goclaw) |
+
+Thông số chuẩn đã tra (không repo tham khảo nào làm RAG cấp đoạn nên tra
+ngoài): cỡ đoạn 400-512 token cho nội dung hỏi đáp (mặc định `KB_CHUNK_CHARS`
+1600 ký tự ~ 400 token tiếng Việt), chồng lấn 10% (nghiên cứu 1/2026 trên
+SPLADE + Mistral-8B đo được chồng lấn cao hơn không có lợi ích rõ rệt), RRF
+`k=60` là mặc định Elasticsearch/OpenSearch/Qdrant nhưng `k=10-20` được khuyến
+nghị riêng cho kho cỡ 100-300 trang (mặc định `KB_RRF_K` đặt 20).
+
+### Ca "mấy giờ đóng cửa" trượt - mốc cho đợt vector
+
+Đo trên 4 câu hỏi kiểu khách hàng thật bằng chế độ OR mọi từ + xếp hạng
+`bm25()`: 3/4 đúng hạng 1 ("phí ship nội thành bao nhiêu", "bảo hành bao lâu
+vậy shop", "đổi trả được không"). Câu thứ 4 **"mấy giờ đóng cửa" trượt**: bỏ
+dấu tiếng Việt làm "đóng" (giờ) và "đồng" (tiền) cùng thành "dong", nên đoạn
+phí vận chuyển bị đẩy lên trên đoạn giờ làm việc - điểm yếu cố hữu của tìm
+theo từ khóa thuần túy. Đây KHÔNG phải lỗi cần vá ngay (RRF đã chừa sẵn chỗ
+nhận thêm một danh sách xếp hạng), mà là **số đo nền** để quyết định lúc nào
+mở đợt vector: chạy thật vài hôm, đo tỉ lệ câu hỏi thật trượt kiểu tương tự,
+đủ nhiều thì mở.
+
+### 5 phase, phase 05 là nơi người vận hành thật sự nạp được tài liệu
+
+- Phase 01-04: lược đồ 3 bảng thật + 1 bảng ảo FTS5, đọc 5 định dạng (docx/xlsx
+  qua bộ đọc zip tự viết sẵn trong repo, PDF qua `unpdf` - dependency mới duy
+  nhất của cả đợt), tìm kiếm FTS5+RRF, tool `kb_search` (không tự nhét, có mặt
+  trong schema chỉ khi agent đã được gán nguồn).
+- Phase 05: route CRUD + upload multipart, vòng xử lý NỀN tách khỏi request
+  (đọc PDF 200 trang trong handler chặn cả bot - không nhận tin, không chạy
+  lượt nào), trần dung lượng chặn ở TẦNG ĐỌC (`hono/body-limit`, không đợi gom
+  hết byte vào RAM), kiểm chữ ký thật (magic bytes: PDF phải `%PDF`, docx/xlsx
+  phải `PK`) thay vì tin đuôi tên, lưu file theo id sinh ra chứ không dùng tên
+  người dùng đặt. Tab dashboard: bảng nguồn kèm trạng thái xử lý, modal thêm
+  nguồn (tải file / gõ tay), khối chọn nguồn ở trang sửa agent.
+
+### Kiểm chứng
+
+116 test mới qua cả 5 phase (1661 -> 1777), riêng phase 05 (route + worker
+nền + dashboard) +29. Typecheck sạch cả backend lẫn web. 6 phép phá ở phase 05
+(bỏ kiểm trần dung lượng, tin đuôi tên thay vì magic bytes, dùng tên người
+dùng làm đường dẫn, xử lý đồng bộ trong handler, DELETE không xóa file, bỏ
+middleware auth khỏi route KB) đều đỏ đúng chỗ.
+
+### Việc còn treo
+
+Chạy thật vài hôm, đo tỉ lệ tra trượt kiểu "mấy giờ đóng cửa" ở trên. Đủ nhiều
+thì mở đợt vector - RRF đã chừa sẵn chỗ, chỉ là truyền thêm một danh sách đã
+xếp hạng. Trần số nguồn / tổng dung lượng kho chưa đặt (chưa có số liệu thật);
+trần theo TỪNG FILE (`KB_MAX_FILE_MB`) đã chặn ca hỏng rõ ràng nhất.

@@ -2,6 +2,7 @@ import { env } from "./config/env.js";
 import { getEffectiveLlmSettings } from "./config/runtime-llm-settings.js";
 import { closeHistoryStore } from "./conversation/history-store.js";
 import { startMediaCleanupSchedule } from "./conversation/media-store.js";
+import { batDauWorker as batDauKbIngestWorker } from "./knowledge/kb-ingest-worker.js";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler-loop.js";
 import { startDashboardServer, stopDashboardServer } from "./server/dashboard-server.js";
 import { createLogger } from "./shared/logger.js";
@@ -35,6 +36,7 @@ function shutdown(signal: string): void {
   shuttingDown = true;
   logger.info({ signal }, "Đang tắt zalo-agent...");
   stopScheduler();
+  stopKbIngestWorker();
   stopDashboardServer();
   stopAllAccounts();
   closeHistoryStore();
@@ -66,6 +68,11 @@ setInterval(() => heartbeatLog.debug("còn sống"), 15 * 60_000).unref();
 startMediaCleanupSchedule();
 // Dọn file tạm mồ côi của tool send_file (process bị kill giữa lượt gửi)
 startTempFileCleanupSchedule();
+
+// Vòng xử lý nền Kho tri thức: cắt đoạn tài liệu vừa nạp, KHÔNG chặn request
+// upload (xem đầu file kb-ingest-worker.ts). Tự gỡ mọi nguồn kẹt ở dang_xu_ly
+// từ lần chạy trước lúc khởi động.
+const stopKbIngestWorker = batDauKbIngestWorker();
 
 startDashboardServer();
 startAllAccounts()

@@ -617,6 +617,15 @@ const TUNING_BY_KEY = {
     max: 20_000,
     unit: "ký tự",
   },
+  KB_MAX_FILE_MB: {
+    kind: "number",
+    group: "kb",
+    label: "Dung lượng tối đa mỗi file",
+    hint: "File nạp lên vượt mức này bị từ chối ngay ở tầng đọc (chưa ghi gì xuống đĩa).",
+    min: 1,
+    max: 100,
+    unit: "MB",
+  },
 } as const satisfies Record<string, TuningDef>;
 
 export const TUNING_DEFS: Record<string, TuningDef> = TUNING_BY_KEY;

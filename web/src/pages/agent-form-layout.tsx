@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { AgentDetailForm } from "./agent-detail-form";
+import { AgentKbSourcesSection } from "./agent-kb-sources-section";
 import { AgentModelSection } from "./agent-model-section";
 import { AgentToolsSection } from "./agent-tools-section";
 
@@ -46,6 +47,8 @@ export function AgentFormLayout({
         onChange={(disabledTools) => onChange({ disabledTools })}
         agentId={agentId}
       />
+      {/* Chỉ trang SỬA có agentId - agent chưa tạo thì chưa có id để gán nguồn */}
+      {agentId && <AgentKbSourcesSection agentId={agentId} />}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   IconBrain,
   IconChat,
   IconClose,
+  IconFileText,
   IconGear,
   IconGrid,
   IconLogout,
@@ -37,7 +38,13 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
       { to: "/schedule", label: "Lịch hẹn", icon: IconClock },
     ],
   },
-  { title: "Dữ liệu", items: [{ to: "/memory", label: "Memory", icon: IconBrain }] },
+  {
+    title: "Dữ liệu",
+    items: [
+      { to: "/memory", label: "Memory", icon: IconBrain },
+      { to: "/knowledge", label: "Kho tri thức", icon: IconFileText },
+    ],
+  },
   {
     title: "Hệ thống",
     items: [
