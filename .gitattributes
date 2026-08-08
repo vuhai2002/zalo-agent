@@ -1,19 +1,29 @@
-# Ký tự xuống dòng: LF trong kho, CRLF trong thư mục làm việc.
+# Ký tự xuống dòng: LF ở mọi nơi, cả trong kho lẫn trong thư mục làm việc.
 #
-# Vì sao cần: repo đã dính bẫy này HAI lần. Mọi phép phá code (`pnpm test` xong
-# sửa một dòng rồi đòi test đỏ) đều neo vào chuỗi nhiều dòng; neo bằng `\n` trên
-# file CRLF thì `includes()` báo "không thấy" LẶNG LẼ và phép phá đọc ra y hệt
-# một phép phá thành công. Lần gần nhất một file test mới lọt vào toàn LF trong
-# khi mọi file khác là CRLF - lệch âm thầm, không gì đỏ.
+# Vì sao cần một luật: repo đã dính bẫy này hai lần. Mọi phép phá code (sửa một
+# dòng rồi đòi test đỏ) đều neo vào chuỗi nhiều dòng; neo bằng `\n` trên file
+# CRLF thì `includes()` báo "không thấy" LẶNG LẼ, và phép phá hụt đọc ra y hệt
+# một phép phá thành công. Đo lúc thêm file này: 332 file LF, 163 file CRLF, và
+# 7 file TRỘN CẢ HAI ngay trong cùng một file - đó mới là thứ nguy hiểm nhất.
 #
-# `text=auto` để Git tự nhận đâu là văn bản và chuẩn hóa về LF khi ghi vào kho;
-# `eol=crlf` để mọi lần checkout đều trả về CRLF. Nhờ vậy máy nào cũng ra cùng
-# một kiểu, không phụ thuộc `core.autocrlf` của từng người.
-* text=auto eol=crlf
+# Vì sao LF chứ không phải CRLF: sáu file trong repo được LINUX đọc và chạy -
+# `deploy.sh` (bash), `Dockerfile`, `docker-compose.prod.yml`, `Caddyfile.site`,
+# và hai file `.env*.example` (copy thành `.env.production` rồi Docker nạp qua
+# `env_file`). Ép CRLF lên chúng là gài mìn: `.env.production` có `\r` ở cuối
+# dòng nghĩa là `CREDENTIALS_ENCRYPTION_KEY` mang thêm một ký tự rác, giải mã
+# cookie Zalo và mọi API key hỏng hết, mà thông báo lỗi chẳng nói gì về xuống
+# dòng. Chọn CRLF thì phải chừa từng loại file ra - một danh sách sẽ có ngày bị
+# quên cập nhật. LF thì không có ngoại lệ nào để quên.
+#
+# Windows không mất gì: `tsc`, `tsx`, `node:test`, Vite đều không quan tâm ký tự
+# xuống dòng, và kho vốn đã lưu LF nên `git add --renormalize .` không đổi byte
+# nào.
+* text=auto eol=lf
 
 # Nhị phân: khai TƯỜNG MINH thay vì tin vào phép tự nhận. Đoán nhầm một file ảnh
-# là văn bản nghĩa là Git "sửa" byte trong đó - ảnh hỏng vĩnh viễn trong lịch sử,
-# không có đường lùi. Rẻ hơn nhiều so với việc phải chứng minh phép tự nhận đúng.
+# là văn bản nghĩa là Git "sửa" byte bên trong - ảnh hỏng vĩnh viễn trong lịch
+# sử, không có đường lùi. Rẻ hơn nhiều so với việc phải chứng minh phép tự nhận
+# đúng cho mọi file.
 *.webp binary
 *.png binary
 *.jpg binary
@@ -26,6 +36,6 @@
 *.docx binary
 *.xlsx binary
 
-# Lockfile: để Git đối xử như văn bản nhưng ĐỪNG gộp tự động - gộp nhầm một
-# lockfile là cây phụ thuộc sai mà không ai đọc ra được từ diff.
+# Lockfile: vẫn là văn bản nhưng ĐỪNG gộp tự động - gộp nhầm một lockfile là cây
+# phụ thuộc sai mà không ai đọc ra được từ diff.
 pnpm-lock.yaml -merge
