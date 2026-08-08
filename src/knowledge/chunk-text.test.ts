@@ -33,6 +33,19 @@ describe("catThanhDoan - ranh giới tự nhiên", () => {
     assert.equal(doanBaoHanh.tieuDe, "Bảo hành");
   });
 
+  it("file CRLF (Windows) vẫn gắn đúng tiêu đề - '\\n{2,}' không khớp '\\r\\n\\r\\n'", () => {
+    // Notepad/Word "Save as .txt" trên Windows ghi CRLF: dòng trống thành
+    // "\r\n\r\n" (không có 2 "\n" liền nhau) - nếu quên chuẩn hóa xuống dòng,
+    // toàn tài liệu rơi vào 1 đoạn duy nhất và chỉ dòng ĐẦU được dò heading.
+    const chu = "# Chính sách đổi trả\n\nTrong vòng 7 ngày.\n\n# Bảo hành\n\n12 tháng.".replace(
+      /\n/g,
+      "\r\n",
+    );
+    const d = catThanhDoan(chu, { coDoanToiDa: 40, chongLan: 0 });
+    const doanBaoHanh = d.find((x) => x.noiDung.includes("12 tháng"))!;
+    assert.equal(doanBaoHanh.tieuDe, "Bảo hành");
+  });
+
   it("đoạn dài hơn trần vẫn phải ra, không được nuốt mất", () => {
     const d = catThanhDoan("x".repeat(5000), { coDoanToiDa: 1000, chongLan: 0 });
     assert.equal(d.map((x) => x.noiDung).join("").length >= 5000 - d.length, true);

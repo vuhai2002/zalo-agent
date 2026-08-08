@@ -91,6 +91,15 @@ export function catThanhDoan(
   chu: string,
   p: ThamSoCat,
 ): { thuTu: number; tieuDe: string; noiDung: string }[] {
+  // Chuẩn hóa xuống dòng MỘT LẦN ở cửa vào - toàn bộ logic dưới đây (tách đoạn
+  // trống, dò heading ở dòng đầu) đều dựa vào "\n" trần. File .txt/.md do
+  // Windows Notepad/Word "Save as" ghi CRLF ("\r\n\r\n" cho dòng trống): không
+  // có 2 ký tự "\n" nào LIỀN NHAU nên `split(/\n{2,}/)` không tách được gì,
+  // cả tài liệu rơi vào MỘT đoạn duy nhất - hỏng câm tính năng "giữ tiêu đề
+  // gần nhất" (chỉ dò được heading ở dòng đầu tài liệu). `\r\n?` bắt cả CRLF
+  // lẫn CR đơn (Mac cổ).
+  chu = chu.replace(/\r\n?/g, "\n");
+
   const maxLen = Math.max(1, p.coDoanToiDa);
   const overlapChars = Math.max(0, Math.floor(maxLen * (p.chongLan / 100)));
 
