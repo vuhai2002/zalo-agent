@@ -174,6 +174,7 @@ export function AgentDetailPage() {
         form={form}
         onChange={doi}
         soTaiKhoan={agent.accountCount}
+        agentId={agent.id}
         danhTinh={
           <AgentIdentitySection
             id={agent.id}

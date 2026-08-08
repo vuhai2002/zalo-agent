@@ -38,6 +38,18 @@ describe("kb-agent-binding - mặc định đóng", () => {
     binding.datNguonChoAgent("agent-a", [n1.id]);
     assert.deepEqual(binding.nguonCuaAgent("agent-b"), []);
   });
+
+  /**
+   * `tool-catalog-read.ts` dùng `agent.id === ""` làm quy ước "route /api/tools
+   * không biết agent nào" (xem `SCOPE_KHONG_CO_AGENT_THAT` ở tool-routes.ts) -
+   * bất biến CẦN GIỮ ĐÚNG để quy ước đó an toàn là chuỗi rỗng KHÔNG BAO GIỜ
+   * đọc ra nguồn thật, kể cả khi chưa ai gán gì cho nó. Hàm này không có gì
+   * đặc biệt hoá `""` (không chặn ở tầng ghi/đọc) - test này canh để một ngày
+   * nào đó có dòng agent_id = '' lọt vào bảng thì đây là chỗ đỏ đầu tiên.
+   */
+  it("id rỗng cũng đọc ra RỖNG - route /api/tools dùng chuỗi rỗng làm quy ước 'không có agent'", () => {
+    assert.deepEqual(binding.nguonCuaAgent(""), []);
+  });
 });
 
 describe("kb-agent-binding - đặt lại là THAY THẾ", () => {

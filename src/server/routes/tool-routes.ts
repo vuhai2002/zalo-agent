@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { TOOL_DEFINITIONS } from "../../agent/tools/index.js";
+import { TOOL_DEFINITIONS, type ToolScope } from "../../agent/tools/index.js";
+import { getAgent } from "../../config/agent-store.js";
 import {
   getFetchSettings,
   getSearchSettingsForApi,
@@ -23,35 +24,54 @@ const fetchUpdateSchema = z.object({
 });
 
 /**
- * Catalog này KHÔNG BIẾT agent/account nào đang xem - trang Tools liệt kê cho
- * MỌI account, còn phần "agent nào" chỉ tô thêm ở FRONTEND (tools-page.tsx đối
- * chiếu `agent.disabledTools` sau khi đã tải catalog). `available()` của
- * `kb_search` cần `scope.agent.id` để tra đúng nguồn đã gán (`nguonCuaAgent`) -
- * ở route này không có agent thật nào để đưa, nên dùng agent RỖNG (id không
- * khớp bất kỳ agent thật nào) làm scope trung lập: `nguonCuaAgent("")` luôn ra
- * mảng rỗng, kb_search luôn báo `available:false` ở catalog chung này.
- *
- * Đây là lựa chọn AN TOÀN (thà báo "chưa dùng được" oan còn hơn báo "dùng được"
- * cho một agent không thật sự có nguồn), không phải câu trả lời đầy đủ - muốn
- * đúng cho từng agent thì route này cần nhận `agentId` thật, việc đó thuộc
- * phạm vi trang Kho tri thức (phase 05), không phải phase này.
+ * Scope KHÔNG có agent thật - dùng khi GET /api/tools không kèm `agentId` (vd
+ * trang Tools phạm vi tài khoản, không gắn với một agent cụ thể nào). Agent id
+ * RỖNG là quy ước có chủ đích: `kb_search.available()` (tool-catalog-read.ts)
+ * đọc thấy `scope.agent.id === ""` thì tự chuyển sang câu hỏi tầm rộng hơn
+ * ("kho ĐÃ có nguồn nào chưa" thay vì "nguồn của agent nào") - xem
+ * `kb-agent-binding.test.ts` cho bất biến `nguonCuaAgent("")` luôn rỗng, canh
+ * cho quy ước này không bao giờ lẫn với một agent id thật.
  */
-const SCOPE_KHONG_CO_AGENT_THAT = { agent: { id: "", disabledTools: [] }, account: { disabledTools: [] } };
+const SCOPE_KHONG_CO_AGENT_THAT: ToolScope = { agent: { id: "", disabledTools: [] }, account: { disabledTools: [] } };
+
+/**
+ * Dựng scope cho GET /api/tools. Có `agentId` hợp lệ (agent tồn tại) thì trả
+ * scope THẬT của agent đó, để `kb_search.available()` trả lời đúng "agent NÀY
+ * đã gán nguồn chưa" - thiếu bước này thì trang sửa agent (nơi vừa gán nguồn
+ * xong) vẫn hiện "chưa dùng được", chỉ người vận hành sang đúng tab họ vừa rời.
+ *
+ * `agentId` không tồn tại (agent bị xóa giữa lúc trang đang mở, hay ai đó gõ
+ * tay query param) trả `null` để caller trả 400 - KHÔNG rơi về ca "không
+ * agent": im lặng đổi nghĩa "id sai" thành "không biết agent nào" là gài bẫy
+ * cho lần debug sau, con số hiện ra vẫn "hợp lý" nhưng sai ngữ cảnh.
+ */
+function dungScope(agentId: string | undefined): ToolScope | null {
+  if (!agentId) return SCOPE_KHONG_CO_AGENT_THAT;
+  const agent = getAgent(agentId);
+  if (!agent) return null;
+  return { agent: { id: agent.id, disabledTools: agent.disabledTools }, account: { disabledTools: [] } };
+}
 
 /**
  * /api/tools - catalog tool + cấu hình chuỗi nguồn cho web_search/web_fetch.
  * Một nguồn duy nhất từ tool-registry (giống reaction-icons) - frontend không
  * chép lại. Trạng thái bật/tắt tool per account nằm trong GET /api/accounts.
+ *
+ * `?agentId=` optional - trang sửa agent truyền vào để `available` phản ánh
+ * đúng agent đang sửa; trang Tools (phạm vi tài khoản) không truyền.
  */
 export const toolRoutes = new Hono()
 
-  .get("/", (c) =>
-    c.json({
+  .get("/", (c) => {
+    const scope = dungScope(c.req.query("agentId"));
+    if (!scope) return c.json({ error: "Agent không tồn tại" }, 400);
+
+    return c.json({
       items: TOOL_DEFINITIONS.map((t) => {
         // available = hạ tầng đã sẵn sàng chưa (khác với bật/tắt per account).
         // Thiếu cờ này thì UI hiện tool bật sẵn trong khi model không hề nhận
         // được nó - người dùng tưởng bot có khả năng đó mà không có.
-        const available = t.available ? t.available(SCOPE_KHONG_CO_AGENT_THAT) : true;
+        const available = t.available ? t.available(scope) : true;
         return {
           key: t.key,
           label: t.label,
@@ -64,8 +84,8 @@ export const toolRoutes = new Hono()
       }),
       search: getSearchSettingsForApi(),
       fetch: getFetchSettings(),
-    }),
-  )
+    });
+  })
 
   .patch("/search", async (c) => {
     const parsed = searchUpdateSchema.safeParse(await c.req.json().catch(() => null));

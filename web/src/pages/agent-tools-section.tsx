@@ -26,11 +26,19 @@ export function AgentToolsSection({
   disabledTools,
   soTaiKhoan,
   onChange,
+  agentId,
 }: {
   disabledTools: string[];
   /** Số tài khoản Zalo đang gắn agent này - mỗi tài khoản còn một lớp tắt riêng */
   soTaiKhoan: number;
   onChange: (disabledTools: string[]) => void;
+  /**
+   * Id agent ĐÃ TỒN TẠI trong DB (trang sửa) - để `kb_search.available` phản
+   * ánh đúng agent đang sửa thay vì câu hỏi tầm rộng "kho đã có nguồn nào
+   * chưa". Bỏ trống khi tạo agent mới (agent chưa có trong DB, chưa thể gán
+   * nguồn cho một id chưa tồn tại).
+   */
+  agentId?: string;
 }) {
   const [tools, setTools] = useState<ToolCatalogItem[] | null>(null);
   const [loi, setLoi] = useState("");
@@ -38,7 +46,7 @@ export function AgentToolsSection({
   useEffect(() => {
     let huy = false;
     api
-      .tools()
+      .tools(agentId)
       .then((d) => !huy && setTools(d.items))
       // Tải hỏng mà chỉ set mảng rỗng thì màn hình hiện "0/0 công cụ" và đọc ra
       // "agent này không có công cụ nào" - sai hẳn nghĩa. Phải nói là chưa tải được.
@@ -50,7 +58,7 @@ export function AgentToolsSection({
     return () => {
       huy = true;
     };
-  }, []);
+  }, [agentId]);
 
   const tat = new Set(disabledTools);
 
@@ -86,9 +94,10 @@ export function AgentToolsSection({
     );
   }
 
-  // Chỉ đếm tool CÓ HẠ TẦNG. `read_image` và `create_image` khi chưa cấu hình
-  // sidecar/endpoint thì `available: false` - đếm chúng vào là hint khoe "13/13
-  // công cụ" trong khi model không hề nhận được hai cái đó.
+  // Chỉ đếm tool CÓ HẠ TẦNG. `read_image`/`create_image` chưa cấu hình
+  // sidecar/endpoint, hoặc `kb_search` chưa có nguồn Kho tri thức nào gán cho
+  // agent này, đều là `available: false` - đếm chúng vào là hint khoe sai số
+  // công cụ trong khi model không hề nhận được.
   const dungDuoc = tools.filter((t) => t.available !== false);
   const soBat = dungDuoc.filter((t) => !tat.has(t.key)).length;
 

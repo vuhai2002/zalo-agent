@@ -18,11 +18,14 @@ export function AgentFormLayout({
   form,
   onChange,
   soTaiKhoan,
+  agentId,
 }: {
   danhTinh: ReactNode;
   form: AgentDetailForm;
   onChange: (patch: Partial<AgentDetailForm>) => void;
   soTaiKhoan: number;
+  /** Xem `AgentToolsSection` - chỉ trang SỬA truyền, trang TẠO bỏ trống */
+  agentId?: string;
 }) {
   return (
     <div className="space-y-5">
@@ -41,6 +44,7 @@ export function AgentFormLayout({
         disabledTools={form.disabledTools}
         soTaiKhoan={soTaiKhoan}
         onChange={(disabledTools) => onChange({ disabledTools })}
+        agentId={agentId}
       />
     </div>
   );

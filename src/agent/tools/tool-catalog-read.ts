@@ -1,5 +1,6 @@
 import { isSidecarConfigured } from "../../config/runtime-vision-settings.js";
 import { nguonCuaAgent } from "../../knowledge/kb-agent-binding.js";
+import { danhSachNguon } from "../../knowledge/kb-source-store.js";
 import { createGetDatetimeTool } from "./get-datetime-tool.js";
 import { createGetGroupInfoTool } from "./get-group-info-tool.js";
 import { createKbSearchTool } from "./kb-search-tool.js";
@@ -68,10 +69,22 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
     description: "Tra tài liệu do chủ bot nạp lên (chính sách, bảng giá, hướng dẫn)",
     group: "read",
     hasSettings: false,
-    // Agent chưa gán nguồn nào thì tra cũng chỉ ra rỗng - bày tool luôn trả
-    // rỗng chỉ dạy model gọi vô ích và tốn một step.
-    available: (scope) => nguonCuaAgent(scope.agent.id).length > 0,
-    unavailableHint: "Chưa bật nguồn nào cho agent này - vào tab Kho tri thức để gán",
+    /**
+     * Agent chưa gán nguồn nào thì tra cũng chỉ ra rỗng - bày tool luôn trả
+     * rỗng chỉ dạy model gọi vô ích và tốn một step. Trong LƯỢT AGENT THẬT,
+     * `scope.agent.id` luôn là id thật (bắt buộc ở `ToolContext`) nên nhánh
+     * dưới luôn hỏi đúng câu "nguồn ĐÃ GÁN cho agent này".
+     *
+     * Route `/api/tools` (catalog dashboard, không có agent cụ thể - trang
+     * Tools phạm vi tài khoản) truyền agent RỖNG (`id: ""`) làm quy ước "không
+     * biết agent nào" - khi đó câu hỏi đúng tầm là "kho ĐÃ có nguồn nào chưa"
+     * (`danhSachNguon`), không phải "nguồn của agent nào" (mọi agent id thật
+     * đều không rỗng nên hai nhánh không bao giờ lẫn nhau).
+     */
+    available: (scope) =>
+      scope.agent.id === "" ? danhSachNguon().length > 0 : nguonCuaAgent(scope.agent.id).length > 0,
+    unavailableHint:
+      "Kho tri thức chưa có nguồn nào, hoặc agent này chưa được gán nguồn - vào tab Kho tri thức để nạp/gán",
     build: (ctx) => createKbSearchTool(ctx),
   },
 ];

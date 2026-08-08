@@ -149,22 +149,41 @@ describe("kb_search - nhánh rỗng", () => {
 });
 
 describe("kb_search - trần ký tự áp cho TOÀN BỘ kết quả", () => {
+  // Chuỗi CHỈ xuất hiện ở CUỐI fixture (xa hơn hẳn điểm cắt 500 ký tự) - dùng
+  // làm bằng chứng THẬT của việc cắt: một khẳng định chỉ đo ĐỘ DÀI (như bản cũ
+  // `kq.length < 700`) vẫn xanh dù bỏ hẳn phần cắt, cắt sai mốc (vd
+  // `maxChars * 2`), hay cắt `noiDung` thay vì cắt `boc` (không tính phần vỏ) -
+  // độ dài vẫn tình cờ lọt dưới ngưỡng rộng rãi đó. Đo nội dung ĐUÔI mới phân
+  // biệt được "có cắt thật" với "trùng hợp đủ ngắn".
+  const DUOI_TAI_LIEU = "DUOI_TAI_LIEU_CHI_XUAT_HIEN_O_DAY_kmqzx789";
+
   beforeEach(() => {
     napNguon(AGENT_ID, "Chính sách bảo hành", [
       "Bảo hành 12 tháng cho mọi sản phẩm, đổi mới trong 30 ngày đầu nếu lỗi nhà sản xuất. " +
-        "Đổi trả trong 7 ngày kể từ ngày nhận hàng, sản phẩm còn nguyên tem, đủ dài để vượt trần thấp.",
+        "Đổi trả trong 7 ngày kể từ ngày nhận hàng, sản phẩm còn nguyên tem. " +
+        "Điều khoản bổ sung: mọi khiếu nại phải gửi trong vòng 24 giờ kể từ khi phát hiện lỗi, " +
+        "kèm ảnh chụp hóa đơn và sản phẩm lỗi, gửi về email cskh@vidu.test hoặc gọi hotline " +
+        "1900-1234 trong giờ hành chính từ 8h đến 17h các ngày trong tuần. " +
+        `${DUOI_TAI_LIEU}.`,
     ]);
   });
 
-  it("kết quả bị cắt về đúng trần ký tự, có câu báo đã cắt", async () => {
-    // 200 (Ví dụ minh họa trong brief) THẤP HƠN min=500 của chính tham số này
+  it("kết quả bị cắt về đúng trần ký tự (đuôi tài liệu biến mất), có câu báo đã cắt", async () => {
+    // 200 (ví dụ minh họa trong brief) THẤP HƠN min=500 của chính tham số này
     // (xem tuning-definitions.ts) nên getTuning() sẽ âm thầm rơi về mặc định
     // 4000 - dùng đúng trần MIN hợp lệ để phép đặt tuning này có tác dụng thật.
     tuning.setTuning("KB_MAX_RESULT_CHARS", 500);
     try {
       const kq = await run(makeCtx(), { cau_hoi: "bảo hành" });
-      assert.ok(kq.length < 700, `dài ${kq.length}, trần 500 cộng phần vỏ`);
+      // Cắt tại ĐÚNG maxChars cộng phần vỏ nối thêm (câu báo + thẻ đóng, ~62
+      // ký tự đo được) - không phải một ngưỡng rộng rãi bất kỳ cũng xanh được.
+      assert.ok(kq.length <= 500 + 70, `dài ${kq.length}, trần 500 + phần vỏ (~62)`);
+      // Bằng chứng cắt THẬT: đuôi tài liệu (chỉ nằm ở cuối, xa điểm cắt 500)
+      // phải biến mất khỏi kết quả trả về.
+      assert.doesNotMatch(kq, new RegExp(DUOI_TAI_LIEU), "đuôi tài liệu vẫn còn -> chưa cắt thật");
       assert.match(kq, /đã rút gọn/i);
+      // Cắt xong vẫn phải khép đúng thẻ - không bỏ dở khối <noi_dung_ngoai>.
+      assert.match(kq, new RegExp(`</${markers.THE_NOI_DUNG_NGOAI}>$`));
     } finally {
       tuning.setTuning("KB_MAX_RESULT_CHARS", null);
     }

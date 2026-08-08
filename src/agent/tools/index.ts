@@ -10,4 +10,5 @@ export {
   type ToolContext,
   type ToolDefinition,
   type ToolGroup,
+  type ToolScope,
 } from "./tool-registry.js";

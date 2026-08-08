@@ -211,9 +211,14 @@ export const api = {
       method: "DELETE",
     }),
 
-  tools: () =>
+  /**
+   * `agentId` optional: có truyền thì `available` của các tool gate theo agent
+   * (hiện chỉ `kb_search`) phản ánh ĐÚNG agent đang xem, thay vì câu hỏi tầm
+   * rộng "kho đã có nguồn nào chưa" (xem `dungScope()` ở tool-routes.ts).
+   */
+  tools: (agentId?: string) =>
     request<{ items: ToolCatalogItem[]; search: SearchSettings; fetch: FetchSettings }>(
-      "/api/tools",
+      agentId ? `/api/tools?agentId=${encodeURIComponent(agentId)}` : "/api/tools",
     ),
   updateSearchSettings: (update: { provider?: "duckduckgo" | "brave"; braveApiKey?: string }) =>
     request<{ ok: true; search: SearchSettings }>("/api/tools/search", {
