@@ -4,6 +4,7 @@ import path from "node:path";
 // mọi store (history/thread/contact/usage) - node:sqlite là sync nên không cần pool.
 import { DatabaseSync } from "node:sqlite";
 import { dataDir } from "../config/env.js";
+import { taoBangKnowledgeBase } from "../knowledge/kb-schema.js";
 
 export const db = new DatabaseSync(path.join(dataDir, "zalo-agent.db"));
 db.exec("PRAGMA journal_mode = WAL;");
@@ -238,6 +239,11 @@ function runMigrations(): void {
       PRIMARY KEY (account_id, thread_id, day_key)
     );
   `);
+
+  // Kho tri thức (nguồn -> đoạn -> FTS5 -> gán agent) - lược đồ riêng vì có
+  // bảng ẢO fts5, khai chung trong template string trên sẽ lẫn với các bảng
+  // thường và khó soát khi sửa sau này.
+  taoBangKnowledgeBase(db);
 
   // Tool CHẠY LỖI: AI SDK để chúng ở content dạng tool-error, không vào
   // toolResults, nên trước cột này mọi lần tool hỏng đều mất tăm khỏi trace.
