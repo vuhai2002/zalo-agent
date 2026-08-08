@@ -117,6 +117,16 @@ export type KbSourceItem = {
   updatedAt: string;
 };
 
+/**
+ * Hình dạng THẬT của `GET /api/kb/sources` - KHÔNG có `noiDungGoc`
+ * (`kb-routes.ts` dùng `danhSachNguonGon()`, không phải `danhSachNguon()`,
+ * để không kéo toàn văn xuống mỗi lần trang tự làm mới). Trước đây route liệt
+ * kê khai nhầm trả `KbSourceItem[]` đầy đủ - sai vô hại CHỪNG NÀO chưa ai đọc
+ * `noiDungGoc` từ kết quả `sources()`, nhưng typecheck sẽ không bắt được lần
+ * đầu ai đó viết `source.noiDungGoc.length` dựa trên type sai đó.
+ */
+export type KbSourceListItem = Omit<KbSourceItem, "noiDungGoc">;
+
 export type ContactItem = {
   accountId: string;
   userId: string;
@@ -374,7 +384,7 @@ export const api = {
   },
 
   kb: {
-    sources: () => request<{ items: KbSourceItem[] }>("/api/kb/sources"),
+    sources: () => request<{ items: KbSourceListItem[] }>("/api/kb/sources"),
     createText: (ten: string, noiDung: string) =>
       request<{ source: KbSourceItem }>("/api/kb/sources/text", {
         method: "POST",

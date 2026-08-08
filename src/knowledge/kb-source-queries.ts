@@ -90,3 +90,17 @@ const claimStmt = db.prepare(`
 export function giaNguonChoXuLy(id: string): boolean {
   return claimStmt.run(id).changes > 0;
 }
+
+const coNguonNaoStmt = db.prepare(`SELECT 1 FROM kb_sources LIMIT 1`);
+
+/**
+ * Kho tri thức đã có ÍT NHẤT một nguồn chưa - dùng cho `kb_search.available()`
+ * (`tool-catalog-read.ts`) khi không biết agent cụ thể nào (trang Tools phạm
+ * vi tài khoản). `SELECT 1 ... LIMIT 1` thay vì `danhSachNguon().length > 0`:
+ * hàm cũ kéo cả bảng (kèm toàn văn của MỌI nguồn) chỉ để tính một boolean, mà
+ * `available()` chạy mỗi lần dựng catalog tool - tức MỖI LƯỢT AGENT, hai lần
+ * một lượt (dựng schema tool + dựng persona).
+ */
+export function coNguonNao(): boolean {
+  return coNguonNaoStmt.get() !== undefined;
+}

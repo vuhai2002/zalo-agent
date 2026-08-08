@@ -1,6 +1,6 @@
 import { isSidecarConfigured } from "../../config/runtime-vision-settings.js";
 import { nguonCuaAgent } from "../../knowledge/kb-agent-binding.js";
-import { danhSachNguon } from "../../knowledge/kb-source-store.js";
+import { coNguonNao } from "../../knowledge/kb-source-queries.js";
 import { createGetDatetimeTool } from "./get-datetime-tool.js";
 import { createGetGroupInfoTool } from "./get-group-info-tool.js";
 import { createKbSearchTool } from "./kb-search-tool.js";
@@ -78,11 +78,10 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
      * Route `/api/tools` (catalog dashboard, không có agent cụ thể - trang
      * Tools phạm vi tài khoản) truyền agent RỖNG (`id: ""`) làm quy ước "không
      * biết agent nào" - khi đó câu hỏi đúng tầm là "kho ĐÃ có nguồn nào chưa"
-     * (`danhSachNguon`), không phải "nguồn của agent nào" (mọi agent id thật
+     * (`coNguonNao`), không phải "nguồn của agent nào" (mọi agent id thật
      * đều không rỗng nên hai nhánh không bao giờ lẫn nhau).
      */
-    available: (scope) =>
-      scope.agent.id === "" ? danhSachNguon().length > 0 : nguonCuaAgent(scope.agent.id).length > 0,
+    available: (scope) => (scope.agent.id === "" ? coNguonNao() : nguonCuaAgent(scope.agent.id).length > 0),
     unavailableHint:
       "Kho tri thức chưa có nguồn nào, hoặc agent này chưa được gán nguồn - vào tab Kho tri thức để nạp/gán",
     build: (ctx) => createKbSearchTool(ctx),

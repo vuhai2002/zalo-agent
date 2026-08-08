@@ -285,6 +285,22 @@ describe("gán nguồn cho agent", () => {
     assert.deepEqual(binding.nguonCuaAgent("agent-khong-ton-tai"), []);
   });
 
+  // Không thử với vài trăm id "không tồn tại": id không tồn tại CŨNG ra 400
+  // (nhánh "Nguồn không tồn tại" ở dưới), nên phép thử đó đỏ y hệt dù có
+  // .max(500) hay không - không chứng minh được gì về CHÍNH cái trần này.
+  // Test dưới đây vượt THẲNG qua SQLITE_LIMIT_VARIABLE_NUMBER (đo thật: 32766
+  // OK, 32767 ném "too many SQL variables") để lộ ra khác biệt thật: có
+  // .max(500) thì chặn ở schema (400) TRƯỚC KHI build câu SQL nào; bỏ .max()
+  // thì lọt xuống `locIdTonTai()`, câu `IN (...)` 33.000 placeholder ném lỗi,
+  // Hono không có `onError` riêng nên rơi về 500 trần (không lý do đọc được).
+  it("sourceIds vượt xa SQLITE_LIMIT_VARIABLE_NUMBER vẫn bị chặn 400 nhờ .max(500) - không lọt xuống tới câu SQL", async () => {
+    agents.createAgent({ id: "a1", name: "Agent A1" });
+    const qua = Array.from({ length: 33_000 }, (_, i) => `id-${i}`);
+    const res = await guiJson("/api/kb/agents/a1/sources", "PUT", { sourceIds: qua });
+    assert.equal(res.status, 400, `phải chặn ở schema với 400 có lý do, không phải văng 500 trần - nhận ${res.status}`);
+    assert.deepEqual(binding.nguonCuaAgent("a1"), []);
+  });
+
   it("GET trả đúng danh sách đã gán", async () => {
     const n1 = store.taoNguon({ ten: "n1", loai: "text", noiDungGoc: "1" });
     binding.datNguonChoAgent("a2", [n1.id]);

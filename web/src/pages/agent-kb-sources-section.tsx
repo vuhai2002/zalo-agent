@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError, type KbSourceItem } from "../dashboard-api-client";
+import { api, ApiError, type KbSourceListItem } from "../dashboard-api-client";
 import { ToggleKnob } from "../shared/ui-bits";
 import { AgentFormSection } from "./agent-form-field";
 
@@ -13,7 +13,7 @@ import { AgentFormSection } from "./agent-form-field";
  * agent, không phải một trường trong `AgentDetailForm`.
  */
 export function AgentKbSourcesSection({ agentId }: { agentId: string }) {
-  const [sources, setSources] = useState<KbSourceItem[] | null>(null);
+  const [sources, setSources] = useState<KbSourceListItem[] | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [banDau, setBanDau] = useState<Set<string>>(new Set());
   const [loi, setLoi] = useState("");

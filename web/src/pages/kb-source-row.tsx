@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { KbSourceItem } from "../dashboard-api-client";
+import type { KbSourceListItem } from "../dashboard-api-client";
 import { ApiError } from "../dashboard-api-client";
 import { Badge, formatTime } from "../shared/ui-bits";
 import { IconUndo } from "../shared/dashboard-icons";
@@ -12,7 +12,7 @@ function formatBytes(soByte: number): string {
   return `${(soByte / (1024 * 1024)).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} MB`;
 }
 
-const NHAN_TRANG_THAI: Record<KbSourceItem["trangThai"], { tone: "blue" | "gray" | "green" | "red" | "amber"; text: string }> = {
+const NHAN_TRANG_THAI: Record<KbSourceListItem["trangThai"], { tone: "blue" | "gray" | "green" | "red" | "amber"; text: string }> = {
   cho_xu_ly: { tone: "gray", text: "Chờ xử lý" },
   dang_xu_ly: { tone: "amber", text: "Đang xử lý" },
   san_sang: { tone: "green", text: "Sẵn sàng" },
@@ -24,7 +24,7 @@ export function KbSourceRow({
   onReindex,
   onDelete,
 }: {
-  source: KbSourceItem;
+  source: KbSourceListItem;
   onReindex: () => Promise<void>;
   onDelete: () => void;
 }) {

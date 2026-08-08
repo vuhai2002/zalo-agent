@@ -64,7 +64,12 @@ const textSourceSchema = z.object({
 });
 
 const putAgentSourcesSchema = z.object({
-  sourceIds: z.array(z.string()),
+  // Trần 500: `locIdTonTai` dựng một placeholder SQL cho MỖI id
+  // (`SELECT id FROM kb_sources WHERE id IN (?, ?, ...)`) - mảng dài không
+  // trần vượt `SQLITE_LIMIT_VARIABLE_NUMBER` (32766 ở bản SQLite hiện đại) là
+  // `db.prepare` NÉM, lỗi lọt khỏi handler thành 500 trần thay vì 400 có lý
+  // do. Số nguồn thật của một kho không bao giờ gần tới 500.
+  sourceIds: z.array(z.string()).max(500),
 });
 
 export const kbRoutes = new Hono()

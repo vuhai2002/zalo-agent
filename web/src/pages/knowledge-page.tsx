@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, type KbSourceItem } from "../dashboard-api-client";
+import { api, ApiError, type KbSourceListItem } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { IconFileText } from "../shared/dashboard-icons";
@@ -13,7 +13,7 @@ import { KbSourceRow } from "./kb-source-row";
  * mới định kỳ để thấy trạng thái `cho_xu_ly` -> `san_sang` mà không cần F5.
  */
 export function KnowledgePage() {
-  const [sources, setSources] = useState<KbSourceItem[] | null>(null);
+  const [sources, setSources] = useState<KbSourceListItem[] | null>(null);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [adding, setAdding] = useState(false);
@@ -46,7 +46,7 @@ export function KnowledgePage() {
     reload();
   }
 
-  async function remove(source: KbSourceItem) {
+  async function remove(source: KbSourceListItem) {
     const ok = await confirm({
       title: `Xóa nguồn "${source.ten}"?`,
       message: "Toàn bộ đoạn đã cắt của nguồn này cũng bị xóa, agent không tra cứu được nữa. Không khôi phục được.",
