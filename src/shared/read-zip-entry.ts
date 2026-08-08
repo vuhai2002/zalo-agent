@@ -24,15 +24,29 @@ const CENTRAL_HEADER_SIGNATURE = 0x02014b50;
  * này thì OOM giết cả process - không bắt được, mất luôn mọi account đang
  * chạy chung tiến trình.
  *
- * 5000 MB = 50 lần trần file lớn nhất Kho tri thức cho phép (100 MB) - đủ
- * rộng cho docx/xlsx thật (không tài liệu nào giải nén ra quá vài chục MB) mà
- * vẫn hữu hạn. Hằng số CỐ ĐỊNH, không đọc trực tiếp từ tuning KB_MAX_FILE_MB:
- * module này còn phục vụ đường GHI tài liệu của bot (docx/xlsx tự sinh, xem
- * `render-docx.ts`/`render-xlsx.ts` và test của chúng) - kéo cấu hình DB của
- * riêng Kho tri thức vào một tiện ích dùng chung là ghép sai tầng, và sẽ buộc
- * mọi test gọi hàm này phải mở DB thật (xem "Bẫy khi viết test" ở CLAUDE.md).
+ * 300 MB = 3 lần trần file lớn nhất Kho tri thức cho phép (100 MB) - đủ rộng
+ * cho docx/xlsx thật (không tài liệu nào giải nén ra quá vài chục MB) mà vẫn
+ * đủ nhỏ để không tự đâm OOM: bot tự host, thường chạy VPS 1-4 GB, nên trần
+ * phải nằm trong ngân sách RAM thật của máy, không chỉ "hữu hạn về lý
+ * thuyết" (5000 MB cũ vẫn đủ để kernel OOM-killer bắn tiến trình trước khi
+ * zlib kịp ném lỗi trên một máy nhỏ). Hằng số CỐ ĐỊNH, không đọc trực tiếp từ
+ * tuning KB_MAX_FILE_MB: module này còn phục vụ đường GHI tài liệu của bot
+ * (docx/xlsx tự sinh, xem `render-docx.ts`/`render-xlsx.ts` và test của
+ * chúng) - kéo cấu hình DB của riêng Kho tri thức vào một tiện ích dùng
+ * chung là ghép sai tầng, và sẽ buộc mọi test gọi hàm này phải mở DB thật
+ * (xem "Bẫy khi viết test" ở CLAUDE.md).
+ *
+ * Hai giới hạn của cơ chế này, cần nhớ để không tưởng nó chặn được nhiều hơn
+ * thực tế:
+ * - Trần áp theo TỪNG ENTRY, không phải theo cả file zip. `extract-xlsx-text.ts`
+ *   đọc `sharedStrings.xml` CỘNG mọi `sheetN.xml` trong cùng một file - tổng
+ *   dung lượng giải nén của một file .xlsx vẫn không có trần chung.
+ * - `maxOutputLength` của zlib kiểm THEO TỪNG CHUNK trong lúc giải nén (không
+ *   phải trần cấp phát trước), nên bộ nhớ đỉnh vẫn có thể chạm gần tới trần
+ *   này trước khi `inflateRawSync` kịp ném lỗi - trần này giảm rủi ro OOM,
+ *   không loại bỏ hẳn.
  */
-const TRAN_GIAI_NEN_MAC_DINH = 100 * 50 * 1024 * 1024;
+const TRAN_GIAI_NEN_MAC_DINH = 300 * 1024 * 1024;
 
 type CentralEntry = { name: string; method: number; compSize: number; localOffset: number };
 

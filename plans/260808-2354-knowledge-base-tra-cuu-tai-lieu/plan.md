@@ -36,11 +36,11 @@ route, React cho tab dashboard. Một dependency mới duy nhất: `unpdf`.
 
 | # | Phase | Giao được gì | Trạng thái |
 |---|---|---|---|
-| 01 | [Lược đồ và kho nguồn](phase-01-luoc-do-va-kho-nguon.md) | 3 bảng thật + 1 bảng ảo FTS5, bỏ dấu, store CRUD, xóa sạch không bỏ mồ côi | chưa làm |
-| 02 | [Đọc file và cắt đoạn](phase-02-doc-file-va-cat-doan.md) | 5 định dạng -> chữ thuần -> đoạn | chưa làm |
-| 03 | [Tìm kiếm FTS5 + RRF](phase-03-tim-kiem-fts5-va-rrf.md) | bỏ dấu, truy vấn MATCH an toàn, bm25, hợp nhất RRF | chưa làm |
-| 04 | [Tool kb_search](phase-04-tool-kb-search.md) | tool + lọc theo agent + luật persona | chưa làm |
-| 05 | [API và tab dashboard](phase-05-api-va-tab-dashboard.md) | upload, gõ tay, gán nguồn cho agent | chưa làm |
+| 01 | [Lược đồ và kho nguồn](phase-01-luoc-do-va-kho-nguon.md) | 3 bảng thật + 1 bảng ảo FTS5, bỏ dấu, store CRUD, xóa sạch không bỏ mồ côi | Xong (1821dce) |
+| 02 | [Đọc file và cắt đoạn](phase-02-doc-file-va-cat-doan.md) | 5 định dạng -> chữ thuần -> đoạn | Xong (cc8ce3b) |
+| 03 | [Tìm kiếm FTS5 + RRF](phase-03-tim-kiem-fts5-va-rrf.md) | bỏ dấu, truy vấn MATCH an toàn, bm25, hợp nhất RRF | Xong (c283a18) |
+| 04 | [Tool kb_search](phase-04-tool-kb-search.md) | tool + lọc theo agent + luật persona | Xong (2600eec) |
+| 05 | [API và tab dashboard](phase-05-api-va-tab-dashboard.md) | upload, gõ tay, gán nguồn cho agent | Xong (169229d) |
 
 Sau phase 05: cập nhật `docs/project-roadmap.md`, `CHANGELOG.md`, số test ở
 `README.md`.

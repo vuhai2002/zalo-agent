@@ -1,7 +1,7 @@
 # Phase 03 - Tìm kiếm FTS5 và hợp nhất RRF
 
 **Ưu tiên:** cao. Đây là chỗ quyết định bot trả lời đúng hay sai.
-**Trạng thái:** chưa làm. **Cần:** phase 01, 02.
+**Trạng thái:** XONG. **Cần:** phase 01, 02.
 
 ## Bối cảnh
 

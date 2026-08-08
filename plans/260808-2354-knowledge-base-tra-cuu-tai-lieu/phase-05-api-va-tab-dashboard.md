@@ -1,7 +1,7 @@
 # Phase 05 - API và tab dashboard
 
 **Ưu tiên:** cao. Không có phase này thì không ai nạp được tài liệu.
-**Trạng thái:** chưa làm. **Cần:** phase 01-04.
+**Trạng thái:** XONG. **Cần:** phase 01-04.
 
 ## Bối cảnh
 

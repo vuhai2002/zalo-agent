@@ -1,7 +1,7 @@
 # Phase 01 - Lược đồ và kho nguồn
 
 **Ưu tiên:** cao nhất, mọi phase sau đều dựng trên đây.
-**Trạng thái:** chưa làm.
+**Trạng thái:** XONG.
 
 ## Bối cảnh
 

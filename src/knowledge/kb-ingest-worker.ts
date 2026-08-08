@@ -69,10 +69,32 @@ export async function xuLyMotVong(): Promise<void> {
     // liền MỘT khối JS, chặn luôn việc nhận/gửi tin Zalo (cùng tiến trình 1
     // luồng). Đo trên DB tạm với 3 nguồn gõ tay 20MB: KHÔNG nhả thì cả vòng
     // chạy liền ~5,1 giây, 0 lần nào khác chen được vào giữa; nhả sau mỗi
-    // nguồn thì độ trễ tối đa tụt xuống dưới mili-giây (chi tiết đo ở
-    // `.superpowers/sdd/plan/final-fix-wave-report.md`, mục 2). Không nhả
-    // thêm giữa từng ĐOẠN trong vòng ghi (`luuDoan`): đã đo, phần tốn thời
-    // gian nhất là `catThanhDoan`+ghi cả nguồn, không phải từng đoạn riêng lẻ.
+    // nguồn thì khối lớn nhất còn lại tụt từ "cả vòng" xuống "một nguồn đơn" -
+    // KHÔNG về dưới mili-giây. Đo trực tiếp (vòng tick độc lập chạy song song,
+    // 3 nguồn 20MB): một nguồn đơn vẫn giữ nhịp bot ~2,2 giây. Đo tách riêng
+    // `catThanhDoan`+`luuDoan` cho một nguồn ở trần tối đa cho phép (100MB):
+    // ~6,3 giây - suy theo tỉ lệ tuyến tính từ số này thì một nguồn đúng
+    // TRẦN MẶC ĐỊNH `KB_MAX_FILE_MB` (20MB, chưa ai chỉnh trên dashboard) tốn
+    // khoảng ~1,2 giây (chi tiết đo ở
+    // `.superpowers/sdd/plan/final-fix-wave-report.md`, mục 2). Dù đo bằng
+    // cách nào, kết luận không đổi: một nguồn đơn đủ lớn vẫn giữ nhịp bot
+    // NHIỀU GIÂY, không phải "dưới mili-giây" như comment cũ nói sai.
+    //
+    // KHÔNG nhả thêm giữa từng ĐOẠN trong vòng ghi (`luuDoan`) - dù đó mới là
+    // phần tốn thời gian nhất (đo trên nguồn 100MB: `catThanhDoan` 198ms so
+    // với `luuDoan` 6099ms, tức 97%). Lý do KHÔNG PHẢI vì đoạn đó rẻ, mà vì
+    // RÀNG BUỘC GIAO DỊCH: `luuDoan` chạy trong `trongGiaoDich` (`BEGIN
+    // IMMEDIATE`) trên connection SQLite DÙNG CHUNG cho cả process
+    // (`conversation/database.ts` export một `DatabaseSync` duy nhất, xem
+    // `shared/db-transaction.ts:8-10`). Nhả event loop giữa một giao dịch
+    // đang mở KHÔNG ném `SQLITE_BUSY` (lỗi đó xảy ra GIỮA các connection khác
+    // nhau, không phải giữa hai đoạn code trên cùng một connection) - nó âm
+    // thầm để code khác trong tiến trình (agent loop ghi tin nhắn, scheduler
+    // tick, `setTuning`...) ghi LẠC vào bên trong giao dịch KB đang mở. Hậu
+    // quả: `luuDoan` ném lỗi thì `ROLLBACK` cuốn theo cả dữ liệu không liên
+    // quan vừa ghi xen vào; giao dịch nào khác cố mở trong lúc đó sẽ ăn lỗi
+    // "cannot start a transaction within a transaction" (`node:sqlite` không
+    // hỗ trợ giao dịch lồng nhau).
     await new Promise((resolve) => setImmediate(resolve));
   }
 }

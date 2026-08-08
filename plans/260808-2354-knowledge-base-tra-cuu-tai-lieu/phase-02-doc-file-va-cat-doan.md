@@ -2,7 +2,7 @@
 
 **Ưu tiên:** cao. Chất lượng cắt đoạn quyết định chất lượng tra cứu nhiều hơn
 thuật toán tìm kiếm.
-**Trạng thái:** chưa làm. **Cần:** phase 01.
+**Trạng thái:** XONG. **Cần:** phase 01.
 
 ## Bối cảnh
 

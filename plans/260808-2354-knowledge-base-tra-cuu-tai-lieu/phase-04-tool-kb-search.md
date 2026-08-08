@@ -1,7 +1,7 @@
 # Phase 04 - Tool kb_search
 
 **Ưu tiên:** cao. Đây là chỗ kho tri thức thật sự tới được model.
-**Trạng thái:** chưa làm. **Cần:** phase 03.
+**Trạng thái:** XONG. **Cần:** phase 03.
 
 ## Bối cảnh
 
