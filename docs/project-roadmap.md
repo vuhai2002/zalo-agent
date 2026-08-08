@@ -3890,11 +3890,16 @@ mở đợt vector: chạy thật vài hôm, đo tỉ lệ câu hỏi thật tr�
 
 ### Kiểm chứng
 
-116 test mới qua cả 5 phase (1661 -> 1777), riêng phase 05 (route + worker
-nền + dashboard) +29. Typecheck sạch cả backend lẫn web. 6 phép phá ở phase 05
-(bỏ kiểm trần dung lượng, tin đuôi tên thay vì magic bytes, dùng tên người
-dùng làm đường dẫn, xử lý đồng bộ trong handler, DELETE không xóa file, bỏ
-middleware auth khỏi route KB) đều đỏ đúng chỗ.
+125 test mới qua cả 5 phase (1661 -> 1786), riêng phase 05 (route + worker
+nền + dashboard, gồm cả vòng rà soát sau đó) +38. Typecheck sạch cả backend
+lẫn web. 11 phép phá đều đỏ đúng chỗ: 6 phép ở bản đầu của phase 05 (bỏ kiểm
+trần dung lượng, tin đuôi tên thay vì magic bytes, dùng tên người dùng làm
+đường dẫn, xử lý đồng bộ trong handler, DELETE không xóa file, bỏ middleware
+auth khỏi route KB) cộng 5 phép từ vòng rà soát (giành nguồn vô điều kiện gây
+xử lý trùng khi hai vòng worker chồng lấn, thiếu trần dung lượng ở route gõ
+tay, GET /sources lộ toàn văn, xóa agent không dọn gán Kho tri thức - agent
+tạo lại CÙNG id đọc lại được tài liệu cũ, thiếu test cho nhánh CHẤP NHẬN
+pdf/docx/xlsx).
 
 ### Việc còn treo
 

@@ -6,7 +6,8 @@ import { createLogger } from "../shared/logger.js";
 import { catThanhDoan } from "./chunk-text.js";
 import { docChuTuFile, laDinhDangHoTro } from "./doc-text-extract.js";
 import { luuDoan } from "./kb-chunk-store.js";
-import { danhSachNguon, datTrangThai, type KbSource } from "./kb-source-store.js";
+import { giaNguonChoXuLy, layNguonTheoTrangThai } from "./kb-source-queries.js";
+import { datTrangThai, type KbSource } from "./kb-source-store.js";
 
 /**
  * Vòng xử lý nền của Kho tri thức: đọc chữ từ nguồn `cho_xu_ly` -> cắt đoạn ->
@@ -24,9 +25,12 @@ const log = createLogger("kb-ingest-worker");
 const TICK_MS = 5000;
 
 async function xuLyMotNguon(n: KbSource): Promise<void> {
-  // Giành nguồn TRƯỚC khi đọc/cắt - để vòng tick sau (hoặc lần gọi xuLyMotVong
-  // khác) không nhặt lại đúng nguồn này giữa lúc đang xử lý dở.
-  datTrangThai(n.id, "dang_xu_ly");
+  // Giành CÓ ĐIỀU KIỆN (so sánh-rồi-đổi nguyên tử) - không dùng datTrangThai
+  // (UPDATE vô điều kiện) ở đây: hai vòng xuLyMotVong() có thể chồng lấn thời
+  // gian thật (vòng này đang await đọc file lớn thì tick 5s sau đã bắn tiếp),
+  // nên `n` có thể tới từ một SNAPSHOT CŨ mà nguồn đã bị vòng khác giành/xử lý
+  // xong. Giành thất bại thì BỎ QUA hẳn, không xử lý tiếp - xem giaNguonChoXuLy().
+  if (!giaNguonChoXuLy(n.id)) return;
   try {
     let chu: string;
     if (n.loai === "text") {
@@ -56,7 +60,7 @@ async function xuLyMotNguon(n: KbSource): Promise<void> {
 
 /** Xử lý mọi nguồn đang `cho_xu_ly`; một nguồn hỏng không dừng vòng. */
 export async function xuLyMotVong(): Promise<void> {
-  const dangCho = danhSachNguon().filter((n) => n.trangThai === "cho_xu_ly");
+  const dangCho = layNguonTheoTrangThai("cho_xu_ly");
   for (const n of dangCho) {
     await xuLyMotNguon(n);
   }
@@ -68,8 +72,24 @@ export async function xuLyMotVong(): Promise<void> {
  * về `cho_xu_ly` để vòng tick kế tiếp nhặt lại xử lý, không nằm kẹt vĩnh viễn.
  */
 export function goNguonKetLucKhoiDong(): void {
-  for (const n of danhSachNguon()) {
-    if (n.trangThai === "dang_xu_ly") datTrangThai(n.id, "cho_xu_ly");
+  for (const n of layNguonTheoTrangThai("dang_xu_ly")) {
+    datTrangThai(n.id, "cho_xu_ly");
+  }
+}
+
+// Chặn hai vòng interval chồng lên nhau: nguồn lớn (PDF vài trăm trang) có
+// thể xử lý lâu hơn TICK_MS, tick sau bắn vào lúc vòng trước còn dở thì bỏ
+// qua - giành có điều kiện ở trên đã đủ AN TOÀN dù thiếu cờ này (không xử lý
+// trùng một nguồn), nhưng thiếu cờ thì vẫn tốn công quét trùng lặp mỗi 5s.
+let dangChayVong = false;
+
+async function chayMotVongAnToan(): Promise<void> {
+  if (dangChayVong) return;
+  dangChayVong = true;
+  try {
+    await xuLyMotVong();
+  } finally {
+    dangChayVong = false;
   }
 }
 
@@ -78,8 +98,8 @@ export function batDauWorker(): () => void {
   goNguonKetLucKhoiDong();
   // Chạy NGAY, không đợi hết TICK_MS đầu tiên - nguồn upload lúc bot vừa khởi
   // động lại không phải chờ oan một nhịp quét.
-  void xuLyMotVong();
-  const timer = setInterval(() => void xuLyMotVong(), TICK_MS);
+  void chayMotVongAnToan();
+  const timer = setInterval(() => void chayMotVongAnToan(), TICK_MS);
   timer.unref();
   return () => clearInterval(timer);
 }

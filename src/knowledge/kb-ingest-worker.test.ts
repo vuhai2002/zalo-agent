@@ -16,6 +16,14 @@ before(async () => {
   database = await import("../conversation/database.js");
 });
 
+/** Nội dung chunk hiện có của một nguồn, đọc trực tiếp qua DB - không cần biết id đoạn */
+function noiDungDoanCuaNguon(sourceId: string): string[] {
+  const rows = database.db
+    .prepare("SELECT noi_dung FROM kb_chunks WHERE source_id = ? ORDER BY thu_tu")
+    .all(sourceId) as { noi_dung: string }[];
+  return rows.map((r) => r.noi_dung);
+}
+
 after(() => {
   database.closeDatabase();
   cleanupTestEnv(dataDir);
@@ -91,5 +99,51 @@ describe("kb-ingest-worker - xử lý nguồn cho_xu_ly", () => {
     store.datTrangThai(sanSang.id, "san_sang", { soDoan: 1 });
     worker.goNguonKetLucKhoiDong();
     assert.equal(store.layNguon(sanSang.id)!.trangThai, "san_sang");
+  });
+});
+
+describe("kb-ingest-worker - hai vòng chồng lấn không được xử lý trùng", () => {
+  it("vòng A giữ snapshot cũ không được ghi đè nguồn mà vòng B đã xử lý xong trong lúc A còn dở", async () => {
+    // Y tạo TRƯỚC, X tạo SAU - rồi ép created_at để LUÔN chắc chắn X đứng ĐẦU
+    // snapshot của danhSachNguon() (ORDER BY created_at DESC), Y đứng SAU. Cần
+    // thứ tự này để vòng A còn "kẹt" ở X (await thật bên trong docChuTuFile,
+    // dù rồi sẽ hỏng) trong lúc ta giả lập vòng B đã xử lý xong Y.
+    const y = store.taoNguon({ ten: "y", loai: "text", noiDungGoc: "# Giờ làm việc\n\n8h - 21h" });
+    const x = store.taoNguon({
+      ten: "x",
+      loai: "file",
+      dinhDang: "pdf",
+      duongDan: fileStore.luuFile("cham", "pdf", Buffer.from("khong phai pdf that")),
+    });
+    database.db.prepare("UPDATE kb_sources SET created_at = ? WHERE id = ?").run("2020-01-01T00:00:00.000Z", y.id);
+    database.db.prepare("UPDATE kb_sources SET created_at = ? WHERE id = ?").run("2020-01-01T00:00:00.001Z", x.id);
+
+    // Vòng A: KHÔNG await - hàm async chạy đồng bộ tới điểm await THẬT đầu
+    // tiên (bên trong docChuTuFile khi xử lý x) rồi mới trả quyền điều khiển
+    // lại đây. Nghĩa là khi dòng này chạy xong, x đã được GIÀNH (dang_xu_ly),
+    // nhưng y thì CHƯA - vòng A còn chưa kịp chạm tới y trong snapshot của nó.
+    const luotA = worker.xuLyMotVong();
+
+    // Giả lập vòng B: đã giành, xử lý XONG y - CODE ĐỒNG BỘ nên chắc chắn chạy
+    // trước khi luotA (đang suspend ở await bên trong x) được tiếp tục, JS
+    // không bao giờ xen ngang một hàm async đang treo cho tới khi ngăn xếp
+    // đồng bộ hiện tại rỗng.
+    const chunkStore = await import("./kb-chunk-store.js");
+    chunkStore.luuDoan(y.id, [{ thuTu: 0, tieuDe: "", noiDung: "đã xử lý bởi lượt B" }]);
+    store.datTrangThai(y.id, "san_sang", { soDoan: 1 });
+
+    await luotA;
+
+    // Vòng A cuối cùng cũng chạm tới y (từ snapshot CŨ, lúc y còn cho_xu_ly).
+    // Nếu giành lại được (UPDATE vô điều kiện) thì nó ghi đè bằng bản CẮT LẠI
+    // của chính nó ("Giờ làm việc" / "8h - 21h" - nội dung gốc của y), xóa mất
+    // đoạn "đã xử lý bởi lượt B". Đo NỘI DUNG, không chỉ đếm số đoạn: cả hai
+    // nhánh đều ra đúng 1 đoạn nên đếm số là khẳng định vacuous.
+    assert.deepEqual(
+      noiDungDoanCuaNguon(y.id),
+      ["đã xử lý bởi lượt B"],
+      "vòng A giành lại và xử lý CHỒNG lên y dù vòng B đã xong - đúng race brief mô tả",
+    );
+    assert.equal(store.layNguon(y.id)!.trangThai, "san_sang");
   });
 });

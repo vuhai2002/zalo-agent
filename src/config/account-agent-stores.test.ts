@@ -59,6 +59,33 @@ describe("agent-store", () => {
     assert.equal(agents.getAgent("agent-le"), null);
   });
 
+  it("xóa agent dọn sạch nguồn Kho tri thức đã gán - agent tạo lại CÙNG id không đọc lại tài liệu cũ", async () => {
+    // Id agent là SLUG TẤT ĐỊNH sinh từ tên (slugify-vietnamese.ts) - kịch bản
+    // thật: xóa "Bán hàng" (id ban-hang) rồi tạo lại agent CÙNG TÊN đó sẽ ra
+    // đúng id cũ. Mô phỏng thẳng bằng cách tự đặt cùng id, không cần đi qua
+    // đường sinh slug.
+    const kbSource: typeof import("../knowledge/kb-source-store.js") = await import(
+      "../knowledge/kb-source-store.js"
+    );
+    const kbBinding: typeof import("../knowledge/kb-agent-binding.js") = await import(
+      "../knowledge/kb-agent-binding.js"
+    );
+
+    agents.createAgent({ id: "ban-hang", name: "Bán hàng" });
+    const n = kbSource.taoNguon({ ten: "Chính sách", loai: "text", noiDungGoc: "abc" });
+    kbBinding.datNguonChoAgent("ban-hang", [n.id]);
+    assert.deepEqual(kbBinding.nguonCuaAgent("ban-hang"), [n.id], "chưa xóa mà đã rỗng thì test vô nghĩa");
+
+    assert.equal(agents.deleteAgent("ban-hang").ok, true);
+
+    agents.createAgent({ id: "ban-hang", name: "Bán hàng" });
+    assert.deepEqual(
+      kbBinding.nguonCuaAgent("ban-hang"),
+      [],
+      "agent mới tạo (trùng id agent cũ đã xóa) không được đọc lại tài liệu của agent cũ",
+    );
+  });
+
   it("getAgentForAccount rơi về default khi agent không tồn tại", () => {
     const agent = agents.getAgentForAccount("agent-da-xoa");
     assert.equal(agent.isDefault, true);

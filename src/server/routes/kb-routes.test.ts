@@ -18,6 +18,7 @@ let store: typeof import("../../knowledge/kb-source-store.js");
 let fileStore: typeof import("../../knowledge/kb-file-store.js");
 let binding: typeof import("../../knowledge/kb-agent-binding.js");
 let tuning: typeof import("../../config/runtime-tuning-settings.js");
+let agents: typeof import("../../config/agent-store.js");
 let database: typeof import("../../conversation/database.js");
 
 const PASSWORD = "mat-khau-kb-routes-123";
@@ -31,6 +32,7 @@ before(async () => {
   fileStore = await import("../../knowledge/kb-file-store.js");
   binding = await import("../../knowledge/kb-agent-binding.js");
   tuning = await import("../../config/runtime-tuning-settings.js");
+  agents = await import("../../config/agent-store.js");
   database = await import("../../conversation/database.js");
 
   const login = await app.request("/api/auth/login", {
@@ -50,7 +52,7 @@ after(() => {
 // cũng bắt đầu từ một kho trắng, không thì test đếm số file/nguồn ở test SAU
 // dính rác từ test TRƯỚC (đặc biệt là test "quá trần" cần thư mục kb/ RỖNG).
 beforeEach(() => {
-  for (const t of ["kb_sources", "kb_chunks", "kb_chunks_fts", "agent_kb_sources"]) {
+  for (const t of ["kb_sources", "kb_chunks", "kb_chunks_fts", "agent_kb_sources", "agents"]) {
     database.db.exec(`DELETE FROM ${t}`);
   }
   fs.rmSync(kbDir(), { recursive: true, force: true });
@@ -121,6 +123,39 @@ describe("POST /api/kb/sources/file", () => {
     const res = await app.request("/api/kb/sources/file", { method: "POST", body: fd, headers: { cookie } });
     assert.equal(res.status, 400);
   });
+
+  // Nhánh CHẤP NHẬN: test thất bại (magic bytes sai) ở trên không chứng minh
+  // được nhánh khớp CHẤP NHẬN có thật sự nối đúng vào MAGIC_BYTES hay không -
+  // một bản cài đặt từ chối 100% pdf/docx/xlsx vẫn xanh nếu chỉ có test hỏng.
+  it("pdf với chữ ký thật (%PDF) được chấp nhận, trả 202", async () => {
+    const res = await app.request("/api/kb/sources/file", {
+      method: "POST",
+      body: formFile("gia.pdf", Buffer.from("%PDF-1.7\nnoi dung gia lap, chi can dung chu ky dau file")),
+      headers: { cookie },
+    });
+    assert.equal(res.status, 202);
+    assert.equal(store.danhSachNguon()[0]!.dinhDang, "pdf");
+  });
+
+  it("docx với chữ ký thật (PK) được chấp nhận, trả 202", async () => {
+    const res = await app.request("/api/kb/sources/file", {
+      method: "POST",
+      body: formFile("hop-dong.docx", Buffer.from("PK\x03\x04 noi dung gia lap, chi can dung chu ky dau file")),
+      headers: { cookie },
+    });
+    assert.equal(res.status, 202);
+    assert.equal(store.danhSachNguon()[0]!.dinhDang, "docx");
+  });
+
+  it("xlsx với chữ ký thật (PK) được chấp nhận, trả 202", async () => {
+    const res = await app.request("/api/kb/sources/file", {
+      method: "POST",
+      body: formFile("bang-gia.xlsx", Buffer.from("PK\x03\x04 noi dung gia lap, chi can dung chu ky dau file")),
+      headers: { cookie },
+    });
+    assert.equal(res.status, 202);
+    assert.equal(store.danhSachNguon()[0]!.dinhDang, "xlsx");
+  });
 });
 
 describe("POST /api/kb/sources/text", () => {
@@ -143,6 +178,23 @@ describe("POST /api/kb/sources/text", () => {
     const res = await guiJson("/api/kb/sources/text", "POST", { ten: "", noiDung: "có nội dung" });
     assert.equal(res.status, 400);
   });
+
+  it("tên quá 200 ký tự bị từ chối 400 - ô maxLength ở form chỉ là giao diện", async () => {
+    const res = await guiJson("/api/kb/sources/text", "POST", { ten: "a".repeat(201), noiDung: "x" });
+    assert.equal(res.status, 400);
+  });
+
+  it("nội dung gõ tay quá trần KB_MAX_FILE_MB bị từ chối, KHÔNG ghi gì xuống DB", async () => {
+    // c.req.json() gom trọn body vào RAM TRƯỚC khi kịp kiểm gì - phải chặn
+    // được ở đây chứ không chỉ ở route upload file.
+    tuning.setTuning("KB_MAX_FILE_MB", 1);
+    const res = await guiJson("/api/kb/sources/text", "POST", {
+      ten: "quá khổ",
+      noiDung: "a".repeat(2 * 1024 * 1024),
+    });
+    assert.equal(res.status, 413);
+    assert.equal(store.danhSachNguon().length, 0, "không được tạo dòng DB khi nội dung vượt trần");
+  });
 });
 
 describe("GET /api/kb/sources", () => {
@@ -153,6 +205,14 @@ describe("GET /api/kb/sources", () => {
     const body = (await res.json()) as { items: { ten: string }[] };
     assert.equal(body.items.length, 1);
     assert.equal(body.items[0]!.ten, "A");
+  });
+
+  it("KHÔNG kéo theo noi_dung_goc - trang tự làm mới mỗi vài giây, kéo dư toàn văn là phí băng thông", async () => {
+    await guiJson("/api/kb/sources/text", "POST", { ten: "B", noiDung: "nội dung bí mật dài" });
+    const res = await app.request("/api/kb/sources", { headers: { cookie } });
+    const body = (await res.json()) as { items: Record<string, unknown>[] };
+    assert.equal(body.items.length, 1);
+    assert.equal("noiDungGoc" in body.items[0]!, false, "response vẫn còn field noiDungGoc");
   });
 });
 
@@ -199,6 +259,7 @@ describe("DELETE /api/kb/sources/:id", () => {
 
 describe("gán nguồn cho agent", () => {
   it("PUT thay thế toàn bộ danh sách", async () => {
+    agents.createAgent({ id: "a1", name: "Agent A1" });
     const n1 = store.taoNguon({ ten: "n1", loai: "text", noiDungGoc: "1" });
     const n2 = store.taoNguon({ ten: "n2", loai: "text", noiDungGoc: "2" });
 
@@ -209,11 +270,19 @@ describe("gán nguồn cho agent", () => {
   });
 
   it("gán nguồn KHÔNG tồn tại bị từ chối 400", async () => {
+    agents.createAgent({ id: "a1", name: "Agent A1" });
     // Không chặn ở đây thì bảng gán tích lũy id rác, và trang agent hiện ô tick
     // trỏ vào hư không
     const res = await guiJson("/api/kb/agents/a1/sources", "PUT", { sourceIds: ["khong-co"] });
     assert.equal(res.status, 400);
     assert.deepEqual(binding.nguonCuaAgent("a1"), []);
+  });
+
+  it("gán cho agentId KHÔNG tồn tại bị từ chối 400 - không được tạo dòng gán mồ côi", async () => {
+    const n1 = store.taoNguon({ ten: "n1", loai: "text", noiDungGoc: "1" });
+    const res = await guiJson("/api/kb/agents/agent-khong-ton-tai/sources", "PUT", { sourceIds: [n1.id] });
+    assert.equal(res.status, 400);
+    assert.deepEqual(binding.nguonCuaAgent("agent-khong-ton-tai"), []);
   });
 
   it("GET trả đúng danh sách đã gán", async () => {

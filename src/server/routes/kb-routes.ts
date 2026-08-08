@@ -3,11 +3,13 @@ import path from "node:path";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
+import { getAgent } from "../../config/agent-store.js";
 import { getTuning } from "../../config/runtime-tuning-settings.js";
 import { DINH_DANG_HO_TRO, laDinhDangHoTro, type DinhDangKb } from "../../knowledge/doc-text-extract.js";
 import { datNguonChoAgent, nguonCuaAgent } from "../../knowledge/kb-agent-binding.js";
 import { luuFile, xoaFile } from "../../knowledge/kb-file-store.js";
-import { danhSachNguon, layNguon, taoNguon, datTrangThai, xoaNguon } from "../../knowledge/kb-source-store.js";
+import { danhSachNguonGon, locIdTonTai } from "../../knowledge/kb-source-queries.js";
+import { layNguon, taoNguon, datTrangThai, xoaNguon } from "../../knowledge/kb-source-store.js";
 import { createLogger } from "../../shared/logger.js";
 
 const log = createLogger("kb-routes");
@@ -35,22 +37,29 @@ function khopChuKyThat(buf: Buffer, dinhDang: DinhDangKb): boolean {
 }
 
 /**
- * Chặn file quá trần NGAY Ở TẦNG ĐỌC: `hono/body-limit` đọc luồng theo từng
+ * Chặn body quá trần NGAY Ở TẦNG ĐỌC: `hono/body-limit` đọc luồng theo từng
  * mảnh (hoặc kiểm `Content-Length` khi có) và hủy giữa chừng nếu vượt trần,
  * KHÔNG đợi gom hết byte vào RAM rồi mới báo quá lớn. Đọc `getTuning` lại mỗi
  * request (không chốt lúc mount route) - đúng triết lý "đọc lại mỗi lần dùng"
  * của cả dự án, để đổi KB_MAX_FILE_MB trên dashboard có tác dụng ngay.
+ *
+ * Dùng chung cho CẢ route upload file LẪN route gõ tay - `noi_dung_goc` của
+ * nguồn gõ tay đi thẳng qua `c.req.json()` không hề bị chặn dung lượng nếu
+ * thiếu middleware này, và `await c.req.json()` gom trọn body vào RAM trước
+ * khi kịp kiểm gì cả.
  */
 const chanTranDungLuong: MiddlewareHandler = (c, next) => {
   const maxMB = getTuning("KB_MAX_FILE_MB");
   return bodyLimit({
     maxSize: maxMB * 1024 * 1024,
-    onError: (c) => c.json({ error: `File vượt quá ${maxMB}MB` }, 413),
+    onError: (c) => c.json({ error: `Nội dung vượt quá ${maxMB}MB` }, 413),
   })(c, next);
 };
 
 const textSourceSchema = z.object({
-  ten: z.string().min(1),
+  // 200 ký tự khớp `maxLength` của ô tên trên form thêm nguồn - ô đó chỉ là
+  // giao diện, biên hệ thống thật phải nằm ở đây.
+  ten: z.string().min(1).max(200),
   noiDung: z.string(),
 });
 
@@ -60,9 +69,18 @@ const putAgentSourcesSchema = z.object({
 
 export const kbRoutes = new Hono()
 
-  .get("/sources", (c) => c.json({ items: danhSachNguon() }))
+  // GỌN: không kèm noi_dung_goc - giao diện chỉ hiện metadata, và trang tự
+  // làm mới mỗi vài giây nên kéo dư toàn văn (nguồn gõ tay có thể dài hàng
+  // chục nghìn ký tự) là phí băng thông vô ích.
+  .get("/sources", (c) => c.json({ items: danhSachNguonGon() }))
 
-  .post("/sources/text", async (c) => {
+  // `chanTranDungLuong` là hàng phòng thủ DUY NHẤT cho dung lượng ở route này
+  // (không thêm kiểm tra byte trùng lặp trong handler): `noiDung` luôn là một
+  // PHẦN của toàn bộ body JSON, nên bất cứ giá trị nào làm noiDung vượt trần
+  // cũng làm cả body vượt trần theo - middleware đã chặn TRƯỚC khi handler kịp
+  // gọi `c.req.json()` gom body vào RAM. Thêm một kiểm tra byte sau khi đã
+  // parse xong không có tác dụng gì mới, chỉ che mất phép phá thật của route.
+  .post("/sources/text", chanTranDungLuong, async (c) => {
     const parsed = textSourceSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Dữ liệu không hợp lệ", issues: parsed.error.issues }, 400);
     const { ten, noiDung } = parsed.data;
@@ -127,11 +145,19 @@ export const kbRoutes = new Hono()
 
   .put("/agents/:agentId/sources", async (c) => {
     const agentId = c.req.param("agentId");
+    // Không chặn ở đây thì gán được cho một agent KHÔNG TỒN TẠI (id gõ sai,
+    // hoặc agent vừa bị xóa) - bảng agent_kb_sources tích lũy dòng mồ côi mà
+    // không ai đọc tới, đúng lỗ hổng đối xứng với "gán nguồn không tồn tại"
+    // đã chặn ở nhánh sourceIds bên dưới.
+    if (!getAgent(agentId)) return c.json({ error: "Agent không tồn tại" }, 400);
+
     const parsed = putAgentSourcesSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Dữ liệu không hợp lệ", issues: parsed.error.issues }, 400);
 
-    const nguonTonTai = new Set(danhSachNguon().map((n) => n.id));
-    const idKhongTonTai = parsed.data.sourceIds.filter((id) => !nguonTonTai.has(id));
+    // Tra ĐÚNG các id được gửi lên bằng một câu SELECT ... IN (...), không kéo
+    // cả bảng (kèm toàn văn) về so trong JS - cùng lý do với danhSachNguonGon.
+    const idTonTai = locIdTonTai(parsed.data.sourceIds);
+    const idKhongTonTai = parsed.data.sourceIds.filter((id) => !idTonTai.has(id));
     if (idKhongTonTai.length > 0) {
       // Không chặn ở đây thì bảng agent_kb_sources tích lũy id rác, và trang
       // agent hiện ô tick trỏ vào một nguồn không còn tồn tại.

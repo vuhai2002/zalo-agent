@@ -24,7 +24,7 @@ export type KbSource = {
   updatedAt: string;
 };
 
-type KbSourceRow = {
+export type KbSourceRow = {
   id: string;
   ten: string;
   loai: LoaiNguon;
@@ -39,7 +39,8 @@ type KbSourceRow = {
   updated_at: string;
 };
 
-function mapRow(row: KbSourceRow): KbSource {
+/** Export để `kb-source-queries.ts` dùng lại - một nguồn ánh xạ row->domain, không lặp lại ở nơi khác */
+export function mapRow(row: KbSourceRow): KbSource {
   return {
     id: row.id,
     ten: row.ten,

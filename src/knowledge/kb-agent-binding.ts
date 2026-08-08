@@ -38,3 +38,15 @@ export function datNguonChoAgent(agentId: string, sourceIds: string[]): void {
     }
   });
 }
+
+/**
+ * Dọn sạch gán nguồn của một agent - gọi từ `agent-store.ts` khi agent bị
+ * XÓA. Agent id là SLUG TẤT ĐỊNH sinh từ tên (`slugify-vietnamese.ts`): xóa
+ * agent "Bán hàng" (id `ban-hang`) rồi tạo lại agent CÙNG TÊN sẽ ra ĐÚNG id
+ * cũ. Thiếu bước dọn này thì agent "mới" (thật ra trùng id với agent cũ đã
+ * xóa) đọc lại được tài liệu chưa ai từng gán cho NÓ - lật ngược bất biến
+ * "mặc định ĐÓNG" ở đầu file này.
+ */
+export function xoaGanNguonCuaAgent(agentId: string): void {
+  xoaGanCuaAgentStmt.run(agentId);
+}
