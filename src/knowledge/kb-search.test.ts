@@ -66,13 +66,39 @@ describe("timTrongKhoTriThuc - bm25 trên dữ liệu tiếng Việt thật", ()
     }
   });
 
-  it("MỐC ĐÃ BIẾT: câu hỏi giờ mở cửa chỉ vào được top 2, không chắc hạng 1", () => {
-    // "đồng" (tiền) và "đóng" bỏ dấu đều ra "dong" nên đoạn phí ship chen lên
-    // trên. Đây là điểm mù cố hữu của tìm theo từ khóa và là lý do đợt sau thêm
-    // lớp vector. Khẳng định để LỎNG ở top 2 vì thứ hạng chính xác phụ thuộc
-    // fixture; chạy thật thấy nó ổn định ở hạng 1 thì siết lại khẳng định.
+  it("câu hỏi giờ mở cửa cũng ra đúng đoạn ở hạng 1 (đã đo, không phải suy luận)", () => {
+    // Cả 4 câu hỏi mẫu đều ra đúng hạng 1 trên fixture này. Va chạm "đồng"
+    // (tiền) và "đóng" (cửa) cùng bỏ dấu thành "dong" là rủi ro CÓ THẬT của
+    // tìm theo từ khóa - đoạn "Phí vận chuyển" khớp "dong" tới 3 lần - nhưng
+    // fixture này không kích hoạt nó: đoạn "Giờ làm việc" khớp BA từ khác
+    // nhau (gio, dong, cua - riêng "cua" đã xuất hiện 3 lần: "Cửa hàng", "mở
+    // cửa", "đóng cửa"), còn đoạn "Phí vận chuyển" chỉ khớp DUY NHẤT một từ
+    // ("dong") dù lặp lại nhiều lần. bm25 cộng điểm theo TỪNG từ khác nhau
+    // (mỗi từ một trọng số IDF riêng) nên khớp đa dạng thắng khớp lặp cùng
+    // một từ. soLuong giữ ở 2 để nếu thứ hạng có tụt lại (đổi fixture, đổi
+    // dữ liệu), thông báo lỗi in ra cả 2 đoạn top, dễ dò nguyên nhân.
     const kq = search.timTrongKhoTriThuc({ cauHoi: "mấy giờ đóng cửa", agentId: AGENT, soLuong: 2 });
-    assert.ok(kq.some((x) => /Giờ làm việc/.test(x.noiDung)), "vẫn phải nằm trong top 2");
+    assert.match(
+      kq[0]!.noiDung,
+      /Giờ làm việc/,
+      `top 2 thực tế: ${kq.map((x) => JSON.stringify(x.noiDung.slice(0, 30))).join(" | ")}`,
+    );
+  });
+
+  it("câu hỏi chỉ có từ mang chữ 'đ' vẫn ra đúng đoạn - chứng minh boDauTiengViet có tác dụng thật", () => {
+    // "đ" (U+0111) là MỘT CHỮ CÁI riêng có gạch ngang, không phải chữ nền cộng
+    // dấu phụ tổ hợp - unicode61 tự gấp được dấu thanh/mũ/móc (à, ả, ộ, ...)
+    // nhưng KHÔNG tự gấp được "đ" thành "d" (xem kb-schema.ts). Cột `phang`
+    // ghi "doi" (đã bỏ dấu từ lúc lưu), nên câu hỏi PHẢI đi qua boDauTiengViet
+    // thì "đổi" mới thành "doi" mà khớp được.
+    //
+    // Chỉ dùng "đổi" MỘT MÌNH (không kèm "trả"): "đổi trả" sẽ vẫn ra đúng đoạn
+    // dù bỏ boDauTiengViet, vì "trả" tự nó bỏ được dấu qua unicode61 ("ả" là
+    // dấu tổ hợp thật) và không đoạn nào khác trong fixture có từ "tra" - một
+    // mình "trả" đã đủ cứu kết quả, che mất lỗ hổng thật của "đ". Đã đo bằng
+    // sabotage thật trước khi viết test này (xem report task-3).
+    const kq = search.timTrongKhoTriThuc({ cauHoi: "đổi", agentId: AGENT, soLuong: 1 });
+    assert.match(kq[0]!.noiDung, /Chính sách đổi trả/, "câu hỏi 'đổi' một mình");
   });
 });
 
