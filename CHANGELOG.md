@@ -68,6 +68,11 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Thêm
 
+- **Nhiều người trong nhóm nhắn cùng lúc thì mỗi người nhận một câu trả lời
+  riêng**, trích đúng tin của mình - thay vì gộp cả nhóm vào một câu như trước.
+  Một người nhắn nhiều tin liên tiếp (ảnh rồi chú thích) vẫn gộp làm một lượt,
+  đó vốn là lý do bộ gộp tồn tại. Các lượt chạy nối tiếp nhau nên lịch sử cuộc
+  trò chuyện không bị chồng chéo.
 - Trả lời trong nhóm kèm **trích dẫn tin người hỏi** - Zalo hiển thị khối trích
   dẫn ngay trên câu trả lời nên nhiều người cùng hỏi vẫn biết bot đang trả lời
   tin nào. Trích tin mở lượt; chỉ đoạn đầu của câu trả lời dài mới trích. Chat

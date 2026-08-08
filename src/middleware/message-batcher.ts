@@ -4,7 +4,10 @@ import { createLogger } from "../shared/logger.js";
 import { dangBanThread, khiThreadRanh, runOnThreadChain, soThreadDangChay } from "./thread-run-chain.js";
 
 /**
- * Gộp các tin nhắn đến gần nhau trong cùng 1 thread thành 1 lượt agent.
+ * Gộp các tin nhắn đến gần nhau CỦA CÙNG MỘT NGƯỜI thành 1 lượt agent.
+ *
+ * "Cùng một người" chứ không phải "cùng một thread": xem khối doc của `pending`
+ * bên dưới. Trong nhóm, mỗi người có hàng chờ riêng và lượt riêng.
  *
  * Giải quyết 3 vấn đề:
  * 1. Zalo tách ảnh và caption thành 2 tin riêng - xử lý rời sẽ khiến lượt hỏi
@@ -51,6 +54,11 @@ const log = createLogger("message-batcher");
 export const TRAN_TIN_DON = 32;
 
 type PendingBatch = {
+  /**
+   * Khóa KHOÁ của thread. Khác khóa của Map (`khoaGop`, có thêm người gửi):
+   * gộp tin thì theo TỪNG NGƯỜI, còn chống race lịch sử thì theo cả THREAD.
+   */
+  threadKey: string;
   messages: ParsedMessage[];
   /**
    * `null` = đã hết thời gian chờ gộp, giờ chỉ còn đợi thread rảnh.
@@ -72,7 +80,27 @@ type PendingBatch = {
   soTinBoQua: number;
 };
 
+/**
+ * Hàng chờ gộp, khóa theo `(thread, NGƯỜI GỬI)` chứ không theo thread.
+ *
+ * Lý do gộp vốn là gộp tin của MỘT người: Zalo tách ảnh và chú thích thành hai
+ * tin, người ta gõ thêm vài câu làm rõ ý. Gộp theo thread thì trong nhóm hai
+ * người cùng @mention bot trong một nhịp sẽ chung một lượt, và bot trả một câu
+ * cho cả hai - không ai biết câu đó dành cho ai.
+ *
+ * Cả Hermes lẫn goclaw đều một-tin-một-lượt (goclaw còn cho 3 run song song
+ * trong nhóm). Bộ gộp theo thread của mình là chỗ khác biệt, và nó chỉ đúng
+ * cho phần "một người nhắn nhiều tin".
+ *
+ * Khóa KHOÁ vẫn theo thread: chống race lịch sử là chuyện của cả cuộc trò
+ * chuyện, không phải của từng người.
+ */
 const pending = new Map<string, PendingBatch>();
+
+/** Khóa gộp: mỗi người trong một thread có hàng chờ riêng */
+function khoaGopCua(threadKey: string, senderId: string): string {
+  return `${threadKey}:${senderId}`;
+}
 
 /**
  * Nhận 1 tin vào hàng gộp.
@@ -91,7 +119,8 @@ export function enqueueMessage(
   handler: BatchHandler,
   debounceMs = getTuning("MESSAGE_BATCH_DEBOUNCE_MS"),
 ): boolean {
-  const existing = pending.get(threadKey);
+  const khoaGop = khoaGopCua(threadKey, message.senderId);
+  const existing = pending.get(khoaGop);
 
   if (existing) {
     if (existing.messages.length >= TRAN_TIN_DON) {
@@ -102,7 +131,7 @@ export function enqueueMessage(
       // đọc. Tổng số tin bị bỏ ghi lại một lần lúc chốt batch.
       if (existing.soTinBoQua === 1) {
         log.warn(
-          { threadKey, dangCho: existing.messages.length },
+          { threadKey, nguoiGui: message.senderId, dangCho: existing.messages.length },
           "Hàng chờ gộp tin đã chạm trần - BỎ tin mới kể từ đây. Lượt đang chạy nhiều khả năng bị treo.",
         );
       }
@@ -111,15 +140,16 @@ export function enqueueMessage(
     if (existing.timer) clearTimeout(existing.timer);
     existing.messages.push(message);
     existing.handler = handler;
-    existing.timer = setTimeout(() => flush(threadKey), debounceMs);
+    existing.timer = setTimeout(() => flush(khoaGop), debounceMs);
     return true;
   }
 
-  pending.set(threadKey, {
+  pending.set(khoaGop, {
+    threadKey,
     messages: [message],
     handler,
     soTinBoQua: 0,
-    timer: setTimeout(() => flush(threadKey), debounceMs),
+    timer: setTimeout(() => flush(khoaGop), debounceMs),
   });
   return true;
 }
@@ -131,28 +161,35 @@ export function enqueueMessage(
  * tin ngay lúc này, nên tin tới sau đó không còn chỗ nào để gộp vào và lại đẻ
  * ra một lượt nữa - đúng cái hỏng cần chữa.
  */
-function flush(threadKey: string): void {
-  const batch = pending.get(threadKey);
+function flush(khoaGop: string): void {
+  const batch = pending.get(khoaGop);
   if (!batch) return;
 
   batch.timer = null;
-  if (dangBanThread(threadKey)) return; // `danhThucHangCho` sẽ gọi lại khi thread rảnh
+  // Khoá theo THREAD chứ không theo khóa gộp: hai người trong cùng nhóm có hai
+  // hàng chờ riêng nhưng vẫn dùng chung một cuộc trò chuyện, nên lượt của họ
+  // phải nối tiếp nhau để không đọc lịch sử chồng lên nhau
+  if (dangBanThread(batch.threadKey)) return; // `danhThucHangCho` sẽ gọi lại khi thread rảnh
 
-  pending.delete(threadKey);
+  pending.delete(khoaGop);
   if (batch.soTinBoQua > 0) {
     log.warn(
-      { threadKey, soTinBoQua: batch.soTinBoQua, soTinChay: batch.messages.length },
+      { threadKey: batch.threadKey, soTinBoQua: batch.soTinBoQua, soTinChay: batch.messages.length },
       "Chốt batch chạm trần - số tin bị bỏ khỏi lượt này (vẫn được ghi vào history)",
     );
   }
-  void runOnThreadChain(threadKey, () => batch.handler(batch.messages));
+  void runOnThreadChain(batch.threadKey, () => batch.handler(batch.messages));
 }
 
 /**
- * Lấy hết tin đang ĐỖ của thread và xóa khỏi hàng chờ.
+ * Lấy hết tin đang ĐỖ của CHÍNH NGƯỜI đang được trả lời và xóa khỏi hàng chờ.
  *
  * Dùng cho đường tiêm tin giữa lượt (`mid-turn-injection.ts`): lượt đang chạy
  * tự kéo tin mới vào thay vì để chúng nằm đợi thành một lượt nữa.
+ *
+ * Theo NGƯỜI GỬI chứ không theo cả thread: từ khi mỗi người có hàng chờ riêng,
+ * tin của người khác trong nhóm sẽ có lượt riêng của họ - kéo vào đây là vừa
+ * cướp mất lượt đó vừa trộn hai câu hỏi làm một.
  *
  * Trả rỗng khi cụm tin CÒN ĐANG GÕ DỞ (`timer` chưa hết). Cùng một bất biến
  * với `danhThucHangCho`: chưa im lặng đủ thì chưa ai được đụng vào batch. Kéo
@@ -162,14 +199,15 @@ function flush(threadKey: string): void {
  * KHÔNG cần kiểm thread có bận hay không: chỉ lượt đang chạy mới gọi hàm này,
  * mà nó chạy được nghĩa là nó đang giữ khoá.
  */
-export function layTinDangDo(threadKey: string): ParsedMessage[] {
-  const batch = pending.get(threadKey);
+export function layTinDangDo(threadKey: string, senderId: string): ParsedMessage[] {
+  const khoaGop = khoaGopCua(threadKey, senderId);
+  const batch = pending.get(khoaGop);
   if (!batch || batch.timer) return [];
 
-  pending.delete(threadKey);
+  pending.delete(khoaGop);
   if (batch.soTinBoQua > 0) {
     log.warn(
-      { threadKey, soTinBoQua: batch.soTinBoQua, soTinChen: batch.messages.length },
+      { threadKey, nguoiGui: senderId, soTinBoQua: batch.soTinBoQua, soTinChen: batch.messages.length },
       "Tin chen giữa lượt lấy từ hàng chờ đã chạm trần - số tin bị bỏ (vẫn được ghi vào history)",
     );
   }
@@ -177,37 +215,71 @@ export function layTinDangDo(threadKey: string): ParsedMessage[] {
 }
 
 /**
- * id các dòng lịch sử của tin ĐANG CHỜ trong hàng gộp của thread.
+ * id các dòng lịch sử của MỌI tin đang chờ trong thread, bất kể người gửi.
  *
- * Lượt agent dùng để loại chúng khỏi phần lịch sử của mình: tin đã được ghi vào
- * lịch sử NGAY LÚC NHẬN, nên tin tới sau khi batch chốt nhưng trước khi lượt
- * đọc lịch sử sẽ vừa nằm trong lịch sử vừa bị `layTinDangDo` kéo ra chèn giữa
- * lượt - model đọc cùng một yêu cầu hai lần.
+ * Lượt agent dùng để loại chúng khỏi phần lịch sử của mình. Tin đã được ghi vào
+ * lịch sử NGAY LÚC NHẬN, nên tin còn đang chờ vẫn hiện ra trong `getRecentMessages`
+ * dù chưa lượt nào xử lý.
  *
- * KHÔNG đụng tới hàng chờ: chỉ đọc, không lấy đi. Việc lấy vẫn là của
- * `layTinDangDo` ở ranh giới step, và nó có luật riêng (còn gõ dở thì không
- * lấy). Hai hàm cố ý không dùng chung điều kiện: chỗ này phải loại CẢ tin còn
- * đang gõ dở, vì tin đó cũng không thuộc lịch sử của lượt này.
+ * PHẠM VI THREAD chứ không phải người gửi - và đây là chỗ đã đo sai một lần.
+ * Lý lẽ "chỉ loại những tin mà lượt này SẼ chèn lại" nghe chắc nhưng sai: tin
+ * đang chờ của NGƯỜI KHÁC vào prompt như một câu hỏi chưa ai trả lời, model trả
+ * lời luôn cả câu đó, rồi lượt của người kia chạy và trả lời lần nữa. Đo thật
+ * trên prompt lượt 1 khi Hải và Nam cùng @mention trong một nhịp:
+ *
+ *   user: [08/08 00:12] Nam: Nam hỏi tỉ giá     <- đang chờ, lọt vào như lịch sử
+ *   user: [08/08 00:12] Hải: Hải hỏi giá vàng   <- nội dung lượt hiện tại
+ *
+ * Nhóm ba người cùng hỏi là bot bắn ba tin, trong đó hai câu trả lời trùng nội
+ * dung - đúng cái nhiễu mà việc gộp theo người sinh ra để dẹp, cộng ba lần
+ * token và ba lần gọi API không chính thức.
+ *
+ * Tin của người khác chỉ vắng mặt TẠM: chốt batch xong nó thành lịch sử thật và
+ * mọi lượt sau đều thấy.
+ *
+ * `layTinDangDo` thì ngược lại, giữ phạm vi NGƯỜI GỬI - nó LẤY tin đi, mà lấy
+ * của người khác là cướp mất lượt của họ. Hai hàm cố ý khác phạm vi.
+ *
+ * KHÔNG đụng tới hàng chờ: chỉ đọc. Cũng cố ý không dùng điều kiện "còn gõ dở"
+ * của `layTinDangDo` - tin đang gõ dở cũng chưa thuộc lịch sử của lượt này.
  */
 export function idTinDangCho(threadKey: string): number[] {
-  const batch = pending.get(threadKey);
-  if (!batch) return [];
-  return batch.messages
-    .map((m) => m.historyRowId)
-    .filter((id): id is number => id !== undefined);
+  const id: number[] = [];
+  for (const batch of pending.values()) {
+    if (batch.threadKey !== threadKey) continue;
+    for (const m of batch.messages) {
+      if (m.historyRowId !== undefined) id.push(m.historyRowId);
+    }
+  }
+  return id;
 }
 
 /**
- * Thread vừa rảnh: chạy batch đang đỗ (nếu có).
+ * Thread vừa rảnh: chạy MỌI batch đang đỗ của thread đó (nếu có).
+ *
+ * Duyệt cả Map chứ không tra một khóa: một thread nay có nhiều hàng chờ, mỗi
+ * người một cái. Nhóm ba người cùng nhắn lúc bot đang bận là ba batch cùng đỗ;
+ * bỏ sót cái nào thì người đó không bao giờ được trả lời.
+ *
+ * Thực tế chỉ batch ĐẦU TIÊN chạy được: `runOnThreadChain` đặt khoá NGAY và
+ * đồng bộ, nên vòng kế tiếp thấy thread bận và `flush` đỗ lại. Những cái còn
+ * lại được đánh thức lần lượt, mỗi lần một cái, nhờ `release` của lượt trước
+ * bắn hook này. Vòng lặp vẫn giữ vì nó không sai và vì đợt cho chạy song song
+ * sau này sẽ dùng đúng nó - nhưng đừng đọc nó như một phép fan-out.
+ *
+ * Thứ tự chạy là thứ tự chèn Map, tức thứ tự tin ĐẦU TIÊN của mỗi người tới.
  *
  * Còn timer nghĩa là người ta vẫn đang gõ dở một cụm tin - để timer tự lo, đừng
  * cướp cò. Nhờ vậy bất biến "chưa im lặng đủ `debounceMs` thì chưa chạy lượt"
  * đúng cho cả đường bận lẫn đường rảnh, không phải hai luật khác nhau.
  */
 function danhThucHangCho(threadKey: string): void {
-  const batch = pending.get(threadKey);
-  if (!batch || batch.timer) return;
-  flush(threadKey);
+  // Chụp danh sách TRƯỚC khi flush: `flush` xóa khỏi Map, sửa Map trong lúc
+  // đang duyệt nó là mảnh đất của lỗi bỏ sót
+  const canChay = [...pending.entries()]
+    .filter(([, b]) => b.threadKey === threadKey && b.timer === null)
+    .map(([khoa]) => khoa);
+  for (const khoa of canChay) flush(khoa);
 }
 
 khiThreadRanh(danhThucHangCho);
@@ -219,9 +291,11 @@ export { runOnThreadChain };
 /**
  * Tổng số entry còn sống trong hai Map - dùng cho test rò rỉ bộ nhớ.
  *
- * KHÔNG phải "số thread": một thread vừa có batch đang đỗ vừa đang chạy lượt sẽ
- * được đếm HAI lần. Điều đó không sao với công dụng thật của hàm (bằng 0 nghĩa
- * là đã dọn sạch), nhưng đừng đọc con số này như số hội thoại đang hoạt động.
+ * KHÔNG phải "số thread": hàng chờ nay khóa theo `(thread, người gửi)` nên một
+ * nhóm ba người cùng nhắn đếm thành ba, và một thread vừa có batch đang đỗ vừa
+ * đang chạy lượt còn được đếm thêm lần nữa. Điều đó không sao với công dụng
+ * thật của hàm (bằng 0 nghĩa là đã dọn sạch), nhưng đừng đọc con số này như số
+ * hội thoại đang hoạt động.
  */
 export function activeThreadCount(): number {
   return pending.size + soThreadDangChay();
@@ -241,11 +315,17 @@ export function activeThreadCount(): number {
  * chạy tự kết thúc rồi thôi; chỗ này chỉ chặn phần chưa bắt đầu.
  */
 export function huyBatchCuaThread(threadKey: string): number {
-  const batch = pending.get(threadKey);
-  if (!batch) return 0;
-  if (batch.timer) clearTimeout(batch.timer);
-  pending.delete(threadKey);
-  return batch.messages.length;
+  // Duyệt cả Map: một thread nay có nhiều hàng chờ, mỗi người một cái. Hủy đúng
+  // một khóa là bỏ sót tin của những người còn lại trong nhóm, và chúng vẫn
+  // chạy tiếp trên ngữ cảnh vừa bị dọn.
+  let soTin = 0;
+  for (const [khoa, batch] of [...pending.entries()]) {
+    if (batch.threadKey !== threadKey) continue;
+    if (batch.timer) clearTimeout(batch.timer);
+    pending.delete(khoa);
+    soTin += batch.messages.length;
+  }
+  return soTin;
 }
 
 /** Hủy toàn bộ tin đang chờ - dùng khi shutdown để không treo process */

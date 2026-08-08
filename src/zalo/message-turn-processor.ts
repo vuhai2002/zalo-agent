@@ -150,7 +150,10 @@ async function xuLyLuot(
    */
   const tinChen: ParsedMessage[] = [];
   const layTinChen = async (): Promise<ParsedMessage[]> => {
-    const moi = layTinDangDo(threadKey);
+    // Theo NGƯỜI GỬI: batch nay là của đúng một người (`message-batcher.ts`
+    // khóa hàng chờ theo `(thread, người gửi)`), và tin của người khác trong
+    // nhóm đã có lượt riêng - kéo vào đây là cướp mất lượt đó
+    const moi = layTinDangDo(threadKey, latest.senderId);
     if (moi.length === 0) return moi;
     tinChen.push(...moi);
     // Đối xử y hệt tin mở đầu lượt: người gửi phải thấy bot đã nhận, không thì
@@ -198,6 +201,10 @@ async function xuLyLuot(
       // Tin tới TRONG LÚC bot đang tải ảnh (ngay trên) đã vào lịch sử rồi, mà
       // lát nữa `layTinChen` lại kéo chính nó ra chèn kèm nhãn - loại khỏi phần
       // lịch sử để model không đọc hai lần
+      // Phạm vi THREAD, khác `layTinDangDo` ngay trên (theo người gửi): tin
+      // đang chờ của người KHÁC cũng phải ra khỏi lịch sử của lượt này, không
+      // thì nó vào prompt như một câu hỏi chưa ai trả lời và model trả lời
+      // luôn - rồi lượt của người kia trả lời lần nữa
       layIdDangCho: () => idTinDangCho(threadKey),
       ghiNhanDaGui,
     });

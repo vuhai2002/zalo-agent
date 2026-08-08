@@ -38,12 +38,15 @@ const log = createLogger("agent-loop");
  * `shouldRespond`). Bọc như dữ liệu ngoài sẽ dạy model phớt lờ đúng người nó
  * cần nghe.
  *
- * Nói "trong cuộc này" chứ KHÔNG nói "chính người đang trò chuyện với bạn":
- * `layTinDangDo` gom theo THREAD chứ không theo người gửi, nên trong nhóm tin
- * chen có thể đến từ thành viên khác với người mở lượt. Cả hai đều đã qua cùng
- * một cửa lọc nên mức tin cậy ngang nhau, nhưng khẳng định sai danh tính sẽ
- * khiến model gộp hai người thành một - đúng lúc `buildCurrentTurnContent` đã
- * dán tên và giờ gửi của TỪNG tin ở ngay dưới.
+ * Tin chen nay CHẮC CHẮN cùng một người với tin mở lượt: `layTinDangDo` lấy
+ * theo `(thread, người gửi)`, và hàng chờ gộp cũng khóa như vậy. Bản trước gom
+ * theo cả thread nên tin chen có thể đến từ người khác, và nhãn phải nói mơ hồ
+ * "trong cuộc trò chuyện này" để không khẳng định sai danh tính.
+ *
+ * Giữ nguyên lời mơ hồ đó dù nay nói thẳng được: `buildCurrentTurnContent` đã
+ * dán tên và giờ gửi của TỪNG tin ở ngay dưới, nên model không phải đoán ai
+ * nói gì - thêm một khẳng định danh tính ở nhãn là thừa, mà lại thành chỗ phải
+ * nhớ sửa nếu phạm vi lấy tin đổi lần nữa.
  *
  * Nói rõ "đang làm dở" vì không có câu này model dễ đọc tin chen như một yêu
  * cầu MỚI hoàn toàn rồi bỏ ngang việc đang làm.

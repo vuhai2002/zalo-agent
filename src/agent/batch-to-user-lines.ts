@@ -19,12 +19,12 @@ const CHI_CO_ANH = "(gửi ảnh, không kèm chữ)";
  *   1. Không có nhãn giờ, nên mốc giờ mới nhất model thấy được luôn là của tin
  *      TRƯỚC ĐÓ trong lịch sử. Đêm 07 rạng 08/08/2026 model đọc nhãn 23:37 rồi
  *      tưởng câu hỏi lúc 00:12 được gửi từ hôm trước.
- *   2. `enqueueMessage` gom theo THREAD chứ không theo người gửi
- *      (`incoming-message-router.ts`), nên trong nhóm hai người cùng @mention
- *      bot trong khoảng `MESSAGE_BATCH_DEBOUNCE_MS` là vào chung một batch -
- *      lời của người thứ nhất bị gán cho người thứ hai. Lúc bot đang bận thì
- *      batch còn dồn suốt cả lượt (tới `LLM_TURN_TIMEOUT_MS`), nên đây không
- *      phải ca hiếm.
+ *   2. Hồi đó `enqueueMessage` gom theo THREAD chứ không theo người gửi, nên
+ *      trong nhóm hai người cùng @mention bot trong một nhịp là vào chung một
+ *      batch và lời người thứ nhất bị gán cho người thứ hai. Nay hàng chờ khóa
+ *      theo `(thread, người gửi)` nên một batch chỉ có một người - lý do này
+ *      HẾT hiệu lực, nhưng cách dựng từng dòng thì giữ: nó vẫn đúng, và là thứ
+ *      giữ cho hình dạng khớp với lịch sử (điểm ngay dưới).
  *
  * Dán tên cả trong chat RIÊNG chứ không chỉ trong nhóm - cũng để khớp lịch sử,
  * vốn luôn dán tên khi có. Nhờ khớp mà cùng một tin render y hệt nhau ở lượt

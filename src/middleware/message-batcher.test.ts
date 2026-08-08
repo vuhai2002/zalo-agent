@@ -24,13 +24,13 @@ after(async () => {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-function makeMessage(text: string): ParsedMessage {
+function makeMessage(text: string, senderId = "user-1"): ParsedMessage {
   return {
     accountId: "acc-test",
     threadId: "thread-1",
     threadType: ThreadType.User,
     isGroup: false,
-    senderId: "user-1",
+    senderId,
     senderName: "Người dùng",
     text,
     images: [],
@@ -320,7 +320,7 @@ describe("message-batcher - tin đến trong lúc thread đang bận", () => {
     batcher.enqueueMessage("k-lay-tin-do", makeMessage("chen-2"), handler, 25);
     await sleep(60); // hết cửa sổ gộp -> batch đã đỗ
 
-    const daLay = batcher.layTinDangDo("k-lay-tin-do");
+    const daLay = batcher.layTinDangDo("k-lay-tin-do", "user-1");
     assert.deepEqual(daLay.map((m) => m.text), ["chen-1", "chen-2"]);
 
     nha();
@@ -339,7 +339,7 @@ describe("message-batcher - tin đến trong lúc thread đang bận", () => {
     batcher.enqueueMessage("k-lay-som", makeMessage("đang gõ dở"), async () => {}, 200);
     await sleep(20); // còn xa mới hết cửa sổ gộp
 
-    assert.deepEqual(batcher.layTinDangDo("k-lay-som"), []);
+    assert.deepEqual(batcher.layTinDangDo("k-lay-som", "user-1"), []);
 
     batcher.clearPendingBatches();
     nha();
@@ -484,5 +484,190 @@ describe("huyBatchCuaThread", () => {
 
     batcher.huyBatchCuaThread("k-timer");
     assert.equal(demTimer(), truoc, "timer 30 giây bị bỏ quên là process không thoát được");
+  });
+});
+
+/**
+ * Hàng chờ gộp khóa theo `(thread, NGƯỜI GỬI)`.
+ *
+ * Lý do gộp vốn là gộp tin của MỘT người (Zalo tách ảnh với chú thích, người ta
+ * gõ thêm câu làm rõ ý). Gộp theo cả thread thì trong nhóm hai người cùng
+ * @mention bot trong một nhịp sẽ chung một lượt, và bot trả MỘT câu cho cả hai -
+ * không ai biết câu đó dành cho ai. Cả Hermes lẫn goclaw đều một-tin-một-lượt.
+ *
+ * Khóa KHOÁ vẫn theo thread: chống race lịch sử là chuyện của cả cuộc trò
+ * chuyện, không phải của từng người.
+ */
+describe("gộp theo từng người gửi", () => {
+  const sleepNgan = () => sleep(60);
+
+  /** Dựng một lượt chiếm chỗ, trả về hàm nhả nó ra */
+  function chiemThread(threadKey: string) {
+    let nha!: () => void;
+    const bịChặn = new Promise<void>((resolve) => {
+      nha = resolve;
+    });
+    void batcher.runOnThreadChain(threadKey, () => bịChặn);
+    return nha;
+  }
+
+  it("hai người nhắn cùng nhịp: HAI lượt riêng, mỗi lượt một người", async () => {
+    const batches: string[][] = [];
+    const handler = async (batch: ParsedMessage[]) => {
+      batches.push(batch.map((m) => m.text));
+    };
+
+    batcher.enqueueMessage("k-hai-nguoi", makeMessage("Hải hỏi giá vàng", "u-hai"), handler, 20);
+    batcher.enqueueMessage("k-hai-nguoi", makeMessage("Nam hỏi tỉ giá", "u-nam"), handler, 20);
+    await sleepNgan();
+
+    assert.equal(batches.length, 2, `mong 2 lượt riêng, nhận ${batches.length}`);
+    assert.deepEqual(
+      batches.map((b) => b.join("|")).sort(),
+      ["Hải hỏi giá vàng", "Nam hỏi tỉ giá"],
+      "không được trộn lời hai người vào một lượt",
+    );
+  });
+
+  it("MỘT người nhắn nhiều tin vẫn gộp làm một - đúng lý do bộ gộp tồn tại", async () => {
+    const batches: string[][] = [];
+    const handler = async (batch: ParsedMessage[]) => {
+      batches.push(batch.map((m) => m.text));
+    };
+
+    batcher.enqueueMessage("k-mot-nguoi", makeMessage("[ảnh]", "u-hai"), handler, 30);
+    await sleep(10);
+    batcher.enqueueMessage("k-mot-nguoi", makeMessage("cái này là gì?", "u-hai"), handler, 30);
+    await sleepNgan();
+
+    assert.deepEqual(batches, [["[ảnh]", "cái này là gì?"]]);
+  });
+
+  it("ba người nhắn lúc bot BẬN: khi rảnh chạy đủ ba lượt, không bỏ sót ai", async (t) => {
+    // Đây là ca dễ hỏng nhất của bản đổi khóa: `danhThucHangCho` nhận khóa
+    // THREAD, mà hàng chờ nay khóa theo người - tra một khóa là bỏ sót hai
+    // người còn lại và họ không bao giờ được trả lời.
+    const batches: string[][] = [];
+    const handler = async (batch: ParsedMessage[]) => {
+      batches.push(batch.map((m) => m.text));
+    };
+
+    const nha = chiemThread("k-ba-nguoi");
+    // Nhả khoá kể cả khi assert giữa chừng ném: không thì khoá giữ mãi và một
+    // lỗi thật đẻ ra cả chuỗi lỗi phía sau, che mất nguyên nhân
+    t.after(nha);
+    await sleep(20);
+    for (const ai of ["u-a", "u-b", "u-c"]) {
+      batcher.enqueueMessage("k-ba-nguoi", makeMessage(`hỏi bởi ${ai}`, ai), handler, 20);
+    }
+    await sleep(60); // hết cửa sổ gộp -> cả ba cùng ĐỖ vì thread đang bận
+    assert.equal(batches.length, 0, "thread bận thì chưa lượt nào được chạy");
+
+    nha();
+    await sleep(150);
+
+    assert.equal(batches.length, 3, `mong 3 lượt, nhận ${batches.length}`);
+    assert.deepEqual(
+      batches.map((b) => b.join("|")).sort(),
+      ["hỏi bởi u-a", "hỏi bởi u-b", "hỏi bởi u-c"],
+    );
+    assert.equal(batcher.activeThreadCount(), 0, "chạy hết rồi phải dọn sạch");
+  });
+
+  it("layTinDangDo chỉ kéo tin của CHÍNH người đang được trả lời", async () => {
+    // Kéo cả tin người khác là vừa cướp mất lượt của họ vừa trộn hai câu hỏi
+    const nha = chiemThread("k-chen-rieng");
+    await sleep(20);
+    batcher.enqueueMessage("k-chen-rieng", makeMessage("Hải nói thêm", "u-hai"), async () => {}, 20);
+    batcher.enqueueMessage("k-chen-rieng", makeMessage("Nam hỏi riêng", "u-nam"), async () => {}, 20);
+    await sleep(60);
+
+    // Hỏi NGƯỢC thứ tự chèn. Hỏi xuôi thì khẳng định này rỗng: hàm xóa entry
+    // sau khi lấy, nên một bản bỏ qua `senderId` hoàn toàn (lấy batch đầu khớp
+    // thread) vẫn cho ra đúng kết quả - đã kiểm bằng cách phá code.
+    const cuaNam = batcher.layTinDangDo("k-chen-rieng", "u-nam");
+    assert.deepEqual(cuaNam.map((m) => m.text), ["Nam hỏi riêng"]);
+
+    // Tin của Hải PHẢI còn nguyên trong hàng chờ để thành lượt riêng
+    const cuaHai = batcher.layTinDangDo("k-chen-rieng", "u-hai");
+    assert.deepEqual(cuaHai.map((m) => m.text), ["Hải nói thêm"]);
+
+    nha();
+    await sleep(60);
+  });
+
+  it("idTinDangCho lấy MỌI người trong thread - khác phạm vi với layTinDangDo", async () => {
+    // Phạm vi THREAD chứ không phải người gửi: tin đang chờ của người khác mà
+    // lọt vào prompt thì model trả lời luôn câu đó, rồi lượt của người kia
+    // trả lời lần nữa - nhóm nhận hai câu trùng nội dung.
+    const hai = makeMessage("Hải chờ", "u-hai");
+    const nam = makeMessage("Nam chờ", "u-nam");
+    hai.historyRowId = 11;
+    nam.historyRowId = 22;
+    batcher.enqueueMessage("k-id-cho", hai, async () => {}, 60_000);
+    batcher.enqueueMessage("k-id-cho", nam, async () => {}, 60_000);
+    // Thread khác không được lẫn vào
+    const la = makeMessage("thread khác", "u-hai");
+    la.historyRowId = 99;
+    batcher.enqueueMessage("k-id-cho-khac", la, async () => {}, 60_000);
+
+    assert.deepEqual(batcher.idTinDangCho("k-id-cho").sort(), [11, 22]);
+    assert.deepEqual(batcher.idTinDangCho("k-id-cho-khac"), [99]);
+    batcher.clearPendingBatches();
+  });
+
+  it("thứ tự lượt là thứ tự tin ĐẦU TIÊN của mỗi người tới", async () => {
+    // Không `.sort()` ở đây - chính thứ tự mới là thứ đang kiểm. Người nhắn
+    // trước phải được trả lời trước, không thì nhóm đọc ra một mạch lộn xộn.
+    const batches: string[][] = [];
+    const handler = async (batch: ParsedMessage[]) => {
+      batches.push(batch.map((m) => m.text));
+    };
+
+    const nha = chiemThread("k-thu-tu-nguoi");
+    await sleep(20);
+    batcher.enqueueMessage("k-thu-tu-nguoi", makeMessage("A trước", "u-a"), handler, 20);
+    batcher.enqueueMessage("k-thu-tu-nguoi", makeMessage("B giữa", "u-b"), handler, 20);
+    batcher.enqueueMessage("k-thu-tu-nguoi", makeMessage("C sau", "u-c"), handler, 20);
+    await sleep(60);
+
+    nha();
+    await sleep(200);
+
+    assert.deepEqual(batches, [["A trước"], ["B giữa"], ["C sau"]]);
+  });
+
+  it("huyBatchCuaThread dọn hàng chờ của MỌI người trong thread", async () => {
+    // Xóa ngữ cảnh mà chỉ dọn một người thì tin của những người còn lại vẫn
+    // chạy tiếp trên ngữ cảnh vừa bị dọn
+    batcher.enqueueMessage("k-huy-nhieu", makeMessage("a", "u-a"), async () => {}, 60_000);
+    batcher.enqueueMessage("k-huy-nhieu", makeMessage("b", "u-b"), async () => {}, 60_000);
+    batcher.enqueueMessage("k-huy-nhieu", makeMessage("c", "u-b"), async () => {}, 60_000);
+    batcher.enqueueMessage("k-thread-khac", makeMessage("d", "u-a"), async () => {}, 60_000);
+
+    assert.equal(batcher.huyBatchCuaThread("k-huy-nhieu"), 3, "phải đếm cả 3 tin của 2 người");
+    assert.equal(batcher.idTinDangCho("k-huy-nhieu").length, 0, "không được sót hàng chờ của ai");
+
+    // Thread khác không được đụng tới
+    assert.equal(batcher.huyBatchCuaThread("k-thread-khac"), 1);
+    batcher.clearPendingBatches();
+  });
+
+  it("trần tin dồn tính theo TỪNG NGƯỜI, không phải cả thread", async () => {
+    // Một người spam không được làm người khác bị bỏ tin
+    for (let i = 0; i < batcher.TRAN_TIN_DON; i++) {
+      batcher.enqueueMessage("k-tran-rieng", makeMessage(`spam-${i}`, "u-spam"), async () => {}, 60_000);
+    }
+    assert.equal(
+      batcher.enqueueMessage("k-tran-rieng", makeMessage("spam-thua", "u-spam"), async () => {}, 60_000),
+      false,
+      "người đã chạm trần thì tin mới bị bỏ",
+    );
+    assert.equal(
+      batcher.enqueueMessage("k-tran-rieng", makeMessage("người khác", "u-khac"), async () => {}, 60_000),
+      true,
+      "người khác vẫn phải được nhận",
+    );
+    batcher.clearPendingBatches();
   });
 });

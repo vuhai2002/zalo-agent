@@ -3427,6 +3427,9 @@ xanh với bất kỳ giờ nào.
 
 ### 3. Batch nhiều người gửi chỉ được dán MỘT tên
 
+*(Gốc bệnh này được dẹp hẳn ở V3.14: hàng chờ gộp khóa theo `(thread, người
+gửi)` nên một batch chỉ còn một người. Phần dựng từng dòng dưới đây vẫn giữ.)*
+
 `enqueueMessage` gom theo THREAD chứ không theo người gửi. Trong nhóm, hai người
 cùng trong allowlist cùng @mention bot trong `MESSAGE_BATCH_DEBOUNCE_MS` (mặc
 định 2500ms) vào chung một batch, mà `buildCurrentTurnContent` nối phẳng hết chữ
@@ -3742,3 +3745,92 @@ chen vào prompt đúng một lần, tin người dùng đúng một dòng kể 
 
 Bản vá lật một bất biến được viết ở 9 chỗ trong mã nguồn và tài liệu, gồm
 `CLAUDE.md` - đã cập nhật hết.
+
+## V3.14 - Gộp tin theo TỪNG NGƯỜI, không theo cuộc trò chuyện (2026-08-08)
+
+Trong nhóm, ba người cùng @mention bot trong một nhịp gộp (2500ms) thì bot trả
+MỘT câu cho cả ba - không ai biết câu đó dành cho ai. Trích dẫn (V3.12) chỉ trỏ
+được vào một người.
+
+Hàng chờ gộp đổi khóa từ `thread` sang `(thread, người gửi)`. Khóa **khoá** giữ
+nguyên theo thread: chống race lịch sử là chuyện của cả cuộc trò chuyện.
+
+Lý do gộp vốn là gộp tin của MỘT người - Zalo tách ảnh với chú thích thành hai
+tin, người ta gõ thêm câu làm rõ ý. Gộp cả thread là mở rộng quá tay. Cả Hermes
+lẫn goclaw đều một-tin-một-lượt; goclaw còn cho tới 3 run song song trong nhóm
+(`cmd/gateway_consumer_normal.go`).
+
+### Ba chỗ phải đổi theo, đều dễ hỏng câm
+
+| Hàm | Vì sao |
+|---|---|
+| `danhThucHangCho` | Nhận khóa THREAD nhưng Map khóa theo người - tra một khóa là hai người còn lại không bao giờ được trả lời |
+| `huyBatchCuaThread` | Xóa ngữ cảnh mà chỉ dọn một người thì tin của những người khác vẫn chạy trên ngữ cảnh vừa dọn |
+| `layTinDangDo` | Kéo cả thread là cướp mất lượt của người khác và trộn hai câu hỏi làm một |
+
+`TRAN_TIN_DON` nay là trần theo từng người, nên một người spam không làm người
+khác bị bỏ tin.
+
+### Lỗi rà soát tìm ra: tin đang chờ của người KHÁC lọt vào prompt
+
+Bản đầu cho `idTinDangCho` cùng phạm vi NGƯỜI GỬI với `layTinDangDo`, kèm lý lẽ
+nghe rất chắc: "chỉ loại những tin mà lượt này SẼ chèn lại". Lý lẽ đó SAI, và
+subagent rà soát đo được bằng cách in thẳng prompt:
+
+```
+--- LƯỢT 1 (đang trả lời Hải) ---
+user: [08/08 00:12] Nam: Nam hỏi tỉ giá      <- đang chờ, lọt vào như lịch sử
+user: [08/08 00:12] Hải: Hải hỏi giá vàng    <- nội dung lượt hiện tại
+
+--- LƯỢT 2 (đang trả lời Nam) ---
+user: [08/08 00:12] Hải: Hải hỏi giá vàng
+assistant: ok
+user: [08/08 00:12] Nam: Nam hỏi tỉ giá      <- hỏi lại lần hai
+```
+
+Tin đang chờ của Nam vào prompt như một câu hỏi CHƯA AI TRẢ LỜI, nên model trả
+lời luôn cả câu đó - rồi lượt của Nam chạy và trả lời lần nữa. Nhóm ba người là
+bot bắn ba tin với hai câu trùng nội dung, cộng ba lần token và ba lần gọi API
+không chính thức (`CLAUDE.md` xếp gửi nhiều tin là rủi ro khóa nick). Đúng cái
+nhiễu mà cả đợt này sinh ra để dẹp.
+
+Nay `idTinDangCho` lấy phạm vi THREAD, `layTinDangDo` giữ phạm vi NGƯỜI GỬI -
+hai hàm cố ý khác nhau vì một hàm ĐỌC còn một hàm LẤY ĐI.
+
+### Bốn mục nhỏ khác từ rà soát
+
+- Một chú thích mô tả cơ chế không tồn tại: "ba batch cùng chốt sẽ cùng xin
+  `runOnThreadChain` và tự xếp hàng". Thực tế chỉ batch ĐẦU chạy được -
+  `runOnThreadChain` đặt khoá ngay và đồng bộ, phần còn lại đỗ tiếp rồi được
+  `release` kế tiếp đánh thức từng cái một. Hành vi vẫn đúng (phá code xác nhận
+  hai bản tương đương), nhưng chú thích sai là thứ repo này chống.
+- Một khẳng định vacuous: test "layTinDangDo chỉ kéo tin của chính người đang
+  được trả lời" vẫn XANH khi bỏ hẳn `senderId`, vì test hỏi đúng thứ tự chèn mà
+  hàm lại xóa entry sau khi lấy. Đổi sang hỏi ngược thứ tự.
+- File test mới toàn LF trong khi repo là CRLF - đúng cái bẫy làm "phép phá
+  HỤT" ở V3.11. Đã chuẩn hóa.
+- Thứ tự lượt đúng (thứ tự tin đầu tiên của mỗi người tới) nhưng cả hai test
+  đều `.sort()` trước khi so, nên không ai giữ. Thêm test không sort.
+
+### Kiểm chứng
+
+1661 test xanh (+12), typecheck sạch. Sáu phép phá, cả sáu đỏ đúng chỗ - gồm
+đúng lỗi rà soát vừa tìm ra (thu hẹp `idTinDangCho` về người gửi) và ca đảo thứ
+tự lượt.
+
+### Việc còn treo, cần làm cùng đợt "lượt song song"
+
+**Không còn trần cho SỐ LƯỢT mỗi thread.** Trước đây trần 32 tin của một thread
+cũng là trần một lượt. Nay mỗi người một hàng chờ nên nhóm 20 người tắt
+`groupRequireMention` là 20 hàng chờ, 20 lượt, 20 lần gọi model, 20 tin bot bắn
+vào nhóm. Nên có trần số hàng chờ đỗ mỗi thread.
+
+**Người xếp sau không nhận được tín hiệu nào.** `maybeNotifyBusyWait` chỉ chạy
+lúc NHẬN tin và đọc `daBanBaoLau`, mà đồng hồ đó reset mỗi chuỗi mới (giới hạn
+đã ghi ở `thread-run-chain.ts`). Nam nhắn ngay khi lượt của Hải vừa bắt đầu thì
+`daBanBaoLau` gần 0 nên không trấn an, và chỉ báo "đang nhập" cũng chỉ bật trong
+lượt của chính Nam. Trước đổi này Nam được gộp chung nên trả lời cùng lúc; nay
+Nam ngồi im chờ trọn lượt của Hải.
+
+**Bộ nhớ hàng chờ** giờ là 32 tin nhân số người gửi, mà `ParsedMessage` ôm cả
+`rawData` lẫn danh sách ảnh.
