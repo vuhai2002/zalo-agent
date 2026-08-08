@@ -3,11 +3,27 @@ import { describe, it } from "node:test";
 // Module thuần (không import gì ngoài chính nó) - không chạm env/DB nên import tĩnh được
 import { catThanhDoan } from "./chunk-text.js";
 
+/**
+ * Tách thành các "từ" (chuỗi liền không khoảng trắng) - dùng để đo TÍNH CHẤT
+ * "không từ nào bị cắt đứt giữa chừng" thay vì dò một chuỗi con cụ thể như
+ * "dà": dò chuỗi con cụ thể chỉ đúng khi ranh giới cắt cứng tình cờ rơi vào
+ * đúng từ đó - đo được thật: với chuỗi test dưới đây, `coDoanToiDa: 30` cắt
+ * cứng lại tình cờ rơi đúng khoảng trắng (không cắt từ nào), nên assertion cũ
+ * không đỏ dù thuật toán bị thay bằng cắt cứng thật. So khớp danh sách từ sau
+ * khi ghép lại các đoạn với danh sách từ của bản gốc thì không phụ thuộc vào
+ * từ cụ thể nào - từ bị cắt đôi (vd "dài" -> "dà" + "i") luôn lộ ra thành 2
+ * "từ" lạ không khớp bản gốc, bất kể nó rơi vào từ nào.
+ */
+function tuVung(text: string): string[] {
+  return text.match(/\S+/gu) ?? [];
+}
+
 describe("catThanhDoan - ranh giới tự nhiên", () => {
-  it("cắt ở ranh giới đoạn văn, KHÔNG cắt giữa câu", () => {
+  it("cắt ở ranh giới đoạn văn, KHÔNG cắt giữa từ", () => {
     const chu = "Câu một dài dài dài.\n\nCâu hai cũng dài dài dài.";
-    const d = catThanhDoan(chu, { coDoanToiDa: 30, chongLan: 0 });
-    for (const x of d) assert.ok(!x.noiDung.trim().endsWith("dà"), "cắt giữa từ");
+    const d = catThanhDoan(chu, { coDoanToiDa: 37, chongLan: 0 });
+    const tuSauKhiCat = tuVung(d.map((x) => x.noiDung).join(" "));
+    assert.deepEqual(tuSauKhiCat, tuVung(chu), "có từ bị cắt đứt giữa chừng khi ghép lại các đoạn");
   });
 
   it("mỗi đoạn mang tiêu đề markdown gần nhất phía trên", () => {
