@@ -100,6 +100,7 @@ async function main(): Promise<void> {
   const database = await import("../src/conversation/database.js");
   const memoryStore = await import("../src/conversation/memory-store.js");
   const historyStore = await import("../src/conversation/history-store.js");
+  const ghiTinDen = await import("../src/zalo/record-incoming-message.js");
   const { cleanupTestEnv } = await import("../src/shared/test-env-setup.js");
   const { ThreadType } = await import("zca-js");
   // Chính hằng số production dùng để nhắn báo lỗi - so bằng nguồn thật, không
@@ -171,9 +172,19 @@ async function main(): Promise<void> {
           cliMsgId: `c-${c.ten}`,
           isSelf: false,
           mentionsMe: true,
+          sentAt: new Date().toISOString(),
           rawData: {},
         },
       ];
+
+      // Đường thật: router ghi tin vào lịch sử NGAY LÚC NHẬN rồi mới xếp hàng
+      // (`record-incoming-message.ts`). Harness gọi thẳng `processBatch` nên
+      // phải tự làm bước đó - thiếu nó thì dòng `user` KHÔNG BAO GIỜ vào bảng
+      // `messages`, eval đo một hình dạng lịch sử không tồn tại ngoài thật, và
+      // không ca nào đi qua đường lọc `historyRowId`.
+      for (const msg of batch) {
+        ghiTinDen.ghiTinDenVaoHistory(ACC, msg as never, { luuAnhNgay: false });
+      }
 
       const batDau = Date.now();
       let loiChay: string | null = null;

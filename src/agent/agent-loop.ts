@@ -111,9 +111,10 @@ export type AgentTurnParams = {
    * Lấy tin người dùng nhắn thêm TRONG LÚC lượt này đang chạy, gọi ở ranh giới
    * mỗi step. Trả mảng rỗng nghĩa là chưa có gì mới.
    *
-   * Caller sở hữu mọi hệ quả phụ của việc lấy tin (ghi history, báo "đã xem",
-   * thả reaction) - cùng nếp với mảng `trace`. Hàm này chỉ lo đưa tin vào ngữ
-   * cảnh của model.
+   * Caller sở hữu mọi hệ quả phụ của việc lấy tin (báo "đã xem", thả reaction,
+   * tải ảnh) - cùng nếp với mảng `trace`. Hàm này chỉ lo đưa tin vào ngữ cảnh
+   * của model. Riêng phần GHI HISTORY thì không ai phải lo nữa: tin đã vào từ
+   * lúc router nhận.
    *
    * Lượt theo lịch KHÔNG truyền tham số này: không có ai đang ngồi chờ để mà
    * nhắn thêm, và `run-scheduled-job.ts` cũng không giữ khoá thread nên không
@@ -123,6 +124,23 @@ export type AgentTurnParams = {
    * của tin chen có `localPath` trước khi dựng ngữ cảnh và ghi history.
    */
   layTinChen?: () => ParsedMessage[] | Promise<ParsedMessage[]>;
+  /**
+   * id các dòng lịch sử của tin ĐANG CHỜ trong hàng gộp, để loại khỏi phần lịch
+   * sử của lượt này.
+   *
+   * Vì sao cần: tin nay được ghi vào lịch sử NGAY LÚC NHẬN. Tin tới sau khi
+   * batch đã chốt nhưng trước khi lượt đọc lịch sử sẽ có mặt trong lịch sử, rồi
+   * lát nữa `layTinChen` lại kéo chính nó ra chèn kèm nhãn "vừa có tin mới" -
+   * model đọc cùng một yêu cầu hai lần, một lần không nhãn một lần có nhãn.
+   *
+   * Cửa sổ đó KHÔNG mỏng: caller `await persistBatchImages` trước khi hàm này
+   * chạy, tức vài trăm ms tới vài giây tải ảnh. Đúng ca thường gặp nhất - người
+   * ta gửi ảnh rồi gõ thêm một câu.
+   *
+   * Tin đang chờ mà KHÔNG được kéo vào (tắt tiêm giữa lượt, hoặc còn đang gõ
+   * dở) thì lượt này không thấy nó - đúng như trước, và lượt sau sẽ thấy.
+   */
+  layIdDangCho?: () => number[];
   /**
    * Ghi nhận tin do TOOL gửi thẳng xuống Zalo (file, ảnh, tag) để caller đưa
    * vào history. Xem `ToolContext.ghiNhanDaGui`.
@@ -139,8 +157,11 @@ export type AgentTurnResult = {
  * Chạy 1 lượt agent: history + cả batch tin nhắn mới (kèm ảnh nếu có) -> LLM tự
  * quyết gọi tool (react, gửi file, tag...) -> trả text cuối cùng để gửi lại Zalo.
  *
- * History được đọc TRƯỚC khi ghi batch hiện tại vào DB, nếu không tin nhắn mới
- * sẽ xuất hiện 2 lần trong input của model.
+ * Tin của lượt này ĐÃ nằm trong DB trước khi hàm này chạy (router ghi ngay lúc
+ * nhận - `record-incoming-message.ts`), nên `buildTurnMessages` phải LỌC chúng
+ * ra khỏi phần lịch sử, không thì model đọc câu hỏi hai lần. Kèm theo: phải
+ * đọc DƯ từ DB đúng bằng số dòng sắp bị lọc, không thì cửa sổ lịch sử teo lại
+ * lặng lẽ theo cỡ batch.
  */
 export async function runAgentTurn({
   api,
@@ -150,6 +171,7 @@ export async function runAgentTurn({
   resolveModel = resolveLanguageModel,
   isolated = false,
   layTinChen,
+  layIdDangCho,
   ghiNhanDaGui,
 }: AgentTurnParams): Promise<AgentTurnResult> {
   // Tin cuối đại diện cho lượt: tools (thả reaction, quote) tác động lên tin này
@@ -167,7 +189,16 @@ export async function runAgentTurn({
   // (không chỉ bỏ qua kết quả) - job lịch hẹn không được đọc hội thoại đang có
   // của thread, tránh trộn ngữ cảnh giữa "user đang nói chuyện gì" với "job tự
   // báo cáo lúc 3 giờ sáng".
-  const history = isolated ? [] : getRecentMessages(account.id, latest.threadId);
+  // Tin của lượt này và tin đang chờ trong hàng gộp ĐỀU đã nằm trong lịch sử
+  // (ghi ngay lúc nhận) và đều sắp bị lọc bỏ. Xin DƯ đúng bằng số dòng đó, nếu
+  // không cửa sổ lịch sử teo lại lặng lẽ: batch 5 tin là model chỉ còn thấy 15
+  // tin cũ thay vì 20, batch chạm trần 32 tin là thấy 0 - bot bước vào lượt mà
+  // không biết mình vừa trả lời gì.
+  const tranLichSu = getTuning("HISTORY_CONTEXT_LIMIT");
+  const idDangCho = isolated ? [] : (layIdDangCho?.() ?? []);
+  const history = isolated
+    ? []
+    : getRecentMessages(account.id, latest.threadId, tranLichSu + batch.length + idDangCho.length);
   // Ảnh xử lý theo chế độ: native (model tự đọc) / describe (sidecar mô tả) /
   // hybrid (combo: cả hai) / blind (bỏ ảnh, dặn bot nói thật)
   // Trần token hiệu lực: agent đặt riêng thắng cấu hình chung - cùng nếp với
@@ -181,6 +212,8 @@ export async function runAgentTurn({
   const built = await buildTurnMessages({
     history,
     batch,
+    idBoQua: idDangCho,
+    tranLichSu,
     override: agent,
     allowlist: account.allowlist,
     tranToken,

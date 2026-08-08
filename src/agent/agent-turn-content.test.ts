@@ -266,6 +266,159 @@ describe("buildCurrentTurnContent - nhãn giờ và tên người gửi", () => 
   });
 });
 
+describe("buildTurnMessages - lọc tin của chính lượt ra khỏi lịch sử", () => {
+  const lichSu = (id: number, noiDung: string) => ({
+    id,
+    role: "user" as const,
+    content: noiDung,
+    senderName: "Hải",
+    createdAt: "2026-08-07T17:12:00.000Z",
+  });
+
+  const chuCuaTinNhan = (messages: { content: unknown }[]) =>
+    messages.map((m) =>
+      typeof m.content === "string"
+        ? m.content
+        : (m.content as { type: string; text?: string }[])
+            .filter((p) => p.type === "text")
+            .map((p) => p.text)
+            .join("\n"),
+    );
+
+  it("dòng lịch sử trùng id với tin của batch bị bỏ - model không đọc hai lần", async () => {
+    const tin = { ...msgTu("Hải", "cho mình bảng giá", "2026-08-07T17:12:00.000Z", false), historyRowId: 7 };
+    const { messages } = await content.buildTurnMessages({
+      history: [lichSu(5, "câu cũ"), lichSu(7, "cho mình bảng giá")],
+      batch: [tin],
+      tranToken: 0,
+    });
+
+    const chu = chuCuaTinNhan(messages);
+    assert.equal(chu.filter((c) => c.includes("cho mình bảng giá")).length, 1);
+    assert.ok(chu.some((c) => c.includes("câu cũ")), "tin cũ vẫn phải còn");
+  });
+
+  it("lọc theo ID chứ không theo nội dung - câu cũ giống hệt vẫn giữ", async () => {
+    const tin = { ...msgTu("Hải", "giá vàng hôm nay", "2026-08-07T17:12:00.000Z", false), historyRowId: 9 };
+    const { messages } = await content.buildTurnMessages({
+      history: [lichSu(5, "giá vàng hôm nay"), lichSu(9, "giá vàng hôm nay")],
+      batch: [tin],
+      tranToken: 0,
+    });
+
+    assert.equal(
+      chuCuaTinNhan(messages).filter((c) => c.includes("giá vàng hôm nay")).length,
+      2,
+      "một lần là câu cũ trong lịch sử, một lần là câu đang hỏi",
+    );
+  });
+
+  it("batch chưa có historyRowId thì KHÔNG lọc gì - giữ nguyên hành vi cũ", async () => {
+    const tin = msgTu("Hải", "chào bot", "2026-08-07T17:12:00.000Z", false);
+    const { messages } = await content.buildTurnMessages({
+      history: [lichSu(5, "câu cũ")],
+      batch: [tin],
+      tranToken: 0,
+    });
+
+    assert.equal(chuCuaTinNhan(messages).filter((c) => c.includes("câu cũ")).length, 1);
+  });
+
+  it("`idBoQua` loại tin ĐANG CHỜ khỏi lịch sử - nó sẽ được chèn kèm nhãn tin chen", async () => {
+    // Không loại thì model đọc cùng một yêu cầu hai lần: một lần lẫn trong lịch
+    // sử, một lần dưới nhãn "[Vừa có tin nhắn mới ... trong lúc bạn đang làm dở]".
+    const tin = { ...msgTu("Hải", "soạn giúp bài giảng", "2026-08-07T17:12:00.000Z", false), historyRowId: 7 };
+    const { messages } = await content.buildTurnMessages({
+      history: [lichSu(7, "soạn giúp bài giảng"), lichSu(8, "à mà xuất ra Word nhé")],
+      batch: [tin],
+      idBoQua: [8],
+      tranToken: 0,
+    });
+
+    const chu = chuCuaTinNhan(messages);
+    assert.equal(chu.filter((c) => c.includes("xuất ra Word")).length, 0, "tin đang chờ không thuộc lịch sử lượt này");
+  });
+
+  it("bước mô tả ảnh chạy trên CÙNG danh sách với phần render", async () => {
+    // Hai bên chạy trên hai danh sách khác nhau là ngân sách mô tả rơi vào ảnh
+    // của chính lượt này, ảnh cũ không bao giờ được mô tả, mà chế độ `describe`
+    // cũng bỏ luôn pixel - dòng đó xuống model thành chữ trần, không dấu vết
+    // nào của tấm ảnh. Hỏng CÂM, không log, không note.
+    const daXinMoTa: string[][] = [];
+    const cuaBatch = { ...lichSu(20, "ảnh của lượt này [gửi kèm 1 ảnh]"), images: ["media/a/t/moi-0.jpg"] };
+    const cu = { ...lichSu(10, "ảnh cũ [gửi kèm 1 ảnh]"), images: ["media/a/t/cu-0.jpg"] };
+
+    await content.buildTurnMessages({
+      history: [cu, cuaBatch],
+      batch: [{ ...msgTu("Hải", "xem giúp", "2026-08-07T17:12:00.000Z", false), historyRowId: 20 }],
+      forceMode: "describe",
+      tranToken: 0,
+      moTaTruoc: async (paths) => {
+        daXinMoTa.push(paths);
+      },
+    });
+
+    assert.deepEqual(
+      daXinMoTa[0],
+      ["media/a/t/cu-0.jpg"],
+      "ảnh của chính lượt này đã có pixel trong nội dung lượt - xin mô tả cho nó là tiêu mất ngân sách của ảnh cũ",
+    );
+  });
+
+  it("CẮT LẠI sau khi lọc: batch to không được làm teo cửa sổ lịch sử", async () => {
+    // Ca đắt nhất của cả bản vá. `getRecentMessages` trả N tin MỚI NHẤT, mà tin
+    // của batch nằm ngay trong số đó. Lọc rồi không cắt lại là cửa sổ 20 tin
+    // teo xuống 15 với batch 5 tin, và xuống 0 khi batch chạm trần 32 tin -
+    // bot bước vào lượt mà không biết mình vừa trả lời gì. Hỏng CÂM.
+    const TRAN = 20;
+    const soTinBatch = 5;
+
+    // Caller đọc DƯ đúng bằng cỡ batch, y như `agent-loop.ts` làm
+    const cu = Array.from({ length: TRAN }, (_, i) => lichSu(100 + i, `tin cũ ${i}`));
+    const cuaBatch = Array.from({ length: soTinBatch }, (_, i) => lichSu(200 + i, `câu mới ${i}`));
+    const batch = Array.from({ length: soTinBatch }, (_, i) => ({
+      ...msgTu("Hải", `câu mới ${i}`, "2026-08-07T17:12:00.000Z", false),
+      historyRowId: 200 + i,
+    }));
+
+    const { messages } = await content.buildTurnMessages({
+      history: [...cu, ...cuaBatch],
+      batch,
+      tranLichSu: TRAN,
+      tranToken: 0,
+    });
+
+    // Trừ 1 tin cuối là nội dung của chính lượt này
+    const soTinLichSu = messages.length - 1;
+    assert.equal(soTinLichSu, TRAN, `mong ${TRAN} tin cũ, nhận ${soTinLichSu}`);
+    assert.ok(
+      chuCuaTinNhan(messages).some((c) => c.includes("tin cũ 0")),
+      "tin cũ nhất trong cửa sổ vẫn phải còn",
+    );
+  });
+
+  it("lọc HỤT vẫn không được vượt trần - cắt bỏ tin CŨ NHẤT, giữ tin gần nhất", async () => {
+    // Caller xin dư theo cỡ batch, nhưng không phải tin nào cũng có dòng trong
+    // cửa sổ vừa đọc (tin chưa kịp ghi, hoặc dòng đã trôi khỏi cửa sổ). Lúc đó
+    // lọc bỏ được ÍT hơn phần xin dư và kết quả vượt trần - phải cắt lại, và
+    // cắt ở đầu CŨ để giữ phần gần nhất.
+    const TRAN = 3;
+    const { messages } = await content.buildTurnMessages({
+      history: [lichSu(1, "cũ nhất"), lichSu(2, "cũ nhì"), lichSu(3, "giữa"), lichSu(4, "gần"), lichSu(5, "của lượt")],
+      // Chỉ MỘT trong hai id được xin dư là có thật trong cửa sổ
+      batch: [{ ...msgTu("Hải", "câu đang hỏi", "2026-08-07T17:12:00.000Z", false), historyRowId: 5 }],
+      idBoQua: [999],
+      tranLichSu: TRAN,
+      tranToken: 0,
+    });
+
+    const chu = chuCuaTinNhan(messages);
+    assert.equal(messages.length - 1, TRAN, `mong đúng ${TRAN} tin lịch sử, nhận ${messages.length - 1}`);
+    assert.ok(!chu.some((c) => c.includes("cũ nhất")), "phải cắt từ đầu CŨ");
+    assert.ok(chu.some((c) => c.includes("gần")), "tin gần nhất phải giữ");
+  });
+});
+
 describe("resolveImageContextMode + buildTurnMessages", () => {
   it("mode off: có sidecar -> describe, không sidecar -> blind (không gọi mạng)", async () => {
     visionStore.updateVisionSettings({ mode: "off" });

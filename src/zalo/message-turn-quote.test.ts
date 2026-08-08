@@ -19,6 +19,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 
 let dataDir: string;
 let processor: typeof import("./message-turn-processor.js");
+let ghiTin: typeof import("./record-incoming-message.js");
 let batcher: typeof import("../middleware/message-batcher.js");
 let accountStore: typeof import("../config/account-store.js");
 let database: typeof import("../conversation/database.js");
@@ -30,6 +31,7 @@ const RIENG = "t-quote";
 before(async () => {
   dataDir = setupTestEnv();
   processor = await import("./message-turn-processor.js");
+  ghiTin = await import("./record-incoming-message.js");
   batcher = await import("../middleware/message-batcher.js");
   accountStore = await import("../config/account-store.js");
   database = await import("../conversation/database.js");
@@ -83,7 +85,7 @@ function tin(opts: {
   senderName?: string;
 }): ParsedMessage {
   const senderName = opts.senderName ?? "Hải";
-  return {
+  const msg: ParsedMessage = {
     accountId: ACC,
     threadId: opts.threadId,
     threadType: opts.isGroup ? ThreadType.Group : ThreadType.User,
@@ -109,6 +111,12 @@ function tin(opts: {
       ttl: 0,
     },
   };
+  // Đường thật: router ghi tin vào lịch sử NGAY LÚC NHẬN rồi mới xếp vào hàng
+  // gộp (`record-incoming-message.ts`). Test gọi thẳng `processBatch` nên phải
+  // tự làm bước đó - thiếu nó thì tin không có `historyRowId` và lượt không lọc
+  // được chính nó ra khỏi lịch sử.
+  ghiTin.ghiTinDenVaoHistory(ACC, msg, { luuAnhNgay: false });
+  return msg;
 }
 
 const modelTraLoi = () =>

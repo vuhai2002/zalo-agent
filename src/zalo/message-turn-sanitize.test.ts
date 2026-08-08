@@ -22,6 +22,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 
 let dataDir: string;
 let processor: typeof import("./message-turn-processor.js");
+let ghiTin: typeof import("./record-incoming-message.js");
 let accountStore: typeof import("../config/account-store.js");
 let historyStore: typeof import("../conversation/history-store.js");
 let database: typeof import("../conversation/database.js");
@@ -33,6 +34,7 @@ const THREAD = "t-sanitize";
 before(async () => {
   dataDir = setupTestEnv();
   processor = await import("./message-turn-processor.js");
+  ghiTin = await import("./record-incoming-message.js");
   accountStore = await import("../config/account-store.js");
   historyStore = await import("../conversation/history-store.js");
   database = await import("../conversation/database.js");
@@ -82,22 +84,28 @@ const api = {
   sendSeenEvent: async () => ({}),
 } as unknown as API;
 
-const tinNhan = (): ParsedMessage => ({
-  accountId: ACC,
-  threadId: THREAD,
-  threadType: ThreadType.User,
-  isGroup: false,
-  senderId: "user-1",
-  senderName: "Hải",
-  text: "cho mình bảng giá",
-  images: [],
-  msgId: "m1",
-  cliMsgId: "c1",
-  isSelf: false,
-  mentionsMe: false,
-  sentAt: new Date().toISOString(),
-  rawData: {},
-});
+const tinNhan = (): ParsedMessage => {
+  const msg: ParsedMessage = {
+    accountId: ACC,
+    threadId: THREAD,
+    threadType: ThreadType.User,
+    isGroup: false,
+    senderId: "user-1",
+    senderName: "Hải",
+    text: "cho mình bảng giá",
+    images: [],
+    msgId: "m1",
+    cliMsgId: "c1",
+    isSelf: false,
+    mentionsMe: false,
+    sentAt: new Date().toISOString(),
+    rawData: {},
+  };
+  // Đường thật: router ghi tin vào lịch sử ngay lúc nhận, xem
+  // `record-incoming-message.ts`
+  ghiTin.ghiTinDenVaoHistory(ACC, msg, { luuAnhNgay: false });
+  return msg;
+};
 
 const traLoi = (text: string) => ({
   content: text ? [{ type: "text" as const, text }] : [],

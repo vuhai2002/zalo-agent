@@ -4,8 +4,8 @@ import { phanLoaiLoiProvider } from "../agent/provider-error-classifier.js";
 import type { StepTrace } from "../agent/agent-step-trace.js";
 import type { AccountConfig } from "../config/account-store.js";
 import { appendMessage } from "../conversation/history-store.js";
-import { imagePathsOf, persistBatchImages } from "../conversation/media-store.js";
-import { layTinDangDo } from "../middleware/message-batcher.js";
+import { persistBatchImages } from "../conversation/media-store.js";
+import { idTinDangCho, layTinDangDo } from "../middleware/message-batcher.js";
 import { maybeSummarizeThread } from "../conversation/thread-summarizer.js";
 import { saveTurnTrace } from "../agent/agent-trace-store.js";
 import { traceLuotHong } from "../agent/failed-turn-trace.js";
@@ -15,11 +15,12 @@ import { createLogger } from "../shared/logger.js";
 import { runInTurnLogContext } from "../shared/turn-log-context.js";
 import { sendSeenReceipt } from "./message-receipts.js";
 import { toZaloReaction } from "./reaction-icons.js";
+import { ganAnhVaoHistory } from "./record-incoming-message.js";
 import { trichDanTuTin } from "./reply-quote.js";
 import { deliverChatReply } from "./deliver-chat-reply.js";
 import { notifyTechnicalError, type ReplyTarget } from "./send-reply-in-parts.js";
 import { startTypingIndicator } from "./typing-indicator.js";
-import { describeForHistory, type ParsedMessage } from "./zalo-message-parser.js";
+import type { ParsedMessage } from "./zalo-message-parser.js";
 
 const log = createLogger("message-turn");
 
@@ -162,56 +163,31 @@ async function xuLyLuot(
     // nạp lại được ảnh, sidecar phải mô tả lại từ đầu mỗi lần vì cache khóa
     // theo chính `localPath`, và ảnh coi như mất hẳn khi URL Zalo hết hạn.
     await luuAnh(config.id, moi);
+    ganAnhVaoHistory(moi);
     return moi;
   };
 
   /**
    * Tin do TOOL gửi thẳng xuống Zalo trong lượt này (file, ảnh, tag).
    *
-   * Mảng do CHỖ NÀY sở hữu chứ không để tool tự `appendMessage`: tin của NGƯỜI
-   * DÙNG được ghi ở CUỐI lượt (ghi trước thì model thấy tin lặp hai lần), nên
-   * tool ghi thẳng lúc gửi sẽ nằm TRƯỚC tin người dùng trong history - sai thứ
-   * tự thật. Gom về đây thì thứ tự đúng: tin người dùng -> tin tool gửi -> câu
-   * chốt của agent (`deliverChatReply` ghi sau cùng).
+   * Ghi NGAY lúc gửi. Bản trước gom vào mảng rồi ghi ở cuối lượt, vì hồi đó tin
+   * NGƯỜI DÙNG cũng ghi ở cuối - ghi thẳng thì tin tool nằm TRƯỚC tin người
+   * dùng, sai thứ tự thật. Từ khi tin người dùng được ghi ngay lúc NHẬN
+   * (`record-incoming-message.ts`), lý do đó không còn: gửi lúc nào ghi lúc
+   * ấy là ra đúng thứ tự, và lượt chết giữa chừng cũng không đánh rơi.
    */
-  const daGuiBoiTool: string[] = [];
   const ghiNhanDaGui = (noiDung: string): void => {
-    if (noiDung.trim()) daGuiBoiTool.push(noiDung.trim());
-  };
-
-  // Ghi 1 lần duy nhất, gọi được ở cả nhánh thành công và nhánh lỗi
-  let historyWritten = false;
-  const writeBatchToHistory = (): void => {
-    if (historyWritten) return;
-    historyWritten = true;
-    // Tin chen ghi SAU tin mở đầu, đúng thứ tự người ta đã gửi
-    for (const msg of [...batch, ...tinChen]) {
-      appendMessage(config.id, msg.threadId, {
-        role: "user",
-        content: describeForHistory(msg),
-        senderName: msg.senderName,
-        senderId: msg.senderId,
-        images: imagePathsOf(msg.images),
-        // Giờ NGƯỜI TA BẤM GỬI, không phải giờ chạy tới dòng này: hàm này gọi ở
-        // CUỐI lượt, mà lượt dài thì cách lúc gửi tới vài phút. Cùng một giá
-        // trị đã dùng làm nhãn giờ trong prompt, nên hai chỗ không lệch nhau.
-        createdAt: msg.sentAt,
-      });
-    }
-    // Ghi trong CÙNG hàm này để không thể quên ở nhánh lỗi: lượt chết sau khi
-    // tool đã gửi file thì file VẪN nằm trên máy người ta, history phải nói ra.
-    for (const noiDung of daGuiBoiTool) {
-      appendMessage(config.id, latest.threadId, { role: "assistant", content: noiDung });
-    }
+    if (!noiDung.trim()) return;
+    appendMessage(config.id, latest.threadId, { role: "assistant", content: noiDung.trim() });
   };
 
   try {
-    // Lưu ảnh xuống data/media TRƯỚC lượt agent: agent đọc từ đĩa (khỏi tải 2 lần)
-    // và các lượt sau nạp lại được ảnh này từ history
+    // Lưu ảnh xuống data/media TRƯỚC lượt agent: agent đọc từ đĩa (khỏi tải 2
+    // lần) và các lượt sau nạp lại được ảnh này từ history. Dòng lịch sử của
+    // tin đã ghi từ lúc NHẬN, giờ mới có đường dẫn ảnh để gắn vào.
     await luuAnh(config.id, batch);
+    ganAnhVaoHistory(batch);
 
-    // Chạy agent TRƯỚC khi ghi history: runAgentTurn tự đọc history cũ và tự
-    // ghép batch hiện tại vào input - ghi trước sẽ khiến tin mới lặp 2 lần.
     const result = await runAgentTurn({
       api,
       account: config,
@@ -219,6 +195,10 @@ async function xuLyLuot(
       trace,
       resolveModel: options.resolveModel,
       layTinChen,
+      // Tin tới TRONG LÚC bot đang tải ảnh (ngay trên) đã vào lịch sử rồi, mà
+      // lát nữa `layTinChen` lại kéo chính nó ra chèn kèm nhãn - loại khỏi phần
+      // lịch sử để model không đọc hai lần
+      layIdDangCho: () => idTinDangCho(threadKey),
       ghiNhanDaGui,
     });
     finishAgentTurn(turnId, result.usage);
@@ -228,8 +208,6 @@ async function xuLyLuot(
     // Trace lưu ở đây chứ không trong agent-loop: chỗ này vốn đã là nơi chốt
     // usage của lượt, gom một mối cho dễ tìm.
     if (trace.length > 0) saveTurnTrace(turnId, trace);
-
-    writeBatchToHistory();
 
     if (!result.text) {
       log.debug("Agent không trả text (có thể chỉ thả reaction)");
@@ -247,9 +225,10 @@ async function xuLyLuot(
     // maybeSummarizeThread tự nuốt lỗi nên không cần catch thêm
     void maybeSummarizeThread(config.id, latest.threadId);
   } catch (err) {
-    // Agent lỗi (provider chết, hết quota, timeout) thì tin của người dùng VẪN
-    // phải vào history - bỏ qua là lượt sau bot không biết họ đã nói gì
-    writeBatchToHistory();
+    // Tin của người dùng KHÔNG cần cứu ở đây nữa: đã vào lịch sử từ lúc nhận
+    // (`record-incoming-message.ts`), nên lượt chết cách nào cũng không đánh
+    // rơi. Trước đây nhánh này phải tự gọi `writeBatchToHistory`.
+    //
     // Trace của những step ĐÃ chạy được là thứ quý nhất lúc này: lượt đi tốt 5
     // step rồi step 6 gặp 500 thì đây là toàn bộ manh mối. Trước đây nhánh này
     // không lưu gì nên lượt hỏng vừa không có trace vừa không lên trang Trace.

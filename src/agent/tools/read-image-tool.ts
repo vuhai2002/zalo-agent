@@ -24,8 +24,12 @@ import { ketQuaLoi } from "./tool-failure-result.js";
 const RECENT_IMAGE_LIMIT = 10;
 
 /**
- * Gom đường dẫn ảnh MỚI NHẤT TRƯỚC: batch của lượt hiện tại (chưa vào DB)
- * rồi tới history. Xuất riêng để test không cần dựng tool.
+ * Gom đường dẫn ảnh MỚI NHẤT TRƯỚC: batch của lượt hiện tại rồi tới history.
+ * Xuất riêng để test không cần dựng tool.
+ *
+ * Batch nay CŨNG nằm trong history (tin ghi ngay lúc nhận), nên duyệt batch
+ * trước rồi bỏ trùng là cách giữ đúng thứ tự "mới nhất trước" mà không đếm hai
+ * lần cùng một tấm.
  */
 export function collectRecentImagePaths(ctx: ToolContext): string[] {
   const paths: string[] = [];
@@ -38,7 +42,10 @@ export function collectRecentImagePaths(ctx: ToolContext): string[] {
   for (let i = history.length - 1; i >= 0; i--) {
     paths.push(...(history[i]!.images ?? []));
   }
-  return paths.slice(0, RECENT_IMAGE_LIMIT);
+  // BỎ TRÙNG: từ khi tin người dùng được ghi ngay lúc nhận, ảnh của batch đang
+  // chạy nằm ở CẢ hai nguồn trên. Không lọc thì "ảnh thứ 2" lại chính là ảnh
+  // thứ nhất, và mọi ảnh cũ bị đẩy lùi một bậc - model chọn số nào cũng trượt.
+  return [...new Set(paths)].slice(0, RECENT_IMAGE_LIMIT);
 }
 
 /** `ask` tiêm được để test không chạm mạng thật */

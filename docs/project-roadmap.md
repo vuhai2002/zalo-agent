@@ -1849,6 +1849,9 @@ chốt) mà web chỉ hiện 1.
   trước thì model thấy tin lặp hai lần), nên tool ghi thẳng lúc gửi sẽ nằm
   TRƯỚC tin người dùng. Tool chỉ ghi nhận vào mảng do `message-turn-processor`
   sở hữu - cùng nếp `trace` và `tinChen`. Có test ghim riêng thứ tự này.
+  *(Lý do này đã hết hiệu lực từ V3.13: tin người dùng ghi ngay lúc nhận, nên
+  tool ghi thẳng lúc gửi là ra đúng thứ tự. Tool vẫn không tự `appendMessage`,
+  nhưng vì lý do khác - chỉ processor biết đủ ngữ cảnh lượt.)*
 - [x] Khung chat mở ra ở TIN MỚI NHẤT (trước đây đứng ở `scrollTop = 0`, tức
   tin cũ nhất trong 50 tin vừa nạp). "Tải tin cũ hơn" giữ nguyên chỗ đang đọc -
   đo khoảng cách tới ĐÁY trước khi chèn, vì đó là đại lượng duy nhất không đổi
@@ -3634,3 +3637,108 @@ có từ V3.11) để gọi đúng tên trong câu. Nếu chạy thật vẫn th
 tiếp là để model xuất nhiều khối theo người rồi gửi từng khối kèm trích dẫn
 tương ứng - đúng nhất về UX nhưng phải dựng giao thức giữa output của model và
 tầng gửi, và model phải tuân thủ, tức thêm một chỗ hỏng câm.
+
+## V3.13 - Tin người dùng vào lịch sử ngay lúc nhận (2026-08-08)
+
+Nền cho việc cho lượt agent chạy SONG SONG trong nhóm (đợt sau). Tự nó cũng
+đóng hai lỗ có thật.
+
+### Vì sao đổi
+
+`writeBatchToHistory` ghi tin người dùng ở **cuối lượt**. Ba hệ quả:
+
+1. **Thứ tự trong DB là thứ tự lượt KẾT THÚC**, không phải thứ tự người ta gửi.
+   Còn chạy nối tiếp thì hai thứ trùng nhau; cho chạy song song là lượt nhanh
+   chen lên trước lượt chậm và lịch sử kể sai mạch chuyện.
+2. **Lượt chết vì process bị giết là mất tin**, dù người nhắn đã nhận dấu "đã
+   nhận".
+3. Ba nhánh ghi khác nhau (passive-listen, chạm trần hàng chờ, có-trả-lời) với
+   ba thời điểm khác nhau.
+
+Nay mọi tin đi chung một đường: `record-incoming-message.ts`, gọi từ router
+TRƯỚC `enqueueMessage`.
+
+### Cái giá phải trả, và ba lỗi nó đẻ ra
+
+Lúc lượt agent đọc lịch sử thì tin của CHÍNH nó đã nằm sẵn trong đó. Bản đầu chỉ
+lọc theo `historyRowId` là xong - và bản đầu đó SAI ba chỗ, cả ba đều do subagent
+rà soát tìm ra chứ không phải test bắt được.
+
+**1. Cửa sổ lịch sử teo theo cỡ batch.** `getRecentMessages` trả `HISTORY_CONTEXT_LIMIT`
+tin MỚI NHẤT, mà tin của batch nằm ngay trong số đó rồi bị lọc bỏ, không ai bù:
+
+| Số tin trong batch | Số tin cũ model thấy (đáng lẽ 20) |
+|---|---|
+| 1 | 19 |
+| 5 | **15** |
+| 32 (chạm trần hàng chờ) | **0** |
+
+Batch 5 tin là ca thường ngày - Zalo tách ảnh với chú thích thành hai tin, người
+ta gõ thêm vài câu trong cửa sổ gộp. Mất 25% trí nhớ, im lặng. Chạm trần thì bot
+bước vào lượt không biết mình vừa trả lời gì.
+
+Sửa: đọc DƯ đúng bằng số dòng sắp bị lọc, rồi cắt lại đúng trần sau khi lọc.
+
+**2. Bước mô tả ảnh chạy trên lịch sử CHƯA lọc, phần render chạy trên bản ĐÃ
+lọc.** Ngân sách mô tả (mặc định 1 ảnh) rơi vào ảnh của chính lượt này - vốn đã
+có pixel trong nội dung lượt - nên ảnh cũ không bao giờ được mô tả. Mà chế độ
+`describe` cũng bỏ luôn pixel, nên dòng đó xuống model thành **chữ trần, không
+một dấu vết nào của tấm ảnh**. Bot mù tấm ảnh mà cấu hình đã cho phép nó xem, và
+mù câm.
+
+Sửa: lọc MỘT lần rồi dùng chung cho cả hai. Thêm seam `moTaTruoc` để test ghim
+được bất biến "hai bên chạy trên cùng một danh sách".
+
+**3. Tin chen vào prompt hai lần.** Tin tới sau khi batch chốt nhưng trước khi
+lượt đọc lịch sử thì vừa nằm trong lịch sử (không bị lọc vì không thuộc `batch`)
+vừa bị `layTinDangDo` kéo ra chèn kèm nhãn "[Vừa có tin nhắn mới...]". Model đọc
+cùng một yêu cầu hai lần, một lần trần một lần có nhãn - đúng thứ cái nhãn đó
+sinh ra để tránh.
+
+Cửa sổ này KHÔNG mỏng: `processBatch` `await persistBatchImages` trước khi lượt
+đọc lịch sử, tức vài trăm ms tới vài giây tải ảnh. Đúng ca thường gặp nhất -
+người ta gửi ảnh rồi gõ thêm một câu.
+
+Sửa: `idTinDangCho(threadKey)` trả id các dòng đang chờ, lượt loại chúng khỏi
+phần lịch sử của mình.
+
+### Bốn mục nhỏ cũng từ rà soát
+
+- `evals/run-eval.ts` không còn ghi tin người dùng vào lịch sử: eval đo một hình
+  dạng không tồn tại ngoài thật, và không ca nào đi qua đường lọc `historyRowId`.
+- Bước ghi nay chạy TRƯỚC `enqueueMessage`, nên ném ra là tin mất luôn cả đường
+  trả lời (trước đây nó nằm trong `try` của `processBatch`). Bọc `try/catch`.
+- Hai đường fire-and-forget mới thiếu `.catch` - `setMessageImages` chạm DB.
+- Tham số `images` lúc ghi luôn rỗng (chưa tải xong), bỏ đi cho khớp chú thích.
+
+### Hai test tự viết bị hớ
+
+Test cho lỗi 1 **không đỏ** khi phá đúng chỗ nó sinh ra để canh: nó dựng lịch sử
+đúng bằng `trần + cỡ batch` nên lọc xong vừa khít, bước cắt lại thành vô nghĩa.
+Thay bằng hai test khác - một ca lọc HỤT (id xin dư không có thật trong cửa sổ)
+và một ca đi trọn `processBatch` đo số tin cũ model thật sự nhìn thấy.
+
+Thêm một khẳng định gần như tautology ("lượt chết thì tin vẫn còn" - dòng đó do
+chính helper của test ghi ra) được siết thành đếm ĐÚNG MỘT dòng, để nó bắt được
+ca ai đó khôi phục lại đường ghi cũ.
+
+### Lợi ngoài dự tính
+
+- Tin do TOOL gửi nay ghi ngay lúc gửi thay vì gom tới cuối lượt - lý do phải
+  hoãn (tin người dùng ghi sau) đã biến mất. Lượt chết cũng không đánh rơi.
+- Nhánh "tin bị bỏ vì hàng chờ chạm trần" không còn phải tự ghi lấy.
+- `read_image`: ảnh của batch nay nằm ở CẢ `ctx.batch` lẫn lịch sử, nên phải bỏ
+  trùng theo đường dẫn - không thì "ảnh thứ 2" lại chính là ảnh thứ nhất và mọi
+  ảnh cũ bị đẩy lùi một bậc.
+
+### Kiểm chứng
+
+1649 test xanh (+19), typecheck sạch. 11 phép phá, cả 11 đỏ đúng chỗ.
+
+Bất biến được ghim: cửa sổ lịch sử không teo theo cỡ batch (đo qua
+`processBatch` thật), bước mô tả ảnh chạy cùng danh sách với phần render, tin
+chen vào prompt đúng một lần, tin người dùng đúng một dòng kể cả khi lượt chết,
+đường dẫn ảnh gắn đúng dòng cho cả tin mở lượt lẫn tin chen.
+
+Bản vá lật một bất biến được viết ở 9 chỗ trong mã nguồn và tài liệu, gồm
+`CLAUDE.md` - đã cập nhật hết.

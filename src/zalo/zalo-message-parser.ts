@@ -30,6 +30,15 @@ export type ParsedMessage = {
    * lượt dài làm nhãn lệch mấy phút so với lúc bấm gửi.
    */
   sentAt: string;
+  /**
+   * id dòng trong bảng `messages`, đóng dấu bởi `ghiTinDenVaoHistory` ngay lúc
+   * nhận tin. Chưa ghi thì chưa có.
+   *
+   * Lượt agent dùng nó để LỌC chính tin của mình ra khỏi phần lịch sử: từ khi
+   * tin được ghi lúc nhận (thay vì cuối lượt), lúc lượt đọc lịch sử thì tin của
+   * nó đã nằm sẵn trong đó - không lọc là model thấy lặp hai lần.
+   */
+  historyRowId?: number;
   /** data gốc của zca-js - dùng cho quote khi trả lời */
   rawData: Record<string, unknown>;
 };

@@ -43,9 +43,10 @@ export type ToolContext = {
    * mới là chỗ duy nhất gọi `appendMessage`. Không có đường này thì tin bot gửi
    * biến mất khỏi dashboard VÀ khỏi trí nhớ của chính bot ở lượt sau.
    *
-   * Chỉ GHI NHẬN, không tự ghi DB: thứ tự trong history do
-   * `message-turn-processor` quyết (tin người dùng ghi ở CUỐI lượt, nên tool
-   * ghi thẳng lúc gửi sẽ nằm nhầm phía trước). Cùng nếp sở hữu mảng với `trace`.
+   * Chỉ GHI NHẬN, không tự `appendMessage`: `message-turn-processor` mới biết
+   * đủ ngữ cảnh của lượt (accountId, threadId đích). Nó ghi NGAY lúc được gọi -
+   * tin người dùng đã vào lịch sử từ lúc nhận nên thứ tự tự đúng, không phải
+   * gom lại tới cuối lượt như bản trước.
    *
    * Optional vì lượt theo lịch không truyền - 5 tool này vốn đã bị loại khỏi
    * lượt đó (`runsInScheduledTurn: false`).

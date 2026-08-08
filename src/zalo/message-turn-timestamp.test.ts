@@ -25,6 +25,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 
 let dataDir: string;
 let processor: typeof import("./message-turn-processor.js");
+let ghiTin: typeof import("./record-incoming-message.js");
 let batcher: typeof import("../middleware/message-batcher.js");
 let accountStore: typeof import("../config/account-store.js");
 let historyStore: typeof import("../conversation/history-store.js");
@@ -40,6 +41,7 @@ const NHAN_MONG_DOI = "[08/08 00:12]";
 before(async () => {
   dataDir = setupTestEnv();
   processor = await import("./message-turn-processor.js");
+  ghiTin = await import("./record-incoming-message.js");
   batcher = await import("../middleware/message-batcher.js");
   accountStore = await import("../config/account-store.js");
   historyStore = await import("../conversation/history-store.js");
@@ -82,7 +84,7 @@ const api = {
 } as unknown as API;
 
 function tinNhan(text: string, msgId: string, sentAt: string, senderName = "Hải"): ParsedMessage {
-  return {
+  const msg: ParsedMessage = {
     accountId: ACC,
     threadId: THREAD,
     threadType: ThreadType.User,
@@ -98,6 +100,12 @@ function tinNhan(text: string, msgId: string, sentAt: string, senderName = "Hả
     sentAt,
     rawData: { msgId, cliMsgId: `c-${msgId}`, uidFrom: `u-${senderName}`, idTo: "self-1" },
   };
+  // Đường thật: router ghi tin vào lịch sử NGAY LÚC NHẬN rồi mới xếp vào hàng
+  // gộp (`record-incoming-message.ts`). Test gọi thẳng `processBatch` nên phải
+  // tự làm bước đó - thiếu nó thì tin không có `historyRowId`, lượt không lọc
+  // được chính nó ra khỏi lịch sử, và mọi khẳng định về lịch sử đều lệch.
+  ghiTin.ghiTinDenVaoHistory(ACC, msg, { luuAnhNgay: false });
+  return msg;
 }
 
 const traLoi = (text: string) => ({

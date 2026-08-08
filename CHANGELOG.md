@@ -77,6 +77,11 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- Tin nhắn của người dùng vào lịch sử **ngay lúc nhận** thay vì cuối lượt. Nhờ
+  vậy thứ tự trong dữ liệu luôn là thứ tự tin tới, và lượt hỏng giữa chừng
+  không còn đánh rơi câu người ta vừa nói. Tin do bot gửi kèm file/ảnh cũng ghi
+  ngay lúc gửi. Đây là nền cho việc cho bot trả lời nhiều người song song trong
+  nhóm.
 - Bot hiểu sai giờ của câu vừa hỏi: tin trong lịch sử có nhãn `[ngày/tháng
   giờ:phút]` còn tin của lượt đang chạy thì không, nên mốc giờ mới nhất model
   thấy luôn là của tin TRƯỚC ĐÓ. Vắt qua nửa đêm là nó tin câu hỏi lúc 00:12

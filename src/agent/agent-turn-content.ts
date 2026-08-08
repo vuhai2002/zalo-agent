@@ -78,6 +78,16 @@ function historyRendering(imageMode: ImageContextMode): HistoryImageRendering | 
 export async function buildTurnMessages(params: {
   history: StoredMessage[];
   batch: ParsedMessage[];
+  /**
+   * id các dòng lịch sử KHÔNG thuộc lượt này - tin đang chờ trong hàng gộp.
+   * Xem `AgentTurnParams.layIdDangCho`.
+   */
+  idBoQua?: number[];
+  /**
+   * Trần SỐ TIN lịch sử SAU KHI lọc. Caller phải đọc dư từ DB (dư đúng bằng số
+   * dòng sắp bị lọc) rồi truyền trần thật vào đây; bỏ trống hoặc 0 = không cắt.
+   */
+  tranLichSu?: number;
   override?: ModelOverride;
   forceMode?: ImageContextMode;
   /** Có thì tin của người ngoài danh sách bị gắn nhãn chưa xác minh trong history */
@@ -91,6 +101,17 @@ export async function buildTurnMessages(params: {
    * sau khi provider từ chối ảnh. Không muốn giới hạn thì truyền 0 tường minh.
    */
   tranToken: number;
+  /**
+   * Bước mô tả trước các ảnh lịch sử sắp vào context. Có seam vì đường thật gọi
+   * sidecar qua mạng, mà bất biến cần ghim ở đây KHÔNG phải "mô tả đúng" - nó là
+   * "mô tả đúng DANH SÁCH ảnh mà phần render sẽ dùng".
+   *
+   * Bất biến đó từng vỡ và vỡ CÂM: bước mô tả chạy trên lịch sử chưa lọc còn
+   * phần render chạy trên bản đã lọc, nên ngân sách mô tả rơi vào ảnh của chính
+   * lượt này, ảnh cũ không bao giờ được mô tả, mà chế độ `describe` lại bỏ luôn
+   * pixel - dòng đó xuống model thành chữ trần, không dấu vết nào của tấm ảnh.
+   */
+  moTaTruoc?: typeof ensureDescriptionsFor;
 }): Promise<{
   messages: ModelMessage[];
   imageMode: ImageContextMode;
@@ -101,15 +122,23 @@ export async function buildTurnMessages(params: {
   // blind: ngân sách ảnh history = 0, content tự rơi về text "[gửi kèm N ảnh]"
   const imageLimit = imageMode === "blind" ? 0 : getTuning("HISTORY_IMAGE_CONTEXT_LIMIT");
 
+  // Lọc MỘT lần rồi dùng chung cho cả bước mô tả ảnh lẫn bước dựng tin. Hai bên
+  // chạy trên hai danh sách khác nhau là ngân sách ảnh rơi vào tấm này còn phần
+  // render lại cần tấm kia: ảnh cũ không bao giờ được mô tả, mà chế độ
+  // `describe` thì cũng bỏ luôn pixel - dòng đó xuống model thành chữ trần,
+  // không một dấu vết nào của tấm ảnh, và hỏng CÂM.
+  const lichSu = locLichSuChoLuot(params);
+
   if (imageMode === "describe" || imageMode === "hybrid") {
     // Mô tả TRƯỚC các ảnh history sắp vào context - gồm cả ảnh passive-listen
     // chưa từng qua lượt agent nào (nhóm gửi vé số rồi mới @mention bot).
     // Build messages phía dưới chỉ đọc cache sync.
-    await ensureDescriptionsFor(collectImagesWithinBudget(params.history, imageLimit), loadStoredImage);
+    const moTa = params.moTaTruoc ?? ensureDescriptionsFor;
+    await moTa(collectImagesWithinBudget(lichSu, imageLimit), loadStoredImage);
   }
 
   const messages = historyToModelMessages(
-    params.history,
+    lichSu,
     imageLimit,
     loadStoredImage,
     botTimeZone(),
@@ -132,6 +161,48 @@ export async function buildTurnMessages(params: {
     coAnh: getTuning("ZALO_IMAGE_QUALITY"),
   });
   return { messages: tinNhan, imageMode, daCat };
+}
+
+/**
+ * Phần lịch sử THẬT của lượt: bỏ đi những dòng không thuộc về nó, rồi cắt lại
+ * đúng trần số tin.
+ *
+ * Bỏ hai nhóm:
+ *
+ *   1. Tin của CHÍNH batch này. Tin người dùng nay ghi NGAY LÚC NHẬN
+ *      (`record-incoming-message.ts`), nên lúc lượt đọc lịch sử thì câu hỏi của
+ *      nó đã nằm sẵn trong đó; không lọc là model đọc cùng câu hỏi hai lần.
+ *   2. Tin ĐANG CHỜ trong hàng gộp (`idBoQua`). Chúng hoặc sẽ được `layTinChen`
+ *      kéo vào giữa lượt kèm nhãn "vừa có tin mới", hoặc thuộc về lượt sau -
+ *      cả hai đều không phải lịch sử của lượt này.
+ *
+ * Lọc theo id DÒNG chứ không theo nội dung: hai người nhắn y hệt nhau, hay một
+ * người hỏi lại đúng câu cũ, đều là chuyện thường và không được nuốt mất.
+ *
+ * CẮT LẠI sau khi lọc là phần dễ quên nhất. `getRecentMessages` trả về N tin
+ * MỚI NHẤT, mà mấy dòng vừa lọc nằm ngay trong số đó - caller phải xin dư rồi
+ * để hàm này cắt về đúng trần, không thì cửa sổ lịch sử teo đi đúng bằng cỡ
+ * batch và không ai thấy.
+ *
+ * Không có gì để lọc (test gọi thẳng, hoặc lượt theo lịch với tin tổng hợp) thì
+ * chỉ còn bước cắt - đúng hành vi cũ.
+ */
+function locLichSuChoLuot(params: {
+  history: StoredMessage[];
+  batch: ParsedMessage[];
+  idBoQua?: number[];
+  tranLichSu?: number;
+}): StoredMessage[] {
+  const boQua = new Set<number>(params.idBoQua ?? []);
+  for (const m of params.batch) if (m.historyRowId !== undefined) boQua.add(m.historyRowId);
+
+  const conLai =
+    boQua.size === 0
+      ? params.history
+      : params.history.filter((h) => h.id === undefined || !boQua.has(h.id));
+
+  const tran = params.tranLichSu ?? 0;
+  return tran > 0 ? conLai.slice(-tran) : conLai;
 }
 
 /** Gộp toàn bộ ảnh + text trong batch thành content của 1 lượt user */

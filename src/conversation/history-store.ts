@@ -2,6 +2,14 @@ import { closeDatabase, db } from "./database.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 
 export type StoredMessage = {
+  /**
+   * id của dòng trong bảng `messages` - có khi ĐỌC, không có khi ghi.
+   *
+   * Dùng để nhận ra "dòng này chính là tin của lượt đang chạy": tin người dùng
+   * nay được ghi ngay lúc NHẬN, nên lúc lượt agent đọc lịch sử thì tin của
+   * chính nó đã nằm sẵn trong đó. Không lọc ra thì model thấy tin lặp hai lần.
+   */
+  id?: number;
   role: "user" | "assistant";
   content: string;
   senderName?: string;
@@ -13,9 +21,10 @@ export type StoredMessage = {
    *
    * Khi GHI: truyền vào thì lấy đúng giá trị đó, bỏ trống thì DB tự sinh giờ
    * hiện tại. Tin đến từ Zalo PHẢI truyền `msg.sentAt` (giờ người ta bấm gửi):
-   * tin được ghi ở CUỐI lượt nên để DB tự sinh là lấy giờ KẾT THÚC lượt - một
-   * lượt 249 giây làm mốc lệch 4 phút, mà chính mốc này là nhãn `[dd/mm hh:mm]`
-   * model đọc để hiểu "vừa nãy", "sáng nay".
+   * để DB tự sinh là lấy giờ tin TỚI LISTENER, mà mốc này là nhãn
+   * `[dd/mm hh:mm]` model đọc để hiểu "vừa nãy", "sáng nay". Khoảng lệch nhỏ
+   * hơn từ khi tin được ghi ngay lúc nhận thay vì cuối lượt, nhưng vẫn có -
+   * và tin cũ về muộn sau khi listener nối lại thì lệch hẳn hàng giờ.
    */
   createdAt?: string;
 };
@@ -37,7 +46,7 @@ const insertWithCreatedAtStmt = db.prepare(
 );
 
 const recentStmt = db.prepare(
-  `SELECT role, sender_name, sender_id, content, images, created_at FROM messages
+  `SELECT id, role, sender_name, sender_id, content, images, created_at FROM messages
    WHERE account_id = ? AND thread_id = ?
    ORDER BY id DESC LIMIT ?`,
 );
@@ -101,6 +110,7 @@ export function getRecentMessages(
   limit = getTuning("HISTORY_CONTEXT_LIMIT"),
 ): StoredMessage[] {
   type Row = {
+    id: number;
     role: "user" | "assistant";
     sender_name: string | null;
     sender_id: string | null;
@@ -111,6 +121,7 @@ export function getRecentMessages(
   const rows = recentStmt.all(accountId, threadId, limit) as unknown as Row[];
   // DESC để lấy N tin mới nhất, đảo lại thành thứ tự thời gian cho LLM
   return rows.reverse().map((r) => ({
+    id: r.id,
     role: r.role,
     content: r.content,
     senderName: r.sender_name ?? undefined,

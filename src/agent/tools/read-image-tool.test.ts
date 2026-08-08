@@ -96,6 +96,30 @@ describe("collectRecentImagePaths", () => {
     );
     assert.deepEqual(paths, []);
   });
+
+  it("ảnh của batch nằm ở CẢ hai nguồn chỉ được đếm MỘT lần", () => {
+    // Từ khi tin người dùng được ghi ngay lúc nhận, dòng lịch sử của batch đang
+    // chạy đã có sẵn đường dẫn ảnh - nên cùng một tấm nằm ở cả `ctx.batch` lẫn
+    // history. Không bỏ trùng thì "ảnh thứ 2" lại chính là ảnh thứ nhất, và mọi
+    // ảnh cũ bị đẩy lùi một bậc: model chọn số nào cũng trượt.
+    const t = "t-trung-lap";
+    const duong = "media/acc-ri/t/dang-chay-0.png";
+    historyStore.appendMessage("acc-ri", t, {
+      role: "user",
+      content: "cũ [gửi kèm 1 ảnh]",
+      images: ["media/acc-ri/t/cu-0.png"],
+    });
+    historyStore.appendMessage("acc-ri", t, {
+      role: "user",
+      content: "đang chạy [gửi kèm 1 ảnh]",
+      images: [duong],
+    });
+
+    const paths = toolModule.collectRecentImagePaths(
+      makeContext(t, [batchMsg(t, [{ url: "http://x/a.png", localPath: duong }])]),
+    );
+    assert.deepEqual(paths, [duong, "media/acc-ri/t/cu-0.png"]);
+  });
 });
 
 describe("read_image tool", () => {

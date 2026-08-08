@@ -24,6 +24,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 
 let dataDir: string;
 let processor: typeof import("./message-turn-processor.js");
+let ghiTin: typeof import("./record-incoming-message.js");
 let accountStore: typeof import("../config/account-store.js");
 let historyStore: typeof import("../conversation/history-store.js");
 let database: typeof import("../conversation/database.js");
@@ -35,6 +36,7 @@ const TEN_FILE = "bang-gia-test.txt";
 before(async () => {
   dataDir = setupTestEnv();
   processor = await import("./message-turn-processor.js");
+  ghiTin = await import("./record-incoming-message.js");
   accountStore = await import("../config/account-store.js");
   historyStore = await import("../conversation/history-store.js");
   database = await import("../conversation/database.js");
@@ -83,22 +85,29 @@ const api = {
   sendSeenEvent: async () => ({}),
 } as unknown as API;
 
-const tinNhan = (text: string): ParsedMessage => ({
-  accountId: ACC,
-  threadId: THREAD,
-  threadType: ThreadType.User,
-  isGroup: false,
-  senderId: "user-1",
-  senderName: "Hải",
-  text,
-  images: [],
-  msgId: "m1",
-  cliMsgId: "c1",
-  isSelf: false,
-  mentionsMe: false,
-  sentAt: new Date().toISOString(),
-  rawData: {},
-});
+const tinNhan = (text: string): ParsedMessage => {
+  const msg: ParsedMessage = {
+    accountId: ACC,
+    threadId: THREAD,
+    threadType: ThreadType.User,
+    isGroup: false,
+    senderId: "user-1",
+    senderName: "Hải",
+    text,
+    images: [],
+    msgId: "m1",
+    cliMsgId: "c1",
+    isSelf: false,
+    mentionsMe: false,
+    sentAt: new Date().toISOString(),
+    rawData: {},
+  };
+  // Đường thật: router ghi tin vào lịch sử NGAY LÚC NHẬN rồi mới xếp vào hàng
+  // gộp (`record-incoming-message.ts`). Test gọi thẳng `processBatch` nên phải
+  // tự làm bước đó.
+  ghiTin.ghiTinDenVaoHistory(ACC, msg, { luuAnhNgay: false });
+  return msg;
+};
 
 /** Step 1 gọi send_file, step 2 chốt bằng text */
 function modelGoiSendFile(caption: string, cauChot: string) {
@@ -162,9 +171,8 @@ describe("processBatch - tin do tool gửi vào history", () => {
   });
 
   it("thứ tự history đúng: tin người dùng -> tin tool gửi -> câu chốt của agent", async () => {
-    // Đây là lý do tool KHÔNG tự gọi `appendMessage`: tin của người dùng được
-    // ghi ở CUỐI lượt (ghi trước thì model thấy tin lặp hai lần), nên tool ghi
-    // thẳng lúc gửi sẽ nằm TRƯỚC tin người dùng - sai thứ tự thật.
+    // Tin người dùng vào lịch sử từ lúc NHẬN, tin do tool gửi ghi ngay lúc
+    // gửi, câu chốt ghi sau cùng - ba mốc theo đúng thứ tự thời gian thật.
     await processor.processBatch(config, api, [tinNhan("gửi mình bảng giá")], {
       resolveModel: () => modelGoiSendFile("Bảng giá đây", "Em gửi rồi ạ"),
     });

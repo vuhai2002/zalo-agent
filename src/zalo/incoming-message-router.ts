@@ -2,8 +2,7 @@ import type { API } from "zca-js";
 import { getAccount } from "../config/account-store.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { recordContactActivity } from "../conversation/contact-store.js";
-import { appendMessage, setMessageImages } from "../conversation/history-store.js";
-import { imagePathsOf, persistBatchImages } from "../conversation/media-store.js";
+import { persistBatchImages } from "../conversation/media-store.js";
 import {
   hasDisplayName,
   isBotEnabled,
@@ -17,7 +16,8 @@ import { maybeNotifyBusyWait } from "./busy-wait-notice.js";
 import { sendDeliveredReceipt } from "./message-receipts.js";
 import { processBatch } from "./message-turn-processor.js";
 import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
-import { describeForHistory, parseIncomingMessage, type ParsedMessage } from "./zalo-message-parser.js";
+import { ganAnhVaoHistory, ghiTinDenVaoHistory } from "./record-incoming-message.js";
+import { parseIncomingMessage } from "./zalo-message-parser.js";
 
 const log = createLogger("message-router");
 
@@ -61,7 +61,8 @@ export function routeIncomingMessage(
 
   if (!decision.respond) {
     if (decision.record) {
-      ghiVaoHistory(config.id, msg);
+      // Không có lượt agent nào sắp chạy nên phải tự tải ảnh
+      ghiTinDenVaoHistory(config.id, msg, { luuAnhNgay: true });
     }
     log.debug(
       { accountId: config.id, threadId: msg.threadId, reason: decision.reason },
@@ -70,22 +71,36 @@ export function routeIncomingMessage(
     return;
   }
 
+  // Ghi TRƯỚC khi xếp hàng, không đợi lượt agent chạy xong: thứ tự trong lịch
+  // sử phải là thứ tự người ta gửi. Ảnh để lượt agent tải (nó AWAIT vì cần
+  // `localPath` trước khi dựng nội dung cho model) rồi gắn vào chính dòng này.
+  //
+  // Nhờ ghi ở đây mà nhánh "chạm trần hàng chờ" bên dưới không còn phải tự ghi
+  // lấy: trước đây `processBatch` là nơi DUY NHẤT ghi cho nhánh có-trả-lời nên
+  // tin bị bỏ sẽ mất hẳn khỏi lịch sử, dù `sendDeliveredReceipt` đã báo "đã
+  // nhận" và người ta đinh ninh bot có nghe.
+  // Bọc try/catch vì bước này nay chạy TRƯỚC `enqueueMessage`: DB khoá hay đĩa
+  // đầy mà ném ra thì tin không chỉ mất khỏi lịch sử, nó còn không bao giờ tới
+  // được lượt trả lời. Ghi hỏng là chuyện đáng báo động nhưng vẫn phải trả lời
+  // người ta - trước đây bước ghi nằm trong `try` của `processBatch` nên có sẵn
+  // tính chất này.
+  try {
+    ghiTinDenVaoHistory(config.id, msg, { luuAnhNgay: false });
+  } catch (err) {
+    log.error({ accountId: config.id, threadId: msg.threadId, err }, "Không ghi được tin vào history - vẫn trả lời");
+  }
+
   const threadKey = `${config.id}:${msg.threadId}`;
   const daNhan = enqueueMessage(threadKey, msg, (batch) => processBatch(config, api, batch));
 
-  // Chạm trần hàng chờ. Tin không tới được `processBatch` - mà đó là nơi DUY
-  // NHẤT ghi history cho nhánh có-trả-lời - nên phải tự ghi ở đây. Không ghi
-  // thì tin biến mất khỏi cả cuộc hội thoại lẫn trí nhớ của bot, trong khi
-  // `sendDeliveredReceipt` bên trên đã báo "đã nhận" và người ta đinh ninh bot
-  // có nghe. Với bot cá nhân, im lặng nuốt một câu người ta đã nói là kết cục
-  // tệ nhất - cùng lý do đã chốt cho job lịch hẹn trễ hạn.
-  //
-  // ĐÁNH ĐỔI đã biết: dòng này ghi NGAY, còn batch đang đỗ thì mãi tới lúc lượt
-  // chạy xong mới ghi - nên trong history tin bị bỏ nằm TRƯỚC những tin đến
-  // trước nó. Chấp nhận: sai thứ tự một tin trong một ca bệnh lý vẫn hơn mất
-  // hẳn tin đó. Đường passive bên trên vốn đã có đúng tính chất này.
   if (!daNhan) {
-    ghiVaoHistory(config.id, msg);
+    // Tin đã nằm trong lịch sử rồi, nhưng KHÔNG lượt nào tải ảnh cho nó nữa -
+    // phải tự tải, không thì dòng này mãi mãi không có đường dẫn ảnh
+    if (msg.images.length > 0) {
+      void persistBatchImages(config.id, [msg])
+        .then(() => ganAnhVaoHistory([msg]))
+        .catch((err) => log.debug({ threadId: msg.threadId, err }, "Không gắn được ảnh vào history"));
+    }
     log.warn(
       { accountId: config.id, threadId: msg.threadId },
       "Tin bị bỏ khỏi lượt vì hàng chờ chạm trần - đã ghi vào history để bot còn biết",
@@ -102,27 +117,6 @@ export function routeIncomingMessage(
     threadId: msg.threadId,
     threadType: msg.threadType,
   }).catch((err) => log.debug({ threadId: msg.threadId, err }, "Gửi câu trấn an thất bại"));
-}
-
-/**
- * Ghi 1 tin vào history ngay lập tức.
- *
- * Ảnh tải xong (async) mới gắn vào row qua id - `persistBatchImages` không bao
- * giờ reject nên fire-and-forget được.
- */
-function ghiVaoHistory(accountId: string, msg: ParsedMessage): void {
-  const rowId = appendMessage(accountId, msg.threadId, {
-    role: "user",
-    content: describeForHistory(msg),
-    senderName: msg.senderName,
-    senderId: msg.senderId,
-    createdAt: msg.sentAt,
-  });
-  if (msg.images.length > 0) {
-    void persistBatchImages(accountId, [msg]).then(() => {
-      setMessageImages(rowId, imagePathsOf(msg.images));
-    });
-  }
 }
 
 /** Lấy tên group 1 lần khi gặp lần đầu, cache vào bảng threads */

@@ -1,10 +1,10 @@
 /**
  * Mốc giờ NGƯỜI TA GỬI một tin Zalo, đọc từ `data.ts` của zca-js.
  *
- * Vì sao không dùng giờ ghi vào DB: tin được ghi vào history ở CUỐI lượt
- * (`message-turn-processor.ts`), nên một lượt chạy 249 giây làm `created_at`
- * lệch 4 phút so với lúc người ta thật sự bấm gửi. Chính con số đó là thứ model
- * đọc để hiểu "hôm nay", "vừa nãy", "sáng nay". Cả Hermes
+ * Vì sao không dùng giờ ghi vào DB: giờ ghi là giờ tin TỚI LISTENER, không phải
+ * giờ người ta bấm gửi. Listener nối lại sau khi mất mạng nhận một loạt tin cũ
+ * là hai mốc lệch nhau hàng giờ. Chính con số đó là thứ model đọc để hiểu "hôm
+ * nay", "vừa nãy", "sáng nay". Cả Hermes
  * (`gateway/message_timestamps.py` - lấy `event.timestamp` của nền tảng) lẫn
  * goclaw (`channels/telegram/handlers.go` - `time.Unix(message.Date)`) đều lấy
  * giờ từ NỀN TẢNG chứ không phải giờ xử lý.

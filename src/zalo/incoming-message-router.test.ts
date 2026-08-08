@@ -6,10 +6,13 @@ import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 /**
  * Test cho CỬA VÀO của mọi tin nhắn.
  *
- * Trọng tâm: tin nào cũng phải để lại dấu vết trong history, kể cả tin bot
- * không xử lý. Nhánh dễ mất nhất là tin bị hàng chờ gộp BỎ vì chạm trần - nó
- * không bao giờ tới `processBatch`, mà đó là nơi DUY NHẤT ghi history cho
- * nhánh có-trả-lời.
+ * Trọng tâm: tin nào cũng phải để lại dấu vết trong history NGAY LÚC NHẬN, kể
+ * cả tin bot không xử lý và tin bị hàng chờ gộp BỎ vì chạm trần.
+ *
+ * Bản trước chỉ ghi ngay ở hai nhánh đặc biệt (passive-listen và tin bị bỏ),
+ * còn tin có-trả-lời đợi tới cuối lượt mới ghi. Nay mọi tin đi chung một
+ * đường - xem `record-incoming-message.ts` cho lý do (thứ tự trong DB phải là
+ * thứ tự người ta gửi, không phải thứ tự lượt kết thúc).
  *
  * `setupTestEnv()` phải chạy TRƯỚC mọi import chạm DB (luật ở CLAUDE.md), nên
  * mọi module dưới đây đều import động.
@@ -59,12 +62,39 @@ function tinRaw(threadId: string, text: string, msgId: string) {
   };
 }
 
+/**
+ * Trần lớn hơn hẳn `HISTORY_CONTEXT_LIMIT` (mặc định 20): ca chạm trần hàng chờ
+ * ghi tới 35 dòng, đọc bằng trần mặc định thì mất 15 dòng đầu và khẳng định về
+ * số lượng đo nhầm chính cái trần đó.
+ */
 function noiDungHistory(threadId: string): string[] {
-  return history.getRecentMessages(ACC, threadId).map((m) => m.content);
+  return history.getRecentMessages(ACC, threadId, 500).map((m) => m.content);
 }
 
-describe("routeIncomingMessage - tin bị bỏ vì hàng chờ chạm trần", () => {
-  it("vẫn vào history, để bot còn biết người ta đã nói gì", async () => {
+describe("routeIncomingMessage - ghi lịch sử ngay lúc nhận", () => {
+  it("ghi NGAY, không đợi lượt chạy xong", async () => {
+    const threadId = "thread-ghi-ngay";
+
+    router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw(threadId, "chào bot", "m-don"));
+
+    // Chưa có sleep, chưa lượt nào chạy - tin phải đã nằm trong lịch sử.
+    // Đây là bất biến cho phép lượt chạy song song mà thứ tự vẫn đúng.
+    assert.deepEqual(noiDungHistory(threadId), ["chào bot"]);
+    batcher.clearPendingBatches();
+  });
+
+  it("ghi đúng MỘT dòng cho mỗi tin, theo đúng thứ tự người ta gửi", async () => {
+    const threadId = "thread-thu-tu";
+
+    for (const [i, chu] of ["câu một", "câu hai", "câu ba"].entries()) {
+      router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw(threadId, chu, `m-tt-${i}`));
+    }
+
+    assert.deepEqual(noiDungHistory(threadId), ["câu một", "câu hai", "câu ba"]);
+    batcher.clearPendingBatches();
+  });
+
+  it("tin bị bỏ vì hàng chờ chạm trần VẪN vào history - không im lặng nuốt", async () => {
     const threadId = "thread-tran-history";
     const threadKey = `${ACC}:${threadId}`;
 
@@ -83,14 +113,10 @@ describe("routeIncomingMessage - tin bị bỏ vì hàng chờ chạm trần", (
       router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw(threadId, `tin-${i}`, `m${i}`));
     }
 
-    // Lượt vẫn đang chạy nên batch chưa chốt, chưa tin nào của batch vào history.
-    // Nhưng tin BỊ BỎ phải đã có mặt - đó là toàn bộ điểm của bản vá.
+    // MỌI tin đều đã vào lịch sử, cả tin lọt batch lẫn tin bị bỏ. Người nhắn đã
+    // nhận dấu "đã nhận" nên im lặng nuốt bất kỳ tin nào cũng là kết cục tệ.
     const daGhi = noiDungHistory(threadId);
-    assert.equal(
-      daGhi.length,
-      soThua,
-      `chỉ ${soThua} tin bị bỏ được ghi ngay, nhận ${daGhi.length}`,
-    );
+    assert.equal(daGhi.length, tong, `mong ${tong} dòng, nhận ${daGhi.length}`);
     for (let i = 0; i < soThua; i++) {
       const text = `tin-${batcher.TRAN_TIN_DON + i}`;
       assert.ok(
@@ -104,18 +130,5 @@ describe("routeIncomingMessage - tin bị bỏ vì hàng chờ chạm trần", (
     batcher.clearPendingBatches();
     nha();
     await sleep(30);
-  });
-
-  it("tin nằm trong trần KHÔNG bị ghi hai lần", async () => {
-    // Đối chứng: nếu ghi cả tin lọt batch ở router thì mọi tin sẽ vào history
-    // hai lần (một lần ở đây, một lần ở `processBatch`) và model đọc thấy
-    // người dùng lặp lại y hệt mọi câu.
-    const threadId = "thread-khong-trung";
-
-    router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw(threadId, "chào bot", "m-don"));
-    await sleep(10);
-
-    assert.deepEqual(noiDungHistory(threadId), [], "chưa chốt lượt thì router không được ghi gì");
-    batcher.clearPendingBatches();
   });
 });

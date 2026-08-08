@@ -77,11 +77,13 @@ const pending = new Map<string, PendingBatch>();
 /**
  * Nhận 1 tin vào hàng gộp.
  *
- * Trả `false` khi tin BỊ BỎ vì chạm trần. Caller PHẢI xử lý giá trị này: tin bị
- * bỏ không bao giờ tới `processBatch`, mà đó lại là nơi DUY NHẤT ghi history
- * cho nhánh có-trả-lời. Bỏ qua giá trị trả về nghĩa là tin biến mất khỏi cả
- * cuộc hội thoại lẫn trí nhớ của bot, trong khi người nhắn đã nhận dấu "đã
- * nhận" từ trước và đinh ninh bot có nghe.
+ * Trả `false` khi tin BỊ BỎ vì chạm trần. Tin đó không bao giờ tới
+ * `processBatch`, nên caller phải tự lo phần việc mà lượt agent lẽ ra làm hộ.
+ *
+ * Từ khi tin được ghi vào lịch sử NGAY LÚC NHẬN
+ * (`record-incoming-message.ts`), phần việc đó rút xuống còn TẢI ẢNH - lịch sử
+ * đã có tin rồi. Trước đây `processBatch` là nơi DUY NHẤT ghi history cho nhánh
+ * có-trả-lời nên bỏ qua giá trị này là mất hẳn tin.
  */
 export function enqueueMessage(
   threadKey: string,
@@ -175,6 +177,27 @@ export function layTinDangDo(threadKey: string): ParsedMessage[] {
 }
 
 /**
+ * id các dòng lịch sử của tin ĐANG CHỜ trong hàng gộp của thread.
+ *
+ * Lượt agent dùng để loại chúng khỏi phần lịch sử của mình: tin đã được ghi vào
+ * lịch sử NGAY LÚC NHẬN, nên tin tới sau khi batch chốt nhưng trước khi lượt
+ * đọc lịch sử sẽ vừa nằm trong lịch sử vừa bị `layTinDangDo` kéo ra chèn giữa
+ * lượt - model đọc cùng một yêu cầu hai lần.
+ *
+ * KHÔNG đụng tới hàng chờ: chỉ đọc, không lấy đi. Việc lấy vẫn là của
+ * `layTinDangDo` ở ranh giới step, và nó có luật riêng (còn gõ dở thì không
+ * lấy). Hai hàm cố ý không dùng chung điều kiện: chỗ này phải loại CẢ tin còn
+ * đang gõ dở, vì tin đó cũng không thuộc lịch sử của lượt này.
+ */
+export function idTinDangCho(threadKey: string): number[] {
+  const batch = pending.get(threadKey);
+  if (!batch) return [];
+  return batch.messages
+    .map((m) => m.historyRowId)
+    .filter((id): id is number => id !== undefined);
+}
+
+/**
  * Thread vừa rảnh: chạy batch đang đỗ (nếu có).
  *
  * Còn timer nghĩa là người ta vẫn đang gõ dở một cụm tin - để timer tự lo, đừng
@@ -208,8 +231,10 @@ export function activeThreadCount(): number {
  * Hủy tin đang chờ của ĐÚNG một thread. Dùng khi xóa sạch ngữ cảnh thread đó.
  *
  * Không có bước này thì xóa xong, cái batch đang đỗ trong hàng chờ vẫn chạy
- * tiếp và ghi ngược tin cũ vào lịch sử vừa dọn - người dùng bấm xóa rồi vẫn
- * thấy tin xuất hiện lại, không hiểu vì sao.
+ * tiếp: bot trả lời một câu hỏi thuộc ngữ cảnh vừa bị dọn, và câu trả lời đó
+ * ghi ngược vào lịch sử trống - người dùng bấm xóa rồi vẫn thấy tin xuất hiện
+ * lại, không hiểu vì sao. (Tin của NGƯỜI DÙNG thì đã vào lịch sử từ lúc nhận
+ * nên chính lệnh xóa đã dọn nó đi rồi.)
  *
  * KHÔNG đụng tới lượt đang CHẠY: cắt ngang giữa chừng thì tool đang gửi file
  * hay đang vẽ ảnh bị bỏ dở, mà lượt đó vẫn ghi kết quả lúc kết thúc. Lượt đang
