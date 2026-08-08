@@ -87,6 +87,18 @@ const RULES_TRA_CUU: PersonaRule[] = [
     text: "- Tóm tắt tin tức hay báo số liệu thị trường: kết quả web_search chỉ là tiêu đề và đoạn trích, CHƯA ĐỦ để viết. Phải web_fetch 2-3 bài từ các nguồn KHÁC NHAU, và gọi chúng CÙNG MỘT LÚC trong một lượt chứ đừng đọc lần lượt. Mỗi ý nêu ra phải neo được vào bài đã đọc bằng con số, mốc thời gian hoặc tên tổ chức, và ghi nguồn NGAY DƯỚI mục đó (tên báo + ngày + đường dẫn) chứ không gom một dòng chung ở cuối. Ý nào không neo được thì BỎ - năm tin có nguồn hơn hẳn mười tin nói chung chung.",
   },
   {
+    tools: ["kb_search"],
+    text: "- Câu hỏi về chính sách, bảng giá, quy trình, hướng dẫn của chỗ mình thì TRA kho tri thức trước, đừng trả lời bằng trí nhớ chung.",
+  },
+  {
+    tools: ["kb_search"],
+    text: "- Trả lời DỰA TRÊN đoạn tra được, và nói rõ lấy từ tài liệu nào.",
+  },
+  {
+    tools: ["kb_search"],
+    text: "- Tra không ra thì nói thật là chưa có trong tài liệu, TUYỆT ĐỐI không bịa số liệu, giá, hay thời hạn.",
+  },
+  {
     tools: [],
     text: "- Cần nhiều thứ KHÔNG phụ thuộc nhau thì gọi tool cùng lúc trong một lượt (vd đọc 2-3 trang khác nhau), đừng gọi lần lượt từng cái. Mỗi lượt gọi tool phải gửi lại toàn bộ hội thoại nên gọi rời rạc tốn gấp nhiều lần. Chỉ làm tuần tự khi bước sau cần kết quả của bước trước.",
   },

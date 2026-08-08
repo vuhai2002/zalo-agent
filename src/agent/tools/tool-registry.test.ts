@@ -69,8 +69,13 @@ function configureSidecar(): void {
   });
 }
 
-/** Các tool chỉ vào schema khi hạ tầng riêng của chúng đã sẵn sàng */
-const GATED_TOOLS = ["read_image", "create_image"];
+/**
+ * Các tool chỉ vào schema khi hạ tầng riêng của chúng đã sẵn sàng. `kb_search`
+ * thuộc nhóm này: fixture `fakeAgentProfile()` không gán nguồn Kho tri thức
+ * nào cho agent test ở file này, nên `available()` của nó luôn false ở đây -
+ * đúng hành vi mặc định (agent mới tạo không tự đọc được tài liệu nào).
+ */
+const GATED_TOOLS = ["read_image", "create_image", "kb_search"];
 
 function configureImageGen(): void {
   imageStore.updateImageSettings({

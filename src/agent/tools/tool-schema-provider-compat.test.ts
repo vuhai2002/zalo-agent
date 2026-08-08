@@ -24,6 +24,9 @@ let dataDir: string;
 let registry: typeof import("./tool-registry.js");
 let visionStore: typeof import("../../config/runtime-vision-settings.js");
 let imageStore: typeof import("../../config/runtime-image-settings.js");
+let kbSourceStore: typeof import("../../knowledge/kb-source-store.js");
+let kbChunkStore: typeof import("../../knowledge/kb-chunk-store.js");
+let kbBinding: typeof import("../../knowledge/kb-agent-binding.js");
 let aiMod: typeof import("ai");
 
 before(async () => {
@@ -31,9 +34,12 @@ before(async () => {
   registry = await import("./tool-registry.js");
   visionStore = await import("../../config/runtime-vision-settings.js");
   imageStore = await import("../../config/runtime-image-settings.js");
+  kbSourceStore = await import("../../knowledge/kb-source-store.js");
+  kbChunkStore = await import("../../knowledge/kb-chunk-store.js");
+  kbBinding = await import("../../knowledge/kb-agent-binding.js");
   aiMod = await import("ai");
 
-  // Bật hạ tầng của 2 tool có cửa kiểm, để bộ quét thấy ĐỦ 13 tool chứ không
+  // Bật hạ tầng của 3 tool có cửa kiểm, để bộ quét thấy ĐỦ 14 tool chứ không
   // âm thầm bỏ sót đúng tool đang hỏng
   visionStore.updateVisionSettings({
     sidecarBaseUrl: "https://vision.test/v1",
@@ -41,6 +47,12 @@ before(async () => {
     sidecarApiKey: "k",
   });
   imageStore.updateImageSettings({ baseUrl: "https://router.test", model: "m", apiKey: "k" });
+
+  // kb_search chỉ vào schema khi agent test (id "agent-test", xem fakeAgentProfile)
+  // đã được gán ít nhất một nguồn Kho tri thức.
+  const nguon = kbSourceStore.taoNguon({ ten: "Nguồn test", loai: "text", noiDungGoc: "Nội dung test." });
+  kbChunkStore.luuDoan(nguon.id, [{ thuTu: 0, tieuDe: "", noiDung: "Nội dung test." }]);
+  kbBinding.datNguonChoAgent("agent-test", [nguon.id]);
 });
 
 after(async () => {
@@ -97,7 +109,7 @@ function schemaCuaTungTool(): { ten: string; schema: unknown }[] {
 describe("schema tool - hình dạng mà nhà cung cấp soi chặt vẫn nhận", () => {
   it("quét được đủ bộ tool, không phải mảng rỗng đọc ra như đã đạt", () => {
     const ds = schemaCuaTungTool();
-    assert.ok(ds.length >= 13, `chỉ dựng được ${ds.length} tool - bộ quét đang nhìn hụt`);
+    assert.ok(ds.length >= 14, `chỉ dựng được ${ds.length} tool - bộ quét đang nhìn hụt`);
   });
 
   /**
@@ -206,7 +218,7 @@ describe("schema tool - hình dạng mà nhà cung cấp soi chặt vẫn nhận
     const soConst = nut.filter((x) => "const" in x.nut).length;
     const soEnum = nut.filter((x) => Array.isArray(x.nut.enum)).length;
 
-    assert.ok(soConst > 0, "không thấy nút const nào trong cả 13 tool - bộ quét đang mù");
-    assert.ok(soEnum > 0, "không thấy nút enum nào trong cả 13 tool - bộ quét đang mù");
+    assert.ok(soConst > 0, "không thấy nút const nào trong cả 14 tool - bộ quét đang mù");
+    assert.ok(soEnum > 0, "không thấy nút enum nào trong cả 14 tool - bộ quét đang mù");
   });
 });

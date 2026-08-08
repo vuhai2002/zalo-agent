@@ -61,6 +61,14 @@ describe("toolPersonaSections", () => {
     assert.ok(!chiVeAnh.includes("web_search"), "không có tool web thì đừng dạy web_search");
     assert.ok(chiVeAnh.includes("không bịa số liệu"), "luật chống bịa áp cho mọi tool");
   });
+
+  it("bật kb_search thì có luật tra kho trước khi trả lời bằng trí nhớ chung, tắt thì mất", () => {
+    const bat = gop(["kb_search"]);
+    const tat = gop(["web_search"]);
+    assert.ok(bat.includes("TRA kho tri thức trước"), "bật thì phải có luật tra kho");
+    assert.ok(bat.includes("nói rõ lấy từ tài liệu nào"), "bật thì phải có luật dẫn nguồn");
+    assert.ok(!tat.includes("kho tri thức"), "tắt kb_search rồi mà vẫn dạy luật tra kho");
+  });
 });
 
 describe("buildSystemPrompt ghép luật theo tool đang bật", () => {

@@ -23,6 +23,22 @@ const fetchUpdateSchema = z.object({
 });
 
 /**
+ * Catalog này KHÔNG BIẾT agent/account nào đang xem - trang Tools liệt kê cho
+ * MỌI account, còn phần "agent nào" chỉ tô thêm ở FRONTEND (tools-page.tsx đối
+ * chiếu `agent.disabledTools` sau khi đã tải catalog). `available()` của
+ * `kb_search` cần `scope.agent.id` để tra đúng nguồn đã gán (`nguonCuaAgent`) -
+ * ở route này không có agent thật nào để đưa, nên dùng agent RỖNG (id không
+ * khớp bất kỳ agent thật nào) làm scope trung lập: `nguonCuaAgent("")` luôn ra
+ * mảng rỗng, kb_search luôn báo `available:false` ở catalog chung này.
+ *
+ * Đây là lựa chọn AN TOÀN (thà báo "chưa dùng được" oan còn hơn báo "dùng được"
+ * cho một agent không thật sự có nguồn), không phải câu trả lời đầy đủ - muốn
+ * đúng cho từng agent thì route này cần nhận `agentId` thật, việc đó thuộc
+ * phạm vi trang Kho tri thức (phase 05), không phải phase này.
+ */
+const SCOPE_KHONG_CO_AGENT_THAT = { agent: { id: "", disabledTools: [] }, account: { disabledTools: [] } };
+
+/**
  * /api/tools - catalog tool + cấu hình chuỗi nguồn cho web_search/web_fetch.
  * Một nguồn duy nhất từ tool-registry (giống reaction-icons) - frontend không
  * chép lại. Trạng thái bật/tắt tool per account nằm trong GET /api/accounts.
@@ -35,7 +51,7 @@ export const toolRoutes = new Hono()
         // available = hạ tầng đã sẵn sàng chưa (khác với bật/tắt per account).
         // Thiếu cờ này thì UI hiện tool bật sẵn trong khi model không hề nhận
         // được nó - người dùng tưởng bot có khả năng đó mà không có.
-        const available = t.available ? t.available() : true;
+        const available = t.available ? t.available(SCOPE_KHONG_CO_AGENT_THAT) : true;
         return {
           key: t.key,
           label: t.label,

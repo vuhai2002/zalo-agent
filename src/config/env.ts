@@ -280,6 +280,9 @@ const envSchema = z.object({
   // cho corpus cỡ TREC hàng nghìn tài liệu; kho 100-300 trang thì khuyến nghị
   // 10-20, k nhỏ hơn làm top của mỗi danh sách có trọng lượng hơn.
   KB_RRF_K: z.coerce.number().int().min(5).max(100).default(20),
+  // Trần ký tự cho TOÀN BỘ chuỗi kết quả tool kb_search (thẻ bọc + tên nguồn +
+  // nội dung), không phải riêng từng đoạn.
+  KB_MAX_RESULT_CHARS: z.coerce.number().int().min(500).max(20_000).default(4000),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

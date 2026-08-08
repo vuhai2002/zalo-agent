@@ -1,7 +1,6 @@
 import type { Tool } from "ai";
-import type { AccountConfig } from "../../config/account-store.js";
-import type { AgentProfile } from "../../config/agent-store.js";
 import { TOOL_DEFINITIONS, type ToolContext, type ToolDefinition } from "./tool-catalog.js";
+import type { ToolScope } from "./tool-catalog-types.js";
 
 /**
  * Logic lọc + dựng tool cho 1 lượt agent. Hình dạng dữ liệu (type + catalog
@@ -10,9 +9,10 @@ import { TOOL_DEFINITIONS, type ToolContext, type ToolDefinition } from "./tool-
  * gián tiếp qua "index.js") như cũ, không phải sửa call site nào khác.
  */
 export { TOOL_DEFINITIONS, TOOL_KEYS, type ToolContext, type ToolDefinition, type ToolGroup } from "./tool-catalog.js";
-
 /**
- * Hai lớp cùng quyết định một tool có được cấp hay không.
+ * `ToolScope` bản thân khai ở `tool-catalog-types.ts` (lý do ở đó: tránh vòng
+ * import với `available()`) - re-export lại để chỗ nào từng `import type
+ * { ToolScope } from "./tool-registry.js"` không phải sửa đường dẫn.
  *
  * - `agent` khai NĂNG LỰC: agent này biết làm những việc gì.
  * - `account` áp CHÍNH SÁCH: nick Zalo này được phép làm gì.
@@ -21,10 +21,7 @@ export { TOOL_DEFINITIONS, TOOL_KEYS, type ToolContext, type ToolDefinition, typ
  * nào bật ngược lại được bên kia - nhờ vậy thêm một agent mới không bao giờ nới
  * rộng được quyền của một nick, kể cả khi agent đó được tạo cẩu thả.
  */
-export type ToolScope = {
-  agent: Pick<AgentProfile, "disabledTools">;
-  account: Pick<AccountConfig, "disabledTools">;
-};
+export type { ToolScope } from "./tool-catalog-types.js";
 
 /**
  * Bộ tool đưa vào lượt agent, đã bỏ tool agent tắt, tool account tắt trên
@@ -72,6 +69,6 @@ export function listAvailableTools(
     if (disabled.has(def.key)) return false;
     if (context.isolated && def.runsInScheduledTurn === false) return false;
     // Kiểm mỗi lượt: cấu hình từ dashboard ăn ngay không cần restart
-    return !def.available || def.available();
+    return !def.available || def.available(scope);
   });
 }

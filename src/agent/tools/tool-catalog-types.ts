@@ -19,8 +19,7 @@ export type ToolContext = {
   /**
    * Agent đang chạy lượt này. BẮT BUỘC (không optional) vì nó là một trong hai
    * lớp quyết định tool nào được cấp - để optional thì quên truyền sẽ âm thầm
-   * cấp thừa tool thay vì báo lỗi biên dịch. Xem `ToolScope` ở
-   * `tool-registry.ts`.
+   * cấp thừa tool thay vì báo lỗi biên dịch. Xem `ToolScope` ở trên.
    */
   agent: AgentProfile;
   /** Tin cuối của lượt - tools tác động (reaction, quote) nhắm vào tin này */
@@ -61,6 +60,22 @@ export type ToolContext = {
  */
 export type ToolGroup = "read" | "action";
 
+/**
+ * Hai lớp cùng quyết định một tool có được cấp hay không (đủ lý do ở
+ * `tool-registry.ts#listAvailableTools`): `agent` khai NĂNG LỰC, `account` áp
+ * CHÍNH SÁCH. Khai Ở ĐÂY (không phải `tool-registry.ts`) vì `available()` bên
+ * dưới cần type này, mà `tool-registry.ts` import ngược qua `tool-catalog.ts`
+ * rồi mới tới file này - khai ở chiều ngược lại sẽ tạo vòng import.
+ *
+ * `agent` giờ có thêm `id` (trước chỉ `disabledTools`) từ khi `kb_search` cần
+ * biết đang dựng tool cho AGENT NÀO để tra đúng nguồn Kho tri thức đã gán
+ * riêng cho agent đó (`nguonCuaAgent(scope.agent.id)`).
+ */
+export type ToolScope = {
+  agent: Pick<AgentProfile, "id" | "disabledTools">;
+  account: Pick<AccountConfig, "disabledTools">;
+};
+
 export type ToolDefinition = {
   /** Tên tool trong schema gửi LLM - đổi là model mất trí nhớ về tool */
   key: string;
@@ -78,8 +93,13 @@ export type ToolDefinition = {
    * Điều kiện runtime để tool vào schema (kiểm mỗi lượt, ngoài chuyện bật/tắt
    * per account). Tool thiếu hạ tầng (read_image chưa có sidecar) mà vẫn vào
    * schema thì chỉ tốn token mô tả và dụ model gọi để nhận lỗi.
+   *
+   * Nhận `scope` (agent + account) từ khi `kb_search` cần biết đang dựng cho
+   * AGENT NÀO - trước đó không tool nào cần hơn "hạ tầng đã cấu hình chưa" nên
+   * chữ ký cũ không có tham số. Tool không cần biết agent thì cứ khai
+   * `available: () => ...` như trước, JS/TS cho gọi hàm bỏ qua tham số thừa.
    */
-  available?: () => boolean;
+  available?: (scope: ToolScope) => boolean;
   /**
    * Hiện trên trang Tools khi `available()` false - phải nói RÕ thiếu gì và
    * sửa ở đâu. Không có dòng này thì UI hiện tool bật sẵn trong khi model

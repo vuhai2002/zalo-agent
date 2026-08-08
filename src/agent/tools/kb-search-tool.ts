@@ -1,0 +1,84 @@
+import { tool } from "ai";
+import { z } from "zod";
+import { getTuning } from "../../config/runtime-tuning-settings.js";
+import { timTrongKhoTriThuc, type KetQuaKb } from "../../knowledge/kb-search.js";
+import { THE_NOI_DUNG_NGOAI } from "../prompt-leak-markers.js";
+import { createLogger } from "../../shared/logger.js";
+import { KB_SEARCH_DESCRIPTION } from "./kb-search-tool-description.js";
+import type { ToolContext } from "./index.js";
+import { ketQuaLoi } from "./tool-failure-result.js";
+import { wrapUntrustedContent } from "./wrap-untrusted-content.js";
+
+/**
+ * Tool cho model tự tra Kho tri thức của agent (nạp bằng TOOL, không tự nhét
+ * vào prompt - lý do đầy đủ ở phase-04-tool-kb-search.md: giữ nguyên khoản
+ * đầu tư prompt cache của những lượt không đụng tới KB).
+ *
+ * Chỉ có mặt trong schema khi agent đã được gán ít nhất một nguồn (xem
+ * `available` ở `tool-catalog-read.ts`) - bày một tool luôn trả rỗng chỉ dạy
+ * model gọi vô ích.
+ */
+const log = createLogger("kb-search");
+
+/**
+ * `timTrongKhoTriThuc` (kb-search.ts) KHÔNG tự kẹp `soLuong` - SQLite coi
+ * `LIMIT` âm là "không giới hạn" (xem `kb-fts-query.ts`). Tầng tool là biên
+ * cuối cùng trước khi giá trị này chạm SQL nên PHẢI tự kẹp ở đây, không tin
+ * giá trị đọc từ cấu hình (hay từ bất kỳ đâu khác) luôn nằm trong khoảng hợp
+ * lệ. Khoảng khớp min/max của KB_TOP_K ở `tuning-definitions.ts`.
+ */
+const SO_LUONG_MIN = 1;
+const SO_LUONG_MAX = 20;
+
+export function kepSoLuong(raw: number): number {
+  // Chỉ NaN mới không phải một con số thật - Infinity vẫn kẹp bình thường qua
+  // Math.min/Math.max bên dưới (Number.isFinite(Infinity) === false nên KHÔNG
+  // dùng nó ở đây, kẻo Infinity bị coi ngang NaN và luôn rơi về tối thiểu).
+  if (Number.isNaN(raw)) return SO_LUONG_MIN;
+  return Math.min(SO_LUONG_MAX, Math.max(SO_LUONG_MIN, Math.trunc(raw)));
+}
+
+/** Mỗi đoạn kèm TÊN NGUỒN để model dẫn nguồn lại được cho người hỏi */
+function dinhDangDoan(d: KetQuaKb): string {
+  const nhan = d.tieuDe ? `${d.tenNguon} - ${d.tieuDe}` : d.tenNguon;
+  return `[Nguồn: ${nhan}]\n${d.noiDung}`;
+}
+
+export function createKbSearchTool(ctx: ToolContext) {
+  return tool({
+    description: KB_SEARCH_DESCRIPTION,
+    inputSchema: z.object({
+      cau_hoi: z.string().min(1).describe("Câu hỏi hoặc từ khóa cần tra, viết bằng tiếng Việt tự nhiên"),
+    }),
+    execute: async ({ cau_hoi }) => {
+      try {
+        const soLuong = kepSoLuong(getTuning("KB_TOP_K"));
+        const ketQua = timTrongKhoTriThuc({ cauHoi: cau_hoi, agentId: ctx.agent.id, soLuong });
+
+        if (ketQua.length === 0) {
+          return ketQuaLoi(
+            `Không tìm thấy nội dung nào khớp "${cau_hoi}" trong kho tri thức. Nói thật là chưa có trong tài liệu, đừng bịa số liệu.`,
+          );
+        }
+
+        const noiDung = ketQua.map(dinhDangDoan).join("\n\n---\n\n");
+        const boc = wrapUntrustedContent(noiDung, `kho tri thức: ${cau_hoi}`);
+
+        // Trần áp cho TOÀN BỘ chuỗi kết quả (đã gồm thẻ bọc + tên nguồn), không
+        // phải riêng nội dung từng đoạn - 5 đoạn x 1600 ký tự đã đủ đẩy ngữ
+        // cảnh sát trần.
+        const maxChars = getTuning("KB_MAX_RESULT_CHARS");
+        if (boc.length <= maxChars) return boc;
+
+        // Vẫn giữ thẻ đóng ở cuối sau khi cắt, để khối `<noi_dung_ngoai>` không
+        // bị bỏ dở - cắt xong nối thêm câu báo + thẻ đóng nên chuỗi ra có thể
+        // dài hơn maxChars một chút (phần vỏ), chấp nhận được.
+        return `${boc.slice(0, maxChars)}\n[...đã rút gọn, kho còn nhiều nội dung hơn]\n</${THE_NOI_DUNG_NGOAI}>`;
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        log.error({ err, cauHoi: cau_hoi }, "Tool kb_search lỗi");
+        return ketQuaLoi(`Tra kho tri thức thất bại (${reason}). Nói thật với người dùng, đừng bịa số liệu.`);
+      }
+    },
+  });
+}

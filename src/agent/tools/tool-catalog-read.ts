@@ -1,6 +1,8 @@
 import { isSidecarConfigured } from "../../config/runtime-vision-settings.js";
+import { nguonCuaAgent } from "../../knowledge/kb-agent-binding.js";
 import { createGetDatetimeTool } from "./get-datetime-tool.js";
 import { createGetGroupInfoTool } from "./get-group-info-tool.js";
+import { createKbSearchTool } from "./kb-search-tool.js";
 import { createReadImageTool } from "./read-image-tool.js";
 import type { ToolDefinition } from "./tool-catalog-types.js";
 import { createWebFetchTool } from "./web-fetch-tool.js";
@@ -59,5 +61,17 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
     description: "Xem tên nhóm, số thành viên, danh sách thành viên của nhóm hiện tại",
     group: "read",
     build: (ctx) => createGetGroupInfoTool(ctx),
+  },
+  {
+    key: "kb_search",
+    label: "Tra kho tri thức",
+    description: "Tra tài liệu do chủ bot nạp lên (chính sách, bảng giá, hướng dẫn)",
+    group: "read",
+    hasSettings: false,
+    // Agent chưa gán nguồn nào thì tra cũng chỉ ra rỗng - bày tool luôn trả
+    // rỗng chỉ dạy model gọi vô ích và tốn một step.
+    available: (scope) => nguonCuaAgent(scope.agent.id).length > 0,
+    unavailableHint: "Chưa bật nguồn nào cho agent này - vào tab Kho tri thức để gán",
+    build: (ctx) => createKbSearchTool(ctx),
   },
 ];

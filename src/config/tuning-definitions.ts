@@ -608,6 +608,15 @@ const TUNING_BY_KEY = {
     min: 5,
     max: 100,
   },
+  KB_MAX_RESULT_CHARS: {
+    kind: "number",
+    group: "kb",
+    label: "Trần ký tự cho kết quả tra kho",
+    hint: "Áp cho TOÀN BỘ chuỗi kết quả tool kb_search (đã gồm thẻ bọc và tên nguồn), không phải riêng từng đoạn - nhiều đoạn cộng lại đủ đẩy ngữ cảnh sát trần.",
+    min: 500,
+    max: 20_000,
+    unit: "ký tự",
+  },
 } as const satisfies Record<string, TuningDef>;
 
 export const TUNING_DEFS: Record<string, TuningDef> = TUNING_BY_KEY;
