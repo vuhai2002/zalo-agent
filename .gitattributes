@@ -1,0 +1,31 @@
+# Ký tự xuống dòng: LF trong kho, CRLF trong thư mục làm việc.
+#
+# Vì sao cần: repo đã dính bẫy này HAI lần. Mọi phép phá code (`pnpm test` xong
+# sửa một dòng rồi đòi test đỏ) đều neo vào chuỗi nhiều dòng; neo bằng `\n` trên
+# file CRLF thì `includes()` báo "không thấy" LẶNG LẼ và phép phá đọc ra y hệt
+# một phép phá thành công. Lần gần nhất một file test mới lọt vào toàn LF trong
+# khi mọi file khác là CRLF - lệch âm thầm, không gì đỏ.
+#
+# `text=auto` để Git tự nhận đâu là văn bản và chuẩn hóa về LF khi ghi vào kho;
+# `eol=crlf` để mọi lần checkout đều trả về CRLF. Nhờ vậy máy nào cũng ra cùng
+# một kiểu, không phụ thuộc `core.autocrlf` của từng người.
+* text=auto eol=crlf
+
+# Nhị phân: khai TƯỜNG MINH thay vì tin vào phép tự nhận. Đoán nhầm một file ảnh
+# là văn bản nghĩa là Git "sửa" byte trong đó - ảnh hỏng vĩnh viễn trong lịch sử,
+# không có đường lùi. Rẻ hơn nhiều so với việc phải chứng minh phép tự nhận đúng.
+*.webp binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.docx binary
+*.xlsx binary
+
+# Lockfile: để Git đối xử như văn bản nhưng ĐỪNG gộp tự động - gộp nhầm một
+# lockfile là cây phụ thuộc sai mà không ai đọc ra được từ diff.
+pnpm-lock.yaml -merge
