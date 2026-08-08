@@ -5,6 +5,7 @@
 
 import { db } from "../conversation/database.js";
 import { boDauTiengViet } from "../shared/bo-dau-tieng-viet.js";
+import { trongGiaoDich } from "../shared/db-transaction.js";
 
 export type DoanMoi = { thuTu: number; tieuDe: string; noiDung: string };
 
@@ -21,33 +22,12 @@ const chenDoanStmt = db.prepare(`
 const chenFtsStmt = db.prepare(`INSERT INTO kb_chunks_fts (rowid, phang) VALUES (?, ?)`);
 
 /**
- * Cùng pattern `trongGiaoDich` của `kb-source-store.ts` (viết tay vì
- * `node:sqlite` không có `db.transaction()`) - xem chú thích ở đó để biết vì
- * sao `BEGIN IMMEDIATE`.
- */
-function trongGiaoDich<T>(viec: () => T): T {
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const ketQua = viec();
-    db.exec("COMMIT");
-    return ketQua;
-  } catch (err) {
-    try {
-      db.exec("ROLLBACK");
-    } catch {
-      /* giữ nguyên lỗi gốc */
-    }
-    throw err;
-  }
-}
-
-/**
  * THAY THẾ toàn bộ đoạn của nguồn, không cộng dồn: mỗi lần cắt lại tài liệu
  * (phase 02) coi như một bản chốt mới, không phải bản vá thêm vào bản cũ - xóa
  * sạch đoạn cũ (cả FTS lẫn `kb_chunks`) rồi chèn lại từ đầu, trong một giao dịch.
  */
 export function luuDoan(sourceId: string, doan: DoanMoi[]): void {
-  trongGiaoDich(() => {
+  trongGiaoDich(db, () => {
     xoaFtsCuaNguonStmt.run(sourceId);
     xoaDoanCuaNguonStmt.run(sourceId);
     for (const d of doan) {

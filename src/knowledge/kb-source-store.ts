@@ -4,6 +4,7 @@
 
 import { randomBytes } from "node:crypto";
 import { db } from "../conversation/database.js";
+import { trongGiaoDich } from "../shared/db-transaction.js";
 
 export type TrangThaiNguon = "cho_xu_ly" | "dang_xu_ly" | "san_sang" | "hong";
 export type LoaiNguon = "file" | "text";
@@ -125,31 +126,8 @@ const xoaDoanCuaNguonStmt = db.prepare(`DELETE FROM kb_chunks WHERE source_id = 
 const xoaGanAgentCuaNguonStmt = db.prepare(`DELETE FROM agent_kb_sources WHERE source_id = ?`);
 const xoaNguonStmt = db.prepare(`DELETE FROM kb_sources WHERE id = ?`);
 
-/**
- * Viết tay `BEGIN IMMEDIATE`/`COMMIT` vì `node:sqlite` KHÔNG có `db.transaction()`
- * như better-sqlite3. `BEGIN IMMEDIATE` lấy khóa ghi ngay từ đầu thay vì nâng
- * cấp giữa chừng - cùng pattern `wipe-thread-context.ts` (chỗ đầu tiên trong
- * repo dùng giao dịch). Cả process dùng CHUNG một connection và không có nơi
- * nào khác mở giao dịch lồng vào thao tác của Kho tri thức.
- */
-function trongGiaoDich<T>(viec: () => T): T {
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const ketQua = viec();
-    db.exec("COMMIT");
-    return ketQua;
-  } catch (err) {
-    try {
-      db.exec("ROLLBACK");
-    } catch {
-      /* giữ nguyên lỗi gốc */
-    }
-    throw err;
-  }
-}
-
 export function xoaNguon(id: string): { soDoanDaXoa: number } {
-  return trongGiaoDich(() => {
+  return trongGiaoDich(db, () => {
     const soDoanDaXoa = (demDoanCuaNguonStmt.get(id) as { n: number }).n;
     xoaFtsCuaNguonStmt.run(id);
     xoaDoanCuaNguonStmt.run(id);

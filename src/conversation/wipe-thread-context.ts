@@ -2,6 +2,7 @@ import { db } from "./database.js";
 import { xoaMoTaAnhTheoDuongDan } from "./image-description-store.js";
 import { xoaMediaCuaThread } from "./media-store.js";
 import { createLogger } from "../shared/logger.js";
+import { trongGiaoDich } from "../shared/db-transaction.js";
 
 /**
  * Xóa sạch ngữ cảnh của MỘT cuộc trò chuyện: bot quên hẳn, như chưa từng nói
@@ -106,39 +107,12 @@ const docEpoch = db.prepare(
   "SELECT context_epoch FROM threads WHERE account_id = ? AND thread_id = ?",
 );
 
-/**
- * Chạy trong một giao dịch. Viết tay vì `node:sqlite` KHÔNG có
- * `db.transaction()` như better-sqlite3 - gọi nhầm hàm đó là lỗi biên dịch,
- * nhưng đây là chỗ ĐẦU TIÊN trong repo dùng giao dịch nên ghi rõ ra.
- *
- * `BEGIN IMMEDIATE` chứ không phải `BEGIN`: lấy khóa ghi ngay từ đầu thay vì
- * nâng cấp giữa chừng. Cả process dùng CHUNG một connection và chưa chỗ nào
- * khác mở giao dịch, nên không có lồng nhau - thêm giao dịch ở nơi khác thì
- * phải kiểm lại điều đó.
- */
-function trongGiaoDich<T>(viec: () => T): T {
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const ketQua = viec();
-    db.exec("COMMIT");
-    return ketQua;
-  } catch (err) {
-    // Rollback hỏng thì nuốt: ném đè lên lỗi gốc là giấu mất nguyên nhân thật
-    try {
-      db.exec("ROLLBACK");
-    } catch {
-      /* giữ nguyên lỗi gốc */
-    }
-    throw err;
-  }
-}
-
 export function xoaNguCanhThread(
   accountId: string,
   threadId: string,
   tuyChon: TuyChonXoa = {},
 ): KetQuaXoaNguCanh {
-  const ketQua = trongGiaoDich((): Omit<KetQuaXoaNguCanh, "anh" | "moTaAnh"> => {
+  const ketQua = trongGiaoDich(db, (): Omit<KetQuaXoaNguCanh, "anh" | "moTaAnh"> => {
     const buocAgent = Number(xoaBuocAgent.run(accountId, threadId).changes);
     const tinNhan = Number(xoaTinNhan.run(accountId, threadId).changes);
     const soDemChuDong = Number(xoaSoDemChuDong.run(accountId, threadId).changes);
