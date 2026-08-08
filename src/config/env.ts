@@ -274,6 +274,12 @@ const envSchema = z.object({
   // Đo 1/2026 trên SPLADE + Mistral-8B: chồng lấn không có lợi ích rõ rệt nên
   // mặc định thấp - vẫn chỉnh được vì kho của người dùng khác corpus benchmark.
   KB_CHUNK_OVERLAP_PERCENT: z.coerce.number().int().min(0).max(50).default(10),
+  // Số đoạn trả về mỗi lần tra cứu (sau khi hợp nhất RRF).
+  KB_TOP_K: z.coerce.number().int().min(1).max(20).default(5),
+  // Hằng số k của RRF - 60 là mặc định của Elasticsearch/OpenSearch/Qdrant
+  // cho corpus cỡ TREC hàng nghìn tài liệu; kho 100-300 trang thì khuyến nghị
+  // 10-20, k nhỏ hơn làm top của mỗi danh sách có trọng lượng hơn.
+  KB_RRF_K: z.coerce.number().int().min(5).max(100).default(20),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

@@ -591,6 +591,23 @@ const TUNING_BY_KEY = {
     max: 50,
     unit: "%",
   },
+  KB_TOP_K: {
+    kind: "number",
+    group: "kb",
+    label: "Số đoạn trả về mỗi lần tra",
+    hint: "Bot đọc bấy nhiêu đoạn liên quan nhất khi tra cứu Kho tri thức. Cao hơn cho model nhiều ngữ cảnh hơn nhưng cũng tốn thêm token.",
+    min: 1,
+    max: 20,
+    unit: "đoạn",
+  },
+  KB_RRF_K: {
+    kind: "number",
+    group: "kb",
+    label: "Hằng số RRF",
+    hint: "Dùng khi hợp nhất nhiều bộ xếp hạng (hiện chỉ có bm25 theo từ khóa). Nhỏ hơn làm kết quả TOP của mỗi bộ có trọng lượng hơn. 60 là mặc định chuẩn ngành cho corpus hàng nghìn tài liệu; kho vài trăm trang thì 10-20 hợp lý hơn.",
+    min: 5,
+    max: 100,
+  },
 } as const satisfies Record<string, TuningDef>;
 
 export const TUNING_DEFS: Record<string, TuningDef> = TUNING_BY_KEY;
