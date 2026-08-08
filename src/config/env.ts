@@ -267,6 +267,14 @@ const envSchema = z.object({
   // cũ hơn bị dọn ngay sau khi ghi lượt mới (cùng pattern prune của history-store).
   SCHEDULER_RUN_LOG_KEEP: z.coerce.number().int().min(5).max(1000).default(50),
 
+  // ===== Kho tri thức (KB): cắt tài liệu nạp lên thành đoạn để tra bằng bm25 =====
+  // 1600 ký tự xấp xỉ 400 token với tiếng Việt (~4 ký tự/token) - đúng khoảng
+  // chuẩn ngành cho nội dung hỏi đáp (400-512 token/đoạn).
+  KB_CHUNK_CHARS: z.coerce.number().int().min(400).max(4000).default(1600),
+  // Đo 1/2026 trên SPLADE + Mistral-8B: chồng lấn không có lợi ích rõ rệt nên
+  // mặc định thấp - vẫn chỉnh được vì kho của người dùng khác corpus benchmark.
+  KB_CHUNK_OVERLAP_PERCENT: z.coerce.number().int().min(0).max(50).default(10),
+
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),
   /**

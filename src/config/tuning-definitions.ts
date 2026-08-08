@@ -119,6 +119,12 @@ export const TUNING_GROUPS: TuningGroup[] = [
     navHint: "Quản lý lịch hẹn",
     hint: "Bot tự nhắn theo lịch: tần suất quét, trần chống spam, giữ log bao lâu.",
   },
+  {
+    id: "kb",
+    title: "Kho tri thức",
+    navHint: "Cắt đoạn tài liệu",
+    hint: "Tài liệu nạp lên được cắt thành đoạn thế nào trước khi lưu để bot tra cứu.",
+  },
 ];
 
 const TUNING_BY_KEY = {
@@ -564,6 +570,26 @@ const TUNING_BY_KEY = {
     min: 5,
     max: 1000,
     unit: "lượt",
+  },
+
+  // --- Kho tri thức ---
+  KB_CHUNK_CHARS: {
+    kind: "number",
+    group: "kb",
+    label: "Độ dài mỗi đoạn",
+    hint: "Tài liệu nạp lên bị cắt thành từng đoạn tối đa bấy nhiêu ký tự, ưu tiên cắt ở ranh giới đoạn văn/câu chứ không cắt cứng giữa từ.",
+    min: 400,
+    max: 4000,
+    unit: "ký tự",
+  },
+  KB_CHUNK_OVERLAP_PERCENT: {
+    kind: "number",
+    group: "kb",
+    label: "Phần chồng lấn giữa hai đoạn",
+    hint: "Đoạn sau lặp lại bấy nhiêu % cuối của đoạn trước, tránh cắt đứt mạch ý nằm vắt qua ranh giới hai đoạn.",
+    min: 0,
+    max: 50,
+    unit: "%",
   },
 } as const satisfies Record<string, TuningDef>;
 
