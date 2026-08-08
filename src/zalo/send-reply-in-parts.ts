@@ -1,6 +1,7 @@
-import type { API, Style, ThreadType } from "zca-js";
+import type { API, SendMessageQuote, Style, ThreadType } from "zca-js";
 import { enqueueSend } from "../middleware/rate-limiter.js";
 import { createLogger } from "../shared/logger.js";
+import { trichDanTrongNganSach } from "./reply-quote.js";
 import { chiaTheoNganSachByte, demDoanBoDinhDang } from "./split-styled-message.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 
@@ -55,6 +56,16 @@ export type ReplyTarget = {
   threadKey: string;
   threadId: string;
   threadType: ThreadType;
+  /**
+   * Tin được trích dẫn khi trả lời (chỉ nhóm - xem `reply-quote.ts`). Chỉ ĐOẠN
+   * ĐẦU của câu trả lời mang nó: các đoạn sau là phần nối tiếp của cùng một
+   * câu, trích lại ở mỗi đoạn chỉ tổ rối. goclaw cũng gỡ `reply_to_message_id`
+   * khỏi các tin trung gian, giữ lại đúng tin chốt.
+   *
+   * Đường gửi của scheduler dùng chung `ReplyTarget` nhưng không đặt trường này
+   * - job theo lịch không trả lời tin nào cả.
+   */
+  quote?: SendMessageQuote;
 };
 
 export type ReplyResult = {
@@ -71,9 +82,20 @@ export type ReplyResult = {
  *
  * Chỉ đính `styles` khi thật sự có - `sendMessage` của zca-js chỉ dựng
  * `textProperties` khi trường này khác rỗng, gửi mảng rỗng là thêm việc thừa.
+ * Cùng lý do với `quote`: có trích dẫn thì zca-js đổi hẳn sang endpoint
+ * `.../quote`, nên đính một giá trị rỗng là đổi đường gọi API mà không được gì.
  */
-function sendOne(target: ReplyTarget, text: string, styles?: Style[]): Promise<unknown> {
-  const msg = styles && styles.length > 0 ? { msg: text, styles } : { msg: text };
+function sendOne(
+  target: ReplyTarget,
+  text: string,
+  styles?: Style[],
+  quote?: SendMessageQuote,
+): Promise<unknown> {
+  const msg = {
+    msg: text,
+    ...(styles && styles.length > 0 ? { styles } : {}),
+    ...(quote ? { quote } : {}),
+  };
   return enqueueSend(target.threadKey, () =>
     target.api.sendMessage(msg, target.threadId, target.threadType),
   );
@@ -102,24 +124,31 @@ export function laLoiMayChuTuChoi(err: unknown): boolean {
  * đen - không có cách nào liệt kê cho đủ. Nên thay vì đoán cho hết, hạ mức hậu
  * quả: tổ hợp style lạ chỉ còn làm tin NHẠT ĐI, không làm mất nội dung.
  *
- * Chỉ thử lại khi thật sự CÓ style để bỏ - không thì lần hai y hệt lần đầu và
- * chỉ tổ nhân đôi một lời gọi API không chính thức.
+ * Chỉ thử lại khi thật sự CÓ thứ để bỏ (style hoặc trích dẫn) - không thì lần
+ * hai y hệt lần đầu và chỉ tổ nhân đôi một lời gọi API không chính thức.
+ *
+ * Lần thử lại bỏ CẢ HAI. Không cố đoán bên nào là thủ phạm: ở nhánh này mục
+ * tiêu duy nhất còn lại là chữ TỚI NƠI, mà mỗi lần đoán sai là thêm một lời gọi
+ * nữa. Trích dẫn cũng là ứng viên thật chứ không phải bịa - có nó thì zca-js
+ * gọi sang endpoint `.../quote` khác hẳn, và phần `qmsg` cộng thêm vào payload.
  */
 async function sendOneCoDuongLui(
   target: ReplyTarget,
   text: string,
   styles: Style[],
+  quote?: SendMessageQuote,
 ): Promise<unknown> {
   try {
-    return await sendOne(target, text, styles);
+    return await sendOne(target, text, styles, quote);
   } catch (err) {
-    if (styles.length === 0 || !laLoiMayChuTuChoi(err)) throw err;
+    const coCaiDeBo = styles.length > 0 || quote !== undefined;
+    if (!coCaiDeBo || !laLoiMayChuTuChoi(err)) throw err;
 
     // WARN chứ không debug: mất định dạng là hỏng thầm lặng, người vận hành
     // phải thấy được để còn lần ra tổ hợp style nào bị Zalo chê.
     log.warn(
-      { threadId: target.threadId, soStyle: styles.length, err },
-      "Zalo từ chối tin có định dạng - gửi lại dạng chữ trơn",
+      { threadId: target.threadId, soStyle: styles.length, coTrichDan: quote !== undefined, err },
+      "Zalo từ chối tin - gửi lại dạng chữ trơn, không định dạng và không trích dẫn",
     );
     return await sendOne(target, text);
   }
@@ -138,12 +167,26 @@ export async function sendReplyInParts(
   text: string,
   styles: Style[] = [],
 ): Promise<ReplyResult> {
+  // Trích dẫn ăn vào CÙNG ngân sách byte với chữ của bot, mà bộ cắt không biết
+  // gì về nó - phải trừ trước rồi mới cắt. Quá dài thì bỏ hẳn trích dẫn: mất
+  // một khối trang trí còn hơn để Zalo chối cả tin.
+  const trichDan = trichDanTrongNganSach(
+    target.quote,
+    getTuning("ZALO_RICH_TEXT_MAX_PAYLOAD_BYTES"),
+  );
+  if (trichDan.boViQuaDai) {
+    log.warn(
+      { threadId: target.threadId },
+      "Tin được trích dẫn quá dài so với ngân sách byte - trả lời không kèm trích dẫn",
+    );
+  }
+
   const parts = chiaTheoNganSachByte(
     { text, styles },
     {
       maxChars: getTuning("ZALO_MAX_MESSAGE_CHARS"),
       maxParts: getTuning("ZALO_MAX_MESSAGE_PARTS"),
-      maxPayloadBytes: getTuning("ZALO_RICH_TEXT_MAX_PAYLOAD_BYTES"),
+      maxPayloadBytes: trichDan.tranConLai,
     },
   );
 
@@ -172,7 +215,9 @@ export async function sendReplyInParts(
   const delivered: string[] = [];
   for (const part of parts) {
     try {
-      await sendOneCoDuongLui(target, part.text, part.styles);
+      // Chỉ đoạn ĐẦU trích dẫn: các đoạn sau là phần nối tiếp của cùng một câu
+      // trả lời, trích lại ở mỗi đoạn thì khối trích dẫn lặp đầy màn hình
+      await sendOneCoDuongLui(target, part.text, part.styles, delivered.length === 0 ? trichDan.quote : undefined);
       delivered.push(part.text);
     } catch (err) {
       log.error(

@@ -66,6 +66,15 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   form kèm cách sửa. Base URL sót lại của hãng khác bị bỏ qua thay vì gửi khóa
   Google sang bên thứ ba.
 
+### Thêm
+
+- Trả lời trong nhóm kèm **trích dẫn tin người hỏi** - Zalo hiển thị khối trích
+  dẫn ngay trên câu trả lời nên nhiều người cùng hỏi vẫn biết bot đang trả lời
+  tin nào. Trích tin mở lượt; chỉ đoạn đầu của câu trả lời dài mới trích. Chat
+  riêng không trích (hai người thì trích là nhiễu). Loại tin Zalo không cho
+  trích, hoặc tin được trích quá dài so với ngân sách, thì gửi bình thường
+  không kèm - trích dẫn không bao giờ được phép làm mất chữ.
+
 ### Sửa
 
 - Bot hiểu sai giờ của câu vừa hỏi: tin trong lịch sử có nhãn `[ngày/tháng

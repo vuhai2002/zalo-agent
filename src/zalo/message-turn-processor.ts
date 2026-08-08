@@ -15,6 +15,7 @@ import { createLogger } from "../shared/logger.js";
 import { runInTurnLogContext } from "../shared/turn-log-context.js";
 import { sendSeenReceipt } from "./message-receipts.js";
 import { toZaloReaction } from "./reaction-icons.js";
+import { trichDanTuTin } from "./reply-quote.js";
 import { deliverChatReply } from "./deliver-chat-reply.js";
 import { notifyTechnicalError, type ReplyTarget } from "./send-reply-in-parts.js";
 import { startTypingIndicator } from "./typing-indicator.js";
@@ -94,6 +95,12 @@ async function xuLyLuot(
     threadKey,
     threadId: latest.threadId,
     threadType: latest.threadType,
+    // Trích tin ĐẦU batch, không phải `latest`: đó là tin mở lượt, thường mang
+    // câu hỏi chính, và không xê dịch khi có tin chen giữa lượt. Khác chỗ bám
+    // của auto-react và biên nhận (cả hai nhắm `latest`) - cố ý, vì hai việc
+    // khác nhau: reaction là phản hồi tin VỪA tới, trích dẫn là chỉ ra tin
+    // ĐANG được trả lời. `trichDanTuTin` tự bỏ qua chat riêng.
+    quote: trichDanTuTin(batch[0]!),
   };
 
   // Mảng do CHỖ NÀY sở hữu: agent-loop chỉ push vào. Lượt ném lỗi vẫn còn đủ

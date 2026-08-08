@@ -3519,3 +3519,118 @@ Bảy phép phá, cả bảy đều đỏ đúng chỗ:
 Đáng nói: trước khi phá, đổi hẳn cách dựng tin của lượt hiện tại mà **không test
 nào đỏ** - vùng đó chỉ được khẳng định bằng substring (`/dò giúp em/`). Đó là lý
 do phải viết test mới trước rồi mới tin vào màu xanh.
+
+## V3.12 - Trả lời có trích dẫn tin người hỏi, trong nhóm (2026-08-08)
+
+Trong nhóm 7 người, bot trả lời mà không trỏ vào tin nào. Nhiều người cùng hỏi
+là không ai biết câu trả lời dành cho ai - kể cả khi câu trả lời có gọi tên.
+
+Zalo có sẵn khối trích dẫn, và zca-js hỗ trợ đầy đủ
+(`MessageContent.quote?: SendMessageQuote`). Repo cũng đã chuẩn bị từ đầu:
+`ParsedMessage.rawData` có comment "dùng cho quote khi trả lời", `agent-loop.ts`
+nhắc "tools (thả reaction, quote) tác động lên tin này". Ý định có từ lâu, dây
+chưa nối.
+
+### goclaw làm gì
+
+`cmd/gateway_consumer_normal.go:245-256`:
+
+```go
+if isGroup {
+    if mid := msg.Metadata["message_id"]; mid != "" {
+        outMeta["reply_to_message_id"] = mid
+    }
+    // Address the asker so multi-user group chats render a clear "this
+    // reply is for X" signal.
+    ...
+}
+```
+
+Bốn điều lấy nguyên:
+
+1. Trích dẫn **tự động**, không qua tool, không để model quyết.
+2. **Chỉ trong nhóm** (`if isGroup`). Chat riêng hai người thì trích là nhiễu.
+3. Trích **tin đã kích hoạt lượt**.
+4. Tin trung gian **không trích** - `events.go:363` gỡ `reply_to_message_id` vì
+   "block replies are standalone".
+
+Hermes có `reply_to_message_id` ở nhiều nền tảng nhưng dùng để **định tuyến
+thread** (Telegram DM topic, Feishu thread), không phải tín hiệu UX trong nhóm.
+Không lấy được gì thêm.
+
+Đáng chú ý: goclaw có kênh Zalo riêng nhưng **chỉ đọc** quote của tin đến, không
+trích khi gửi. Chỗ này zca-js làm được nhiều hơn bản Zalo của họ.
+
+### Ba cái bẫy tra ra từ source zca-js
+
+**1. zca-js NÉM với hai loại tin** (`sendMessage.ts`, khối `if (quote)`):
+
+```js
+if (typeof quote.content != "string" && quote.msgType == "webchat") throw
+if (quote.msgType == "group.poll") throw
+```
+
+**2. Đường lui hiện có KHÔNG cứu được.** `sendOneCoDuongLui` chỉ thử lại khi
+`laLoiMayChuTuChoi(err)` đúng, mà hàm đó kiểm `typeof err.code === "number"`.
+`ZaloApiError` dựng không kèm mã thì `code = null` (`ZaloApiError.ts:7`), nên
+hai lỗi trên bị ném thẳng lên và **mất trọn câu trả lời** - đúng lớp hỏng đã trả
+giá ngày 05/08 với tổ hợp style.
+
+Nên làm hai lớp: `laLoaiTrichDanDuoc` lọc trước theo đúng hai điều kiện đó, cộng
+đường lui bỏ trích dẫn khi máy chủ từ chối. Bản zca-js sau thêm điều kiện thứ ba
+thì lớp một lạc hậu, lớp hai vẫn đỡ.
+
+**3. Trích dẫn phình payload mà bộ cắt không biết.** `qmsg` mang nội dung tin
+được trích, còn `chiaTheoNganSachByte` chỉ đo chữ của bot. Ai đó dán 2000 ký tự
+rồi bot trích lại là riêng khối trích dẫn đã ăn hết trần, mà bộ cắt vẫn báo mọi
+đoạn đều lọt - tin đầu bị Zalo chối bằng mã 118 và không ai hiểu vì sao. Nay trừ
+trước phần trích dẫn khỏi trần; quá 30% trần thì bỏ hẳn trích dẫn.
+
+Thêm một chi tiết dễ bỏ sót: **có `quote` là zca-js đổi hẳn endpoint** (thêm
+`/quote` vào đường dẫn). Nên đính `quote: undefined` không phải chuyện vô hại -
+nó đổi đường gọi API. Vì vậy `sendOne` chỉ thêm khóa khi thật sự có giá trị, và
+test khẳng định trên DANH SÁCH KHÓA của payload chứ không trên giá trị.
+
+### Chọn tin nào để trích
+
+**Tin ĐẦU batch**, không phải `latest`. Đó là tin mở lượt, thường mang câu hỏi
+chính, và không xê dịch khi có tin chen giữa lượt. Khác chỗ bám của auto-react
+và biên nhận (cả hai nhắm `latest`) - cố ý, vì hai việc khác nhau: reaction là
+phản hồi tin VỪA tới, trích dẫn là chỉ ra tin ĐANG được trả lời.
+
+Câu thông báo lỗi kỹ thuật không trích dẫn - nó là tin đứng riêng, cùng lý do
+goclaw gỡ `reply_to_message_id` khỏi tin trung gian.
+
+### Kiểm chứng
+
+1630 test xanh (+27), typecheck sạch.
+
+Tám phép phá, cả tám đỏ đúng chỗ:
+
+| Phá gì | Test đỏ |
+|---|---|
+| Không nối dây (`ReplyTarget` không mang trích dẫn) | 2 test khâu nối |
+| Trích tin CUỐI thay vì tin đầu | test tin mở lượt |
+| Trích cả trong chat riêng | 2 test chat riêng |
+| Bỏ lọc loại tin zca-js từ chối | 2 test `group.poll` / `webchat` object |
+| Bỏ kiểm định danh | 4 test thiếu trường + tin tổng hợp |
+| Bỏ trần ngân sách byte | 2 test trích dẫn quá dài |
+| Mọi đoạn đều trích | test chỉ đoạn đầu |
+| Đường lui không bỏ trích dẫn | test gửi lại trơn |
+
+Một lỗ tự bắt được lúc viết: test đầu tiên khẳng định `"quote" in daGui[0]` -
+nhưng `daGui` là object TEST TỰ DỰNG LẠI, luôn có đủ khóa. Nó đo chính nó chứ
+không đo payload thật. Sửa thành ghi lại `Object.keys(payload)`.
+
+**Chưa đo được**: đường `/quote` của Zalo chưa bắn thật lần nào - không có phiên
+Zalo nào chạy được từ máy dev. Mọi test đều dùng `api.sendMessage` giả. Lần chạy
+thật đầu tiên trên nhóm là phép đo thật sự.
+
+### Việc còn treo
+
+Trả lời RIÊNG cho từng người khi một batch có nhiều người hỏi. Hiện một batch ra
+một câu trả lời, trích tin mở lượt, và persona dựa vào tên + giờ từng dòng (đã
+có từ V3.11) để gọi đúng tên trong câu. Nếu chạy thật vẫn thấy rối thì hướng kế
+tiếp là để model xuất nhiều khối theo người rồi gửi từng khối kèm trích dẫn
+tương ứng - đúng nhất về UX nhưng phải dựng giao thức giữa output của model và
+tầng gửi, và model phải tuân thủ, tức thêm một chỗ hỏng câm.
