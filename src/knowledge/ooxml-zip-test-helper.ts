@@ -14,37 +14,49 @@ const WORDML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 const SPREADSHEETML_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
 type ZipEntryInput = { name: string; data: Buffer };
+/** Entry đã NÉN SẴN - dùng khi nhiều entry cùng nội dung để khỏi gọi
+ * `deflateRawSync` lặp lại trên CÙNG một khối byte (xem `buildZipBufferTaiSuDungNen`). */
+type ZipEntryNenSan = { name: string; compressed: Buffer; uncompSize: number };
 
-/** Zip tối thiểu, NHIỀU entry - mở rộng bản 1-entry của `read-zip-entry.test.ts` */
-export function buildZipBuffer(entries: ZipEntryInput[]): Buffer {
+/** Ráp local section + central section cho MỘT entry đã nén - dùng chung bởi
+ * `buildZipBuffer` (tự nén) và `buildZipBufferTaiSuDungNen` (nén sẵn, tái dùng). */
+function raponMotEntry(
+  entry: ZipEntryNenSan,
+  offset: number,
+): { local: Buffer; central: Buffer } {
+  const { name, compressed, uncompSize } = entry;
+  const nameBuf = Buffer.from(name, "utf-8");
+
+  const localHeader = Buffer.alloc(30);
+  localHeader.writeUInt32LE(0x04034b50, 0);
+  localHeader.writeUInt16LE(8, 8); // method = deflate
+  localHeader.writeUInt32LE(compressed.length, 18);
+  localHeader.writeUInt32LE(uncompSize, 22);
+  localHeader.writeUInt16LE(nameBuf.length, 26);
+  localHeader.writeUInt16LE(0, 28);
+  const local = Buffer.concat([localHeader, nameBuf, compressed]);
+
+  const centralHeader = Buffer.alloc(46);
+  centralHeader.writeUInt32LE(0x02014b50, 0);
+  centralHeader.writeUInt16LE(8, 10);
+  centralHeader.writeUInt32LE(compressed.length, 20);
+  centralHeader.writeUInt32LE(uncompSize, 24);
+  centralHeader.writeUInt16LE(nameBuf.length, 28);
+  centralHeader.writeUInt32LE(offset, 42);
+  const central = Buffer.concat([centralHeader, nameBuf]);
+
+  return { local, central };
+}
+
+function goiZip(entries: ZipEntryNenSan[]): Buffer {
   const localSections: Buffer[] = [];
   const centralSections: Buffer[] = [];
   let offset = 0;
-
-  for (const { name, data } of entries) {
-    const compressed = zlib.deflateRawSync(data);
-    const nameBuf = Buffer.from(name, "utf-8");
-
-    const localHeader = Buffer.alloc(30);
-    localHeader.writeUInt32LE(0x04034b50, 0);
-    localHeader.writeUInt16LE(8, 8); // method = deflate
-    localHeader.writeUInt32LE(compressed.length, 18);
-    localHeader.writeUInt32LE(data.length, 22);
-    localHeader.writeUInt16LE(nameBuf.length, 26);
-    localHeader.writeUInt16LE(0, 28);
-    const localSection = Buffer.concat([localHeader, nameBuf, compressed]);
-    localSections.push(localSection);
-
-    const centralHeader = Buffer.alloc(46);
-    centralHeader.writeUInt32LE(0x02014b50, 0);
-    centralHeader.writeUInt16LE(8, 10);
-    centralHeader.writeUInt32LE(compressed.length, 20);
-    centralHeader.writeUInt32LE(data.length, 24);
-    centralHeader.writeUInt16LE(nameBuf.length, 28);
-    centralHeader.writeUInt32LE(offset, 42);
-    centralSections.push(Buffer.concat([centralHeader, nameBuf]));
-
-    offset += localSection.length;
+  for (const entry of entries) {
+    const { local, central } = raponMotEntry(entry, offset);
+    localSections.push(local);
+    centralSections.push(central);
+    offset += local.length;
   }
 
   const centralDirectory = Buffer.concat(centralSections);
@@ -57,6 +69,37 @@ export function buildZipBuffer(entries: ZipEntryInput[]): Buffer {
   eocd.writeUInt32LE(localTotal.length, 16);
 
   return Buffer.concat([localTotal, centralDirectory, eocd]);
+}
+
+/** Zip tối thiểu, NHIỀU entry - mở rộng bản 1-entry của `read-zip-entry.test.ts` */
+export function buildZipBuffer(entries: ZipEntryInput[]): Buffer {
+  return goiZip(
+    entries.map(({ name, data }) => ({
+      name,
+      compressed: zlib.deflateRawSync(data),
+      uncompSize: data.length,
+    })),
+  );
+}
+
+/**
+ * NHIỀU entry CÙNG NỘI DUNG (`data`) nhưng KHÁC TÊN (`tenCacEntry`) - nén
+ * MỘT LẦN rồi tái dùng, thay vì gọi `deflateRawSync` lặp lại trên CÙNG một
+ * khối byte cho từng entry như `buildZipBuffer` sẽ làm. Dùng cho fixture cần
+ * NHIỀU entry lớn (`zipNhieuEntryVuaDu`) - đo được `deflateRawSync` trên 20
+ * MB chữ khó nén tốn ~550 ms MỘT LẦN gọi; gọi lại cho mỗi tên (kiểu
+ * `buildZipBuffer`) nhân phí đó lên 3-4 lần, cộng thẳng vào tổng thời gian
+ * `pnpm test`.
+ *
+ * `level: 1` (nén NHANH NHẤT, không phải nén TỐT NHẤT): đo được giảm ~20%
+ * thời gian (551 -> 437 ms trên 20 MB) mà tỉ lệ nén hầu như không đổi (1,85
+ * so với 1,84) - test chỉ cần tỉ lệ ĐỦ THẤP để không chạm chốt tỉ lệ 500:1,
+ * không cần nén tốt nhất. Chỉ dùng ở đây (fixture test), KHÔNG áp cho
+ * `buildZipBuffer` dùng chung - giữ hành vi nén mặc định cho mọi caller khác.
+ */
+export function buildZipBufferTaiSuDungNen(data: Buffer, tenCacEntry: string[]): Buffer {
+  const compressed = zlib.deflateRawSync(data, { level: 1 });
+  return goiZip(tenCacEntry.map((name) => ({ name, compressed, uncompSize: data.length })));
 }
 
 /**
@@ -73,11 +116,13 @@ export function docxTuXml(fragment: string): Buffer {
 /**
  * Chữ KHÓ NÉN (hex của byte ngẫu nhiên) - dùng cho fixture cần cỡ giải nén
  * LỚN mà KHÔNG được vượt trần TỈ LỆ NÉN (500:1, xem `ooxml-limits.ts`). Nội
- * dung lặp 1 ký tự (`"x".repeat(...)`) nén tới hơn 1000:1 - sau khi sửa chốt
- * tỉ lệ để miễn kiểm theo OUTPUT (không phải theo cỡ nén đầu vào), fixture
- * kiểu đó sẽ bị CHÍNH chốt tỉ lệ bắt trước khi chạm tới chốt entry/tổng cần
- * đo - che mất đường code cần kiểm. Hex của byte ngẫu nhiên chỉ nén được
- * ~1,1:1 (16 giá trị byte trong bảng chữ, không đủ dư thừa cho deflate).
+ * dung lặp 1 ký tự (`"x".repeat(...)`) nén tới hơn 1000:1 (**đo thật: 1
+ * MB "x" lặp -> 1033 byte, tỉ lệ 1015:1**) - sau khi sửa chốt tỉ lệ để miễn
+ * kiểm theo OUTPUT (không phải theo cỡ nén đầu vào), fixture kiểu đó sẽ bị
+ * CHÍNH chốt tỉ lệ bắt trước khi chạm tới chốt entry/tổng cần đo - che mất
+ * đường code cần kiểm. Hex của byte ngẫu nhiên nén được **1,85:1** (đo thật:
+ * 1 MB hex -> 568.244 byte) - 16 giá trị byte trong bảng chữ vẫn còn dư thừa
+ * hơn byte ngẫu nhiên thuần, nhưng xa dưới trần 500:1.
  */
 export function chuKhoNen(soByte: number): string {
   return crypto.randomBytes(Math.ceil(soByte / 2)).toString("hex").slice(0, soByte);
@@ -97,33 +142,32 @@ export function zipEntryQuaTran(): Buffer {
 /**
  * xlsx-shaped: `sharedStrings.xml` + 3 sheet, MỖI entry đều DƯỚI trần entry
  * (32 MB) nhưng TỔNG vượt trần archive (64 MB) - đúng ca trần theo entry bỏ
- * lọt mà trần tổng phải bắt được.
- *
- * MỖI entry là XML ĐÃ ĐÓNG THẺ ĐẦY ĐỦ (`<sst><si><t>...chữ...</t></si></sst>`)
- * VỚI CHỮ KHÓ NÉN (`chuKhoNen`) - cố ý, có BA bẫy nếu làm khác:
- * 1. Byte NGẪU NHIÊN thô (không lồng trong the) thay vì text hợp lệ: `saxes`
- *    chặn bằng lỗi CÚ PHÁP ngay ở chunk đầu (~16 KB, đúng cỡ buffer nội bộ
- *    của zlib) - lỗi đó che mất chính cơ chế cần kiểm (bộ cộng dồn).
- * 2. Để thẻ KHÔNG đóng: từng entry đọc RIÊNG một lượt `quetXmlTheoLuong`
- *    (một `SaxesParser` mới mỗi entry) - entry đầu (dưới cả 2 trần) đọc xong
- *    hết rồi mới tới `parser.close()`, lúc đó saxes mới phát hiện "unclosed
- *    tag" - LỖI CÚ PHÁP Ở CHÍNH ENTRY ĐẦU che mất bộ cộng dồn, vì test không
- *    bao giờ chạy tới entry thứ 3-4 (nơi tổng vượt 64 MB).
- * 3. Chữ LẶP 1 KÝ TỰ (`"x".repeat(...)`) nén tới hơn 1000:1 - CHÍNH chốt tỉ
- *    lệ nén (500:1, đã sửa để miễn kiểm theo OUTPUT thay vì cỡ nén đầu vào)
- *    sẽ bắt fixture này trước khi chạm chốt entry/tổng cần đo ở đây.
+ * lọt mà trần tổng phải bắt được. MỖI entry là XML ĐÃ ĐÓNG THẺ ĐẦY ĐỦ
+ * (`<sst><si><t>...chữ...</t></si></sst>`) VỚI CHỮ KHÓ NÉN (`chuKhoNen`) -
+ * cố ý, có BA bẫy nếu làm khác:
+ * 1. Byte ngẫu nhiên THÔ (không lồng trong thẻ): saxes chặn CÚ PHÁP ngay ở
+ *    chunk đầu (~16 KB, cỡ buffer nội bộ zlib) - che mất bộ cộng dồn cần đo.
+ * 2. Để thẻ KHÔNG đóng: entry đầu (dưới cả 2 trần) đọc xong hết mới tới
+ *    `parser.close()` báo "unclosed tag" - che mất bộ cộng dồn vì test
+ *    không bao giờ chạy tới entry thứ 3-4 (nơi tổng vượt 64 MB).
+ * 3. Chữ LẶP 1 KÝ TỰ nén tới hơn 1000:1 - CHÍNH chốt tỉ lệ (đã sửa để miễn
+ *    kiểm theo OUTPUT) sẽ bắt fixture này trước khi chạm chốt cần đo.
  * Đóng thẻ đầy đủ + chữ khó nén thì 3 entry đầu qua trót lọt (20+20+20=60 MB,
- * dưới 64 MB, và tỉ lệ nén ~1,1:1 dưới xa 500:1), entry thứ 4 mới chạm trần
+ * dưới 64 MB, tỉ lệ nén 1,85:1 dưới xa 500:1), entry thứ 4 mới chạm trần
  * tổng - đúng đường code cần đo.
+ *
+ * Dùng `buildZipBufferTaiSuDungNen` (nén MỘT LẦN, tái dùng cho 4 tên) thay
+ * `buildZipBuffer` (tự nén lại 4 lần cho CÙNG 20 MB dữ liệu - đo được cộng
+ * gần 3 giây vào tổng thời gian `pnpm test`).
  */
 export function zipNhieuEntryVuaDu(): Buffer {
   const noiDung = `<sst><si><t>${chuKhoNen(20 * 1024 * 1024)}</t></si></sst>`;
   const moiEntry = Buffer.from(noiDung, "utf-8");
-  return buildZipBuffer([
-    { name: "xl/sharedStrings.xml", data: moiEntry },
-    { name: "xl/worksheets/sheet1.xml", data: moiEntry },
-    { name: "xl/worksheets/sheet2.xml", data: moiEntry },
-    { name: "xl/worksheets/sheet3.xml", data: moiEntry },
+  return buildZipBufferTaiSuDungNen(moiEntry, [
+    "xl/sharedStrings.xml",
+    "xl/worksheets/sheet1.xml",
+    "xl/worksheets/sheet2.xml",
+    "xl/worksheets/sheet3.xml",
   ]);
 }
 

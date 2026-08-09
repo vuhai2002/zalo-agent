@@ -50,11 +50,21 @@ export const TRAN_MOT_ENTRY = 32 * 1024 * 1024;
 export const TI_LE_NEN_TOI_DA = 500;
 
 /**
- * Entry nén ra dưới ngưỡng này (theo kích thước NÉN, tức `compSize` khai
- * trong central directory) được MIỄN kiểm tỉ lệ - entry nhỏ nhiễu mạnh
- * (metadata, docProps...) và không đe doạ gì dù tỉ lệ cao.
+ * Đọc CHƯA ĐỦ ngưỡng này (theo byte OUTPUT đã giải nén, KHÔNG phải cỡ nén
+ * đầu vào) thì MIỄN kiểm tỉ lệ - entry nhỏ nhiễu mạnh (metadata, docProps...)
+ * và không đe doạ gì dù tỉ lệ cao. Đúng cách Apache POI làm
+ * (`ZipSecureFile.MIN_INFLATE_RATIO`: chưa đọc đủ 100 KiB OUTPUT thì chưa
+ * xét tỉ lệ) - dùng CHÍNH 100 KiB của POI, không tự đặt số khác: sàn miễn
+ * kiểm rộng hơn (ví dụ 1 MB) để lọt một bom CÙNG tỉ lệ nhưng output chỉ
+ * ~1.000.000 byte (dưới 1 MB, trên 100 KiB) qua hẳn tầng zip.
+ *
+ * QUAN TRỌNG khi đọc code: điều kiện miễn kiểm trong `zip-stream-entry.ts`
+ * so `byteEntry` (đếm TRONG LÚC giải nén) với hằng số này - KHÔNG so
+ * `compData.length` (cỡ nén đầu vào). Bản đầu tiên của phase này lỡ so theo
+ * cỡ nén, khiến chốt tỉ lệ trở thành code chết (không đường nào tới được nó
+ * trước khi trần MỘT entry đã chặn) - đã sửa và có test riêng.
  */
-export const TRAN_MIEN_KIEM_TI_LE = 1 * 1024 * 1024;
+export const TRAN_MIEN_KIEM_TI_LE = 100 * 1024;
 
 /**
  * Số entry tối đa trong một archive. Corpus OOXML thật đo được trung bình
@@ -95,6 +105,34 @@ export const TRAN_TONG_KY_TU_TRICH = 8 * 1024 * 1024;
  * bắt được ca này (xem `xlsx-sax-sheet-builder.ts`).
  */
 export const TRAN_SO_COT_EXCEL = 16384;
+
+/**
+ * Tổng số Ô (kể cả ô ĐỆM do cột nhảy cóc, không chỉ ô có chữ) được phép xử lý
+ * cho CẢ file xlsx - dùng chung một bộ đếm cho MỌI sheet (giống trần tổng
+ * giải nén của `zip-stream-entry.ts`: nếu đếm riêng từng sheet thì chia nhỏ
+ * đủ số sheet là lách được).
+ *
+ * Kẹp `TRAN_SO_COT_EXCEL` (16.384) chỉ chặn CẤP PHÁT MỘT Ô, không chặn SỐ
+ * HÀNG lặp lại thao tác đó. Đo được: 100.000 hàng, mỗi hàng một `<c
+ * r="XFD1".../>` (sheet nén chỉ ~507 KB trên đĩa) khiến vòng lặp lấp cột
+ * (`themOVaoDong`) chạy khoảng 1,6 TỈ lần `push` - 21,7 giây khoá event loop,
+ * với `--max-old-space-size=384` (đúng ngân sách container). Hàng toàn ô
+ * RỖNG không bị `TRAN_TONG_KY_TU_TRICH` bắt (hàng bị `dongHienTai.some(o =>
+ * o.trim())` lọc bỏ TRƯỚC khi cộng vào `tongKyTu`) - đây là trần THỨ HAI,
+ * đo theo CÔNG CẤP PHÁT chứ không theo CHỮ TRÍCH RA, cho đúng loại chi phí
+ * cần chặn. Ngoại suy tới trần entry 32 MB (~730.000 hàng tương tự): ~160
+ * giây khoá - cùng cỡ ReDoS gốc (127 giây) mà phase này sinh ra để đóng.
+ *
+ * 2.000.000 (2 triệu): xấp xỉ số `<c>` THẬT tối đa nhồi vừa MỘT entry 32 MB
+ * (mỗi `<c r="A1" s="1"/>` tối thiểu ~15-20 byte -> 32 MB / ~16 byte ≈ 2
+ * triệu) - tức trần này không siết thêm gì so với trần entry đã có cho nội
+ * dung THẬT, chỉ riêng chặn phần KHUẾCH ĐẠI qua ô đệm (1 ô XFD tự đóng nặng
+ * ~20 byte XML nhưng buộc 16.383 lần `push`). Headroom rộng so với dữ liệu
+ * thật: "một bảng giá thật không quá vài chục nghìn ô có chữ" (chục nghìn <<
+ * 2 triệu). Ở thông lượng đo được (~75 triệu `push`/giây), 2 triệu hoàn tất
+ * trong ~30 ms - xa dưới 1 giây.
+ */
+export const TRAN_TONG_SO_O = 2_000_000;
 
 /**
  * Ném khi vượt BẤT KỲ trần nào ở trên - đánh dấu để `xml-sax-scan.ts` không

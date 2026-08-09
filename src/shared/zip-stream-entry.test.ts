@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 // Module thuần (chỉ đụng zip/zlib) - không chạm env/DB nên import tĩnh được
 import { moPhienDocZip } from "./zip-stream-entry.js";
-import { buildZipBuffer, chuKhoNen } from "../knowledge/ooxml-zip-test-helper.js";
+import { buildZipBuffer, buildZipBufferTaiSuDungNen, chuKhoNen } from "../knowledge/ooxml-zip-test-helper.js";
 
 async function gomHetChunk(gen: AsyncGenerator<string>): Promise<{ text: string; soChunk: number }> {
   let text = "";
@@ -84,12 +84,10 @@ describe("zip-stream-entry - trần an toàn", () => {
     // Chữ KHÓ NÉN (không phải Buffer.alloc lặp 1 byte) - lặp 1 byte nén tới
     // >1000:1, giờ sẽ bị CHÍNH chốt tỉ lệ (đã sửa) bắt trước, che mất chốt
     // tổng cần đo ở đây. Xem comment `chuKhoNen` trong test helper.
+    // buildZipBufferTaiSuDungNen: nén MỘT LẦN, tái dùng cho 3 tên - thay vì
+    // để buildZipBuffer tự nén lại 3 lần trên CÙNG 25 MB dữ liệu khó nén.
     const moiEntry = Buffer.from(chuKhoNen(25 * 1024 * 1024), "utf-8");
-    const zip = buildZipBuffer([
-      { name: "a.xml", data: moiEntry },
-      { name: "b.xml", data: moiEntry },
-      { name: "c.xml", data: moiEntry },
-    ]);
+    const zip = buildZipBufferTaiSuDungNen(moiEntry, ["a.xml", "b.xml", "c.xml"]);
     const phien = moPhienDocZip(zip);
     // 2 entry đầu (50 MB) đều dưới trần entry LẪN trần tổng - phải đọc trót lọt
     for (const ten of ["a.xml", "b.xml"]) {
@@ -109,15 +107,18 @@ describe("zip-stream-entry - trần an toàn", () => {
     });
   });
 
-  it("tỉ lệ nén vượt 500:1 bị từ chối SỚM (trước khi chạm trần entry) - đúng hình dạng bom-1mb.docx thật", async () => {
-    // Nội dung LẶP 1 KÝ TỰ nén cực tốt (~1000:1+), giải nén ra 1 MB (dưới xa
-    // trần entry 32 MB) - đúng tỉ lệ ~596:1 mà nghiên cứu đo trên bom-1mb.docx
-    // thật (1,7 KB nén -> 1 MB XML). Trước khi sửa Important 3, chốt tỉ lệ
+  it("tỉ lệ nén vượt 500:1 bị từ chối SỚM (trước khi chạm trần entry) - cùng LỚP bom với bom-1mb.docx thật", async () => {
+    // Nội dung LẶP 1 KÝ TỰ, giải nén ra 1 MB (dưới xa trần entry 32 MB) -
+    // ĐO THẬT tỉ lệ của CHÍNH fixture này: 1 MB "x" lặp -> 1.033 byte nén,
+    // tỉ lệ 1015:1. Con số này KHÁC bom-1mb.docx thật nghiên cứu đo (1,7 KB
+    // nén -> 1 MB XML, tỉ lệ ~596:1) - hai file khác nhau, không phải cùng
+    // một số - nhưng CÙNG LỚP bom (tỉ lệ nén phi thực tế, ép Nan phần trăm),
+    // cả hai đều vượt xa trần 500:1. Trước khi sửa Important 3, chốt tỉ lệ
     // miễn kiểm theo CỠ NÉN (compData.length < 1 MB) nên KHÔNG BAO GIỜ bắt
-    // được ca này (1,7 KB nén luôn dưới ngưỡng miễn, dù tỉ lệ tới 596:1). Sau
-    // khi sửa (miễn theo OUTPUT đã đọc, kiểu Apache POI), chốt tỉ lệ phải là
-    // đường ĐẦU TIÊN chặn - đo bằng cách xác nhận message nói "tỉ lệ nén",
-    // không phải "vượt quá giới hạn" (message của trần entry/tổng).
+    // được ca này (phần nén luôn dưới ngưỡng miễn dù tỉ lệ cao). Sau khi sửa
+    // (miễn theo OUTPUT đã đọc, kiểu Apache POI), chốt tỉ lệ phải là đường
+    // ĐẦU TIÊN chặn - đo bằng cách xác nhận message nói "tỉ lệ nén", không
+    // phải "vượt quá giới hạn" (message của trần entry/tổng).
     const raw = "x".repeat(1024 * 1024); // 1 MB, nén cực tốt
     const zip = buildZipBuffer([{ name: "word/document.xml", data: Buffer.from(raw, "utf-8") }]);
     await assert.rejects(async () => {
@@ -133,7 +134,11 @@ describe("zip-stream-entry - trần an toàn", () => {
     });
   });
 
-  it("số entry vượt trần 256 bị từ chối, không cần giải nén entry nào", () => {
+  it("số entry vượt trần 256 bị từ chối, không cần giải nén entry nào, KHÔNG buộc tội 'zip bomb'", () => {
+    // Sửa lại sau rà soát: một .docx nhiều ảnh (mỗi ảnh một entry) đạt 257
+    // entry với khoảng 250 ảnh - hoàn toàn hợp lệ. Corpus đo cao nhất 99 chỉ
+    // chứng minh corpus không có file ảnh nặng, không chứng minh 257 là bất
+    // thường - không được buộc tội "zip bomb" cho ca này.
     const entries = Array.from({ length: 257 }, (_, i) => ({
       name: `f${i}.xml`,
       data: Buffer.from("x"),
@@ -141,8 +146,9 @@ describe("zip-stream-entry - trần an toàn", () => {
     const zip = buildZipBuffer(entries);
     assert.throws(() => moPhienDocZip(zip), (err: unknown) => {
       assert.ok(err instanceof Error);
-      assert.match(err.message, /vượt quá giới hạn 256 entry/i);
-      assert.match(err.message, /zip bomb/i); // số entry bất thường LÀ hình dạng khả nghi
+      assert.match(err.message, /quá nhiều phần bên trong/i);
+      assert.match(err.message, /257/);
+      assert.doesNotMatch(err.message, /zip bomb/i, "không được buộc tội 257 entry là zip bomb");
       return true;
     });
   });

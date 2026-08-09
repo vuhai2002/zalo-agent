@@ -1,7 +1,7 @@
 import { quetXmlTheoLuong } from "../shared/xml-sax-scan.js";
 import { moPhienDocZip } from "../shared/zip-stream-entry.js";
 import { taoSharedStringsSaxBuilder } from "./xlsx-sax-shared-strings.js";
-import { taoXlsxSheetSaxBuilder } from "./xlsx-sax-sheet-builder.js";
+import { taoXlsxSheetSaxBuilder, type NganSachO } from "./xlsx-sax-sheet-builder.js";
 
 /**
  * `sharedStrings.xml` + các `xl/worksheets/sheetN.xml` -> chữ theo HÀNG.
@@ -40,11 +40,15 @@ export async function extractXlsxText(buf: Buffer): Promise<string> {
     throw new Error("File xlsx không có sheet nào đọc được");
   }
 
+  // Dùng CHUNG một bộ đếm công cấp phát cho MỌI sheet - chia nhỏ ra nhiều
+  // sheet, mỗi sheet dưới trần, không được lách trần tổng (đúng nguyên tắc
+  // "trần tổng" đã áp cho zip-stream-entry.ts).
+  const nganSachO: NganSachO = { tongO: 0 };
   const doanTheoSheet: string[] = [];
   for (const file of sheetFiles) {
     // moPhienDocZip/docEntryTheoLuong đã ném lỗi tiếng Việt đọc được khi vượt
     // bất kỳ trần nào - không cần bọc thêm lớp lỗi ở đây.
-    const sheetBuilder = taoXlsxSheetSaxBuilder(chuoiDungChung);
+    const sheetBuilder = taoXlsxSheetSaxBuilder(chuoiDungChung, nganSachO);
     await quetXmlTheoLuong(phien.docEntryTheoLuong(file), sheetBuilder);
     const dong = sheetBuilder.layCacDong();
     if (dong.length > 0) doanTheoSheet.push(dong.join("\n"));

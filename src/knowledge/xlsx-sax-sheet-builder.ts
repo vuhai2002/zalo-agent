@@ -1,7 +1,18 @@
 import type { SaxesTagNS } from "saxes";
 import type { XmlSaxHandlers } from "../shared/xml-sax-scan.js";
 import { thayTheEscapeExcel } from "./xlsx-sax-shared-strings.js";
-import { LoiVuotTran, TRAN_SO_COT_EXCEL, TRAN_TONG_KY_TU_TRICH } from "./ooxml-limits.js";
+import {
+  LoiVuotTran,
+  TRAN_SO_COT_EXCEL,
+  TRAN_TONG_KY_TU_TRICH,
+  TRAN_TONG_SO_O,
+} from "./ooxml-limits.js";
+
+/** Bộ đếm CÔNG CẤP PHÁT (ô thật + ô đệm) dùng CHUNG cho MỌI sheet của cùng 1
+ * file xlsx - `extract-xlsx-text.ts` tạo MỘT lần, truyền vào từng
+ * `taoXlsxSheetSaxBuilder()` (như `zip-stream-entry.ts` dùng 1 phiên cho
+ * trần tổng). KHÔNG dùng biến module-level: mỗi `docChuTuFile` cần bộ riêng. */
+export type NganSachO = { tongO: number };
 
 /**
  * `xl/worksheets/sheetN.xml` -> chữ theo HÀNG, cắt theo hàng như comment gốc
@@ -29,8 +40,15 @@ export type XlsxSheetSaxBuilder = XmlSaxHandlers & {
   layCacDong(): string[];
 };
 
-/** @param chuoiDungChung mảng `sharedStrings.xml` theo ĐÚNG thứ tự index */
-export function taoXlsxSheetSaxBuilder(chuoiDungChung: readonly string[]): XlsxSheetSaxBuilder {
+/**
+ * @param chuoiDungChung mảng `sharedStrings.xml` theo ĐÚNG thứ tự index
+ * @param nganSachO bộ đếm công cấp phát DÙNG CHUNG với các sheet khác trong
+ * cùng file - xem `NganSachO`.
+ */
+export function taoXlsxSheetSaxBuilder(
+  chuoiDungChung: readonly string[],
+  nganSachO: NganSachO,
+): XlsxSheetSaxBuilder {
   const cacDong: string[] = [];
   let tongKyTu = 0;
 
@@ -62,9 +80,24 @@ export function taoXlsxSheetSaxBuilder(chuoiDungChung: readonly string[]): XlsxS
     return boDemV; // "e" (lỗi công thức), hoặc không khai t= (số thường)
   }
 
-  /** Chèn ô rỗng cho cột bị nhảy cóc (ô rỗng hẳn Excel bỏ khỏi XML, hoặc ô có
-   * định dạng nhưng tự đóng) - không thì ô sau dính sát ô trước, lệch cột. */
+  /**
+   * Chèn ô rỗng cho cột bị nhảy cóc (ô rỗng hẳn Excel bỏ khỏi XML, hoặc ô có
+   * định dạng nhưng tự đóng) - không thì ô sau dính sát ô trước, lệch cột.
+   *
+   * BẮT BUỘC đếm CÔNG CẤP PHÁT (ô đệm + chính ô này) TRƯỚC vòng lặp `push`,
+   * bất kể hàng có chữ hay không: hàng toàn ô rỗng bị lọc bỏ ở `</row>`
+   * TRƯỚC khi cộng vào `tongKyTu`, nên `TRAN_TONG_KY_TU_TRICH` không bắt
+   * được ca này. `TRAN_SO_COT_EXCEL` chỉ chặn MỘT lần gọi phình to, không
+   * chặn NHIỀU HÀNG lặp lại - xem `TRAN_TONG_SO_O` cho số đo cụ thể.
+   */
   function themOVaoDong(giaTri: string, chiSoCot: number): void {
+    const soOThemVao = chiSoCot - dongHienTai.length; // ô đệm + chính ô này
+    nganSachO.tongO += soOThemVao;
+    if (nganSachO.tongO > TRAN_TONG_SO_O) {
+      throw new LoiVuotTran(
+        `File xlsx có quá nhiều ô để xử lý (kể cả ô trống do cột nhảy cóc), vượt quá giới hạn ${TRAN_TONG_SO_O.toLocaleString("vi-VN")} ô. Hãy rút gọn bảng tính hoặc tách thành nhiều file nhỏ hơn.`,
+      );
+    }
     while (dongHienTai.length < chiSoCot - 1) dongHienTai.push("");
     dongHienTai[chiSoCot - 1] = giaTri;
     cotKyVong = chiSoCot + 1;

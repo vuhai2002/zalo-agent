@@ -145,6 +145,22 @@ describe("extract-docx-text - fixture Word THẬT (src/knowledge/fixtures)", () 
     assert.equal(chu, "TruocSau", `mã field/chữ đã xoá không được lọt vào giữa: ${JSON.stringify(chu)}`);
   });
 
+  it("outlineLvl=1 (hợp lệ, trong khoảng 0-8) VẪN ra heading đúng cấp - chốt DƯƠNG cho tầng 1", async () => {
+    // Ca test hụt tiềm ẩn: cả 2 test heading qua renderDocx (mô tả ở phần
+    // "extract-docx-text (qua docChuTuFile)" phía trên) đều KHÔNG đo được
+    // tầng 1 (outlineLvl) - thư viện `docx` (đường GHI của bot) chỉ ghi
+    // `pStyle`, KHÔNG BAO GIỜ ghi `outlineLvl` (đã xác nhận bằng cách giải
+    // nén file `docx` tự sinh lúc viết state machine). Thiếu chốt DƯƠNG này,
+    // ai đặt OUTLINE_LVL_TOI_DA = -1 (giết sạch tầng 1) thì TOÀN BỘ suite vẫn
+    // xanh - không có test nào phát hiện. outlineLvl 0-based (0 = Heading1),
+    // nên val="1" phải ra "## " (Heading2).
+    const chu = await docChuTuFile(
+      docxTuXml('<w:p><w:pPr><w:outlineLvl w:val="1"/></w:pPr><w:r><w:t>Tieu de</w:t></w:r></w:p>'),
+      "docx",
+    );
+    assert.equal(chu, "## Tieu de");
+  });
+
   it("outlineLvl=9 (Body Text theo ECMA-376, KHÔNG phải heading) không biến đoạn văn thành tiêu đề", async () => {
     // Ca ĐÃ ĐO hỏng: Number("9") vẫn được nhận, ra "######### Doan thuong" -
     // đoạn văn thường bị chunk-text.ts coi là tiêu đề, gán sai ngữ cảnh cho
@@ -189,6 +205,17 @@ describe("extract-docx-text - fixture Word THẬT (src/knowledge/fixtures)", () 
     // Đúng thứ tự: hàng ngoài A1|A2 phải đứng TRƯỚC nội dung ô B (không bị
     // bảng lồng đẩy văng ra một "đoạn" tách rời đứng lạc chỗ).
     assert.ok(chu.indexOf("A1 | A2") < chu.indexOf("n1 | n2"));
+    // Bất biến "1 hàng = 1 dòng" (chunk-text.ts cắt đoạn theo dòng): hàng
+    // ngoài chứa bảng lồng ("B1"/"n1 | n2"/"B1duoi"/"B2") PHẢI nằm trên ĐÚNG
+    // MỘT dòng - không được có "\n" xen giữa, không thì catThanhDoan sẽ xẻ
+    // đôi đúng hàng đó ở lượt cắt đoạn.
+    const dongChuaN1 = chu.split("\n").find((d) => d.includes("n1 | n2"));
+    assert.ok(dongChuaN1, `không tìm thấy dòng chứa "n1 | n2" trong: ${JSON.stringify(chu)}`);
+    assert.match(
+      dongChuaN1!,
+      /B1.*n1 \| n2.*B1duoi.*B2/,
+      `hàng chứa bảng lồng phải nằm chung 1 dòng với B1/B1duoi/B2: ${JSON.stringify(dongChuaN1)}`,
+    );
   });
 });
 

@@ -45,10 +45,18 @@ export function taoDocxTableTracker(): DocxTableTracker {
     dongBang(themDoan) {
       const xong = bangStack.pop();
       if (!xong || xong.hangCuaBang.length === 0) return;
-      const textBang = xong.hangCuaBang.join("\n");
       const ngoai = bangStack[bangStack.length - 1];
-      if (ngoai) ngoai.boDemO += (ngoai.boDemO ? "\n" : "") + textBang;
-      else themDoan(textBang);
+      if (ngoai) {
+        // Bảng LỒNG: nối hàng bằng "; " (KHÔNG phải "\n") để nhúng vào ô của
+        // bảng ngoài mà VẪN giữ đúng 1 dòng. "1 hàng = 1 dòng" là bất biến
+        // xuyên suốt cả builder này lẫn xlsx-sax-sheet-builder.ts -
+        // catThanhDoan (chunk-text.ts) cắt đoạn theo DÒNG, nối bằng "\n" ở
+        // đây sẽ khiến hàng NGOÀI (chứa bảng lồng) vắt qua nhiều dòng và bị
+        // xẻ đôi giữa 2 chunk khác nhau.
+        ngoai.boDemO += (ngoai.boDemO ? " " : "") + xong.hangCuaBang.join("; ");
+      } else {
+        themDoan(xong.hangCuaBang.join("\n")); // bảng GỐC: giữ "1 hàng = 1 dòng"
+      }
     },
     moHang() {
       const dinh = bangStack[bangStack.length - 1];

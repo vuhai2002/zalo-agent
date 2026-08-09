@@ -151,6 +151,23 @@ describe("extract-xlsx-text - trần cột Excel (Critical: r= của người ng
     const chu = await docChuTuFile(buf, "xlsx");
     assert.match(chu, /Cot cuoi$/);
   });
+
+  it("100.000 hàng ô rỗng ở cột XFD bị từ chối trong dưới 1 giây - trần theo CÔNG CẤP PHÁT, không theo chữ trích ra", async () => {
+    // Ca ĐÃ ĐO hỏng: kẹp trần MỘT ô (TRAN_SO_COT_EXCEL, test ở trên) chỉ hạ
+    // cấp bug từ "giết process" (OOM fatal) xuống "khoá event loop hàng
+    // phút" - CHƯA đóng hẳn. Mỗi hàng chỉ có 1 ô tự đóng ở cột XFD (s=1,
+    // không t=) - hàng toàn ô rỗng bị `dongHienTai.some(o => o.trim())` lọc
+    // bỏ TRƯỚC khi cộng vào tongKyTu, nên TRAN_TONG_KY_TU_TRICH không bắt
+    // được, dù vòng lặp lấp cột (themOVaoDong) vẫn chạy đủ 16.383 lần push
+    // MỖI HÀNG. Đo được TRƯỚC khi có TRAN_TONG_SO_O: 100.000 hàng (sheet nén
+    // chỉ ~507 KB) -> 21,7 giây khoá event loop, --max-old-space-size=384.
+    const hang = '<row><c r="XFD1" s="1"/></row>'.repeat(100_000);
+    const buf = xlsxTuSheetVaChuoi(hang, []);
+    const t0 = performance.now();
+    await assert.rejects(() => docChuTuFile(buf, "xlsx"), /quá nhiều ô/i);
+    const tonMs = performance.now() - t0;
+    assert.ok(tonMs < 1000, `tốn ${tonMs}ms - phải dưới 1 giây (trước khi sửa: 21 700ms)`);
+  });
 });
 
 describe("extract-xlsx-text - bom và trần an toàn", () => {

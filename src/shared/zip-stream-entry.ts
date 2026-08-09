@@ -44,11 +44,13 @@ function formatMB(bytes: number): string {
 }
 
 /**
- * Hai câu thông báo cho "vượt trần vì TO", KHÔNG dùng chữ "nghi ngờ zip bomb"
- * - đó là buộc tội một file có thể hoàn toàn hợp lệ (chỉ là quá lớn so với
- * ngân sách RAM của bot). Chữ "zip bomb" CHỈ dành cho ca hình dạng bất
- * thường thật sự (tỉ lệ nén phi thực tế, số entry bất thường) - xem nhánh
- * kiểm tỉ lệ trong `docEntryTheoLuong` và nhánh kiểm số entry ngay dưới đây.
+ * Ba câu thông báo cho "vượt trần vì TO/NHIỀU", KHÔNG dùng chữ "nghi ngờ zip
+ * bomb" - đó là buộc tội một file có thể hoàn toàn hợp lệ. Ca số entry vượt
+ * 256 CŨNG thuộc nhóm này: một .docx nhiều ảnh (mỗi ảnh một entry) đạt 257
+ * entry với khoảng 250 ảnh - hoàn toàn có thật, corpus đo cao nhất 99 chỉ
+ * chứng minh corpus không có file ảnh nặng, không chứng minh 257 là bất
+ * thường. Chữ "zip bomb" CHỈ dành cho ca hình dạng bất thường THẬT SỰ (tỉ lệ
+ * nén phi thực tế) - xem nhánh kiểm tỉ lệ trong `docEntryTheoLuong`.
  */
 function loiVuotTranMotEntry(): LoiVuotTran {
   return new LoiVuotTran(
@@ -60,16 +62,15 @@ function loiVuotTranTong(): LoiVuotTran {
     `File này quá lớn để xử lý (tổng nội dung bên trong giải nén ra vượt quá giới hạn ${formatMB(TRAN_TONG_GIAI_NEN)}). Hãy rút gọn nội dung hoặc tách thành nhiều file nhỏ hơn.`,
   );
 }
+function loiVuotTranSoEntry(soEntry: number): LoiVuotTran {
+  return new LoiVuotTran(
+    `File này có quá nhiều phần bên trong (${soEntry}, trần là ${TRAN_SO_ENTRY}). Hãy gộp lại hoặc tách thành nhiều file nhỏ hơn.`,
+  );
+}
 
 export function moPhienDocZip(buf: Buffer): PhienDocZip {
   const entries = [...centralEntries(buf)];
-  if (entries.length > TRAN_SO_ENTRY) {
-    // Số entry bất thường (corpus thật trung bình 23, cao nhất 99) - ĐÂY mới
-    // đúng nghĩa "hình dạng khả nghi", giữ chữ "nghi ngờ zip bomb".
-    throw new LoiVuotTran(
-      `File zip có ${entries.length} entry, vượt quá giới hạn ${TRAN_SO_ENTRY} entry - nghi ngờ zip bomb`,
-    );
-  }
+  if (entries.length > TRAN_SO_ENTRY) throw loiVuotTranSoEntry(entries.length);
 
   let tongByteDaGiaiNen = 0;
 
