@@ -132,17 +132,21 @@ export const kbRoutes = new Hono()
     const n = layNguon(id);
     if (!n) return c.json({ error: "Không tìm thấy nguồn" }, 404);
     // I6: bấm "Xử lý lại" ĐÚNG LÚC nguồn đang dang_xu_ly (worker thật đang xử
-    // lý, hoặc kẹt chờ goNguonKetLucKhoiDong() xét lại) trước đây bị NUỐT LẶNG
+    // lý, hoặc kẹt chờ goNguonKetDauTick() xét lại) trước đây bị NUỐT LẶNG
     // LẼ - route đặt cho_xu_ly ngay, rồi lượt worker đang chạy ghi đè trạng
     // thái cuối lên trên, xóa mất quyết định vừa bấm. Từ chối rõ ràng bằng 409
     // thay vì tranh giành ngầm.
     //
-    // 409 này TẠM THỜI, không phải ngõ cụt: goNguonKetLucKhoiDong() giờ chạy
+    // 409 này TẠM THỜI, không phải ngõ cụt: goNguonKetDauTick() giờ chạy
     // lại MỖI TICK (không chỉ lúc boot, xem kb-ingest-worker.ts), nên một
-    // nguồn kẹt dang_xu_ly do worker quá hạn tự thoát trạng thái này trong
-    // tối đa một TICK_MS - câu chữ dưới đây phải nói đúng "thử lại sau ít
-    // phút", không phải "thử lại sau khi xong" (dễ hiểu lầm là phải đợi VÔ
-    // HẠN cho một lượt có thể không bao giờ tự kết thúc).
+    // nguồn kẹt dang_xu_ly do worker quá hạn CUỐI CÙNG cũng tự thoát trạng
+    // thái này - nhưng chặn trên KHÔNG PHẢI một TICK_MS: nguồn ĐANG thật sự
+    // chạy vẫn giữ dang_xu_ly tới hết KB_EXTRACT_TIMEOUT_MS của chính lượt
+    // đó, nên chặn trên thật là TICK_MS + KB_EXTRACT_TIMEOUT_MS (tối đa 605s
+    // theo hai trần mặc định). Câu chữ dưới đây vẫn đúng ("thử lại sau ít
+    // phút", không phải "thử lại sau khi xong" - dễ hiểu lầm là phải đợi VÔ
+    // HẠN cho một lượt có thể không bao giờ tự kết thúc), chỉ comment cũ ước
+    // lượng sai chặn trên.
     if (n.trangThai === "dang_xu_ly") {
       return c.json({ error: "Nguồn đang được xử lý, thử lại sau ít phút" }, 409);
     }

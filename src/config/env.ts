@@ -302,6 +302,12 @@ const envSchema = z.object({
   // nào (trong mọi trần ooxml-limits.ts) chạm nổi 5000ms thật, nên không có
   // cách nào test nhánh "worker bị terminate() vì quá hạn" bằng một trần hợp
   // lệ với người dùng thật.
+  //
+  // Sàn Zod thấp KHÔNG được để hổng luôn hàng rào cho `.env` thật (ai gõ nhầm
+  // giây thành mili-giây vẫn boot êm re, Kho tri thức chết câm toàn hệ thống
+  // mà đổ oan cho "tài liệu độc") - chốt riêng ở CUỐI file này
+  // (`env.NODE_ENV !== "test" && env.KB_EXTRACT_TIMEOUT_MS < 5000`) mới là
+  // hàng rào thật, sàn Zod ở đây chỉ còn tác dụng chặn số ÂM/không phải số.
   KB_EXTRACT_TIMEOUT_MS: z.coerce.number().int().min(100).max(600_000).default(60_000),
   // Số lần GIÀNH xử lý tối đa cho một nguồn trước khi bỏ hẳn (đánh "hong") -
   // chặn nguồn làm worker treo/chết lặp lại vô hạn qua các lần khởi động lại.
@@ -368,6 +374,18 @@ if (env.SEND_DELAY_MAX_MS < env.SEND_DELAY_MIN_MS) {
 // Giữ ít hơn số tin agent đọc mỗi lượt = vừa ghi xong đã bị xóa mất context
 if (env.HISTORY_MAX_MESSAGES_PER_THREAD < env.HISTORY_CONTEXT_LIMIT) {
   console.error("HISTORY_MAX_MESSAGES_PER_THREAD phải >= HISTORY_CONTEXT_LIMIT");
+  process.exit(1);
+}
+
+// Sàn Zod của KB_EXTRACT_TIMEOUT_MS (min: 100, xem comment tại schema) THẤP
+// HƠN HẲN sàn thật (5000ms) - CỐ Ý, nhưng CHỈ để test set qua process.env né
+// qua DB. Thiếu chốt RIÊNG này thì sàn Zod thấp trở thành hàng rào boot DUY
+// NHẤT cho `.env` thật: ai gõ nhầm "600" với ý "600 giây" vẫn boot êm re, rồi
+// MỌI tài liệu quá hạn và bị đổ oan là "tài liệu độc" trong khi gốc rễ là một
+// dòng `.env`. Không áp cho NODE_ENV=test - `setupTestEnv()` cần đặt được
+// dưới 5000ms để dựng ca quá hạn thật (xem chay-trich-xuat-tach-luong.ts).
+if (env.NODE_ENV !== "test" && env.KB_EXTRACT_TIMEOUT_MS < 5000) {
+  console.error("KB_EXTRACT_TIMEOUT_MS phải >= 5000 (dưới 5s chỉ dùng cho test)");
   process.exit(1);
 }
 

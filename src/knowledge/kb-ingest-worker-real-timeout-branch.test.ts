@@ -8,7 +8,7 @@ import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
  * dưới sàn thật 5000ms (min ở tuning-definitions.ts) để dựng được MỘT LẦN QUÁ
  * HẠN THẬT qua worker.xuLyMotVong() - không mô phỏng tay như
  * kb-ingest-worker-attempt-limit.test.ts (file đó đặt thẳng trang_thai qua
- * giaNguonChoXuLy() + gọi goNguonKetLucKhoiDong(), không đi qua
+ * giaNguonChoXuLy() + gọi goNguonKetDauTick(), không đi qua
  * trichXuatTachLuong()/worker thread thật).
  *
  * Seam controller đã duyệt (xem comment tại env.ts:KB_EXTRACT_TIMEOUT_MS):
@@ -65,7 +65,7 @@ describe("kb-ingest-worker - nhánh worker bị terminate() vì quá hạn giữ
     assert.equal(
       sau.trangThai,
       "dang_xu_ly",
-      "worker bị terminate() vì quá hạn KHÔNG BIẾT tài liệu hỏng thật hay chỉ máy chậm - phải để nguyên dang_xu_ly cho goNguonKetLucKhoiDong() xét lại ở tick sau, không được đánh hong ngay như lỗi nội dung thường (file rác, định dạng lạ)",
+      "worker bị terminate() vì quá hạn KHÔNG BIẾT tài liệu hỏng thật hay chỉ máy chậm - phải để nguyên dang_xu_ly cho goNguonKetDauTick() (chạy định kỳ mỗi tick qua chayMotVongAnToan() lúc vận hành thật) xét lại, không được đánh hong ngay như lỗi nội dung thường (file rác, định dạng lạ)",
     );
     assert.equal(sau.soLanThu, 1, "đã giành đúng 1 lần trước khi bị buộc dừng");
     assert.equal(sau.soDoan, 0, "chưa hề ghi đoạn nào - worker bị cắt giữa chừng");

@@ -90,14 +90,14 @@ describe("kb-ingest-worker - xử lý nguồn cho_xu_ly", () => {
     // và không lần nào xử lý lại - phải tự gỡ lúc boot
     const n = store.taoNguon({ ten: "kẹt", loai: "text", noiDungGoc: "x" });
     store.datTrangThai(n.id, "dang_xu_ly");
-    worker.goNguonKetLucKhoiDong();
+    worker.goNguonKetDauTick();
     assert.equal(store.layNguon(n.id)!.trangThai, "cho_xu_ly");
   });
 
-  it("goNguonKetLucKhoiDong KHÔNG đụng nguồn đang ở trạng thái khác", () => {
+  it("goNguonKetDauTick KHÔNG đụng nguồn đang ở trạng thái khác", () => {
     const sanSang = store.taoNguon({ ten: "a", loai: "text", noiDungGoc: "x" });
     store.datTrangThai(sanSang.id, "san_sang", { soDoan: 1 });
-    worker.goNguonKetLucKhoiDong();
+    worker.goNguonKetDauTick();
     assert.equal(store.layNguon(sanSang.id)!.trangThai, "san_sang");
   });
 });

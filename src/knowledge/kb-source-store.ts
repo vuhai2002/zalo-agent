@@ -109,7 +109,7 @@ const setTrangThaiStmt = db.prepare(`
  * `soLanThu` KHÔNG tự reset theo `trangThai` - caller phải truyền TƯỜNG MINH
  * khi muốn cấp lại một budget mới (nguồn vừa xử lý XONG, hoặc người vận hành
  * bấm "Xử lý lại" trên dashboard). Nếu tự động reset theo trạng thái đích thì
- * `goNguonKetLucKhoiDong()` (đưa `dang_xu_ly` -> `cho_xu_ly` để THỬ LẠI) sẽ vô
+ * `goNguonKetDauTick()` (đưa `dang_xu_ly` -> `cho_xu_ly` để THỬ LẠI) sẽ vô
  * tình xoá mất chính bộ đếm nó cần đọc để quyết định thử tiếp hay bỏ hẳn.
  */
 export function datTrangThai(

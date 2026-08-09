@@ -7,7 +7,7 @@ import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
  * trần 200 dòng): ca "nguồn làm worker kẹt lặp lại" đi qua bộ tuning riêng
  * (KB_MAX_INGEST_ATTEMPTS) và mô phỏng "kẹt ở dang_xu_ly" bằng CÙNG kỹ thuật
  * mà test "nguồn kẹt ở dang_xu_ly từ lần chạy trước..." (kb-ingest-worker.test.ts)
- * đã dùng - đặt thẳng trang_thai='dang_xu_ly' rồi gọi goNguonKetLucKhoiDong(),
+ * đã dùng - đặt thẳng trang_thai='dang_xu_ly' rồi gọi goNguonKetDauTick(),
  * KHÔNG đợi một lần trích xuất thật sự quá hạn.
  *
  * Lý do KHÔNG dựng test bằng một file thật sự quá hạn qua worker.xuLyMotVong():
@@ -24,7 +24,7 @@ import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
  * NHANH, không qua tuning, ở chay-trich-xuat-tach-luong.test.ts (bỏ qua trần
  * 5000ms bằng cách gọi thẳng hàm với `hanMs: 300`) - đó là test "quan trọng
  * nhất" của phase, xác nhận cơ chế `worker.terminate()` THẬT SỰ hoạt động.
- * Test ở FILE NÀY xác nhận phần còn lại: bộ đếm + cổng `goNguonKetLucKhoiDong`
+ * Test ở FILE NÀY xác nhận phần còn lại: bộ đếm + cổng `goNguonKetDauTick`
  * quyết định đúng "thử tiếp hay bỏ hẳn" dựa trên `so_lan_thu`.
  */
 
@@ -69,7 +69,7 @@ describe("nguồn kẹt lặp lại ở dang_xu_ly - bị bỏ hẳn sau đúng 
     assert.equal(store.layNguon(n.id)!.trangThai, "dang_xu_ly");
 
     // "Khởi động lại": so_lan_thu(1) < trần(2) -> trả về cho_xu_ly để thử tiếp
-    worker.goNguonKetLucKhoiDong();
+    worker.goNguonKetDauTick();
     assert.equal(store.layNguon(n.id)!.trangThai, "cho_xu_ly");
 
     // Lần 2 (lần thử CUỐI CÙNG được phép): giành lại (so_lan_thu 1 -> 2)
@@ -77,7 +77,7 @@ describe("nguồn kẹt lặp lại ở dang_xu_ly - bị bỏ hẳn sau đúng 
     assert.equal(store.layNguon(n.id)!.trangThai, "dang_xu_ly");
 
     // "Khởi động lại" lần 2: so_lan_thu(2) >= trần(2) -> bỏ hẳn, đánh hong
-    worker.goNguonKetLucKhoiDong();
+    worker.goNguonKetDauTick();
 
     const sau = store.layNguon(n.id)!;
     assert.equal(sau.trangThai, "hong");
@@ -98,20 +98,20 @@ describe("nguồn kẹt lặp lại ở dang_xu_ly - bị bỏ hẳn sau đúng 
 
     for (let lan = 1; lan <= 3; lan++) {
       assert.equal(queries.giaNguonChoXuLy(n.id, tuning.getTuning("KB_MAX_INGEST_ATTEMPTS")), true, `lần ${lan} phải giành được`);
-      worker.goNguonKetLucKhoiDong();
+      worker.goNguonKetDauTick();
       assert.equal(store.layNguon(n.id)!.trangThai, "cho_xu_ly", `sau lần ${lan}/4 phải còn cho_xu_ly, chưa tới trần`);
     }
 
     assert.equal(queries.giaNguonChoXuLy(n.id, tuning.getTuning("KB_MAX_INGEST_ATTEMPTS")), true, "lần 4 phải giành được");
-    worker.goNguonKetLucKhoiDong();
+    worker.goNguonKetDauTick();
     const sau = store.layNguon(n.id)!;
     assert.equal(sau.trangThai, "hong");
     assert.equal(sau.soLanThu, 4);
   });
 });
 
-describe("goNguonKetLucKhoiDong chạy ĐỊNH KỲ mỗi tick qua chayMotVongAnToan(), không chỉ lúc boot", () => {
-  // TRƯỚC bản sửa: goNguonKetLucKhoiDong() CHỈ được gọi từ batDauWorker() lúc
+describe("goNguonKetDauTick chạy ĐỊNH KỲ mỗi tick qua chayMotVongAnToan(), không chỉ lúc boot", () => {
+  // TRƯỚC bản sửa: goNguonKetDauTick() CHỈ được gọi từ batDauWorker() lúc
   // boot. Một nguồn kẹt dang_xu_ly XUẤT HIỆN SAU boot (worker bị terminate()
   // vì quá hạn NGAY TRONG một tick) không có đường tự gỡ nào khác - route
   // reindex từ chối 409 mọi nguồn dang_xu_ly, nên nguồn kẹt VĨNH VIỄN tới lúc
@@ -131,7 +131,7 @@ describe("goNguonKetLucKhoiDong chạy ĐỊNH KỲ mỗi tick qua chayMotVongAn
     assert.equal(store.layNguon(n.id)!.trangThai, "dang_xu_ly", "tiền đề: nguồn phải đang kẹt dang_xu_ly trước tick 2");
 
     // Tick 2 (ĐỊNH KỲ - không phải lúc boot) phải tự gỡ nguồn kẹt này. Nếu
-    // goNguonKetLucKhoiDong() chỉ chạy ở batDauWorker() (bản TRƯỚC sửa) thì
+    // goNguonKetDauTick() chỉ chạy ở batDauWorker() (bản TRƯỚC sửa) thì
     // lần gọi chayMotVongAnToan() này chỉ chạy xuLyMotVong() - hàm đó CHỈ xử
     // lý cho_xu_ly, không đụng gì tới dang_xu_ly - nguồn sẽ kẹt mãi.
     await worker.chayMotVongAnToan();
@@ -140,7 +140,7 @@ describe("goNguonKetLucKhoiDong chạy ĐỊNH KỲ mỗi tick qua chayMotVongAn
     assert.notEqual(
       sau.trangThai,
       "dang_xu_ly",
-      "goNguonKetLucKhoiDong() phải chạy lại ở MỖI tick (không chỉ boot) - nguồn kẹt xuất hiện SAU boot vẫn phải tự gỡ ở tick kế tiếp",
+      "goNguonKetDauTick() phải chạy lại ở MỖI tick (không chỉ boot) - nguồn kẹt xuất hiện SAU boot vẫn phải tự gỡ ở tick kế tiếp",
     );
     // Nội dung hợp lệ + nhanh nên cùng tick 2 luôn xử lý xong tới san_sang -
     // chốt cả bước sau, không chỉ "thoát dang_xu_ly", để không lẫn với một

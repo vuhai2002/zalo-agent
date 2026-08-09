@@ -36,7 +36,7 @@ describe("giaNguonChoXuLy - bộ đếm lần thử (C3)", () => {
   it("mỗi lần giành lại (sau khi trả về cho_xu_ly) đếm tăng thêm 1", () => {
     const n = store.taoNguon({ ten: "x", loai: "text", noiDungGoc: "abc" });
     queries.giaNguonChoXuLy(n.id, 5);
-    store.datTrangThai(n.id, "cho_xu_ly"); // mô phỏng goNguonKetLucKhoiDong() trả về chờ xử lý lại
+    store.datTrangThai(n.id, "cho_xu_ly"); // mô phỏng goNguonKetDauTick() trả về chờ xử lý lại
     queries.giaNguonChoXuLy(n.id, 5);
     assert.equal(store.layNguon(n.id)!.soLanThu, 2);
   });
@@ -52,7 +52,7 @@ describe("giaNguonChoXuLy - bộ đếm lần thử (C3)", () => {
   it("nguồn đã chạm trần (so_lan_thu >= tranLanThu) không giành được nữa dù đang cho_xu_ly", () => {
     const n = store.taoNguon({ ten: "x", loai: "text", noiDungGoc: "abc" });
     queries.giaNguonChoXuLy(n.id, 1); // đưa so_lan_thu lên 1, đúng trần 1
-    store.datTrangThai(n.id, "cho_xu_ly"); // vẫn còn cho_xu_ly (mô phỏng ca hiếm nguồn chưa kịp bị goNguonKetLucKhoiDong xử lý)
+    store.datTrangThai(n.id, "cho_xu_ly"); // vẫn còn cho_xu_ly (mô phỏng ca hiếm nguồn chưa kịp bị goNguonKetDauTick xử lý)
     const daGianh = queries.giaNguonChoXuLy(n.id, 1);
     assert.equal(daGianh, false, "so_lan_thu đã bằng trần thì không được giành thêm");
   });

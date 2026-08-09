@@ -96,7 +96,7 @@ async function xuLyMotNguon(n: KbSourceTomTat): Promise<void> {
       // Worker bị buộc dừng (quá hạn hoặc chết bất thường) - KHÔNG BIẾT tài
       // liệu hỏng thật hay chỉ máy chậm/OOM thoáng qua, nên KHÔNG đánh "hong"
       // ngay: để nguyên "dang_xu_ly" (đã đặt bởi giaNguonChoXuLy), chờ
-      // goNguonKetLucKhoiDong() (đọc so_lan_thu, gọi lúc khởi động lại) quyết
+      // goNguonKetDauTick() (đọc so_lan_thu, gọi lúc khởi động lại) quyết
       // định thử lại hay bỏ hẳn.
       log.warn({ sourceId: n.id, loi: err.message }, "Worker trích xuất Kho tri thức bị dừng giữa chừng");
       return;
@@ -128,15 +128,20 @@ export async function xuLyMotVong(): Promise<void> {
  * mọi `dang_xu_ly` sót lại - từ lần khởi động trước (worker bị giết giữa
  * chừng) HOẶC từ chính tick liền trước (worker bị `terminate()` vì quá hạn -
  * catch trong `xuLyMotNguon` cố ý ĐỂ NGUYÊN `dang_xu_ly`) - được xét theo
- * `so_lan_thu`: còn dưới trần thì về `cho_xu_ly` để tick kế tiếp thử lại; đã
+ * `so_lan_thu`: còn dưới trần thì về `cho_xu_ly` - `xuLyMotVong()` (gọi NGAY
+ * SAU trong CÙNG một lần `chayMotVongAnToan()`, không phải tick sau) truy vấn
+ * lại `cho_xu_ly` nên giành lại và thử tiếp NGAY TRONG CHÍNH TICK NÀY; đã
  * chạm trần thì đi thẳng sang `hong` - không thử lại VÔ HẠN (C3).
  *
  * TRƯỚC bản sửa chỉ gọi lúc boot: nguồn quá hạn SAU boot kẹt `dang_xu_ly`
  * VĨNH VIỄN (route reindex từ chối 409 mọi `dang_xu_ly` - chỉ còn đường xóa
- * nguồn hoặc restart bot). Gọi lại mỗi tick làm 409 đó thành TẠM THỜI: chờ
- * tối đa một `TICK_MS` là nguồn tự thoát `dang_xu_ly`.
+ * nguồn hoặc restart bot). Gọi lại mỗi tick làm 409 đó thành TẠM THỜI, NHƯNG
+ * chặn trên KHÔNG PHẢI một `TICK_MS`: nguồn ĐANG thật sự chạy vẫn giữ
+ * `dang_xu_ly` tới hết `KB_EXTRACT_TIMEOUT_MS` của chính lượt đó - chặn trên
+ * thật là `TICK_MS + KB_EXTRACT_TIMEOUT_MS` (tối đa 605s theo hai trần mặc
+ * định).
  */
-export function goNguonKetLucKhoiDong(): void {
+export function goNguonKetDauTick(): void {
   const tranLanThu = getTuning("KB_MAX_INGEST_ATTEMPTS");
   for (const n of layNguonTheoTrangThai("dang_xu_ly")) {
     if (n.soLanThu >= tranLanThu) {
@@ -153,7 +158,7 @@ export function goNguonKetLucKhoiDong(): void {
 // thể xử lý lâu hơn TICK_MS, tick sau bắn vào lúc vòng trước còn dở thì bỏ
 // qua - giành có điều kiện ở trên đã đủ AN TOÀN dù thiếu cờ này (không xử lý
 // trùng một nguồn), nhưng thiếu cờ thì vẫn tốn công quét trùng lặp mỗi 5s.
-// CÙNG cờ này còn đảm bảo goNguonKetLucKhoiDong() (gọi ngay dưới) KHÔNG BAO
+// CÙNG cờ này còn đảm bảo goNguonKetDauTick() (gọi ngay dưới) KHÔNG BAO
 // GIỜ chạy trong lúc nguồn khác đang THẬT SỰ được xử lý ở CHÍNH tick hiện tại
 // (tick mới chỉ bắt đầu sau khi tick trước đã hoàn toàn xong) - chỉ gỡ đúng
 // nguồn kẹt lại TỪ tick/lần khởi động trước.
@@ -168,7 +173,7 @@ export async function chayMotVongAnToan(): Promise<void> {
   if (dangChayVong) return;
   dangChayVong = true;
   try {
-    goNguonKetLucKhoiDong();
+    goNguonKetDauTick();
     await xuLyMotVong();
   } finally {
     dangChayVong = false;
@@ -184,7 +189,7 @@ export function batDauWorker(): () => void {
   // Chạy NGAY, không đợi hết TICK_MS đầu tiên - nguồn upload lúc bot vừa khởi
   // động lại không phải chờ oan một nhịp quét. Lượt đầu tiên này CŨNG gỡ mọi
   // dang_xu_ly kẹt từ lần chạy trước (chayMotVongAnToan tự gọi
-  // goNguonKetLucKhoiDong()) - các tick SAU tiếp tục gọi lại, không chỉ riêng
+  // goNguonKetDauTick()) - các tick SAU tiếp tục gọi lại, không chỉ riêng
   // lượt boot này.
   void chayMotVongAnToan();
   const timer = setInterval(() => void chayMotVongAnToan(), TICK_MS);

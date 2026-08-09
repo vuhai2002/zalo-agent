@@ -25,8 +25,8 @@ export type KetQuaTrichXuat = { chu: string; doan: DoanMoi[] };
  * (file hỏng, ok:false từ chính worker). Ở ca này KHÔNG BIẾT tài liệu có hỏng
  * thật hay chỉ máy chậm/OOM thoáng qua, nên caller (`kb-ingest-worker.ts`)
  * KHÔNG được đánh "hong" ngay - phải để nguyên `dang_xu_ly`, chờ
- * `goNguonKetLucKhoiDong()` (đọc `so_lan_thu`, gọi lúc khởi động lại) quyết
- * định thử lại hay bỏ hẳn. Xem thêm phần đầu file đó.
+ * `goNguonKetDauTick()` (đọc `so_lan_thu`, chạy đầu mỗi tick) quyết định thử
+ * lại hay bỏ hẳn. Xem thêm phần đầu file đó.
  */
 export class LoiTrichXuatBiNgatGiuaChung extends Error {}
 

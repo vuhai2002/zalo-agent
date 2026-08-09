@@ -91,7 +91,7 @@ const claimStmt = db.prepare(`
  * chạm `tranLanThu` lúc câu UPDATE này chạy (so sánh-rồi-đổi NGUYÊN TỬ trong
  * một câu lệnh, không phải đọc rồi ghi 2 bước). Trả `false` nếu nguồn đã bị
  * giành/xử lý bởi lượt khác, hoặc đã hết lượt thử (trần thường bị hạ ngay
- * trước khi nguồn kịp bị đưa sang `hong` - phòng hờ, `goNguonKetLucKhoiDong()`
+ * trước khi nguồn kịp bị đưa sang `hong` - phòng hờ, `goNguonKetDauTick()`
  * mới là nơi CHỦ ĐỘNG chuyển nguồn hết lượt sang `hong`).
  *
  * `so_lan_thu` tăng NGAY TRONG câu UPDATE này, KHÔNG phải sau khi xử lý xong:
