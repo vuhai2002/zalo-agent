@@ -24,6 +24,16 @@
  * bộ canh rò prompt (`sanitize-reply-text.ts`) khi model trích lại nguyên văn;
  * (b) phòng khi model tự nhại lại tên thẻ KHÔNG nonce ra output.
  *
+ * Bộ khử này dùng ĐÚNG cách dựng regex chịu ký tự xen của `memory-prompt-block.ts`
+ * (không còn literal `new RegExp(THE, "gi")`). Lý do nâng cấp dù nonce đã đủ
+ * chặn RANH GIỚI: nonce làm ranh giới không giả mạo được với một BỘ PHÂN TÍCH
+ * CÚ PHÁP, nhưng thứ đọc chuỗi này là MỘT MODEL NGÔN NGỮ, và model khớp mờ.
+ * Trước khi nâng cấp, `</noi_dung␣_ngoai>` (ZWSP chèn giữa) đi tới model
+ * NGUYÊN VĂN - không ai đo được model có đọc nó ra như một thẻ đóng "quen mắt"
+ * hay không. Bộ khử chịu ký tự xen xoá hẳn câu hỏi đó cho 8/11 payload vô hình
+ * (fullwidth và homoglyph vẫn cần nonce - đó là lý do nonce vẫn là hàng rào
+ * CHÍNH, bộ khử chỉ là lớp phòng thêm rẻ tiền).
+ *
  * Học từ hermes-agent (`agent/tool_dispatch_helpers.py`), nơi họ cũng cố tình
  * KHÔNG có đường tắt "đã bọc rồi thì thôi" - cờ đó giả mạo được, còn bọc thừa
  * hai lần thì vô hại.
@@ -39,8 +49,12 @@ import { randomBytes } from "node:crypto";
 // đòi sửa gì ở đó.
 import { THE_NOI_DUNG_NGOAI as THE } from "../prompt-leak-markers.js";
 
-/** Bắt cả thẻ mở lẫn thẻ đóng DẠNG GỐC (không nonce), không phân biệt hoa thường */
-const TEN_THE_RE = new RegExp(THE, "gi");
+/**
+ * Bắt cả thẻ mở lẫn thẻ đóng DẠNG GỐC (không nonce) - CHỊU ký tự xen: ghép
+ * từng chữ cái của tên thẻ (bỏ gạch dưới) bằng lớp đệm chấp nhận ký tự định
+ * dạng vô hình, dấu phụ, HOẶC gạch dưới. Cùng cách dựng với `memory-prompt-block.ts`.
+ */
+const TEN_THE_RE = new RegExp([...THE.replace(/_/g, "")].join("[\\p{Cf}\\p{Mn}_]*"), "giu");
 
 /** Dạng đã khử: gạch ngang thay gạch dưới, không còn khớp tên thẻ gốc */
 const DANG_KHU = THE.replace(/_/g, "-");

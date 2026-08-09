@@ -115,4 +115,11 @@ describe("catThanhDoan - lọc dải Tags (ASCII smuggling) lúc nạp", () => {
     const doan = catThanhDoan(chu, MAC_DINH);
     assert.equal(doan[0]!.noiDung, chu, "nội dung hợp lệ phải nguyên vẹn TỪNG BYTE, không chỉ 'giống giống'");
   });
+
+  it("bốn ký tự hiển-thị-rỗng khác (Hangul filler, Braille blank, Mathematical Bold) cũng bị lọc lúc nạp", () => {
+    const an = "ㅤᅟ⠀\u{1D41D}";
+    const doan = catThanhDoan(`Bảng giá bình thường.${an}`, MAC_DINH);
+    const gop = doan.map((d) => d.noiDung).join("");
+    assert.equal(gop.includes(an), false, "một trong bốn ký tự hiển-thị-rỗng còn sót sau khi cắt đoạn");
+  });
 });

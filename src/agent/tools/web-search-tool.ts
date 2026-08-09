@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { getSearchSettings } from "../../config/runtime-tool-settings.js";
 import { searchWeb } from "../../shared/web-search-providers.js";
+import { locKyTuAn } from "./tag-ky-tu-an.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 import { wrapUntrustedContent } from "./wrap-untrusted-content.js";
 import { getTuning } from "../../config/runtime-tuning-settings.js";
@@ -40,8 +41,10 @@ export function createWebSearchTool() {
         (r, i) => `${i + 1}. ${r.title}\n   ${r.url}${r.snippet ? `\n   ${r.snippet}` : ""}`,
       );
       // Tiêu đề và mô tả trong kết quả tìm kiếm cũng do bên ngoài viết ra - một
-      // trang đặt tiêu đề thành chỉ thị là đủ để thử điều khiển model
-      return wrapUntrustedContent(lines.join("\n"), `kết quả tìm kiếm: ${query}`);
+      // trang đặt tiêu đề thành chỉ thị là đủ để thử điều khiển model. Lọc dải
+      // Tags (ASCII smuggling, xem `tag-ky-tu-an.ts`) TRƯỚC khi bọc - nghiên cứu
+      // yêu cầu lọc ở CẢ HAI tầng nạp (KB lẫn web), không chỉ KB.
+      return wrapUntrustedContent(locKyTuAn(lines.join("\n")), `kết quả tìm kiếm: ${query}`);
     },
   });
 }

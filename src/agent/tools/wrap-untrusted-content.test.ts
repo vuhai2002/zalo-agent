@@ -114,9 +114,16 @@ describe("wrapUntrustedContent - chống thoát ranh giới bằng payload vô h
       assert.equal(soLanXuatHien, 1, `${ten}: thẻ đóng thật xuất hiện ${soLanXuatHien} lần, đáng lẽ đúng 1`);
       assert.ok(ra.trimEnd().endsWith(theDongThat), `${ten}: thẻ đóng thật không nằm ở cuối`);
 
-      // Nội dung GỐC (kèm payload) vẫn phải còn trong output - nonce không đòi
-      // hỏi đụng một byte nội dung nào (khác cách tiếp cận lọc \p{Cf} toàn cục).
-      assert.ok(ra.includes(`</noi_dung${kyTu}_ngoai>`), `${ten}: payload gốc bị đụng dù nonce không cần điều đó`);
+      // Lớp phụ (Important 4, sau rà soát): payload GỐC (kèm ký tự vô hình)
+      // KHÔNG còn sống sót nguyên văn - `TEN_THE_RE` nay dùng cùng cách dựng
+      // chịu ký tự xen với memory-prompt-block.ts nên đã khử được nó, dù nonce
+      // một mình đã đủ chặn ranh giới. Phòng thêm cho trường hợp model tự nhại
+      // lại tên thẻ GỐC (không nonce) ra output.
+      assert.equal(
+        ra.includes(`</noi_dung${kyTu}_ngoai>`),
+        false,
+        `${ten}: payload gốc (kèm ký tự vô hình) còn sống sót nguyên văn - bộ khử chịu ký tự xen không chạm tới`,
+      );
     }
   });
 

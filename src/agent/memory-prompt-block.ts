@@ -1,4 +1,5 @@
 import { THE_DIEU_DA_NHO as THE } from "./prompt-leak-markers.js";
+import { locKyTuAn } from "./tools/tag-ky-tu-an.js";
 
 /**
  * Dựng khối "điều đã ghi nhớ" cho system prompt, có ranh giới rõ ràng.
@@ -26,7 +27,22 @@ import { THE_DIEU_DA_NHO as THE } from "./prompt-leak-markers.js";
  * chấp nhận được vì nội dung khối này do CHÍNH BOT ghi ra (qua `save_memory`),
  * không phải nguyên văn của người lạ như nội dung web.
  *
- * Module THUẦN: không env, không DB.
+ * Nặng hơn docstring trên thừa nhận: fact do bot ghi, nhưng bot ghi lại thứ
+ * NGƯỜI LẠ VỪA NÓI qua `save_memory`, rồi khối này nằm trong system prompt ở
+ * MỌI lượt sau - đây là đường injection BỀN duy nhất còn hở (nội dung web đã
+ * bọc `wrapUntrustedContent`, tin người ngoài allowlist đã có nhãn). Vì vậy
+ * cũng gọi `locKyTuAn` (dùng chung với `chunk-text.ts`/web tools) trên nội
+ * dung fact TRƯỚC khi khử tên thẻ - chặn kênh ASCII smuggling (dải Tags +
+ * 4 ký tự hiển-thị-rỗng khác) ẩn TRONG NỘI DUNG fact, tách biệt với việc khử
+ * TÊN THẺ ở trên.
+ *
+ * RỦI RO CÒN LẠI đã ghi nhận, KHÔNG sửa: `</dieu_da nho>` (khoảng trắng ASCII
+ * thay gạch dưới) không bị lớp đệm `[\p{Cf}\p{Mn}_]*` bắt, vì đệm không gồm
+ * `\s` - thêm `\s` vào lớp đệm sẽ khử NHẦM cụm tiếng Việt bình thường như
+ * "dieu da nho" (không dấu, gõ tắt) xuất hiện tự nhiên trong fact. Đánh đổi
+ * có chủ ý: chấp nhận khe hở hẹp này để không khử nhầm chữ thật.
+ *
+ * Module THUẦN: không env, không DB - `tag-ky-tu-an.ts` cũng THUẦN.
  */
 
 /**
@@ -44,8 +60,9 @@ export function khoiDieuDaNho(facts: readonly { content: string }[]): string {
 
   // Khử tên thẻ TRONG NỘI DUNG trước khi bọc. Fact do model tự viết, mà model
   // viết gì thì chịu ảnh hưởng của tin nhắn nó vừa đọc - nên nội dung fact phải
-  // bị coi là không đáng tin y như nội dung web.
-  const dong = facts.map((f) => `- ${f.content.replace(TEN_THE_RE, DANG_KHU)}`).join("\n");
+  // bị coi là không đáng tin y như nội dung web. `locKyTuAn` chạy TRƯỚC (lọc
+  // ký tự hiển-thị-rỗng khỏi TOÀN BỘ nội dung fact) rồi mới khử riêng tên thẻ.
+  const dong = facts.map((f) => `- ${locKyTuAn(f.content).replace(TEN_THE_RE, DANG_KHU)}`).join("\n");
 
   return [
     `<${THE}>`,

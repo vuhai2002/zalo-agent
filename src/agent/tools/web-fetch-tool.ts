@@ -5,6 +5,7 @@ import { extractHtmlTitle, htmlToReadableText } from "../../shared/html-to-text.
 import { fetchViaJinaReader } from "../../shared/jina-reader-fallback.js";
 import { createLogger } from "../../shared/logger.js";
 import { downloadFromPublicUrl } from "../../shared/safe-remote-download.js";
+import { locKyTuAn } from "./tag-ky-tu-an.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 import { wrapUntrustedContent } from "./wrap-untrusted-content.js";
 import { getTuning } from "../../config/runtime-tuning-settings.js";
@@ -81,7 +82,10 @@ export function createWebFetchTool() {
         ? `${page.text.slice(0, maxChars)}\n[...đã cắt bớt, trang còn dài]`
         : page.text;
 
-      return wrapUntrustedContent(body, `${url}${page.title ? ` - ${page.title}` : ""}`);
+      // Lọc dải Tags (ASCII smuggling, xem `tag-ky-tu-an.ts`) TRƯỚC khi bọc -
+      // trang web là nguồn KHÔNG kiểm soát y hệt tài liệu KB, nghiên cứu yêu
+      // cầu lọc ở CẢ HAI tầng nạp.
+      return wrapUntrustedContent(locKyTuAn(body), `${url}${page.title ? ` - ${page.title}` : ""}`);
     },
   });
 }
