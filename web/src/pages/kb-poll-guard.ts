@@ -14,8 +14,20 @@ export function conViecDoiXuLy(sources: { trangThai: KbSourceStatus }[]): boolea
   return sources.some((s) => s.trangThai === "cho_xu_ly" || s.trangThai === "dang_xu_ly");
 }
 
-/** Kết quả một lần thử tải danh sách nguồn - `thanhCong: false` không kèm `items` vì không có gì mới để đọc. */
-export type KetQuaTaiNguon = { thanhCong: true; items: { trangThai: KbSourceStatus }[] } | { thanhCong: false };
+/**
+ * Kết quả một lần thử tải danh sách nguồn - `thanhCong: false` không kèm
+ * `items` vì không có gì mới để đọc, chỉ kèm `loi` (tùy chọn) để tầng áp dụng
+ * UI (`kb-source-poll.ts`) hiện đúng thông điệp lỗi mà không phải tự bắt lại
+ * exception ở một chỗ khác.
+ *
+ * Generic theo `T` (mặc định chỉ cần `trangThai`) - `kb-poll-guard.test.ts`
+ * dùng fixture tối giản `{ trangThai }`, còn `kb-source-poll.ts` (component
+ * thật) cần NGUYÊN `KbSourceListItem[]` (đủ trường cho `setSources`) để
+ * `apDung` (`kb-poll-loop.ts`) không phải ép kiểu mất an toàn.
+ */
+export type KetQuaTaiNguon<T extends { trangThai: KbSourceStatus } = { trangThai: KbSourceStatus }> =
+  | { thanhCong: true; items: T[] }
+  | { thanhCong: false; loi?: string };
 
 /**
  * Có nên hẹn lượt poll KẾ TIẾP hay không, sau MỘT lần thử tải - kể cả khi lần
@@ -31,9 +43,9 @@ export type KetQuaTaiNguon = { thanhCong: true; items: { trangThai: KbSourceStat
  * này (`sourcesDaBiet`) - một lần gọi mạng hỏng không được hiểu nhầm thành
  * "hết việc" khi lần tải THÀNH CÔNG gần nhất còn nguồn đang chờ xử lý.
  */
-export function nenHenLuotKe(
-  ketQua: KetQuaTaiNguon,
-  sourcesDaBiet: { trangThai: KbSourceStatus }[] | null,
+export function nenHenLuotKe<T extends { trangThai: KbSourceStatus }>(
+  ketQua: KetQuaTaiNguon<T>,
+  sourcesDaBiet: T[] | null,
 ): boolean {
   if (ketQua.thanhCong) return conViecDoiXuLy(ketQua.items);
   return sourcesDaBiet !== null && conViecDoiXuLy(sourcesDaBiet);
