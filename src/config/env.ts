@@ -290,7 +290,19 @@ const envSchema = z.object({
   // Trần thời gian trích xuất MỘT tài liệu trong worker thread riêng - quá hạn
   // thì `terminate()` worker (cách DUY NHẤT dừng được code đồng bộ đang quay
   // CPU) và đánh dấu lượt này bị dừng giữa chừng, xem chay-trich-xuat-tach-luong.ts.
-  KB_EXTRACT_TIMEOUT_MS: z.coerce.number().int().min(5000).max(600_000).default(60_000),
+  //
+  // Sàn Zod ở đây (100ms) THẤP HƠN sàn thật cho người vận hành (min: 5000 ở
+  // tuning-definitions.ts) - CỐ Ý, không phải lệch sót. `getTuning()` chỉ kẹp
+  // theo tuning-definitions.ts khi CÓ dòng đè trong DB (dashboard); không có
+  // dòng đè thì trả THẲNG giá trị env này - dashboard vẫn không cho nhập dưới
+  // 5 giây (route tuning-routes.ts kiểm riêng theo tuning-definitions.ts). Sàn
+  // thấp ở đây CHỈ mở đường cho test set thẳng qua biến môi trường
+  // (`setupTestEnv({ KB_EXTRACT_TIMEOUT_MS: "300" })`) để dựng được một lần
+  // quá hạn THẬT qua worker.xuLyMotVong() - đã đo: không có tài liệu hợp lệ
+  // nào (trong mọi trần ooxml-limits.ts) chạm nổi 5000ms thật, nên không có
+  // cách nào test nhánh "worker bị terminate() vì quá hạn" bằng một trần hợp
+  // lệ với người dùng thật.
+  KB_EXTRACT_TIMEOUT_MS: z.coerce.number().int().min(100).max(600_000).default(60_000),
   // Số lần GIÀNH xử lý tối đa cho một nguồn trước khi bỏ hẳn (đánh "hong") -
   // chặn nguồn làm worker treo/chết lặp lại vô hạn qua các lần khởi động lại.
   // Đếm tăng NGAY LÚC GIÀNH (giaNguonChoXuLy), không phải lúc phát hiện hỏng.

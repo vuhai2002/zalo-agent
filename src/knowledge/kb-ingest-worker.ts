@@ -75,6 +75,17 @@ async function xuLyMotNguon(n: KbSourceTomTat): Promise<void> {
     // dọn nào khác ngoài donDoanMoCoi() chạy lúc boot).
     if (!layNguon(n.id)) return;
 
+    // I7: trích xuất RA CHỮ không đồng nghĩa với CẮT ĐƯỢC ĐOẠN - tài liệu chỉ
+    // toàn tiêu đề (không thân bài) hoặc file .txt/.md rỗng vẫn trả chữ hợp lệ
+    // (không rỗng hoặc không ném ở extractor) nhưng catThanhDoan() ra mảng
+    // RỖNG. Không chặn ở đây thì nguồn thành "Sẵn sàng, 0 đoạn" - kb_search
+    // không bao giờ trả gì cho nguồn này mà không ai biết vì sao. Ném ở đây để
+    // rơi vào nhánh "lỗi trích xuất THƯỜNG" bên dưới (đánh hong ngay, không
+    // chờ hết so_lan_thu - nội dung rỗng thì thử lại bao nhiêu lần cũng vậy).
+    if (doan.length === 0) {
+      throw new Error("Tài liệu không có nội dung để cắt đoạn (có thể chỉ chứa tiêu đề hoặc trống)");
+    }
+
     luuDoan(n.id, doan);
     // Vừa xử lý XONG - cấp lại budget lượt thử mới, đúng lý do reset ở
     // datTrangThai(): so_lan_thu không tự lùi theo trạng thái, phải truyền
@@ -113,12 +124,17 @@ export async function xuLyMotVong(): Promise<void> {
 }
 
 /**
- * Gọi một lần lúc boot: mọi `dang_xu_ly` sót lại từ lần chạy trước (worker bị
- * giết giữa chừng, hoặc bị `terminate()` vì quá hạn - xem
- * `chay-trich-xuat-tach-luong.ts`) được xét lại theo `so_lan_thu`: còn dưới
- * trần thì về `cho_xu_ly` để vòng tick kế tiếp thử lại; đã chạm trần thì đi
- * thẳng sang `hong` - nguồn làm worker treo/chết lặp lại không được thử lại
- * VÔ HẠN qua các lần khởi động (C3).
+ * Gọi ĐẦU MỖI TICK (qua `chayMotVongAnToan()` bên dưới), KHÔNG chỉ lúc boot:
+ * mọi `dang_xu_ly` sót lại - từ lần khởi động trước (worker bị giết giữa
+ * chừng) HOẶC từ chính tick liền trước (worker bị `terminate()` vì quá hạn -
+ * catch trong `xuLyMotNguon` cố ý ĐỂ NGUYÊN `dang_xu_ly`) - được xét theo
+ * `so_lan_thu`: còn dưới trần thì về `cho_xu_ly` để tick kế tiếp thử lại; đã
+ * chạm trần thì đi thẳng sang `hong` - không thử lại VÔ HẠN (C3).
+ *
+ * TRƯỚC bản sửa chỉ gọi lúc boot: nguồn quá hạn SAU boot kẹt `dang_xu_ly`
+ * VĨNH VIỄN (route reindex từ chối 409 mọi `dang_xu_ly` - chỉ còn đường xóa
+ * nguồn hoặc restart bot). Gọi lại mỗi tick làm 409 đó thành TẠM THỜI: chờ
+ * tối đa một `TICK_MS` là nguồn tự thoát `dang_xu_ly`.
  */
 export function goNguonKetLucKhoiDong(): void {
   const tranLanThu = getTuning("KB_MAX_INGEST_ATTEMPTS");
@@ -137,12 +153,22 @@ export function goNguonKetLucKhoiDong(): void {
 // thể xử lý lâu hơn TICK_MS, tick sau bắn vào lúc vòng trước còn dở thì bỏ
 // qua - giành có điều kiện ở trên đã đủ AN TOÀN dù thiếu cờ này (không xử lý
 // trùng một nguồn), nhưng thiếu cờ thì vẫn tốn công quét trùng lặp mỗi 5s.
+// CÙNG cờ này còn đảm bảo goNguonKetLucKhoiDong() (gọi ngay dưới) KHÔNG BAO
+// GIỜ chạy trong lúc nguồn khác đang THẬT SỰ được xử lý ở CHÍNH tick hiện tại
+// (tick mới chỉ bắt đầu sau khi tick trước đã hoàn toàn xong) - chỉ gỡ đúng
+// nguồn kẹt lại TỪ tick/lần khởi động trước.
 let dangChayVong = false;
 
-async function chayMotVongAnToan(): Promise<void> {
+/**
+ * Một tick đầy đủ: gỡ nguồn kẹt `dang_xu_ly` từ tick/lần khởi động TRƯỚC rồi
+ * mới xử lý nguồn `cho_xu_ly` - export để test gọi trực tiếp, không phải chờ
+ * `TICK_MS` thật qua `setInterval`.
+ */
+export async function chayMotVongAnToan(): Promise<void> {
   if (dangChayVong) return;
   dangChayVong = true;
   try {
+    goNguonKetLucKhoiDong();
     await xuLyMotVong();
   } finally {
     dangChayVong = false;
@@ -155,9 +181,11 @@ export function batDauWorker(): () => void {
   if (soDoan > 0) {
     log.info({ soDoan, soHangFts }, "Đã dọn đoạn/hàng FTS mồ côi (nguồn gốc đã bị xóa) lúc khởi động");
   }
-  goNguonKetLucKhoiDong();
   // Chạy NGAY, không đợi hết TICK_MS đầu tiên - nguồn upload lúc bot vừa khởi
-  // động lại không phải chờ oan một nhịp quét.
+  // động lại không phải chờ oan một nhịp quét. Lượt đầu tiên này CŨNG gỡ mọi
+  // dang_xu_ly kẹt từ lần chạy trước (chayMotVongAnToan tự gọi
+  // goNguonKetLucKhoiDong()) - các tick SAU tiếp tục gọi lại, không chỉ riêng
+  // lượt boot này.
   void chayMotVongAnToan();
   const timer = setInterval(() => void chayMotVongAnToan(), TICK_MS);
   timer.unref();

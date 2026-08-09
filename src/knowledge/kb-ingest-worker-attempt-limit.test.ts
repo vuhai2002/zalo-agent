@@ -109,3 +109,43 @@ describe("nguồn kẹt lặp lại ở dang_xu_ly - bị bỏ hẳn sau đúng 
     assert.equal(sau.soLanThu, 4);
   });
 });
+
+describe("goNguonKetLucKhoiDong chạy ĐỊNH KỲ mỗi tick qua chayMotVongAnToan(), không chỉ lúc boot", () => {
+  // TRƯỚC bản sửa: goNguonKetLucKhoiDong() CHỈ được gọi từ batDauWorker() lúc
+  // boot. Một nguồn kẹt dang_xu_ly XUẤT HIỆN SAU boot (worker bị terminate()
+  // vì quá hạn NGAY TRONG một tick) không có đường tự gỡ nào khác - route
+  // reindex từ chối 409 mọi nguồn dang_xu_ly, nên nguồn kẹt VĨNH VIỄN tới lúc
+  // ai đó restart cả bot. Test này gọi chayMotVongAnToan() TRỰC TIẾP hai lần
+  // (mô phỏng hai tick liên tiếp, KHÔNG qua batDauWorker/setInterval) để chứng
+  // minh lần gọi THỨ HAI - không chỉ lần đầu tiên - cũng tự gỡ được.
+  it("nguồn kẹt dang_xu_ly XUẤT HIỆN SAU tick đầu vẫn được gỡ ở tick kế tiếp, không cần restart", async () => {
+    // Tick 1: không có gì kẹt - chỉ để mô phỏng "đã qua một lần chạy" (đúng
+    // cách batDauWorker() gọi lần đầu tiên lúc boot).
+    await worker.chayMotVongAnToan();
+
+    // Kẹt xảy ra GIỮA hai tick - mô phỏng đúng ca thật: worker bị terminate()
+    // vì quá KB_EXTRACT_TIMEOUT_MS, catch trong xuLyMotNguon để NGUYÊN
+    // dang_xu_ly (không tự đặt lại gì) chờ tick sau xét lại.
+    const n = store.taoNguon({ ten: "kẹt giữa hai tick", loai: "text", noiDungGoc: "# Giờ mở cửa\n\n8h - 21h" });
+    assert.equal(queries.giaNguonChoXuLy(n.id, tuning.getTuning("KB_MAX_INGEST_ATTEMPTS")), true);
+    assert.equal(store.layNguon(n.id)!.trangThai, "dang_xu_ly", "tiền đề: nguồn phải đang kẹt dang_xu_ly trước tick 2");
+
+    // Tick 2 (ĐỊNH KỲ - không phải lúc boot) phải tự gỡ nguồn kẹt này. Nếu
+    // goNguonKetLucKhoiDong() chỉ chạy ở batDauWorker() (bản TRƯỚC sửa) thì
+    // lần gọi chayMotVongAnToan() này chỉ chạy xuLyMotVong() - hàm đó CHỈ xử
+    // lý cho_xu_ly, không đụng gì tới dang_xu_ly - nguồn sẽ kẹt mãi.
+    await worker.chayMotVongAnToan();
+
+    const sau = store.layNguon(n.id)!;
+    assert.notEqual(
+      sau.trangThai,
+      "dang_xu_ly",
+      "goNguonKetLucKhoiDong() phải chạy lại ở MỖI tick (không chỉ boot) - nguồn kẹt xuất hiện SAU boot vẫn phải tự gỡ ở tick kế tiếp",
+    );
+    // Nội dung hợp lệ + nhanh nên cùng tick 2 luôn xử lý xong tới san_sang -
+    // chốt cả bước sau, không chỉ "thoát dang_xu_ly", để không lẫn với một
+    // nhánh chỉ đặt cho_xu_ly rồi bỏ dở.
+    assert.equal(sau.trangThai, "san_sang");
+    assert.ok(sau.soDoan > 0);
+  });
+});
