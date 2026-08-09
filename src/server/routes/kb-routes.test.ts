@@ -332,6 +332,11 @@ describe("GET /api/kb/sources/:id/agents", () => {
     assert.equal(body.agentIds.length, 2);
   });
 
+  it("nguồn không tồn tại trả 404 - nhất quán với /chunks và DELETE ngay cạnh", async () => {
+    const res = await app.request("/api/kb/sources/khong-ton-tai/agents", { headers: { cookie } });
+    assert.equal(res.status, 404);
+  });
+
   it("nguồn chưa agent nào gán trả mảng rỗng", async () => {
     const n = store.taoNguon({ ten: "n", loai: "text", noiDungGoc: "x" });
     const res = await app.request(`/api/kb/sources/${n.id}/agents`, { headers: { cookie } });

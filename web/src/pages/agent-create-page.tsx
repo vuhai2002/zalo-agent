@@ -144,6 +144,9 @@ function ManTao({ banNhap, onXong }: { banNhap: BanNhapAgent; onXong: () => void
         form={form}
         onChange={doi}
         soTaiKhoan={0}
+        // Agent chưa tồn tại trong DB - chưa có id để gán nguồn Kho tri thức.
+        // `null` TƯỜNG MINH (không phải bỏ trống 4 optional) - xem `KbFormBridge`.
+        kb={null}
         danhTinh={
           <AgentIdentitySection
             id={id}

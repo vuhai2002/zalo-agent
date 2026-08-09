@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError, type KbSourceListItem } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { useConfirmDialog } from "../shared/confirm-dialog";
@@ -8,7 +8,7 @@ import { EmptyRow, ListToolbar, TableShell } from "../shared/ui-bits";
 import { KbAddSourceModal } from "./kb-add-source-modal";
 import { KbChunksModal } from "./kb-chunks-modal";
 import { xayThongDiepXoaNguon } from "./kb-delete-warning-message";
-import { conViecDoiXuLy } from "./kb-poll-guard";
+import { useKbSourcePoll } from "./kb-source-poll";
 import { KbSourceRow } from "./kb-source-row";
 
 // Phân trang phía CLIENT - `GET /api/kb/sources` chưa hỗ trợ offset/limit,
@@ -22,8 +22,7 @@ const KICH_TRANG = 20;
  * nhưng DỪNG hẳn khi không còn nguồn nào đang chờ xử lý (B7).
  */
 export function KnowledgePage() {
-  const [sources, setSources] = useState<KbSourceListItem[] | null>(null);
-  const [loadError, setLoadError] = useState("");
+  const { sources, loadError, reload } = useKbSourcePoll();
   const [actionError, setActionError] = useState("");
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
@@ -31,35 +30,18 @@ export function KnowledgePage() {
   const [xemDoanCua, setXemDoanCua] = useState<KbSourceListItem | null>(null);
   const { confirm, confirmDialog } = useConfirmDialog();
 
-  const reload = useCallback(() => {
-    api.kb
-      .sources()
-      .then((d) => {
-        setSources(d.items);
-        setLoadError("");
-      })
-      .catch((err: unknown) => {
-        setSources((cu) => cu ?? []);
-        setLoadError(err instanceof ApiError ? err.message : "Không tải được danh sách nguồn");
-      });
-  }, []);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
-
-  // B7: chỉ hẹn tải lại tiếp khi CÒN nguồn đang chờ worker xử lý - dừng hẳn
-  // khi mọi nguồn đã san_sang/hong, không chạy setInterval vô thời hạn. Effect
-  // chạy lại mỗi khi `sources` đổi (kể cả do reload() gọi từ chỗ khác, như sau
-  // khi thêm nguồn hay bấm "Xử lý lại") nên poll TỰ KHỞI ĐỘNG LẠI đúng lúc có
-  // việc mới, không cần một effect riêng để canh việc đó.
-  useEffect(() => {
-    if (!sources || !conViecDoiXuLy(sources)) return;
-    const timer = window.setTimeout(reload, 4000);
-    return () => window.clearTimeout(timer);
-  }, [sources, reload]);
+  const daLoc = (sources ?? []).filter((s) => nhanKhopTuKhoa(s.ten, query));
 
   useEffect(() => setPage(0), [query]);
+  // Việc 4.1: xóa nguồn cuối cùng của trang đang xem (hoặc gõ tìm kiếm hẹp
+  // hơn) làm số trang thật GIẢM - trang đang đứng có thể vượt quá số trang
+  // mới, hiện rỗng dù người dùng không hề đổi từ khóa. Kẹp về trang cuối còn
+  // dữ liệu (0 nếu shrink về dưới 1 trang). Dùng `daLoc.length` (số nguyên)
+  // chứ không phải `sources`/`daLoc` (mảng đổi tham chiếu mỗi lần poll) - để
+  // không kéo người dùng về trang 0 mỗi 4 giây khi SỐ LƯỢNG không hề đổi.
+  useEffect(() => {
+    if (page > 0 && page * KICH_TRANG >= daLoc.length) setPage(0);
+  }, [daLoc.length, page]);
 
   async function reindex(id: string) {
     await api.kb.reindex(id);
@@ -88,7 +70,6 @@ export function KnowledgePage() {
     }
   }
 
-  const daLoc = (sources ?? []).filter((s) => nhanKhopTuKhoa(s.ten, query));
   const hasMore = (page + 1) * KICH_TRANG < daLoc.length;
   const trang = daLoc.slice(page * KICH_TRANG, (page + 1) * KICH_TRANG);
 

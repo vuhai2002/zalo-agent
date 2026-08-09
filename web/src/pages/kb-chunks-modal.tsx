@@ -73,7 +73,7 @@ export function KbChunksModal({ source, onClose }: { source: KbSourceListItem; o
               {d.tieuDe && (
                 <div className="text-[12px] font-medium text-zalo-600 dark:text-zalo-400">{d.tieuDe}</div>
               )}
-              <p className="whitespace-pre-wrap text-[13px] leading-[1.6] text-ink">{d.noiDung}</p>
+              <p className="whitespace-pre-wrap break-words text-[13px] leading-[1.6] text-ink">{d.noiDung}</p>
             </div>
           ))}
         </div>

@@ -180,10 +180,7 @@ export function AgentDetailPage() {
         form={form}
         onChange={doi}
         soTaiKhoan={agent.accountCount}
-        agentId={agent.id}
-        onKbDirtyChange={onKbDirtyChange}
-        onKbSaved={onKbSaved}
-        kbRefreshSignal={kbRefreshSignal}
+        kb={{ agentId: agent.id, onDirtyChange: onKbDirtyChange, onSaved: onKbSaved, refreshSignal: kbRefreshSignal }}
         danhTinh={
           <AgentIdentitySection id={agent.id} isDefault={agent.isDefault} form={form} onChange={doi} />
         }
