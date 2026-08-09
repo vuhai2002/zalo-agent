@@ -1,16 +1,20 @@
 import { randomBytes } from "node:crypto";
 import path from "node:path";
-import { Hono, type MiddlewareHandler } from "hono";
-import { bodyLimit } from "hono/body-limit";
-import { z } from "zod";
+import { Hono } from "hono";
 import { getAgent } from "../../config/agent-store.js";
-import { getTuning } from "../../config/runtime-tuning-settings.js";
-import { DINH_DANG_HO_TRO, laDinhDangHoTro, type DinhDangKb } from "../../knowledge/doc-text-extract.js";
+import { DINH_DANG_HO_TRO, laDinhDangHoTro } from "../../knowledge/doc-text-extract.js";
 import { datNguonChoAgent, nguonCuaAgent } from "../../knowledge/kb-agent-binding.js";
 import { luuFile, xoaFile } from "../../knowledge/kb-file-store.js";
 import { danhSachNguonGon, locIdTonTai } from "../../knowledge/kb-source-queries.js";
 import { layNguon, taoNguon, datTrangThai, xoaNguon } from "../../knowledge/kb-source-store.js";
 import { createLogger } from "../../shared/logger.js";
+import {
+  chanTranDungLuong,
+  khopChuKyThat,
+  putAgentSourcesSchema,
+  tenNguonSchema,
+  textSourceSchema,
+} from "./kb-route-guards.js";
 
 const log = createLogger("kb-routes");
 
@@ -20,57 +24,10 @@ const log = createLogger("kb-routes");
  * Xử lý nội dung (đọc file, cắt đoạn) KHÔNG nằm ở đây - route chỉ ghi file +
  * tạo dòng DB ở trạng thái `cho_xu_ly` rồi trả response ngay, `kb-ingest-worker.ts`
  * xử lý ở vòng nền kế tiếp. Xem lý do ở đầu file đó.
- */
-
-// Chữ ký thật của file (magic bytes), KHÔNG tin đuôi tên - đuôi tên là lời
-// người dùng tự khai, còn mấy byte đầu là thứ hệ điều hành/thư viện đọc thấy.
-// txt/md không có chữ ký cố định nên không kiểm (chấp nhận mọi byte).
-const MAGIC_BYTES: Partial<Record<DinhDangKb, (buf: Buffer) => boolean>> = {
-  pdf: (buf) => buf.subarray(0, 4).toString("latin1") === "%PDF",
-  docx: (buf) => buf.subarray(0, 2).toString("latin1") === "PK",
-  xlsx: (buf) => buf.subarray(0, 2).toString("latin1") === "PK",
-};
-
-function khopChuKyThat(buf: Buffer, dinhDang: DinhDangKb): boolean {
-  const kiemTra = MAGIC_BYTES[dinhDang];
-  return kiemTra ? kiemTra(buf) : true;
-}
-
-/**
- * Chặn body quá trần NGAY Ở TẦNG ĐỌC: `hono/body-limit` đọc luồng theo từng
- * mảnh (hoặc kiểm `Content-Length` khi có) và hủy giữa chừng nếu vượt trần,
- * KHÔNG đợi gom hết byte vào RAM rồi mới báo quá lớn. Đọc `getTuning` lại mỗi
- * request (không chốt lúc mount route) - đúng triết lý "đọc lại mỗi lần dùng"
- * của cả dự án, để đổi KB_MAX_FILE_MB trên dashboard có tác dụng ngay.
  *
- * Dùng chung cho CẢ route upload file LẪN route gõ tay - `noi_dung_goc` của
- * nguồn gõ tay đi thẳng qua `c.req.json()` không hề bị chặn dung lượng nếu
- * thiếu middleware này, và `await c.req.json()` gom trọn body vào RAM trước
- * khi kịp kiểm gì cả.
+ * Guard dùng chung (chặn dung lượng, kiểm chữ ký file, schema Zod) nằm ở
+ * `kb-route-guards.ts` - xem docstring ở đó.
  */
-const chanTranDungLuong: MiddlewareHandler = (c, next) => {
-  const maxMB = getTuning("KB_MAX_FILE_MB");
-  return bodyLimit({
-    maxSize: maxMB * 1024 * 1024,
-    onError: (c) => c.json({ error: `Nội dung vượt quá ${maxMB}MB` }, 413),
-  })(c, next);
-};
-
-const textSourceSchema = z.object({
-  // 200 ký tự khớp `maxLength` của ô tên trên form thêm nguồn - ô đó chỉ là
-  // giao diện, biên hệ thống thật phải nằm ở đây.
-  ten: z.string().min(1).max(200),
-  noiDung: z.string(),
-});
-
-const putAgentSourcesSchema = z.object({
-  // Trần 500: `locIdTonTai` dựng một placeholder SQL cho MỖI id
-  // (`SELECT id FROM kb_sources WHERE id IN (?, ?, ...)`) - mảng dài không
-  // trần vượt `SQLITE_LIMIT_VARIABLE_NUMBER` (32766 ở bản SQLite hiện đại) là
-  // `db.prepare` NÉM, lỗi lọt khỏi handler thành 500 trần thay vì 400 có lý
-  // do. Số nguồn thật của một kho không bao giờ gần tới 500.
-  sourceIds: z.array(z.string()).max(500),
-});
 
 export const kbRoutes = new Hono()
 
@@ -100,10 +57,19 @@ export const kbRoutes = new Hono()
     const body = await c.req.parseBody().catch(() => null);
     const file = body?.["file"];
     const tenRaw = body?.["ten"];
-    const ten = typeof tenRaw === "string" ? tenRaw.trim() : "";
-    if (!(file instanceof File) || !ten) {
+    if (!(file instanceof File)) {
       return c.json({ error: "Thiếu file hoặc tên nguồn" }, 400);
     }
+
+    // I11: đã đo `ten` 2 triệu ký tự -> 202, lưu nguyên vào DB rồi đi vào MỌI
+    // kết quả kb_search. Route này gõ tay parse form-data (không đi qua zod
+    // như route text) nên phải validate riêng - dùng CHUNG `tenNguonSchema`
+    // với route gõ tay để hai route không lệch trần.
+    const tenParsed = tenNguonSchema.safeParse(typeof tenRaw === "string" ? tenRaw.trim() : "");
+    if (!tenParsed.success) {
+      return c.json({ error: "Tên nguồn không hợp lệ (bắt buộc, tối đa 200 ký tự)" }, 400);
+    }
+    const ten = tenParsed.data;
 
     const dinhDang = path.extname(file.name).slice(1).toLowerCase();
     if (!laDinhDangHoTro(dinhDang)) {
@@ -171,16 +137,24 @@ export const kbRoutes = new Hono()
 
   .get("/agents/:agentId/sources", (c) => c.json({ sourceIds: nguonCuaAgent(c.req.param("agentId")) }))
 
-  .put("/agents/:agentId/sources", async (c) => {
+  .put("/agents/:agentId/sources", chanTranDungLuong, async (c) => {
     const agentId = c.req.param("agentId");
-    // Không chặn ở đây thì gán được cho một agent KHÔNG TỒN TẠI (id gõ sai,
-    // hoặc agent vừa bị xóa) - bảng agent_kb_sources tích lũy dòng mồ côi mà
-    // không ai đọc tới, đúng lỗ hổng đối xứng với "gán nguồn không tồn tại"
-    // đã chặn ở nhánh sourceIds bên dưới.
-    if (!getAgent(agentId)) return c.json({ error: "Agent không tồn tại" }, 400);
 
     const parsed = putAgentSourcesSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Dữ liệu không hợp lệ", issues: parsed.error.issues }, 400);
+
+    // I9 (TOCTOU): kiểm agent tồn tại phải nằm SAU khi đã đọc xong body, KHÔNG
+    // phải trước. Kiểm trước rồi mới `await c.req.json()` để lại một khung hở:
+    // agent bị xóa đúng lúc route còn đang đọc body (mất một nhịp) thì
+    // `datNguonChoAgent` bên dưới vẫn ghi - gán mồ côi lách qua chính phép dọn
+    // ở `deleteAgent` (`xoaGanNguonCuaAgent` chỉ chạy LÚC xóa, không có gì
+    // chạy lại sau đó để dọn dòng vừa lọt qua khe hở này).
+    //
+    // Không chặn thì gán được cho một agent KHÔNG TỒN TẠI (id gõ sai, hoặc
+    // agent vừa bị xóa) - bảng agent_kb_sources tích lũy dòng mồ côi mà không
+    // ai đọc tới, đúng lỗ hổng đối xứng với "gán nguồn không tồn tại" đã chặn
+    // ở nhánh sourceIds bên dưới.
+    if (!getAgent(agentId)) return c.json({ error: "Agent không tồn tại" }, 400);
 
     // Tra ĐÚNG các id được gửi lên bằng một câu SELECT ... IN (...), không kéo
     // cả bảng (kèm toàn văn) về so trong JS - cùng lý do với danhSachNguonGon.

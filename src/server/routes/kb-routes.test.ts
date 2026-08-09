@@ -126,6 +126,31 @@ describe("POST /api/kb/sources/file", () => {
     assert.equal(res.status, 400);
   });
 
+  // I11: đã đo `ten` 2 triệu ký tự -> 202, lưu nguyên vào DB, rồi đi vào MỌI
+  // kết quả kb_search. Route gõ tay đã có `.max(200)`, route này gõ tay parse
+  // form-data nên trước đây không hề đi qua zod. `tenFile` (đối số 3 của
+  // formFile) CỐ Ý khác với `ten` để cách ly phép đo: nếu để trùng, tên file
+  // 200/201 ký tự 'a' không có phần đuôi sẽ bị nhánh kiểm ĐỊNH DẠNG từ chối
+  // trước, khiến test đỏ (hoặc xanh) vì lý do sai, không phải vì trần `ten`.
+  it("upload file với ten quá dài bị từ chối 400", async () => {
+    const res = await app.request("/api/kb/sources/file", {
+      method: "POST",
+      body: formFile("a".repeat(201), Buffer.from("x"), "gia.txt"),
+      headers: { cookie },
+    });
+    assert.equal(res.status, 400);
+    assert.equal(store.danhSachNguon().length, 0);
+  });
+
+  it("ten đúng 200 ký tự VẪN qua - ghim biên, .max(150) cũng sẽ làm test này đỏ", async () => {
+    const res = await app.request("/api/kb/sources/file", {
+      method: "POST",
+      body: formFile("a".repeat(200), Buffer.from("x"), "gia.txt"),
+      headers: { cookie },
+    });
+    assert.equal(res.status, 202);
+  });
+
   // Nhánh CHẤP NHẬN: test thất bại (magic bytes sai) ở trên không chứng minh
   // được nhánh khớp CHẤP NHẬN có thật sự nối đúng vào MAGIC_BYTES hay không -
   // một bản cài đặt từ chối 100% pdf/docx/xlsx vẫn xanh nếu chỉ có test hỏng.
@@ -330,13 +355,100 @@ describe("gán nguồn cho agent", () => {
     const body = (await res.json()) as { sourceIds: string[] };
     assert.deepEqual(body.sourceIds, [n1.id]);
   });
+
+  // I10: `PUT` trước đây không có `chanTranDungLuong` - body khổng lồ bị
+  // `c.req.json()` gom trọn vào RAM TRƯỚC khi kịp kiểm gì cả (đã đo: body
+  // 100MB -> RSS lên 1346MB trong container 768M). `.max(500)` (test phía
+  // trên) chỉ giới hạn SỐ LƯỢNG phần tử, không giới hạn ĐỘ DÀI từng phần tử.
+  it("PUT gán nguồn với body khổng lồ bị chặn ở TẦNG ĐỌC, không nuốt hết vào RAM", async () => {
+    agents.createAgent({ id: "a1", name: "Agent A1" });
+    tuning.setTuning("KB_MAX_FILE_MB", 1);
+    const than = JSON.stringify({ sourceIds: Array.from({ length: 400 }, () => "x".repeat(8000)) });
+    const res = await app.request("/api/kb/agents/a1/sources", {
+      method: "PUT",
+      body: than,
+      headers: { cookie, "content-type": "application/json" },
+    });
+    assert.equal(res.status, 413);
+  });
+
+  it("từng phần tử sourceIds có trần độ dài - id thật chỉ dài 16 ký tự hex, 64 đã dư", async () => {
+    agents.createAgent({ id: "a1", name: "Agent A1" });
+    const res = await guiJson("/api/kb/agents/a1/sources", "PUT", { sourceIds: ["x".repeat(200)] });
+    assert.equal(res.status, 400);
+    // KHÔNG chỉ kiểm status: một id 200 ký tự "không tồn tại" cũng ra 400 qua
+    // nhánh `idKhongTonTai` bên dưới (giống bẫy đã ghi ở test
+    // SQLITE_LIMIT_VARIABLE_NUMBER phía trên) - phải kiểm body để chắc chắn
+    // route CHẶN Ở SCHEMA (do .max(64)), không phải lọt xuống rồi mới bị từ
+    // chối vì "không tồn tại". Đã tự phá: bỏ .max(64) khỏi phần tử vẫn ra 400
+    // nhưng qua thông điệp "Nguồn không tồn tại" - assertion dưới đây bắt được.
+    const body = (await res.json()) as { error?: string };
+    assert.match(
+      body.error ?? "",
+      /Dữ liệu không hợp lệ/,
+      `phải bị chặn ở SCHEMA (độ dài phần tử), không phải ở bước kiểm tồn tại - nhận: ${JSON.stringify(body)}`,
+    );
+    assert.deepEqual(binding.nguonCuaAgent("a1"), []);
+  });
+
+  // I9 (TOCTOU): bản cũ gọi `getAgent(agentId)` TRƯỚC `await c.req.json()`.
+  // Agent bị xóa đúng lúc route còn đang đọc body thì `datNguonChoAgent` vẫn
+  // ghi - gán mồ côi lách qua chính phép dọn ở `deleteAgent`
+  // (`xoaGanNguonCuaAgent` chỉ chạy LÚC xóa, không chạy lại sau đó).
+  //
+  // Cửa sổ đua dựng THẬT (không phải giả lập): thân request là một
+  // `ReadableStream` treo ở `start()` tới khi test chủ động mở, kèm header
+  // `content-length` set TAY để `hono/body-limit` đi nhánh so Content-Length
+  // (không tự gom stream) - stream gốc lọt nguyên vẹn xuống tới
+  // `await c.req.json()` trong handler. Gọi `app.request()` xong (KHÔNG await)
+  // rồi xóa agent NGAY - JS chạy đồng bộ tới await treo đầu tiên bên trong rồi
+  // trả quyền điều khiển lại đúng dòng này, nên `deleteAgent` LUÔN xảy ra
+  // trước bất kỳ microtask nào của lượt gọi, y hệt "agent biến mất giữa lúc
+  // đang await c.req.json()". Đã tự kiểm bằng bản dựng lại tối giản: thứ tự
+  // getAgent TRƯỚC parse cho 200 (ghi lọt), TRƯỚC parse cho 400 (chặn đúng).
+  it("agent bị xóa giữa lúc PUT đang đọc body thì KHÔNG ghi gán mồ côi", async () => {
+    agents.createAgent({ id: "a-toctou", name: "Agent TOCTOU" });
+    const n1 = store.taoNguon({ ten: "n1", loai: "text", noiDungGoc: "1" });
+
+    const bytes = new TextEncoder().encode(JSON.stringify({ sourceIds: [n1.id] }));
+    let moCua: () => void = () => {};
+    const cong = new Promise<void>((res) => {
+      moCua = res;
+    });
+    const than = new ReadableStream({
+      async start(controller) {
+        await cong; // treo tới khi test chủ động cho đọc tiếp
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    });
+
+    const resPromise = app.request("/api/kb/agents/a-toctou/sources", {
+      method: "PUT",
+      body: than,
+      duplex: "half", // bắt buộc khi body là ReadableStream (spec fetch)
+      headers: { cookie, "content-type": "application/json", "content-length": String(bytes.length) },
+    });
+    agents.deleteAgent("a-toctou"); // xảy ra TRƯỚC khi handler kịp đọc xong body
+    moCua();
+
+    const res = await resPromise;
+    assert.equal(res.status, 400, `agent đã xóa giữa chừng vẫn phải bị từ chối - nhận ${res.status}`);
+    assert.deepEqual(
+      binding.nguonCuaAgent("a-toctou"),
+      [],
+      "không được ghi gán mồ côi khi agent đã xóa giữa lúc đọc body",
+    );
+  });
 });
 
 describe("auth", () => {
-  it("mọi route KB đều đòi đăng nhập", async () => {
+  it("mọi route KB đều đòi đăng nhập, KỂ CẢ route ghi ra đĩa", async () => {
     const duong = [
       ["GET", "/api/kb/sources"],
       ["POST", "/api/kb/sources/text"],
+      // I16: route DUY NHẤT ghi file ra đĩa, trước đây bỏ sót khỏi test auth.
+      ["POST", "/api/kb/sources/file"],
       ["DELETE", "/api/kb/sources/x"],
       ["POST", "/api/kb/sources/x/reindex"],
       ["GET", "/api/kb/agents/a/sources"],

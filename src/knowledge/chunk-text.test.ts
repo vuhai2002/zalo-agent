@@ -3,27 +3,25 @@ import { describe, it } from "node:test";
 // Module thuần (không import gì ngoài chính nó) - không chạm env/DB nên import tĩnh được
 import { catThanhDoan } from "./chunk-text.js";
 
-/**
- * Tách thành các "từ" (chuỗi liền không khoảng trắng) - dùng để đo TÍNH CHẤT
- * "không từ nào bị cắt đứt giữa chừng" thay vì dò một chuỗi con cụ thể như
- * "dà": dò chuỗi con cụ thể chỉ đúng khi ranh giới cắt cứng tình cờ rơi vào
- * đúng từ đó - đo được thật: với chuỗi test dưới đây, `coDoanToiDa: 30` cắt
- * cứng lại tình cờ rơi đúng khoảng trắng (không cắt từ nào), nên assertion cũ
- * không đỏ dù thuật toán bị thay bằng cắt cứng thật. So khớp danh sách từ sau
- * khi ghép lại các đoạn với danh sách từ của bản gốc thì không phụ thuộc vào
- * từ cụ thể nào - từ bị cắt đôi (vd "dài" -> "dà" + "i") luôn lộ ra thành 2
- * "từ" lạ không khớp bản gốc, bất kể nó rơi vào từ nào.
- */
-function tuVung(text: string): string[] {
-  return text.match(/\S+/gu) ?? [];
-}
-
 describe("catThanhDoan - ranh giới tự nhiên", () => {
-  it("cắt ở ranh giới đoạn văn, KHÔNG cắt giữa từ", () => {
-    const chu = "Câu một dài dài dài.\n\nCâu hai cũng dài dài dài.";
-    const d = catThanhDoan(chu, { coDoanToiDa: 37, chongLan: 0 });
-    const tuSauKhiCat = tuVung(d.map((x) => x.noiDung).join(" "));
-    assert.deepEqual(tuSauKhiCat, tuVung(chu), "có từ bị cắt đứt giữa chừng khi ghép lại các đoạn");
+  it("cắt ở ranh giới tự nhiên, KHÔNG cắt giữa từ", () => {
+    // ĐẦU VÀO phải làm `viTriCatTotNhat` thật sự được gọi: một đoạn văn dài hơn
+    // hẳn coDoanToiDa. Bản trước dùng coDoanToiDa 37 trên đoạn 20 và 25 ký tự nên
+    // vòng cắt không chạy lần nào và test không đo được gì (I14 - test hụt thứ 8).
+    //
+    // `viTriCatTotNhat` chỉ nhận "\n" và ". " làm ranh giới - KHÔNG nhận khoảng
+    // trắng thường (xem docstring của hàm). Vì vậy câu mẫu phải NGẮN HƠN HẲN
+    // coDoanToiDa để dấu chấm cuối câu luôn rơi trong `text.slice(0, maxLen)` ở
+    // MỌI vòng lặp (đã đo: câu 41 ký tự dài hơn coDoanToiDa 40 làm dấu chấm rơi
+    // ra ngoài cửa sổ cắt đầu tiên và test tự đỏ vì lý do SAI - không phải I14).
+    const cau = "Chính sách đổi trả áp dụng cho đơn hàng. ";
+    const chu = cau.repeat(10); // 410 ký tự, một đoạn văn liền, nhiều câu ngắn
+    const d = catThanhDoan(chu, { coDoanToiDa: 60, chongLan: 0 });
+
+    assert.ok(d.length >= 5, `chỉ ra ${d.length} đoạn - vòng cắt có thể không chạy`);
+    const tuGoc = chu.split(/\s+/).filter(Boolean);
+    const tuSauKhiCat = d.flatMap((x) => x.noiDung.split(/\s+/)).filter(Boolean);
+    assert.deepEqual(tuSauKhiCat, tuGoc, "có từ bị xé làm đôi ở mối nối");
   });
 
   it("mỗi đoạn mang tiêu đề markdown gần nhất phía trên", () => {
