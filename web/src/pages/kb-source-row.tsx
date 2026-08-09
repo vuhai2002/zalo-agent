@@ -53,6 +53,9 @@ export function KbSourceRow({
             {source.loi}
           </div>
         )}
+        {source.trangThai === "hong" && (
+          <div className="mt-0.5 text-[11px] text-ink-soft">Đã thử {source.soLanThu} lần</div>
+        )}
         {loiXuLyLai && <div className="mt-0.5 text-[12px] text-red-600 dark:text-red-400">{loiXuLyLai}</div>}
       </td>
       <td className="px-4 py-3 text-ink-soft">{source.loai === "file" ? "File" : "Gõ tay"}</td>

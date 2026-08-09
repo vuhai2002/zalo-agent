@@ -287,6 +287,14 @@ const envSchema = z.object({
   // hono/body-limit đọc theo luồng, huỷ ngay khi vượt trần) chứ không đợi đọc
   // hết vào RAM rồi mới báo quá lớn.
   KB_MAX_FILE_MB: z.coerce.number().int().min(1).max(100).default(20),
+  // Trần thời gian trích xuất MỘT tài liệu trong worker thread riêng - quá hạn
+  // thì `terminate()` worker (cách DUY NHẤT dừng được code đồng bộ đang quay
+  // CPU) và đánh dấu lượt này bị dừng giữa chừng, xem chay-trich-xuat-tach-luong.ts.
+  KB_EXTRACT_TIMEOUT_MS: z.coerce.number().int().min(5000).max(600_000).default(60_000),
+  // Số lần GIÀNH xử lý tối đa cho một nguồn trước khi bỏ hẳn (đánh "hong") -
+  // chặn nguồn làm worker treo/chết lặp lại vô hạn qua các lần khởi động lại.
+  // Đếm tăng NGAY LÚC GIÀNH (giaNguonChoXuLy), không phải lúc phát hiện hỏng.
+  KB_MAX_INGEST_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(2),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

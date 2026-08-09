@@ -3,18 +3,23 @@ import path from "node:path";
 import { dataDir } from "../config/env.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { createLogger } from "../shared/logger.js";
-import { catThanhDoan } from "./chunk-text.js";
-import { docChuTuFile, laDinhDangHoTro } from "./doc-text-extract.js";
+import { LoiTrichXuatBiNgatGiuaChung, trichXuatTachLuong } from "./chay-trich-xuat-tach-luong.js";
+import { laDinhDangHoTro, type DinhDangKb } from "./doc-text-extract.js";
+import { donDoanMoCoi } from "./don-doan-mo-coi.js";
 import { luuDoan } from "./kb-chunk-store.js";
-import { giaNguonChoXuLy, layNguonTheoTrangThai } from "./kb-source-queries.js";
-import { datTrangThai, type KbSource } from "./kb-source-store.js";
-import { LoiVuotTran } from "./ooxml-limits.js";
+import { giaNguonChoXuLy, layNguonTheoTrangThai, type KbSourceTomTat } from "./kb-source-queries.js";
+import { datTrangThai, layNguon } from "./kb-source-store.js";
 
 /**
  * Vòng xử lý nền của Kho tri thức: đọc chữ từ nguồn `cho_xu_ly` -> cắt đoạn ->
- * lưu -> `san_sang`. CHẠY NỀN, không nằm trong request upload - `node:sqlite`
- * đồng bộ trong tiến trình một luồng nên đọc PDF 200 trang ngay trong handler
- * là chặn cả bot (không nhận tin, không chạy lượt nào).
+ * lưu -> `san_sang`. CHẠY NỀN, không nằm trong request upload - đọc PDF 200
+ * trang ngay trong handler là chặn cả bot (không nhận tin, không chạy lượt
+ * nào).
+ *
+ * Trích xuất + cắt đoạn chạy trong `node:worker_threads` (xem
+ * `chay-trich-xuat-tach-luong.ts`) - file NÀY chỉ giành nguồn, gọi worker, rồi
+ * GHI DB (luồng chính là nơi DUY NHẤT mở SQLite, bất biến "một connection cho
+ * cả process").
  */
 
 const log = createLogger("kb-ingest-worker");
@@ -25,41 +30,71 @@ const log = createLogger("kb-ingest-worker");
 // nóng, khác SCHEDULER_TICK_MS vốn ảnh hưởng trực tiếp độ trễ gửi tin cho khách).
 const TICK_MS = 5000;
 
-async function xuLyMotNguon(n: KbSource): Promise<void> {
-  // Giành CÓ ĐIỀU KIỆN (so sánh-rồi-đổi nguyên tử) - không dùng datTrangThai
-  // (UPDATE vô điều kiện) ở đây: hai vòng xuLyMotVong() có thể chồng lấn thời
-  // gian thật (vòng này đang await đọc file lớn thì tick 5s sau đã bắn tiếp),
-  // nên `n` có thể tới từ một SNAPSHOT CŨ mà nguồn đã bị vòng khác giành/xử lý
-  // xong. Giành thất bại thì BỎ QUA hẳn, không xử lý tiếp - xem giaNguonChoXuLy().
-  if (!giaNguonChoXuLy(n.id)) return;
+async function xuLyMotNguon(n: KbSourceTomTat): Promise<void> {
   try {
-    let chu: string;
+    // Giành CÓ ĐIỀU KIỆN (so sánh-rồi-đổi nguyên tử, kèm tăng so_lan_thu) - xem
+    // giaNguonChoXuLy(). Giành thất bại (trả false) thì BỎ QUA hẳn, không xử
+    // lý tiếp: nguồn đã bị vòng khác giành/xử lý xong, hoặc đã hết lượt thử.
+    //
+    // NẰM TRONG try (I8) - KHÔNG được đặt trước try: giaNguonChoXuLy là một
+    // câu UPDATE thật, có thể NÉM vì lý do SQL (không phải "giành thất bại"
+    // bình thường). Ném ở ngoài try thì thoát thẳng khỏi `await
+    // xuLyMotNguon(n)` trong vòng for của xuLyMotVong(), làm CẢ VÒNG quét bỏ
+    // dở - các nguồn xử lý SAU nguồn lỗi không bao giờ được xét tới.
+    const tranLanThu = getTuning("KB_MAX_INGEST_ATTEMPTS");
+    if (!giaNguonChoXuLy(n.id, tranLanThu)) return;
+
+    let buf: Buffer;
+    let dinhDang: DinhDangKb;
     if (n.loai === "text") {
-      chu = n.noiDungGoc;
+      // noi_dung_goc CHỈ đọc lại SAU KHI giành, cho ĐÚNG MỘT nguồn tại một
+      // thời điểm - danh sách "cho_xu_ly" (layNguonTheoTrangThai) KHÔNG kéo
+      // cột này (I5: 8 nguồn x 5 triệu ký tự = +30 MB một lần gọi nếu snapshot
+      // kéo toàn văn MỌI nguồn đang chờ vào RAM cùng lúc).
+      const day = layNguon(n.id);
+      if (!day) return; // đã bị xóa giữa lúc giành và lúc đọc lại - hiếm nhưng an toàn
+      buf = Buffer.from(day.noiDungGoc, "utf-8");
+      dinhDang = "txt"; // nội dung gõ tay đã là chữ thuần, đúng ngữ nghĩa "txt" của docChuTuFile
     } else {
       if (!laDinhDangHoTro(n.dinhDang)) {
         throw new Error(`Định dạng "${n.dinhDang}" chưa được hỗ trợ`);
       }
-      const buf = fs.readFileSync(path.join(dataDir, n.duongDan));
-      chu = await docChuTuFile(buf, n.dinhDang);
+      buf = fs.readFileSync(path.join(dataDir, n.duongDan));
+      dinhDang = n.dinhDang;
     }
 
-    const doan = catThanhDoan(chu, {
-      coDoanToiDa: getTuning("KB_CHUNK_CHARS"),
-      chongLan: getTuning("KB_CHUNK_OVERLAP_PERCENT"),
+    const { doan } = await trichXuatTachLuong({
+      buf,
+      dinhDang,
+      thamSoCat: { coDoanToiDa: getTuning("KB_CHUNK_CHARS"), chongLan: getTuning("KB_CHUNK_OVERLAP_PERCENT") },
+      hanMs: getTuning("KB_EXTRACT_TIMEOUT_MS"),
     });
+
+    // I4: DELETE có thể xen vào ĐÚNG lúc worker đang await trích xuất - nguồn
+    // không còn thì KHÔNG ghi đoạn (đoạn mồ côi vĩnh viễn nếu ghi, không đường
+    // dọn nào khác ngoài donDoanMoCoi() chạy lúc boot).
+    if (!layNguon(n.id)) return;
+
     luuDoan(n.id, doan);
-    datTrangThai(n.id, "san_sang", { soDoan: doan.length });
+    // Vừa xử lý XONG - cấp lại budget lượt thử mới, đúng lý do reset ở
+    // datTrangThai(): so_lan_thu không tự lùi theo trạng thái, phải truyền
+    // tường minh.
+    datTrangThai(n.id, "san_sang", { soDoan: doan.length, soLanThu: 0 });
   } catch (err) {
-    // Một nguồn hỏng (file lỗi, định dạng lạ) không được kéo cả vòng chết theo -
-    // try/catch bọc TỪNG nguồn, không bọc cả vòng `xuLyMotVong`.
+    if (err instanceof LoiTrichXuatBiNgatGiuaChung) {
+      // Worker bị buộc dừng (quá hạn hoặc chết bất thường) - KHÔNG BIẾT tài
+      // liệu hỏng thật hay chỉ máy chậm/OOM thoáng qua, nên KHÔNG đánh "hong"
+      // ngay: để nguyên "dang_xu_ly" (đã đặt bởi giaNguonChoXuLy), chờ
+      // goNguonKetLucKhoiDong() (đọc so_lan_thu, gọi lúc khởi động lại) quyết
+      // định thử lại hay bỏ hẳn.
+      log.warn({ sourceId: n.id, loi: err.message }, "Worker trích xuất Kho tri thức bị dừng giữa chừng");
+      return;
+    }
+    // Lỗi trích xuất THƯỜNG (file hỏng, định dạng lạ, không đọc ra chữ nào) -
+    // đánh "hong" NGAY, không chờ hết so_lan_thu: nội dung hỏng thì thử lại
+    // bao nhiêu lần cũng vẫn hỏng, giữ nguyên hành vi trước phase này.
     const loi = err instanceof Error ? err.message : String(err);
-    // LoiVuotTran mang thêm entryName/nguon (chẩn đoán, không hiện trong
-    // message) - đính kèm vào log để debug biết TRẦN NÀO/ENTRY NÀO chặn, mà
-    // không buộc module thuần zip-stream-entry.ts phải import logger (xem
-    // comment trên lớp LoiVuotTran trong ooxml-limits.ts).
-    const chiTietTran = err instanceof LoiVuotTran ? { entryName: err.entryName, nguon: err.nguon } : {};
-    log.warn({ sourceId: n.id, loi, ...chiTietTran }, "Xử lý nguồn Kho tri thức thất bại");
+    log.warn({ sourceId: n.id, loi }, "Xử lý nguồn Kho tri thức thất bại");
     datTrangThai(n.id, "hong", { loi });
   }
 }
@@ -69,50 +104,32 @@ export async function xuLyMotVong(): Promise<void> {
   const dangCho = layNguonTheoTrangThai("cho_xu_ly");
   for (const n of dangCho) {
     await xuLyMotNguon(n);
-    // Nhả event loop giữa MỖI nguồn: `xuLyMotNguon` đọc/cắt/lưu đều đồng bộ
-    // (node:sqlite đồng bộ, `catThanhDoan`/regex extractor đều đồng bộ), nhánh
-    // "text" (gõ tay) còn không có await THẬT nào bên trong - cả vòng chạy
-    // liền MỘT khối JS, chặn luôn việc nhận/gửi tin Zalo (cùng tiến trình 1
-    // luồng). Đo trên DB tạm với 3 nguồn gõ tay 20MB: KHÔNG nhả thì cả vòng
-    // chạy liền ~5,1 giây, 0 lần nào khác chen được vào giữa; nhả sau mỗi
-    // nguồn thì khối lớn nhất còn lại tụt từ "cả vòng" xuống "một nguồn đơn" -
-    // KHÔNG về dưới mili-giây. Đo trực tiếp (vòng tick độc lập chạy song song,
-    // 3 nguồn 20MB): một nguồn đơn vẫn giữ nhịp bot ~2,2 giây. Đo tách riêng
-    // `catThanhDoan`+`luuDoan` cho một nguồn ở trần tối đa cho phép (100MB):
-    // ~6,3 giây - suy theo tỉ lệ tuyến tính từ số này thì một nguồn đúng
-    // TRẦN MẶC ĐỊNH `KB_MAX_FILE_MB` (20MB, chưa ai chỉnh trên dashboard) tốn
-    // khoảng ~1,2 giây (chi tiết đo ở
-    // `.superpowers/sdd/plan/final-fix-wave-report.md`, mục 2). Dù đo bằng
-    // cách nào, kết luận không đổi: một nguồn đơn đủ lớn vẫn giữ nhịp bot
-    // NHIỀU GIÂY, không phải "dưới mili-giây" như comment cũ nói sai.
-    //
-    // KHÔNG nhả thêm giữa từng ĐOẠN trong vòng ghi (`luuDoan`) - dù đó mới là
-    // phần tốn thời gian nhất (đo trên nguồn 100MB: `catThanhDoan` 198ms so
-    // với `luuDoan` 6099ms, tức 97%). Lý do KHÔNG PHẢI vì đoạn đó rẻ, mà vì
-    // RÀNG BUỘC GIAO DỊCH: `luuDoan` chạy trong `trongGiaoDich` (`BEGIN
-    // IMMEDIATE`) trên connection SQLite DÙNG CHUNG cho cả process
-    // (`conversation/database.ts` export một `DatabaseSync` duy nhất, xem
-    // `shared/db-transaction.ts:8-10`). Nhả event loop giữa một giao dịch
-    // đang mở KHÔNG ném `SQLITE_BUSY` (lỗi đó xảy ra GIỮA các connection khác
-    // nhau, không phải giữa hai đoạn code trên cùng một connection) - nó âm
-    // thầm để code khác trong tiến trình (agent loop ghi tin nhắn, scheduler
-    // tick, `setTuning`...) ghi LẠC vào bên trong giao dịch KB đang mở. Hậu
-    // quả: `luuDoan` ném lỗi thì `ROLLBACK` cuốn theo cả dữ liệu không liên
-    // quan vừa ghi xen vào; giao dịch nào khác cố mở trong lúc đó sẽ ăn lỗi
-    // "cannot start a transaction within a transaction" (`node:sqlite` không
-    // hỗ trợ giao dịch lồng nhau).
+    // Nhả event loop giữa MỖI nguồn - xem lịch sử đo ở phase trước: trích xuất
+    // giờ chạy trong worker thread riêng (không còn chặn luồng chính khi CPU
+    // nặng), nhưng bước giành/đọc file/ghi DB vẫn đồng bộ trên luồng chính, và
+    // nhả giữa từng nguồn vẫn rẻ.
     await new Promise((resolve) => setImmediate(resolve));
   }
 }
 
 /**
  * Gọi một lần lúc boot: mọi `dang_xu_ly` sót lại từ lần chạy trước (worker bị
- * giết giữa chừng - process 1 luồng duy nhất, không cần chứng minh bằng pid)
- * về `cho_xu_ly` để vòng tick kế tiếp nhặt lại xử lý, không nằm kẹt vĩnh viễn.
+ * giết giữa chừng, hoặc bị `terminate()` vì quá hạn - xem
+ * `chay-trich-xuat-tach-luong.ts`) được xét lại theo `so_lan_thu`: còn dưới
+ * trần thì về `cho_xu_ly` để vòng tick kế tiếp thử lại; đã chạm trần thì đi
+ * thẳng sang `hong` - nguồn làm worker treo/chết lặp lại không được thử lại
+ * VÔ HẠN qua các lần khởi động (C3).
  */
 export function goNguonKetLucKhoiDong(): void {
+  const tranLanThu = getTuning("KB_MAX_INGEST_ATTEMPTS");
   for (const n of layNguonTheoTrangThai("dang_xu_ly")) {
-    datTrangThai(n.id, "cho_xu_ly");
+    if (n.soLanThu >= tranLanThu) {
+      datTrangThai(n.id, "hong", {
+        loi: `Nguồn này làm worker treo hoặc dừng bất thường liên tiếp - đã thử ${n.soLanThu} lần, dừng xử lý.`,
+      });
+    } else {
+      datTrangThai(n.id, "cho_xu_ly");
+    }
   }
 }
 
@@ -134,6 +151,10 @@ async function chayMotVongAnToan(): Promise<void> {
 
 /** Gọi một lần lúc boot. Trả hàm dừng, mẫu `scheduler-loop.ts`. */
 export function batDauWorker(): () => void {
+  const { soDoan, soHangFts } = donDoanMoCoi();
+  if (soDoan > 0) {
+    log.info({ soDoan, soHangFts }, "Đã dọn đoạn/hàng FTS mồ côi (nguồn gốc đã bị xóa) lúc khởi động");
+  }
   goNguonKetLucKhoiDong();
   // Chạy NGAY, không đợi hết TICK_MS đầu tiên - nguồn upload lúc bot vừa khởi
   // động lại không phải chờ oan một nhịp quét.

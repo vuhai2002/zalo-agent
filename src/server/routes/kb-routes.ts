@@ -129,8 +129,20 @@ export const kbRoutes = new Hono()
 
   .post("/sources/:id/reindex", (c) => {
     const id = c.req.param("id");
-    if (!layNguon(id)) return c.json({ error: "Không tìm thấy nguồn" }, 404);
-    datTrangThai(id, "cho_xu_ly");
+    const n = layNguon(id);
+    if (!n) return c.json({ error: "Không tìm thấy nguồn" }, 404);
+    // I6: bấm "Xử lý lại" ĐÚNG LÚC nguồn đang dang_xu_ly (worker thật đang xử
+    // lý, hoặc kẹt chờ goNguonKetLucKhoiDong() xét lại) trước đây bị NUỐT LẶNG
+    // LẼ - route đặt cho_xu_ly ngay, rồi lượt worker đang chạy ghi đè trạng
+    // thái cuối lên trên, xóa mất quyết định vừa bấm. Từ chối rõ ràng bằng 409
+    // thay vì tranh giành ngầm.
+    if (n.trangThai === "dang_xu_ly") {
+      return c.json({ error: "Nguồn đang được xử lý, thử lại sau khi xong" }, 409);
+    }
+    // Cấp lại budget lượt thử: đây là hành động CHỦ ĐỘNG của người vận hành,
+    // không phải retry tự động - cho nguồn một cơ hội đầy đủ, không cộng dồn
+    // lượt thử đã tiêu ở lần trước.
+    datTrangThai(id, "cho_xu_ly", { soLanThu: 0 });
     return c.json({ source: layNguon(id) });
   })
 

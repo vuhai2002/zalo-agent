@@ -6,7 +6,7 @@
  */
 
 import { db } from "../conversation/database.js";
-import { mapRow, type KbSource, type KbSourceRow, type TrangThaiNguon } from "./kb-source-store.js";
+import type { KbSource, KbSourceRow, TrangThaiNguon } from "./kb-source-store.js";
 
 export type KbSourceTomTat = Omit<KbSource, "noiDungGoc">;
 type KbSourceRowGon = Omit<KbSourceRow, "noi_dung_goc">;
@@ -22,13 +22,14 @@ function mapRowGon(row: KbSourceRowGon): KbSourceTomTat {
     loi: row.loi,
     soDoan: row.so_doan,
     soByte: row.so_byte,
+    soLanThu: row.so_lan_thu,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 const listGonStmt = db.prepare(`
-  SELECT id, ten, loai, dinh_dang, duong_dan, trang_thai, loi, so_doan, so_byte, created_at, updated_at
+  SELECT id, ten, loai, dinh_dang, duong_dan, trang_thai, loi, so_doan, so_byte, so_lan_thu, created_at, updated_at
     FROM kb_sources ORDER BY created_at DESC
 `);
 
@@ -42,17 +43,25 @@ export function danhSachNguonGon(): KbSourceTomTat[] {
   return rows.map(mapRowGon);
 }
 
-const listTheoTrangThaiStmt = db.prepare(`SELECT * FROM kb_sources WHERE trang_thai = ? ORDER BY created_at DESC`);
+const listTheoTrangThaiStmt = db.prepare(`
+  SELECT id, ten, loai, dinh_dang, duong_dan, trang_thai, loi, so_doan, so_byte, so_lan_thu, created_at, updated_at
+    FROM kb_sources WHERE trang_thai = ? ORDER BY created_at DESC
+`);
 
 /**
  * Liệt kê nguồn ĐÚNG một trạng thái - lọc NGAY Ở SQL, không kéo hết bảng rồi
  * lọc bằng JS. `kb-ingest-worker.ts` gọi mỗi 5s (`cho_xu_ly` lúc quét,
  * `dang_xu_ly` lúc gỡ kẹt khởi động) - kéo cả bảng kèm `noi_dung_goc` của mọi
  * nguồn (kể cả `san_sang`/`hong` không liên quan) mỗi lần quét là phí.
+ *
+ * KHÔNG kèm `noi_dung_goc` (đo được: 8 nguồn x 5 triệu ký tự = +30 MB một lần
+ * gọi nếu snapshot kéo toàn văn MỌI nguồn đang chờ vào RAM cùng lúc) - nguồn
+ * `loai='text'` cần đọc lại toàn văn thì gọi `layNguon(id)` MỘT nguồn tại một
+ * thời điểm, đúng lúc thật sự cần xử lý nguồn đó (xem `kb-ingest-worker.ts`).
  */
-export function layNguonTheoTrangThai(trangThai: TrangThaiNguon): KbSource[] {
-  const rows = listTheoTrangThaiStmt.all(trangThai) as unknown as KbSourceRow[];
-  return rows.map(mapRow);
+export function layNguonTheoTrangThai(trangThai: TrangThaiNguon): KbSourceTomTat[] {
+  const rows = listTheoTrangThaiStmt.all(trangThai) as unknown as KbSourceRowGon[];
+  return rows.map(mapRowGon);
 }
 
 /**
@@ -71,14 +80,24 @@ export function locIdTonTai(ids: string[]): Set<string> {
 }
 
 const claimStmt = db.prepare(`
-  UPDATE kb_sources SET trang_thai = 'dang_xu_ly', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-   WHERE id = ? AND trang_thai = 'cho_xu_ly'
+  UPDATE kb_sources
+     SET trang_thai = 'dang_xu_ly', so_lan_thu = so_lan_thu + 1,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+   WHERE id = ? AND trang_thai = 'cho_xu_ly' AND so_lan_thu < ?
 `);
 
 /**
- * Giành nguồn để xử lý - CHỈ thành công khi nguồn ĐANG ở `cho_xu_ly` lúc câu
- * UPDATE này chạy (so sánh-rồi-đổi NGUYÊN TỬ trong một câu lệnh, không phải
- * đọc rồi ghi 2 bước). Trả `false` nếu nguồn đã bị giành/xử lý bởi lượt khác.
+ * Giành nguồn để xử lý - CHỈ thành công khi nguồn ĐANG ở `cho_xu_ly` VÀ chưa
+ * chạm `tranLanThu` lúc câu UPDATE này chạy (so sánh-rồi-đổi NGUYÊN TỬ trong
+ * một câu lệnh, không phải đọc rồi ghi 2 bước). Trả `false` nếu nguồn đã bị
+ * giành/xử lý bởi lượt khác, hoặc đã hết lượt thử (trần thường bị hạ ngay
+ * trước khi nguồn kịp bị đưa sang `hong` - phòng hờ, `goNguonKetLucKhoiDong()`
+ * mới là nơi CHỦ ĐỘNG chuyển nguồn hết lượt sang `hong`).
+ *
+ * `so_lan_thu` tăng NGAY TRONG câu UPDATE này, KHÔNG phải sau khi xử lý xong:
+ * nguồn làm worker CHẾT/TREO giữa chừng không bao giờ chạy tới được code "sau
+ * khi hỏng" - tăng ở nhánh catch thì vô dụng đúng với ca cần đếm nhất (poison
+ * pill làm treo tiến trình, không phải lỗi bắt được gọn gàng).
  *
  * Worker BẮT BUỘC dùng hàm này ở bước giành, không dùng `datTrangThai(id,
  * "dang_xu_ly")` (UPDATE VÔ ĐIỀU KIỆN): hai vòng `xuLyMotVong()` có thể chồng
@@ -87,8 +106,8 @@ const claimStmt = db.prepare(`
  * kiện sẽ giành LẠI được nguồn dù nguồn đó vòng khác đã giành/xử lý xong,
  * gây xử lý trùng và trạng thái cuối phụ thuộc vòng nào ghi SAU CÙNG.
  */
-export function giaNguonChoXuLy(id: string): boolean {
-  return claimStmt.run(id).changes > 0;
+export function giaNguonChoXuLy(id: string, tranLanThu: number): boolean {
+  return claimStmt.run(id, tranLanThu).changes > 0;
 }
 
 const coNguonNaoStmt = db.prepare(`SELECT 1 FROM kb_sources LIMIT 1`);

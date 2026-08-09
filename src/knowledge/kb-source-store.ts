@@ -20,6 +20,8 @@ export type KbSource = {
   loi: string;
   soDoan: number;
   soByte: number;
+  /** Số lần đã GIÀNH để xử lý (tăng ngay lúc giành, xem giaNguonChoXuLy) - trần chặn nguồn làm worker treo/chết lặp lại vô hạn */
+  soLanThu: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -35,6 +37,7 @@ export type KbSourceRow = {
   loi: string;
   so_doan: number;
   so_byte: number;
+  so_lan_thu: number;
   created_at: string;
   updated_at: string;
 };
@@ -52,6 +55,7 @@ export function mapRow(row: KbSourceRow): KbSource {
     loi: row.loi,
     soDoan: row.so_doan,
     soByte: row.so_byte,
+    soLanThu: row.so_lan_thu,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -92,24 +96,32 @@ export function danhSachNguon(): KbSource[] {
 
 const setTrangThaiStmt = db.prepare(`
   UPDATE kb_sources
-     SET trang_thai = ?, loi = ?, so_doan = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+     SET trang_thai = ?, loi = ?, so_doan = ?, so_lan_thu = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
    WHERE id = ?
 `);
 
 /**
- * `loi`/`soDoan` bỏ trống thì GIỮ NGUYÊN giá trị cũ (đọc lại rồi ghi đè, không
- * phải reset về mặc định) - đổi trạng thái 'dang_xu_ly' -> 'san_sang' không
- * kèm soDoan mới thì không có lý do gì để đè số đoạn hiện có về 0.
+ * `loi`/`soDoan`/`soLanThu` bỏ trống thì GIỮ NGUYÊN giá trị cũ (đọc lại rồi
+ * ghi đè, không phải reset về mặc định) - đổi trạng thái 'dang_xu_ly' ->
+ * 'san_sang' không kèm soDoan mới thì không có lý do gì để đè số đoạn hiện có
+ * về 0.
+ *
+ * `soLanThu` KHÔNG tự reset theo `trangThai` - caller phải truyền TƯỜNG MINH
+ * khi muốn cấp lại một budget mới (nguồn vừa xử lý XONG, hoặc người vận hành
+ * bấm "Xử lý lại" trên dashboard). Nếu tự động reset theo trạng thái đích thì
+ * `goNguonKetLucKhoiDong()` (đưa `dang_xu_ly` -> `cho_xu_ly` để THỬ LẠI) sẽ vô
+ * tình xoá mất chính bộ đếm nó cần đọc để quyết định thử tiếp hay bỏ hẳn.
  */
 export function datTrangThai(
   id: string,
   trangThai: TrangThaiNguon,
-  p?: { loi?: string; soDoan?: number },
+  p?: { loi?: string; soDoan?: number; soLanThu?: number },
 ): void {
   const hienTai = layNguon(id);
   const loi = p?.loi ?? hienTai?.loi ?? "";
   const soDoan = p?.soDoan ?? hienTai?.soDoan ?? 0;
-  setTrangThaiStmt.run(trangThai, loi, soDoan, id);
+  const soLanThu = p?.soLanThu ?? hienTai?.soLanThu ?? 0;
+  setTrangThaiStmt.run(trangThai, loi, soDoan, soLanThu, id);
 }
 
 // ===== Xóa sạch: bất biến quan trọng nhất của Kho tri thức =====

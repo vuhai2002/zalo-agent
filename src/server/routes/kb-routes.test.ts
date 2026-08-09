@@ -20,6 +20,7 @@ let binding: typeof import("../../knowledge/kb-agent-binding.js");
 let tuning: typeof import("../../config/runtime-tuning-settings.js");
 let agents: typeof import("../../config/agent-store.js");
 let database: typeof import("../../conversation/database.js");
+let queries: typeof import("../../knowledge/kb-source-queries.js");
 
 const PASSWORD = "mat-khau-kb-routes-123";
 const kbDir = () => path.join(dataDir, "kb");
@@ -34,6 +35,7 @@ before(async () => {
   tuning = await import("../../config/runtime-tuning-settings.js");
   agents = await import("../../config/agent-store.js");
   database = await import("../../conversation/database.js");
+  queries = await import("../../knowledge/kb-source-queries.js");
 
   const login = await app.request("/api/auth/login", {
     method: "POST",
@@ -217,17 +219,37 @@ describe("GET /api/kb/sources", () => {
 });
 
 describe("POST /api/kb/sources/:id/reindex", () => {
-  it("đặt lại cho_xu_ly để xử lý lại", async () => {
+  it("đặt lại cho_xu_ly để xử lý lại, cấp lại budget lượt thử (soLanThu về 0)", async () => {
     const n = store.taoNguon({ ten: "hỏng rồi", loai: "text", noiDungGoc: "x" });
     store.datTrangThai(n.id, "hong", { loi: "lỗi cũ" });
+    // Mô phỏng nguồn này đã tiêu vài lượt thử TRƯỚC lúc hỏng - bấm "Xử lý lại"
+    // là hành động CHỦ ĐỘNG của người vận hành, phải cấp lại budget đầy đủ,
+    // không cộng dồn lượt đã tiêu từ trước.
+    queries.giaNguonChoXuLy(n.id, 5);
+    store.datTrangThai(n.id, "hong", { loi: "lỗi cũ" });
+
     const res = await app.request(`/api/kb/sources/${n.id}/reindex`, { method: "POST", headers: { cookie } });
     assert.equal(res.status, 200);
-    assert.equal(store.layNguon(n.id)!.trangThai, "cho_xu_ly");
+    const sau = store.layNguon(n.id)!;
+    assert.equal(sau.trangThai, "cho_xu_ly");
+    assert.equal(sau.soLanThu, 0, "bấm Xử lý lại phải cấp lại budget lượt thử đầy đủ");
   });
 
   it("id không tồn tại trả 404", async () => {
     const res = await app.request("/api/kb/sources/khong-ton-tai/reindex", { method: "POST", headers: { cookie } });
     assert.equal(res.status, 404);
+  });
+
+  it("bấm Xử lý lại lúc nguồn đang dang_xu_ly trả 409, không nuốt lặng lẽ (I6)", async () => {
+    const n = store.taoNguon({ ten: "đang xử lý", loai: "text", noiDungGoc: "abc" });
+    store.datTrangThai(n.id, "dang_xu_ly");
+    const res = await app.request(`/api/kb/sources/${n.id}/reindex`, { method: "POST", headers: { cookie } });
+    assert.equal(res.status, 409);
+    assert.equal(
+      store.layNguon(n.id)!.trangThai,
+      "dang_xu_ly",
+      "route KHÔNG được đổi trạng thái khi từ chối - lượt đang chạy phải là nơi duy nhất quyết định trạng thái cuối",
+    );
   });
 });
 

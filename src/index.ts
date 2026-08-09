@@ -31,6 +31,11 @@ logger.info(
 }
 
 let shuttingDown = false;
+// Khai `let` với no-op mặc định: worker Kho tri thức giờ khởi động SAU dashboard
+// (xem cuối file, đúng thứ tự C2 yêu cầu) - nếu shutdown() lỡ chạy trước lúc
+// đó (tín hiệu tắt tới cực sớm) thì vẫn có hàm hợp lệ để gọi thay vì đọc phải
+// `undefined`.
+let stopKbIngestWorker: () => void = () => {};
 function shutdown(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -69,12 +74,17 @@ startMediaCleanupSchedule();
 // Dọn file tạm mồ côi của tool send_file (process bị kill giữa lượt gửi)
 startTempFileCleanupSchedule();
 
+// Dashboard TRƯỚC worker Kho tri thức - cố ý, đây là ranh giới quản trị/dữ
+// liệu (management plane tách khỏi data plane): một nguồn độc treo/chết worker
+// thì người vận hành vẫn phải vào được dashboard để xóa nó. Đảo lại thứ tự là
+// tự khoá đường chữa của chính mình.
+startDashboardServer();
+
 // Vòng xử lý nền Kho tri thức: cắt đoạn tài liệu vừa nạp, KHÔNG chặn request
 // upload (xem đầu file kb-ingest-worker.ts). Tự gỡ mọi nguồn kẹt ở dang_xu_ly
 // từ lần chạy trước lúc khởi động.
-const stopKbIngestWorker = batDauKbIngestWorker();
+stopKbIngestWorker = batDauKbIngestWorker();
 
-startDashboardServer();
 startAllAccounts()
   // Scheduler cần account đã sẵn sàng để lấy api lúc dispatch - khởi động SAU,
   // không phải song song. SCHEDULER_ENABLED=false thì hàm này tự no-op.

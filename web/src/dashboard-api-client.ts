@@ -113,6 +113,8 @@ export type KbSourceItem = {
   loi: string;
   soDoan: number;
   soByte: number;
+  /** Số lần đã giành xử lý nguồn này - hiện ra khi hong để người vận hành biết đây là hỏng do nội dung hay do hết lượt thử */
+  soLanThu: number;
   createdAt: string;
   updatedAt: string;
 };

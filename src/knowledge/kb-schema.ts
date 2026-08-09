@@ -61,4 +61,23 @@ export function taoBangKnowledgeBase(db: DatabaseSync): void {
       PRIMARY KEY (agent_id, source_id)
     );
   `);
+
+  themCotSoLanThu(db);
+}
+
+/**
+ * Cột `so_lan_thu` (bộ đếm lần THỬ GIÀNH xử lý, dùng để bỏ hẳn nguồn làm worker
+ * treo/chết lặp lại - xem `kb-source-queries.ts#giaNguonChoXuLy`) ra đời SAU
+ * khi bảng `kb_sources` đã có trên máy người dùng thật, nên KHÔNG được sửa
+ * thẳng vào `CREATE TABLE` ở trên (bản đó chỉ chạy khi bảng CHƯA tồn tại) -
+ * phải tự `ALTER TABLE` idempotent, đúng mẫu `addColumnIfMissing` của
+ * `conversation/database.ts`. Đặt NGAY TRONG file này (không export dùng
+ * chung hàm của `database.ts`) để tránh import vòng (database.ts đã import
+ * `taoBangKnowledgeBase` từ đây).
+ */
+function themCotSoLanThu(db: DatabaseSync): void {
+  const cols = db.prepare(`SELECT name FROM pragma_table_info('kb_sources')`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === "so_lan_thu")) {
+    db.exec(`ALTER TABLE kb_sources ADD COLUMN so_lan_thu INTEGER NOT NULL DEFAULT 0`);
+  }
 }

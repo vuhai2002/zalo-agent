@@ -626,6 +626,23 @@ const TUNING_BY_KEY = {
     max: 100,
     unit: "MB",
   },
+  KB_EXTRACT_TIMEOUT_MS: {
+    kind: "number",
+    group: "kb",
+    label: "Trần thời gian trích xuất một tài liệu",
+    hint: "Trích xuất chạy trong một tiến trình phụ riêng, quá mốc này bị dừng cưỡng bức - tài liệu đó không kẹt cả bot nhưng bị coi là một lần thử hỏng.",
+    min: 5000,
+    max: 600_000,
+    unit: "ms",
+  },
+  KB_MAX_INGEST_ATTEMPTS: {
+    kind: "number",
+    group: "kb",
+    label: "Số lần thử lại một nguồn trước khi bỏ hẳn",
+    hint: "Nguồn làm tiến trình phụ treo/dừng bất thường lặp lại quá số lần này bị đánh dấu Hỏng và ngừng thử tiếp, tránh treo lặp lại vô hạn qua các lần khởi động lại.",
+    min: 1,
+    max: 5,
+  },
 } as const satisfies Record<string, TuningDef>;
 
 export const TUNING_DEFS: Record<string, TuningDef> = TUNING_BY_KEY;

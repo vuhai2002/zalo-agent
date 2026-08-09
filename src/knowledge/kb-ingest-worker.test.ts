@@ -102,6 +102,62 @@ describe("kb-ingest-worker - xử lý nguồn cho_xu_ly", () => {
   });
 });
 
+describe("kb-ingest-worker - đoạn mồ côi lúc DELETE xen vào giữa khi đang xử lý (I4)", () => {
+  it("worker KHÔNG ghi đoạn cho nguồn đã bị xóa giữa chừng", async () => {
+    // Cửa sổ thật: worker đang await trích xuất (spawn worker thread thật, có
+    // await THẬT), route DELETE chen vào TRƯỚC khi kết quả trích xuất về.
+    const n = store.taoNguon({ ten: "x", loai: "text", noiDungGoc: "abc" });
+    const chay = worker.xuLyMotVong();
+    store.xoaNguon(n.id);
+    await chay;
+    assert.equal(
+      database.db.prepare("SELECT COUNT(*) AS n FROM kb_chunks").get()!.n,
+      0,
+      "nguồn bị xóa giữa chừng thì KHÔNG được ghi đoạn - đoạn ghi xong sẽ mồ côi vĩnh viễn",
+    );
+  });
+});
+
+describe("kb-ingest-worker - lỗi lúc giành nguồn KHÔNG làm cả vòng quét bỏ dở (I8)", () => {
+  it("giaNguonChoXuLy ném lỗi cho MỘT nguồn: nguồn đó được đánh hong, nguồn còn lại vẫn xử lý bình thường", async () => {
+    const khoeManh = store.taoNguon({ ten: "khỏe mạnh", loai: "text", noiDungGoc: "# Tiêu đề\n\nabc" });
+    const loi = store.taoNguon({ ten: "sẽ lỗi lúc giành", loai: "text", noiDungGoc: "def" });
+
+    // Trigger CHỈ chặn đúng bước GIÀNH (chuyển sang dang_xu_ly) của MỘT nguồn
+    // cụ thể - không đụng gì tới nguồn còn lại, và không đụng tới chính câu
+    // ghi "hong" (đặt trang_thai='hong', không phải 'dang_xu_ly') mà catch của
+    // xuLyMotNguon dùng để phục hồi. Mô phỏng ĐÚNG ca I8 mô tả: một lỗi SQL
+    // THẬT xảy ra tại chính bước giaNguonChoXuLy (trước khi sửa I8, hàm này
+    // nằm NGOÀI try trong xuLyMotNguon nên lỗi ở đó thoát thẳng ra khỏi
+    // `await xuLyMotNguon(n)` trong vòng for của xuLyMotVong, làm cả vòng bỏ
+    // dở - nguồn xử lý SAU không bao giờ được xét tới).
+    database.db.exec(`
+      CREATE TRIGGER gia_lap_loi_gianh BEFORE UPDATE OF trang_thai ON kb_sources
+      WHEN NEW.trang_thai = 'dang_xu_ly' AND NEW.id = '${loi.id}'
+      BEGIN SELECT RAISE(ABORT, 'gia lap loi gianh nguon'); END;
+    `);
+    try {
+      await assert.doesNotReject(
+        () => worker.xuLyMotVong(),
+        "lỗi giành MỘT nguồn không được làm cả vòng bỏ dở (rejection thoát ra ngoài xuLyMotVong)",
+      );
+    } finally {
+      database.db.exec(`DROP TRIGGER gia_lap_loi_gianh`);
+    }
+
+    assert.equal(
+      store.layNguon(khoeManh.id)!.trangThai,
+      "san_sang",
+      "nguồn khỏe mạnh phải được xử lý bình thường, không bị nguồn lỗi kéo theo dù xử lý SAU nó",
+    );
+    assert.equal(
+      store.layNguon(loi.id)!.trangThai,
+      "hong",
+      "nguồn lỗi giành phải được đánh hong (không kẹt mãi cho_xu_ly, không phải rejection thoát ra ngoài)",
+    );
+  });
+});
+
 describe("kb-ingest-worker - hai vòng chồng lấn không được xử lý trùng", () => {
   it("vòng A giữ snapshot cũ không được ghi đè nguồn mà vòng B đã xử lý xong trong lúc A còn dở", async () => {
     // Y tạo TRƯỚC, X tạo SAU - rồi ép created_at để LUÔN chắc chắn X đứng ĐẦU
