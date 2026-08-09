@@ -8,6 +8,7 @@ import { EmptyRow, ListToolbar, TableShell } from "../shared/ui-bits";
 import { KbAddSourceModal } from "./kb-add-source-modal";
 import { KbChunksModal } from "./kb-chunks-modal";
 import { xayThongDiepXoaNguon } from "./kb-delete-warning-message";
+import { trangCuoiCungConDuLieu } from "./kb-page-clamp";
 import { useKbSourcePoll } from "./kb-source-poll";
 import { KbSourceRow } from "./kb-source-row";
 
@@ -35,12 +36,14 @@ export function KnowledgePage() {
   useEffect(() => setPage(0), [query]);
   // Việc 4.1: xóa nguồn cuối cùng của trang đang xem (hoặc gõ tìm kiếm hẹp
   // hơn) làm số trang thật GIẢM - trang đang đứng có thể vượt quá số trang
-  // mới, hiện rỗng dù người dùng không hề đổi từ khóa. Kẹp về trang cuối còn
-  // dữ liệu (0 nếu shrink về dưới 1 trang). Dùng `daLoc.length` (số nguyên)
-  // chứ không phải `sources`/`daLoc` (mảng đổi tham chiếu mỗi lần poll) - để
-  // không kéo người dùng về trang 0 mỗi 4 giây khi SỐ LƯỢNG không hề đổi.
+  // mới, hiện rỗng dù người dùng không hề đổi từ khóa. Kẹp về TRANG CUỐI còn
+  // dữ liệu (không phải luôn về 0 - đang xem trang 5 mà mất 1 dòng thì về
+  // trang 4, không ném thẳng về trang 1). Dùng `daLoc.length` (số nguyên) chứ
+  // không phải `sources`/`daLoc` (mảng đổi tham chiếu mỗi lần poll) - để
+  // không kéo người dùng về trang khác mỗi 4 giây khi SỐ LƯỢNG không hề đổi.
   useEffect(() => {
-    if (page > 0 && page * KICH_TRANG >= daLoc.length) setPage(0);
+    const trangCuoi = trangCuoiCungConDuLieu(daLoc.length, KICH_TRANG);
+    if (page > trangCuoi) setPage(trangCuoi);
   }, [daLoc.length, page]);
 
   async function reindex(id: string) {
