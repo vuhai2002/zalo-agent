@@ -1,12 +1,7 @@
 import type { SaxesTagNS } from "saxes";
 import type { XmlSaxHandlers } from "../shared/xml-sax-scan.js";
 import { thayTheEscapeExcel } from "./xlsx-sax-shared-strings.js";
-import {
-  LoiVuotTran,
-  TRAN_SO_COT_EXCEL,
-  TRAN_TONG_KY_TU_TRICH,
-  TRAN_TONG_SO_O,
-} from "./ooxml-limits.js";
+import { LoiVuotTran, TRAN_SO_COT_EXCEL, TRAN_TONG_KY_TU_TRICH, TRAN_TONG_SO_O } from "./ooxml-limits.js";
 
 /** Bộ đếm CÔNG CẤP PHÁT (ô thật + ô đệm) dùng CHUNG cho MỌI sheet của cùng 1
  * file xlsx - `extract-xlsx-text.ts` tạo MỘT lần, truyền vào từng
@@ -14,11 +9,8 @@ import {
  * trần tổng). KHÔNG dùng biến module-level: mỗi `docChuTuFile` cần bộ riêng. */
 export type NganSachO = { tongO: number };
 
-/**
- * `xl/worksheets/sheetN.xml` -> chữ theo HÀNG, cắt theo hàng như comment gốc
- * của file này đã ghi: "một hàng là một bản ghi có nghĩa". Thay
- * `ROW_RE`/`CELL_RE`/`V_RE` cũ - xem mục 1.3 và 3.2 báo cáo nghiên cứu.
- */
+/** `xl/worksheets/sheetN.xml` -> chữ theo HÀNG (một hàng là một bản ghi có
+ * nghĩa). Thay `ROW_RE`/`CELL_RE`/`V_RE` cũ - xem mục 1.3, 3.2 nghiên cứu. */
 
 const SPREADSHEETML_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
@@ -91,7 +83,17 @@ export function taoXlsxSheetSaxBuilder(
    * chặn NHIỀU HÀNG lặp lại - xem `TRAN_TONG_SO_O` cho số đo cụ thể.
    */
   function themOVaoDong(giaTri: string, chiSoCot: number): void {
-    const soOThemVao = chiSoCot - dongHienTai.length; // ô đệm + chính ô này
+    // Math.max(1, ...) - KHÔNG BAO GIỜ hoàn quỹ. `dongHienTai` reset mỗi
+    // <row> nhưng `nganSachO.tongO` thì KHÔNG (cố ý, dùng chung cả sheet) -
+    // để hiệu ÂM cộng thẳng vào (ô cột THẤP đứng SAU ô cột CAO cùng hàng, vd
+    // <c r="XFD1"/><c r="A1"/>) thì một khoản "hoàn quỹ" giả xoá sạch chi phí
+    // CPU thật của push vừa chạy khỏi sổ. Đã đo: 100.000 hàng hình dạng đó
+    // chạy đủ 20 giây mà KHÔNG trần nào bắt (tongO cuối chỉ = 100.000, mỗi
+    // hàng "net" +1 dù tốn 16.383 lần push CPU). Kẹp sàn 1: mỗi lần gọi
+    // charge = max(1, số push thật + 1) >= số push thật, nên tongO tích luỹ
+    // LUÔN là biên trên của tổng push CPU thật - không thể lách bằng bất kỳ
+    // thứ tự cột nào.
+    const soOThemVao = Math.max(1, chiSoCot - dongHienTai.length);
     nganSachO.tongO += soOThemVao;
     if (nganSachO.tongO > TRAN_TONG_SO_O) {
       throw new LoiVuotTran(
@@ -108,12 +110,10 @@ export function taoXlsxSheetSaxBuilder(
     if (!chuCai) return cotKyVong;
     const chiSo = chuCotThanhChiSo(chuCai.toUpperCase());
     // BẮT BUỘC kẹp: cột thật tối đa của Excel là XFD = 16.384. Không kẹp thì
-    // themOVaoDong() bên dưới cấp phát mảng theo chiSo KHÔNG TRẦN - đo được:
-    // r="AAAAAAA1" (7 chữ cái) ra chỉ số cột hơn 321 TRIỆU, khiến vòng lặp
-    // lấp cột nhảy cóc cấp một mảng 321 triệu phần tử -> OOM FATAL của V8
-    // (không phải Error bắt được bằng try/catch - giết hẳn process, mọi tài
-    // khoản Zalo mất kết nối cùng lúc). Entry chứa r= độc chỉ cần vài trăm
-    // byte, KHÔNG trần zip/entry/tổng/độ-sâu nào ở trên bắt được ca này.
+    // themOVaoDong() cấp phát mảng theo chiSo KHÔNG TRẦN - r="AAAAAAA1" (7
+    // chữ cái) ra hơn 321 TRIỆU, khiến vòng lặp lấp cột cấp một mảng 321
+    // triệu phần tử -> OOM FATAL của V8 (giết hẳn process, không try/catch
+    // bắt được). Không trần zip/entry/tổng/độ-sâu nào ở trên bắt được ca này.
     if (chiSo > TRAN_SO_COT_EXCEL) {
       throw new LoiVuotTran(
         `File xlsx có ô ở cột vượt quá giới hạn thật của Excel (cột tối đa là XFD, tức ${TRAN_SO_COT_EXCEL}) - nghi ngờ file bị chỉnh sửa bất thường`,

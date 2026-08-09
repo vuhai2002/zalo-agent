@@ -52,14 +52,16 @@ function formatMB(bytes: number): string {
  * thường. Chữ "zip bomb" CHỈ dành cho ca hình dạng bất thường THẬT SỰ (tỉ lệ
  * nén phi thực tế) - xem nhánh kiểm tỉ lệ trong `docEntryTheoLuong`.
  */
-function loiVuotTranMotEntry(): LoiVuotTran {
+function loiVuotTranMotEntry(entryName: string, nguon: "khai-bao" | "do-that"): LoiVuotTran {
   return new LoiVuotTran(
     `File này quá lớn để xử lý (một phần bên trong giải nén ra vượt quá giới hạn ${formatMB(TRAN_MOT_ENTRY)} cho một phần). Hãy rút gọn nội dung hoặc tách thành nhiều file nhỏ hơn.`,
+    { entryName, nguon },
   );
 }
-function loiVuotTranTong(): LoiVuotTran {
+function loiVuotTranTong(entryName: string, nguon: "khai-bao" | "do-that"): LoiVuotTran {
   return new LoiVuotTran(
     `File này quá lớn để xử lý (tổng nội dung bên trong giải nén ra vượt quá giới hạn ${formatMB(TRAN_TONG_GIAI_NEN)}). Hãy rút gọn nội dung hoặc tách thành nhiều file nhỏ hơn.`,
+    { entryName, nguon },
   );
 }
 function loiVuotTranSoEntry(soEntry: number): LoiVuotTran {
@@ -74,9 +76,9 @@ export function moPhienDocZip(buf: Buffer): PhienDocZip {
 
   let tongByteDaGiaiNen = 0;
 
-  function kiemTranByte(byteEntry: number): void {
-    if (byteEntry > TRAN_MOT_ENTRY) throw loiVuotTranMotEntry();
-    if (tongByteDaGiaiNen > TRAN_TONG_GIAI_NEN) throw loiVuotTranTong();
+  function kiemTranByte(entryName: string, byteEntry: number): void {
+    if (byteEntry > TRAN_MOT_ENTRY) throw loiVuotTranMotEntry(entryName, "do-that");
+    if (tongByteDaGiaiNen > TRAN_TONG_GIAI_NEN) throw loiVuotTranTong(entryName, "do-that");
   }
 
   async function* docEntryTheoLuong(entryName: string): AsyncGenerator<string> {
@@ -86,15 +88,15 @@ export function moPhienDocZip(buf: Buffer): PhienDocZip {
     // Từ chối SỚM theo kích thước KHAI BÁO trong central directory - rẻ,
     // nhưng KHÔNG đáng tin tuyệt đối (spec cho phép khai gian), nên vòng lặp
     // dưới vẫn phải đếm byte THẬT trong lúc giải nén, không chỉ dựa vào đây.
-    if (entry.uncompSize > TRAN_MOT_ENTRY) throw loiVuotTranMotEntry();
-    if (tongByteDaGiaiNen + entry.uncompSize > TRAN_TONG_GIAI_NEN) throw loiVuotTranTong();
+    if (entry.uncompSize > TRAN_MOT_ENTRY) throw loiVuotTranMotEntry(entryName, "khai-bao");
+    if (tongByteDaGiaiNen + entry.uncompSize > TRAN_TONG_GIAI_NEN) throw loiVuotTranTong(entryName, "khai-bao");
 
     const compData = duLieuNenCuaEntry(buf, entry);
 
     if (entry.method === 0) {
       // STORED - không nén, kích thước thật CHÍNH LÀ compData.length
       tongByteDaGiaiNen += compData.length;
-      kiemTranByte(compData.length);
+      kiemTranByte(entryName, compData.length);
       yield compData.toString("utf-8");
       return;
     }
@@ -114,7 +116,7 @@ export function moPhienDocZip(buf: Buffer): PhienDocZip {
         const bytes = Buffer.byteLength(chunk, "utf8");
         byteEntry += bytes;
         tongByteDaGiaiNen += bytes;
-        kiemTranByte(byteEntry);
+        kiemTranByte(entryName, byteEntry);
 
         // Miễn kiểm tỉ lệ khi CHƯA ĐỌC ĐỦ ngưỡng OUTPUT (byteEntry, KHÔNG
         // phải cỡ nén compData.length đầu vào) - đúng cách Apache POI làm
@@ -132,6 +134,7 @@ export function moPhienDocZip(buf: Buffer): PhienDocZip {
           // "nghi ngờ zip bomb".
           throw new LoiVuotTran(
             `Entry "${entryName}" có tỉ lệ nén vượt quá ${TI_LE_NEN_TOI_DA}:1 - nghi ngờ zip bomb`,
+            { entryName, nguon: "do-that" },
           );
         }
         yield chunk;

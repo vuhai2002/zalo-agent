@@ -8,6 +8,7 @@ import { docChuTuFile, laDinhDangHoTro } from "./doc-text-extract.js";
 import { luuDoan } from "./kb-chunk-store.js";
 import { giaNguonChoXuLy, layNguonTheoTrangThai } from "./kb-source-queries.js";
 import { datTrangThai, type KbSource } from "./kb-source-store.js";
+import { LoiVuotTran } from "./ooxml-limits.js";
 
 /**
  * Vòng xử lý nền của Kho tri thức: đọc chữ từ nguồn `cho_xu_ly` -> cắt đoạn ->
@@ -53,7 +54,12 @@ async function xuLyMotNguon(n: KbSource): Promise<void> {
     // Một nguồn hỏng (file lỗi, định dạng lạ) không được kéo cả vòng chết theo -
     // try/catch bọc TỪNG nguồn, không bọc cả vòng `xuLyMotVong`.
     const loi = err instanceof Error ? err.message : String(err);
-    log.warn({ sourceId: n.id, loi }, "Xử lý nguồn Kho tri thức thất bại");
+    // LoiVuotTran mang thêm entryName/nguon (chẩn đoán, không hiện trong
+    // message) - đính kèm vào log để debug biết TRẦN NÀO/ENTRY NÀO chặn, mà
+    // không buộc module thuần zip-stream-entry.ts phải import logger (xem
+    // comment trên lớp LoiVuotTran trong ooxml-limits.ts).
+    const chiTietTran = err instanceof LoiVuotTran ? { entryName: err.entryName, nguon: err.nguon } : {};
+    log.warn({ sourceId: n.id, loi, ...chiTietTran }, "Xử lý nguồn Kho tri thức thất bại");
     datTrangThai(n.id, "hong", { loi });
   }
 }

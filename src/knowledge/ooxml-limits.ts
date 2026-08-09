@@ -142,5 +142,27 @@ export const TRAN_TONG_SO_O = 2_000_000;
  * chuỗi "lồng quá sâu" trong message - mong manh, và các trần KHÁC (tổng ký
  * tự trích ra, cột vượt XFD) không được miễn dịch, bị dán nhãn sai là lỗi cú
  * pháp XML dù file hoàn toàn hợp lệ.
+ *
+ * `entryName`/`nguon` là trường CHẨN ĐOÁN tuỳ chọn, KHÔNG lộ ra `message`
+ * (message giữ ngắn gọn cho người dùng cuối đọc trên dashboard). Đặt trên
+ * chính lớp lỗi thay vì `log.warn` ngay tại nơi ném: `zip-stream-entry.ts` là
+ * module THUẦN, import tĩnh ở nhiều file test (`extract-docx-text.test.ts`...)
+ * - kéo `shared/logger.ts` vào sẽ đọc `DATA_DIR` qua `env.ts` lúc nạp module,
+ * đúng bẫy "Bẫy khi viết test" của CLAUDE.md. Đóng gói dữ liệu vào lỗi để
+ * CALLER có logger (`kb-ingest-worker.ts`) tự đọc ra mà ghi log, không buộc
+ * module thuần phải biết tới logger.
  */
-export class LoiVuotTran extends Error {}
+export class LoiVuotTran extends Error {
+  readonly entryName?: string;
+  /** "khai-bao": chặn SỚM theo kích thước KHAI BÁO trong central directory,
+   * chưa đọc thật (rẻ nhưng có thể bị khai gian). "do-that": chặn khi ĐANG
+   * đếm byte thật lúc giải nén/xử lý - luôn đúng, không thể khai gian né. */
+  readonly nguon?: "khai-bao" | "do-that";
+
+  constructor(message: string, chiTiet?: { entryName?: string; nguon?: "khai-bao" | "do-that" }) {
+    super(message);
+    this.name = "LoiVuotTran";
+    this.entryName = chiTiet?.entryName;
+    this.nguon = chiTiet?.nguon;
+  }
+}

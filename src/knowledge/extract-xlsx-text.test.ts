@@ -168,6 +168,27 @@ describe("extract-xlsx-text - trần cột Excel (Critical: r= của người ng
     const tonMs = performance.now() - t0;
     assert.ok(tonMs < 1000, `tốn ${tonMs}ms - phải dưới 1 giây (trước khi sửa: 21 700ms)`);
   });
+
+  it("hàng có cột GIẢM DẦN (XFD1 rồi A1) không hoàn quỹ - BẤT BIẾN: tongO luôn >= số push mảng thật đã chạy", async () => {
+    // BẤT BIẾN cần giữ, không phải MỘT chuỗi cụ thể: "không có input nào khiến
+    // themOVaoDong() chạy vòng lặp push() thật mà nganSachO.tongO không ghi đủ
+    // công đó". Ca trước (test "100.000 hàng ô rỗng") chỉ có 1 ô/hàng nên
+    // KHÔNG BAO GIỜ chạm nhánh trừ ra ÂM của `chiSoCot - dongHienTai.length` -
+    // không đại diện cho bất biến trên. Ca NÀY xếp 2 ô/hàng theo thứ tự
+    // GIẢM (cột 16.384 trước, cột 1 sau) - đúng hình dạng đã đo hỏng: hàng thứ
+    // hai "hoàn quỹ" 16.383 dù `themOVaoDong` vẫn chạy đủ vòng lặp push() cho ô
+    // XFD1. Trước khi sửa (bỏ Math.max): 100.000 hàng dạng này khoá event loop
+    // ~20 giây (đo lại ở báo cáo) mà tongO cuối chỉ = 100.000 (5% trần) -
+    // KHÔNG trần nào bắt. Sau khi kẹp sàn 1, mỗi hàng tốn đúng 16.384 + 1 =
+    // 16.385 vào tongO -> vượt trần 2.000.000 ngay ở hàng ~123, nên phép thử
+    // này phải BỊ TỪ CHỐI RẤT NHANH (không cần dựng đủ 100.000 hàng mới biết).
+    const hang = '<row><c r="XFD1" s="1"/><c r="A1" s="1"/></row>'.repeat(100_000);
+    const buf = xlsxTuSheetVaChuoi(hang, []);
+    const t0 = performance.now();
+    await assert.rejects(() => docChuTuFile(buf, "xlsx"), /quá nhiều ô/i);
+    const tonMs = performance.now() - t0;
+    assert.ok(tonMs < 1000, `tốn ${tonMs}ms - phải dưới 1 giây (trước khi sửa: không bao giờ bị chặn, khoá ~20s)`);
+  });
 });
 
 describe("extract-xlsx-text - bom và trần an toàn", () => {
