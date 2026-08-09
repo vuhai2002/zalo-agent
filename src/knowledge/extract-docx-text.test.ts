@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 // Module thuần (chỉ đụng zip/regex) - không chạm env/DB nên import tĩnh được
 import { docChuTuFile } from "./doc-text-extract.js";
 import { renderDocx } from "../documents/render-docx.js";
-import { docxChiCoAnh, docxTuXml, zipEntryQuaTran } from "./ooxml-zip-test-helper.js";
+import { chuKhoNen, docxChiCoAnh, docxTuXml, zipEntryQuaTran } from "./ooxml-zip-test-helper.js";
 
 const wordTable = () =>
   fs.readFileSync(new URL("./fixtures/word-table.docx", import.meta.url));
@@ -88,12 +88,14 @@ describe("extract-docx-text - fixture Word THẬT (src/knowledge/fixtures)", () 
     assert.doesNotMatch(chu, /Tên \| Số\n\|/);
   });
 
-  it("<w:p/> tự đóng NẰM GIỮA hai đoạn văn thật không gộp lẫn nội dung", async () => {
-    // fixture word-table.docx không lộ được ca này: 3 <w:p/> tự đóng của nó
-    // đều nằm ở CUỐI tài liệu, không còn </w:p> nào phía sau để bug cũ
-    // (PARAGRAPH_RE quét lố sang </w:p> kế tiếp) gộp nhầm - đúng nhận định
-    // "vô hại trong file đo được nhưng là bom hẹn giờ" của báo cáo nghiên
-    // cứu. Test này đặt <w:p/> XEN GIỮA hai đoạn có chữ để lộ ra ranh giới.
+  it("<w:p/> tự đóng NẰM GIỮA hai đoạn văn thật không gộp lẫn nội dung (chốt HỒI QUY, không phải bằng chứng B10-8)", async () => {
+    // SỬA LẠI cách gọi test này sau rà soát: đây là chốt HỒI QUY cho ranh
+    // giới đoạn văn khi có <w:p/> tự đóng xen giữa - KHÔNG PHẢI bằng chứng
+    // B10-8 như báo cáo phase trước lỡ ghi. Đã kiểm tay: chạy PARAGRAPH_RE
+    // (regex cũ) trên ĐÚNG input này cho ra "A\n\nB" - Y HỆT bản mới, vì thẻ
+    // tự đóng không mang chữ nên không có gì để bug cũ làm mất. Bằng chứng
+    // THẬT cho B10-8 (saxes phát cả moThe lẫn dongThe cho thẻ tự đóng) nằm ở
+    // `xml-sax-scan.test.ts` ("thẻ tự đóng phát cả moThe LẪN dongThe").
     const chu = await docChuTuFile(
       docxTuXml(
         "<w:p><w:r><w:t>Truoc tu dong</w:t></w:r></w:p>" +
@@ -103,6 +105,90 @@ describe("extract-docx-text - fixture Word THẬT (src/knowledge/fixtures)", () 
       "docx",
     );
     assert.equal(chu, "Truoc tu dong\n\nSau tu dong");
+  });
+
+  it("nội dung KHÔNG-KHOẢNG-TRẮNG trong pPr (bỏ qua nội dung) không lọt ra, không cần .trim() che", async () => {
+    // Đo trực tiếp THE_BO_QUA_NOI_DUNG: bản test tab-stop ở trên KHÔNG chứng
+    // minh được cơ chế này thật sự chặn nội dung - nó chỉ chứng minh trim()
+    // xoá được KHOẢNG TRẮNG thừa ở đầu chuỗi (pPr luôn là con ĐẦU của <w:p>
+    // theo schema, nên bất kỳ rò rỉ nào từ pPr luôn nằm ở đầu và bị trim()
+    // nuốt, kể cả nếu chốt bỏ-qua-nội-dung hỏng hoàn toàn - đã kiểm tay bằng
+    // cách tắt gate, test tab-stop ở trên VẪN xanh). <w:noBreakHyphen/> tạo
+    // ra "-" - KHÔNG PHẢI khoảng trắng - nên nếu nó rò rỉ từ pPr thì trim()
+    // KHÔNG xoá được, và test này mới thật sự đo được cơ chế bỏ-qua-nội-dung.
+    // Đặt trong <w:pPr> là dữ liệu SAI SCHEMA có chủ đích (mô phỏng input đối
+    // kháng), không phải file Word thật ghi.
+    const chu = await docChuTuFile(
+      docxTuXml("<w:p><w:pPr><w:noBreakHyphen/></w:pPr><w:r><w:t>Noi dung that</w:t></w:r></w:p>"),
+      "docx",
+    );
+    assert.equal(chu, "Noi dung that", `dấu "-" không được lọt ra: ${JSON.stringify(chu)}`);
+  });
+
+  it("<w:instrText>/<w:delText> NẰM GIỮA hai run có chữ không lọt vào kết quả (không phải nhờ trim che)", async () => {
+    // instrText/delText không nằm trong pPr/rPr (không được THE_BO_QUA_NOI_DUNG
+    // che) - chúng bị loại vì CHỈ khớp đúng local name "t" mới được coi là nội
+    // dung. Đặt GIỮA hai run có chữ thật để nếu cơ chế này hỏng (ví dụ ai đó
+    // sau này đổi "ten === 't'" thành so khớp lỏng hơn), chữ rác sẽ lộ ra
+    // GIỮA chuỗi - vị trí trim() không che được.
+    const chu = await docChuTuFile(
+      docxTuXml(
+        "<w:p>" +
+          "<w:r><w:t>Truoc</w:t></w:r>" +
+          '<w:r><w:instrText> HYPERLINK "http://evil.example/x" </w:instrText></w:r>' +
+          "<w:del><w:r><w:delText>chu da xoa</w:delText></w:r></w:del>" +
+          "<w:r><w:t>Sau</w:t></w:r>" +
+          "</w:p>",
+      ),
+      "docx",
+    );
+    assert.equal(chu, "TruocSau", `mã field/chữ đã xoá không được lọt vào giữa: ${JSON.stringify(chu)}`);
+  });
+
+  it("outlineLvl=9 (Body Text theo ECMA-376, KHÔNG phải heading) không biến đoạn văn thành tiêu đề", async () => {
+    // Ca ĐÃ ĐO hỏng: Number("9") vẫn được nhận, ra "######### Doan thuong" -
+    // đoạn văn thường bị chunk-text.ts coi là tiêu đề, gán sai ngữ cảnh cho
+    // các chunk phía sau nó. outlineLvl hợp lệ cho heading chỉ 0-8.
+    const chu = await docChuTuFile(
+      docxTuXml(
+        '<w:p><w:pPr><w:outlineLvl w:val="9"/></w:pPr><w:r><w:t>Doan thuong</w:t></w:r></w:p>',
+      ),
+      "docx",
+    );
+    assert.equal(chu, "Doan thuong", `không được có tiền tố "#": ${JSON.stringify(chu)}`);
+  });
+
+  it("bảng LỒNG trong ô không làm mất hàng bảng ngoài, không mất chữ trong ô", async () => {
+    // Ca ĐÃ ĐO hỏng ở bản dùng biến đơn (không ngăn xếp): hàng "A1 | A2" của
+    // bảng NGOÀI biến mất hoàn toàn (bảng lồng mở ra ghi đè hangCuaBang dùng
+    // chung); chữ "B1" (đứng TRƯỚC bảng lồng, trong cùng ô) cũng mất; bảng
+    // lồng thoát ra thành "đoạn" đứng SAI vị trí thay vì nằm trong ô của nó.
+    // Kết quả SAI đã đo: "Truoc bang\n\nn1 | n2\n\nB1duoi\n\nn1 | n2\nn1 | n2 | n2 | B2\nC1 | C2\n\nSau bang".
+    const oTc = (chu: string) => `<w:tc><w:p><w:r><w:t>${chu}</w:t></w:r></w:p></w:tc>`;
+    const chu = await docChuTuFile(
+      docxTuXml(
+        "<w:tbl>" +
+          `<w:tr>${oTc("A1")}${oTc("A2")}</w:tr>` +
+          "<w:tr>" +
+          "<w:tc>" +
+          '<w:p><w:r><w:t>B1</w:t></w:r></w:p>' +
+          `<w:tbl><w:tr>${oTc("n1")}${oTc("n2")}</w:tr></w:tbl>` +
+          '<w:p><w:r><w:t>B1duoi</w:t></w:r></w:p>' +
+          "</w:tc>" +
+          oTc("B2") +
+          "</w:tr>" +
+          "</w:tbl>",
+      ),
+      "docx",
+    );
+    assert.match(chu, /A1 \| A2/, `mất hàng bảng ngoài: ${JSON.stringify(chu)}`);
+    assert.match(chu, /\bB1\b/, `mất chữ trong ô trước bảng lồng: ${JSON.stringify(chu)}`);
+    assert.match(chu, /n1 \| n2/, `mất nội dung bảng lồng: ${JSON.stringify(chu)}`);
+    assert.match(chu, /B1duoi/, `mất chữ trong ô sau bảng lồng: ${JSON.stringify(chu)}`);
+    assert.match(chu, /B2/, `mất ô còn lại của hàng ngoài: ${JSON.stringify(chu)}`);
+    // Đúng thứ tự: hàng ngoài A1|A2 phải đứng TRƯỚC nội dung ô B (không bị
+    // bảng lồng đẩy văng ra một "đoạn" tách rời đứng lạc chỗ).
+    assert.ok(chu.indexOf("A1 | A2") < chu.indexOf("n1 | n2"));
   });
 });
 
@@ -130,5 +216,21 @@ describe("extract-docx-text - bom và trần an toàn", () => {
     // Trả chuỗi rỗng thì worker đánh dấu "Sẵn sàng, 0 đoạn" - nguồn độc trông
     // như nguồn khỏe. Đây là cách nguồn giết tiến trình lọt qua nhánh "hong".
     await assert.rejects(() => docChuTuFile(docxChiCoAnh(), "docx"), /không đọc được chữ nào/i);
+  });
+
+  it("chữ trích ra vượt trần 8 MB bị từ chối với thông báo ĐÚNG NGHĨA, KHÔNG bị dán nhãn sai 'XML không hợp lệ'", async () => {
+    // TRAN_TONG_KY_TU_TRICH TRƯỚC ĐÂY không có MỘT test nào (đường sống mà
+    // người rà soát phải tự dựng mới biết chạy). Lỗi của nó cũng bị
+    // xml-sax-scan.ts bọc nhầm thành "XML không hợp lệ: Chữ trích ra..." dù
+    // file HOÀN TOÀN hợp lệ (chỉ là quá nhiều chữ) - handler ném ĐỒNG BỘ bên
+    // trong parser.write() nên đi qua đúng nhánh dịch lỗi saxes. Dùng chữ khó
+    // nén (không phải "x" lặp) để KHÔNG chạm trần tỉ lệ nén trước.
+    const buf = docxTuXml(`<w:p><w:r><w:t>${chuKhoNen(8.5 * 1024 * 1024)}</w:t></w:r></w:p>`);
+    await assert.rejects(() => docChuTuFile(buf, "docx"), (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /vượt quá giới hạn 8 MB/i);
+      assert.doesNotMatch(err.message, /XML không hợp lệ/i, "không được dán nhãn sai là lỗi cú pháp XML");
+      return true;
+    });
   });
 });

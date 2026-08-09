@@ -1,12 +1,14 @@
 import type { SaxesTagNS } from "saxes";
 import type { XmlSaxHandlers } from "../shared/xml-sax-scan.js";
-import { TRAN_TONG_KY_TU_TRICH } from "./ooxml-limits.js";
+import { taoDocxTableTracker } from "./docx-sax-table-tracker.js";
+import { LoiVuotTran, TRAN_TONG_KY_TU_TRICH } from "./ooxml-limits.js";
 
 /**
  * State machine đọc `word/document.xml` qua sự kiện SAX, thay
  * `PARAGRAPH_RE`/`RUN_TEXT_RE` cũ - xem mục 3.1 báo cáo nghiên cứu cho từng
  * ca biên (tab stop trong `w:pPr` so với trong `w:r`, `<w:p/>` tự đóng, bảng
- * giữ cấu trúc hàng, heading qua `w:outlineLvl`).
+ * giữ cấu trúc hàng, heading qua `w:outlineLvl`). Theo dõi bảng (kể cả bảng
+ * lồng) tách sang `docx-sax-table-tracker.ts`.
  */
 
 const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -18,6 +20,10 @@ const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
  * nên cũng bị bỏ qua nhờ nằm trong `pPr`, không cần liệt kê riêng "tabs".
  */
 const THE_BO_QUA_NOI_DUNG = new Set(["pPr", "rPr", "tblPr", "tcPr", "trPr", "sectPr"]);
+
+/** outlineLvl hợp lệ chỉ 0-8 (Heading1-9). Word ghi giá trị 9 cho "Body Text"
+ * (ECMA-376) - KHÔNG phải heading, dù cùng cơ chế outline level. */
+const OUTLINE_LVL_TOI_DA = 8;
 
 function giaTriThuocTinh(tag: SaxesTagNS, localName: string): string | undefined {
   for (const key in tag.attributes) {
@@ -53,16 +59,13 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
   let capTieuDe: number | undefined; // từ pStyle (tầng 3)
   let outlineLvl: number | undefined; // từ w:outlineLvl (tầng 1, ưu tiên hơn)
 
-  let hangCuaBang: string[] = []; // mỗi phần tử = 1 hàng đã join " | "
-  let oCuaHang: string[] = [];
-  let dangTrongO = false;
-  let boDemO = ""; // gom nhiều <w:p> trong cùng 1 <w:tc>
+  const bang = taoDocxTableTracker(); // ngăn xếp bảng (kể cả bảng lồng)
 
   function themDoan(text: string): void {
     if (!text) return;
     tongKyTu += text.length;
     if (tongKyTu > TRAN_TONG_KY_TU_TRICH) {
-      throw new Error(
+      throw new LoiVuotTran(
         `Chữ trích ra từ file vượt quá giới hạn ${TRAN_TONG_KY_TU_TRICH / (1024 * 1024)} MB`,
       );
     }
@@ -71,8 +74,8 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
 
   function ketThucDoanVan(): void {
     const vanBan = boDemDoanVan.trim();
-    if (dangTrongO) {
-      if (vanBan) boDemO += (boDemO ? " " : "") + vanBan;
+    if (bang.dangTrongO()) {
+      bang.themVaoODangMo(vanBan);
     } else if (vanBan) {
       // outlineLvl 0-based (0 = Heading1) - tầng 1 BỀN hơn pStyle bản địa hoá
       const cap = outlineLvl !== undefined ? outlineLvl + 1 : capTieuDe;
@@ -99,7 +102,13 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
         if (val !== undefined) capTieuDe = capTuStyleId(val);
       } else if (ten === "outlineLvl") {
         const val = giaTriThuocTinh(tag, "val");
-        if (val !== undefined) outlineLvl = Number(val);
+        // Word ghi "9" cho outline level "Body Text" (ECMA-376) - không phải
+        // heading. Chỉ nhận 0-8 (Heading1-9); giá trị khác bỏ qua, để
+        // capTieuDe (tầng 3) hoặc không heading nào quyết định thay.
+        if (val !== undefined) {
+          const n = Number(val);
+          if (n >= 0 && n <= OUTLINE_LVL_TOI_DA) outlineLvl = n;
+        }
       }
       return;
     }
@@ -124,14 +133,13 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
         boDemDoanVan += "-";
         break;
       case "tbl":
-        hangCuaBang = [];
+        bang.moBang();
         break;
       case "tr":
-        oCuaHang = [];
+        bang.moHang();
         break;
       case "tc":
-        dangTrongO = true;
-        boDemO = "";
+        bang.moO();
         break;
     }
   };
@@ -154,14 +162,13 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
         ketThucDoanVan();
         break;
       case "tc":
-        oCuaHang.push(boDemO.trim());
-        dangTrongO = false;
+        bang.dongO();
         break;
       case "tr":
-        if (oCuaHang.some((o) => o.trim())) hangCuaBang.push(oCuaHang.join(" | "));
+        bang.dongHang();
         break;
       case "tbl":
-        if (hangCuaBang.length > 0) themDoan(hangCuaBang.join("\n"));
+        bang.dongBang(themDoan);
         break;
     }
   };

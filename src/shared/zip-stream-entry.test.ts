@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 // Module thuần (chỉ đụng zip/zlib) - không chạm env/DB nên import tĩnh được
 import { moPhienDocZip } from "./zip-stream-entry.js";
-import { buildZipBuffer } from "../knowledge/ooxml-zip-test-helper.js";
+import { buildZipBuffer, chuKhoNen } from "../knowledge/ooxml-zip-test-helper.js";
 
 async function gomHetChunk(gen: AsyncGenerator<string>): Promise<{ text: string; soChunk: number }> {
   let text = "";
@@ -62,16 +62,29 @@ describe("zip-stream-entry - đọc đúng nội dung", () => {
 });
 
 describe("zip-stream-entry - trần an toàn", () => {
-  it("entry giải nén vượt trần MỘT entry (32 MB) bị từ chối", async () => {
+  it("entry giải nén vượt trần MỘT entry (32 MB) bị từ chối, thông báo KHÔNG buộc tội 'zip bomb'", async () => {
+    // Vượt trần vì file TO THẬT khác hẳn vượt trần vì HÌNH DẠNG khả nghi (tỉ
+    // lệ nén/số entry bất thường) - buộc tội "zip bomb" cho một bảng tính hợp
+    // lệ chỉ đơn giản LỚN là sai, và người vận hành không đối chiếu được với
+    // file trên đĩa của họ. Xem `zip-stream-entry.ts` (loiVuotTranMotEntry).
     const raw = Buffer.alloc(33 * 1024 * 1024, 0x41);
     const zip = buildZipBuffer([{ name: "word/document.xml", data: raw }]);
     await assert.rejects(async () => {
       for await (const _ of moPhienDocZip(zip).docEntryTheoLuong("word/document.xml")) void _;
-    }, /vượt quá giới hạn/i);
+    }, (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /quá lớn để xử lý/i);
+      assert.match(err.message, /vượt quá giới hạn/i);
+      assert.doesNotMatch(err.message, /zip bomb/i, "không được buộc tội file to thật là zip bomb");
+      return true;
+    });
   });
 
   it("tổng giải nén vượt trần archive (64 MB) dù mỗi entry đều dưới trần entry", async () => {
-    const moiEntry = Buffer.alloc(25 * 1024 * 1024, 0x42);
+    // Chữ KHÓ NÉN (không phải Buffer.alloc lặp 1 byte) - lặp 1 byte nén tới
+    // >1000:1, giờ sẽ bị CHÍNH chốt tỉ lệ (đã sửa) bắt trước, che mất chốt
+    // tổng cần đo ở đây. Xem comment `chuKhoNen` trong test helper.
+    const moiEntry = Buffer.from(chuKhoNen(25 * 1024 * 1024), "utf-8");
     const zip = buildZipBuffer([
       { name: "a.xml", data: moiEntry },
       { name: "b.xml", data: moiEntry },
@@ -83,22 +96,42 @@ describe("zip-stream-entry - trần an toàn", () => {
       for await (const _ of phien.docEntryTheoLuong(ten)) void _;
     }
     // Entry thứ 3 đẩy tổng lên 75 MB - vượt trần archive dù bản thân nó (25 MB)
-    // vẫn dưới trần entry (32 MB)
+    // vẫn dưới trần entry (32 MB). Cùng lý do "không buộc tội zip bomb" như
+    // trần MỘT entry ở test trên - vượt trần tổng cũng chỉ là "file to thật".
     await assert.rejects(async () => {
       for await (const _ of phien.docEntryTheoLuong("c.xml")) void _;
-    }, /vượt quá giới hạn/i);
+    }, (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /quá lớn để xử lý/i);
+      assert.match(err.message, /vượt quá giới hạn/i);
+      assert.doesNotMatch(err.message, /zip bomb/i, "không được buộc tội file to thật là zip bomb");
+      return true;
+    });
   });
 
-  // KHÔNG có test riêng cho "tỉ lệ nén vượt 500:1" - đã THỬ và phát hiện
-  // không dựng nổi fixture hợp lệ: với trần entry 32 MB + ngưỡng miễn kiểm
-  // 1 MB, để tỉ lệ VƯỢT 500:1 mà phần nén còn ĐỦ LỚN để không bị miễn kiểm
-  // thì phần giải nén phải > 500 MB - lúc đó trần MỘT ENTRY (32 MB) đã chặn
-  // từ lâu. Nói cách khác: với đúng 3 con số nghiên cứu chốt, trần tỉ lệ nén
-  // KHÔNG BAO GIỜ là chốt chặn ĐẦU TIÊN cho một entry đơn - trần entry luôn
-  // tới trước. Giữ nguyên đoạn code kiểm tỉ lệ (đúng con số brief yêu cầu,
-  // phòng khi sau này trần entry được nới lỏng thì đây vẫn còn chốt chặn),
-  // nhưng không viết test cho một đường không cách nào chạm tới bằng dữ liệu
-  // thật - ghi lại đây thay vì âm thầm bỏ qua, đúng luật của đợt sửa này.
+  it("tỉ lệ nén vượt 500:1 bị từ chối SỚM (trước khi chạm trần entry) - đúng hình dạng bom-1mb.docx thật", async () => {
+    // Nội dung LẶP 1 KÝ TỰ nén cực tốt (~1000:1+), giải nén ra 1 MB (dưới xa
+    // trần entry 32 MB) - đúng tỉ lệ ~596:1 mà nghiên cứu đo trên bom-1mb.docx
+    // thật (1,7 KB nén -> 1 MB XML). Trước khi sửa Important 3, chốt tỉ lệ
+    // miễn kiểm theo CỠ NÉN (compData.length < 1 MB) nên KHÔNG BAO GIỜ bắt
+    // được ca này (1,7 KB nén luôn dưới ngưỡng miễn, dù tỉ lệ tới 596:1). Sau
+    // khi sửa (miễn theo OUTPUT đã đọc, kiểu Apache POI), chốt tỉ lệ phải là
+    // đường ĐẦU TIÊN chặn - đo bằng cách xác nhận message nói "tỉ lệ nén",
+    // không phải "vượt quá giới hạn" (message của trần entry/tổng).
+    const raw = "x".repeat(1024 * 1024); // 1 MB, nén cực tốt
+    const zip = buildZipBuffer([{ name: "word/document.xml", data: Buffer.from(raw, "utf-8") }]);
+    await assert.rejects(async () => {
+      for await (const _ of moPhienDocZip(zip).docEntryTheoLuong("word/document.xml")) void _;
+    }, (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /tỉ lệ nén vượt quá 500:1/i);
+      // Khác trần entry/tổng: tỉ lệ nén phi thực tế LÀ hình dạng khả nghi
+      // thật - GIỮ chữ "zip bomb" ở đây (xác nhận DƯƠNG, không chỉ kiểm phủ
+      // định ở 2 test trên).
+      assert.match(err.message, /zip bomb/i);
+      return true;
+    });
+  });
 
   it("số entry vượt trần 256 bị từ chối, không cần giải nén entry nào", () => {
     const entries = Array.from({ length: 257 }, (_, i) => ({
@@ -106,7 +139,12 @@ describe("zip-stream-entry - trần an toàn", () => {
       data: Buffer.from("x"),
     }));
     const zip = buildZipBuffer(entries);
-    assert.throws(() => moPhienDocZip(zip), /vượt quá giới hạn 256 entry/i);
+    assert.throws(() => moPhienDocZip(zip), (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /vượt quá giới hạn 256 entry/i);
+      assert.match(err.message, /zip bomb/i); // số entry bất thường LÀ hình dạng khả nghi
+      return true;
+    });
   });
 
   it("zip hỏng (không phải zip) ném lỗi tiếng Việt như read-zip-entry.ts", () => {

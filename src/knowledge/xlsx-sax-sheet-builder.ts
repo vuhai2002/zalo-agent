@@ -1,7 +1,7 @@
 import type { SaxesTagNS } from "saxes";
 import type { XmlSaxHandlers } from "../shared/xml-sax-scan.js";
 import { thayTheEscapeExcel } from "./xlsx-sax-shared-strings.js";
-import { TRAN_TONG_KY_TU_TRICH } from "./ooxml-limits.js";
+import { LoiVuotTran, TRAN_SO_COT_EXCEL, TRAN_TONG_KY_TU_TRICH } from "./ooxml-limits.js";
 
 /**
  * `xl/worksheets/sheetN.xml` -> chữ theo HÀNG, cắt theo hàng như comment gốc
@@ -48,7 +48,14 @@ export function taoXlsxSheetSaxBuilder(chuoiDungChung: readonly string[]): XlsxS
   let doSauRPh = 0; // phiên âm furigana trong <is> - loại như sharedStrings
 
   function giaTriOTheoLoai(): string {
-    if (kieuO === "s") return thayTheEscapeExcel(chuoiDungChung[Number(boDemV)] ?? "");
+    if (kieuO === "s") {
+      // Ô t="s" nhưng KHÔNG có <v> (hoặc <v></v> rỗng) - boDemV === "" thì
+      // Number("") === 0, LỘ RA chuỗi tại index 0 của người khác thay vì ô
+      // rỗng. Đã đo: '<c t="s"><v>1</v></c><c t="s"></c>' ra "That | BI-MAT" -
+      // ô B trống bịa ra chữ của ô A. Phải kiểm rỗng TRƯỚC khi Number().
+      if (boDemV.trim() === "") return "";
+      return thayTheEscapeExcel(chuoiDungChung[Number(boDemV)] ?? "");
+    }
     if (kieuO === "inlineStr") return thayTheEscapeExcel(boDemIs);
     if (kieuO === "str") return thayTheEscapeExcel(boDemV); // kết quả công thức dạng chữ
     if (kieuO === "b") return boDemV === "1" ? "Đúng" : "Sai";
@@ -65,7 +72,21 @@ export function taoXlsxSheetSaxBuilder(chuoiDungChung: readonly string[]): XlsxS
 
   function chiSoCotCua(tag: SaxesTagNS): number {
     const chuCai = giaTriThuocTinh(tag, "r")?.match(/^[A-Za-z]+/)?.[0];
-    return chuCai ? chuCotThanhChiSo(chuCai.toUpperCase()) : cotKyVong;
+    if (!chuCai) return cotKyVong;
+    const chiSo = chuCotThanhChiSo(chuCai.toUpperCase());
+    // BẮT BUỘC kẹp: cột thật tối đa của Excel là XFD = 16.384. Không kẹp thì
+    // themOVaoDong() bên dưới cấp phát mảng theo chiSo KHÔNG TRẦN - đo được:
+    // r="AAAAAAA1" (7 chữ cái) ra chỉ số cột hơn 321 TRIỆU, khiến vòng lặp
+    // lấp cột nhảy cóc cấp một mảng 321 triệu phần tử -> OOM FATAL của V8
+    // (không phải Error bắt được bằng try/catch - giết hẳn process, mọi tài
+    // khoản Zalo mất kết nối cùng lúc). Entry chứa r= độc chỉ cần vài trăm
+    // byte, KHÔNG trần zip/entry/tổng/độ-sâu nào ở trên bắt được ca này.
+    if (chiSo > TRAN_SO_COT_EXCEL) {
+      throw new LoiVuotTran(
+        `File xlsx có ô ở cột vượt quá giới hạn thật của Excel (cột tối đa là XFD, tức ${TRAN_SO_COT_EXCEL}) - nghi ngờ file bị chỉnh sửa bất thường`,
+      );
+    }
+    return chiSo;
   }
 
   const moThe: XmlSaxHandlers["moThe"] = (tag) => {
@@ -108,7 +129,7 @@ export function taoXlsxSheetSaxBuilder(chuoiDungChung: readonly string[]): XlsxS
           const dong = dongHienTai.join(" | ");
           tongKyTu += dong.length;
           if (tongKyTu > TRAN_TONG_KY_TU_TRICH) {
-            throw new Error(
+            throw new LoiVuotTran(
               `Chữ trích ra từ file vượt quá giới hạn ${TRAN_TONG_KY_TU_TRICH / (1024 * 1024)} MB`,
             );
           }

@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 // Module thuần (chỉ đụng zip/regex) - không chạm env/DB nên import tĩnh được
 import { docChuTuFile } from "./doc-text-extract.js";
 import { renderXlsx } from "../documents/render-xlsx.js";
-import { xlsxRong, xlsxTuSheetVaChuoi, zipNhieuEntryVuaDu } from "./ooxml-zip-test-helper.js";
+import { chuKhoNen, xlsxRong, xlsxTuSheetVaChuoi, zipNhieuEntryVuaDu } from "./ooxml-zip-test-helper.js";
 
 const excelORong = () =>
   fs.readFileSync(new URL("./fixtures/excel-o-rong-co-dinh-dang.xlsx", import.meta.url));
@@ -94,6 +94,63 @@ describe("extract-xlsx-text - fixture Excel THẬT (src/knowledge/fixtures)", ()
     assert.equal(dong[0], "X | Y");
     assert.equal(dong[1], "Z | ", `hàng 2 phải giữ đủ 2 cột (ô B rỗng ở cuối): ${JSON.stringify(dong[1])}`);
   });
+
+  it('ô t="s" KHÔNG có <v> (rỗng nhưng không tự đóng) không bịa nội dung từ ô khác', async () => {
+    // Ca ĐÃ ĐO hỏng: boDemV === "" -> Number("") === 0 -> lấy NHẦM chuỗi tại
+    // index 0 của sharedStrings, dù ô này không hề khai chỉ số nào. Khác ca
+    // "ô tự đóng" ở trên: đây là ô KHÔNG tự đóng (<c t="s"></c>, có mở/đóng
+    // riêng) nhưng bên trong KHÔNG có <v> - đường code khác, đúng nhánh
+    // giaTriOTheoLoai() thay vì nhánh ô tự đóng.
+    const buf = xlsxTuSheetVaChuoi(
+      '<row r="1"><c r="A1" t="s"><v>1</v></c><c r="B1" t="s"></c></row>',
+      ["Bi-mat", "That"],
+    );
+    const chu = await docChuTuFile(buf, "xlsx");
+    assert.equal(chu, "That | ", `ô B1 rỗng không được bịa ra "Bi-mat": ${JSON.stringify(chu)}`);
+  });
+});
+
+describe("extract-xlsx-text - trần cột Excel (Critical: r= của người ngoài không trần)", () => {
+  // Đã đo TRƯỚC khi sửa: chuCotThanhChiSo không kẹp trần, themOVaoDong cấp
+  // phát mảng theo chỉ số cột suy từ r= - r="AAAAAAA1" (7 chữ cái) ra hơn 321
+  // TRIỆU, khiến vòng lặp lấp cột cấp một mảng 321 triệu phần tử. Với
+  // --max-old-space-size=384 (đúng ngân sách container): FATAL ERROR heap
+  // out of memory - GIẾT HẲN process, không phải Error bắt được bằng
+  // try/catch. Nặng hơn cả ReDoS gốc: ReDoS chỉ khoá event loop rồi process
+  // còn sống, cái này giết luôn mọi tài khoản Zalo cùng lúc. Xem B11 (report)
+  // cho số đo thật với --max-old-space-size=384 + setInterval.
+
+  it('cột r="AAAAAAA1" (~321 triệu) bị từ chối NGAY, không cấp phát mảng khổng lồ', async () => {
+    const buf = xlsxTuSheetVaChuoi(
+      '<row r="1"><c r="AAAAAAA1" t="s"><v>0</v></c></row>',
+      ["x"],
+    );
+    await assert.rejects(
+      () => docChuTuFile(buf, "xlsx"),
+      /vượt quá giới hạn thật của Excel/i,
+    );
+  });
+
+  it('cột r="AAAAA1" (~475 nghìn, vẫn vượt XFD) KHÔNG để lọt ký tự rác nào vào kết quả', async () => {
+    // Ca ĐÃ ĐO hỏng ở mức nhẹ hơn ca trên: không OOM nhưng "OK" một cách sai
+    // - 1,4 triệu ký tự đệm (chuỗi rỗng lặp lại do lấp cột) lọt vào kết quả,
+    // +6,7 MB RSS. Với chốt mới, PHẢI ném lỗi - không được trả về BẤT KỲ chữ
+    // nào (kể cả rỗng có ý nghĩa), vì cả file coi như không đọc được.
+    const buf = xlsxTuSheetVaChuoi(
+      '<row r="1"><c r="AAAAA1" t="s"><v>0</v></c></row>',
+      ["x"],
+    );
+    await assert.rejects(
+      () => docChuTuFile(buf, "xlsx"),
+      /vượt quá giới hạn thật của Excel/i,
+    );
+  });
+
+  it('cột XFD1 (16.384, cột CUỐI CÙNG thật của Excel) vẫn đọc được bình thường - không kẹp nhầm ca hợp lệ', async () => {
+    const buf = xlsxTuSheetVaChuoi('<row r="1"><c r="XFD1" t="s"><v>0</v></c></row>', ["Cot cuoi"]);
+    const chu = await docChuTuFile(buf, "xlsx");
+    assert.match(chu, /Cot cuoi$/);
+  });
 });
 
 describe("extract-xlsx-text - bom và trần an toàn", () => {
@@ -110,5 +167,22 @@ describe("extract-xlsx-text - bom và trần an toàn", () => {
 
   it("xlsx toàn ô rỗng NÉM lỗi", async () => {
     await assert.rejects(() => docChuTuFile(xlsxRong(), "xlsx"), /không đọc được chữ nào/i);
+  });
+
+  it("chữ trích ra vượt trần 8 MB (xlsx) bị từ chối với thông báo ĐÚNG NGHĨA, KHÔNG bị dán nhãn sai 'XML không hợp lệ'", async () => {
+    // Cùng lỗ hổng như phía docx (TRAN_TONG_KY_TU_TRICH không có test, lỗi bị
+    // dán nhãn sai) nhưng ĐƯỜNG CODE khác hẳn (xlsx-sax-sheet-builder.ts, kiểm
+    // ở </row> chứ không phải ở </w:p>) - cần test riêng, không dùng chung
+    // bằng chứng với phía docx.
+    const buf = xlsxTuSheetVaChuoi(
+      `<row r="1"><c r="A1" t="inlineStr"><is><t>${chuKhoNen(8.5 * 1024 * 1024)}</t></is></c></row>`,
+      [],
+    );
+    await assert.rejects(() => docChuTuFile(buf, "xlsx"), (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /vượt quá giới hạn 8 MB/i);
+      assert.doesNotMatch(err.message, /XML không hợp lệ/i, "không được dán nhãn sai là lỗi cú pháp XML");
+      return true;
+    });
   });
 });

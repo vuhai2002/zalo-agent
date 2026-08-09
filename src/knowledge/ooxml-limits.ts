@@ -80,3 +80,29 @@ export const TRAN_DO_SAU_XML = 256;
  * dạng bom "toàn `<w:t>` hợp lệ, không lồng sâu, chỉ nhiều").
  */
 export const TRAN_TONG_KY_TU_TRICH = 8 * 1024 * 1024;
+
+/**
+ * Số cột tối đa THẬT của Excel (cột cuối cùng XFD = 16.384) - trần cho chỉ số
+ * cột suy ra từ thuộc tính `r=` của `<c>` (`xlsx-sax-sheet-builder.ts`).
+ *
+ * KHÔNG kẹp trần này thì `r="AAAAAAA1"` (7 chữ cái) quy ra chỉ số cột hơn 321
+ * triệu - vòng lặp lấp cột nhảy cóc (`themOVaoDong`) cấp phát một mảng chuỗi
+ * hơn 321 triệu phần tử. Đo được: OOM FATAL của V8 (không phải lỗi bắt được
+ * bằng try/catch) trên container giới hạn 384 MB old space - nặng hơn cả ReDoS
+ * gốc mà phase này đóng, vì ReDoS chỉ khoá event loop còn process SỐNG, còn
+ * OOM fatal GIẾT HẲN process (mọi tài khoản Zalo mất kết nối cùng lúc). Entry
+ * chứa `r=` độc chỉ cần vài trăm byte - không trần zip/entry/tổng nào ở trên
+ * bắt được ca này (xem `xlsx-sax-sheet-builder.ts`).
+ */
+export const TRAN_SO_COT_EXCEL = 16384;
+
+/**
+ * Ném khi vượt BẤT KỲ trần nào ở trên - đánh dấu để `xml-sax-scan.ts` không
+ * vô tình dịch một lỗi ĐÃ tiếng Việt sẵn (từ `zip-stream-entry.ts` hoặc chính
+ * state machine docx/xlsx) thành "XML không hợp lệ: ..." chung chung. Trước
+ * khi có lớp này, `xml-sax-scan.ts` chỉ nhận diện lỗi trần bằng cách so khớp
+ * chuỗi "lồng quá sâu" trong message - mong manh, và các trần KHÁC (tổng ký
+ * tự trích ra, cột vượt XFD) không được miễn dịch, bị dán nhãn sai là lỗi cú
+ * pháp XML dù file hoàn toàn hợp lệ.
+ */
+export class LoiVuotTran extends Error {}

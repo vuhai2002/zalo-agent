@@ -1,5 +1,5 @@
 import { SaxesParser, type SaxesTagNS } from "saxes";
-import { TRAN_DO_SAU_XML } from "../knowledge/ooxml-limits.js";
+import { LoiVuotTran, TRAN_DO_SAU_XML } from "../knowledge/ooxml-limits.js";
 
 /**
  * Bọc `saxes` (chế độ namespace `xmlns: true`) cho đường đọc docx/xlsx: nạp
@@ -34,13 +34,12 @@ export type XmlSaxHandlers = {
   cdata?: (text: string) => void;
 };
 
-/** Lỗi "lồng quá sâu" đã là câu tiếng Việt cuối cùng - không dịch lại lần nữa */
-function laLoiDoSau(err: unknown): err is Error {
-  return err instanceof Error && err.message.includes("lồng quá sâu");
-}
-
 function dichLoiSaxes(err: unknown): never {
-  if (laLoiDoSau(err)) throw err;
+  // LoiVuotTran ĐÃ là câu tiếng Việt cuối cùng (bộ đếm độ sâu ở dưới, hoặc
+  // caller ném ngược từ handlers - ví dụ TRAN_TONG_KY_TU_TRICH của state
+  // machine docx/xlsx) - không dịch lại lần nữa. Nhận diện bằng KIỂU LỖI,
+  // không so khớp chuỗi (mong manh, chỉ bắt được đúng 1 loại trần).
+  if (err instanceof LoiVuotTran) throw err;
   const goc = err instanceof Error ? err.message : String(err);
   throw new Error(`XML không hợp lệ: ${goc}`);
 }
@@ -49,7 +48,11 @@ function dichLoiSaxes(err: unknown): never {
  * Nạp luồng chunk (từ `zip-stream-entry.ts`) vào một `SaxesParser` mới, phát
  * lại qua `handlers`. Lỗi từ chính `chunks` (ví dụ vượt trần zip) KHÔNG đi
  * qua `dichLoiSaxes` - chỉ lỗi xảy ra TRONG `parser.write()`/`parser.close()`
- * (saxes tự ném, hoặc bộ đếm độ sâu ở đây tự ném) mới bị bọc/dịch.
+ * mới bị bắt ở đây. Ba nguồn có thể ném từ bên trong đó: saxes tự ném (cú
+ * pháp sai), bộ đếm độ sâu ở dưới tự ném, hoặc `handlers.moThe`/`dongThe`/
+ * `chuVanBan` ném NGƯỢC LÊN (ví dụ state machine docx/xlsx phát hiện vượt
+ * `TRAN_TONG_KY_TU_TRICH`/`TRAN_SO_COT_EXCEL`) - vì các handler này được gọi
+ * ĐỒNG BỘ từ bên trong sự kiện saxes. `dichLoiSaxes` chỉ dịch loại thứ nhất.
  */
 export async function quetXmlTheoLuong(
   chunks: AsyncIterable<string>,
@@ -61,7 +64,7 @@ export async function quetXmlTheoLuong(
   parser.on("opentag", (tag) => {
     doSau++;
     if (doSau > TRAN_DO_SAU_XML) {
-      throw new Error(`XML lồng quá sâu (vượt ${TRAN_DO_SAU_XML} cấp) - nghi ngờ bom giải nén`);
+      throw new LoiVuotTran(`XML lồng quá sâu (vượt ${TRAN_DO_SAU_XML} cấp) - nghi ngờ bom giải nén`);
     }
     handlers.moThe?.(tag);
   });

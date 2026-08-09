@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import zlib from "node:zlib";
 
 /**
@@ -69,6 +70,19 @@ export function docxTuXml(fragment: string): Buffer {
   return buildZipBuffer([{ name: "word/document.xml", data: Buffer.from(documentXml, "utf-8") }]);
 }
 
+/**
+ * Chữ KHÓ NÉN (hex của byte ngẫu nhiên) - dùng cho fixture cần cỡ giải nén
+ * LỚN mà KHÔNG được vượt trần TỈ LỆ NÉN (500:1, xem `ooxml-limits.ts`). Nội
+ * dung lặp 1 ký tự (`"x".repeat(...)`) nén tới hơn 1000:1 - sau khi sửa chốt
+ * tỉ lệ để miễn kiểm theo OUTPUT (không phải theo cỡ nén đầu vào), fixture
+ * kiểu đó sẽ bị CHÍNH chốt tỉ lệ bắt trước khi chạm tới chốt entry/tổng cần
+ * đo - che mất đường code cần kiểm. Hex của byte ngẫu nhiên chỉ nén được
+ * ~1,1:1 (16 giá trị byte trong bảng chữ, không đủ dư thừa cho deflate).
+ */
+export function chuKhoNen(soByte: number): string {
+  return crypto.randomBytes(Math.ceil(soByte / 2)).toString("hex").slice(0, soByte);
+}
+
 /** docx chỉ có 1 đoạn rỗng (không `<w:t>` nào) - mô phỏng file chỉ chứa ảnh */
 export function docxChiCoAnh(): Buffer {
   return docxTuXml('<w:p><w:r><w:drawing/></w:r></w:p>');
@@ -86,20 +100,24 @@ export function zipEntryQuaTran(): Buffer {
  * lọt mà trần tổng phải bắt được.
  *
  * MỖI entry là XML ĐÃ ĐÓNG THẺ ĐẦY ĐỦ (`<sst><si><t>...chữ...</t></si></sst>`)
- * - cố ý, có HAI bẫy nếu làm khác:
- * 1. Byte NGẪU NHIÊN thay vì text hợp lệ: `saxes` chặn bằng lỗi CÚ PHÁP ngay
- *    ở chunk đầu (~16 KB, đúng cỡ buffer nội bộ của zlib) - lỗi đó che mất
- *    chính cơ chế cần kiểm (bộ cộng dồn của `zip-stream-entry.ts`).
+ * VỚI CHỮ KHÓ NÉN (`chuKhoNen`) - cố ý, có BA bẫy nếu làm khác:
+ * 1. Byte NGẪU NHIÊN thô (không lồng trong the) thay vì text hợp lệ: `saxes`
+ *    chặn bằng lỗi CÚ PHÁP ngay ở chunk đầu (~16 KB, đúng cỡ buffer nội bộ
+ *    của zlib) - lỗi đó che mất chính cơ chế cần kiểm (bộ cộng dồn).
  * 2. Để thẻ KHÔNG đóng: từng entry đọc RIÊNG một lượt `quetXmlTheoLuong`
- *    (một `SaxesParser` mới mỗi entry) - entry đầu (20 MB, dưới cả 2 trần)
- *    đọc xong hết rồi mới tới `parser.close()`, lúc đó saxes mới phát hiện
- *    "unclosed tag" - LỖI CÚ PHÁP Ở CHÍNH ENTRY ĐẦU che mất bộ cộng dồn, vì
- *    test không bao giờ chạy tới entry thứ 3-4 (nơi tổng vượt 64 MB).
- * Đóng thẻ đầy đủ thì 3 entry đầu qua trót lọt (20+20+20=60 MB, dưới 64 MB),
- * entry thứ 4 mới chạm trần tổng - đúng đường code cần đo.
+ *    (một `SaxesParser` mới mỗi entry) - entry đầu (dưới cả 2 trần) đọc xong
+ *    hết rồi mới tới `parser.close()`, lúc đó saxes mới phát hiện "unclosed
+ *    tag" - LỖI CÚ PHÁP Ở CHÍNH ENTRY ĐẦU che mất bộ cộng dồn, vì test không
+ *    bao giờ chạy tới entry thứ 3-4 (nơi tổng vượt 64 MB).
+ * 3. Chữ LẶP 1 KÝ TỰ (`"x".repeat(...)`) nén tới hơn 1000:1 - CHÍNH chốt tỉ
+ *    lệ nén (500:1, đã sửa để miễn kiểm theo OUTPUT thay vì cỡ nén đầu vào)
+ *    sẽ bắt fixture này trước khi chạm chốt entry/tổng cần đo ở đây.
+ * Đóng thẻ đầy đủ + chữ khó nén thì 3 entry đầu qua trót lọt (20+20+20=60 MB,
+ * dưới 64 MB, và tỉ lệ nén ~1,1:1 dưới xa 500:1), entry thứ 4 mới chạm trần
+ * tổng - đúng đường code cần đo.
  */
 export function zipNhieuEntryVuaDu(): Buffer {
-  const noiDung = `<sst><si><t>${"x".repeat(20 * 1024 * 1024)}</t></si></sst>`;
+  const noiDung = `<sst><si><t>${chuKhoNen(20 * 1024 * 1024)}</t></si></sst>`;
   const moiEntry = Buffer.from(noiDung, "utf-8");
   return buildZipBuffer([
     { name: "xl/sharedStrings.xml", data: moiEntry },

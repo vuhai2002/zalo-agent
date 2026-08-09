@@ -1,6 +1,7 @@
 import zlib from "node:zlib";
 import { centralEntries, duLieuNenCuaEntry } from "./read-zip-entry.js";
 import {
+  LoiVuotTran,
   TI_LE_NEN_TOI_DA,
   TRAN_MIEN_KIEM_TI_LE,
   TRAN_MOT_ENTRY,
@@ -42,27 +43,39 @@ function formatMB(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
+/**
+ * Hai câu thông báo cho "vượt trần vì TO", KHÔNG dùng chữ "nghi ngờ zip bomb"
+ * - đó là buộc tội một file có thể hoàn toàn hợp lệ (chỉ là quá lớn so với
+ * ngân sách RAM của bot). Chữ "zip bomb" CHỈ dành cho ca hình dạng bất
+ * thường thật sự (tỉ lệ nén phi thực tế, số entry bất thường) - xem nhánh
+ * kiểm tỉ lệ trong `docEntryTheoLuong` và nhánh kiểm số entry ngay dưới đây.
+ */
+function loiVuotTranMotEntry(): LoiVuotTran {
+  return new LoiVuotTran(
+    `File này quá lớn để xử lý (một phần bên trong giải nén ra vượt quá giới hạn ${formatMB(TRAN_MOT_ENTRY)} cho một phần). Hãy rút gọn nội dung hoặc tách thành nhiều file nhỏ hơn.`,
+  );
+}
+function loiVuotTranTong(): LoiVuotTran {
+  return new LoiVuotTran(
+    `File này quá lớn để xử lý (tổng nội dung bên trong giải nén ra vượt quá giới hạn ${formatMB(TRAN_TONG_GIAI_NEN)}). Hãy rút gọn nội dung hoặc tách thành nhiều file nhỏ hơn.`,
+  );
+}
+
 export function moPhienDocZip(buf: Buffer): PhienDocZip {
   const entries = [...centralEntries(buf)];
   if (entries.length > TRAN_SO_ENTRY) {
-    throw new Error(
+    // Số entry bất thường (corpus thật trung bình 23, cao nhất 99) - ĐÂY mới
+    // đúng nghĩa "hình dạng khả nghi", giữ chữ "nghi ngờ zip bomb".
+    throw new LoiVuotTran(
       `File zip có ${entries.length} entry, vượt quá giới hạn ${TRAN_SO_ENTRY} entry - nghi ngờ zip bomb`,
     );
   }
 
   let tongByteDaGiaiNen = 0;
 
-  function kiemTranByte(entryName: string, byteEntry: number): void {
-    if (byteEntry > TRAN_MOT_ENTRY) {
-      throw new Error(
-        `Entry "${entryName}" giải nén ra vượt quá giới hạn ${formatMB(TRAN_MOT_ENTRY)} - nghi ngờ zip bomb`,
-      );
-    }
-    if (tongByteDaGiaiNen > TRAN_TONG_GIAI_NEN) {
-      throw new Error(
-        `Tổng dữ liệu giải nén của file vượt quá giới hạn ${formatMB(TRAN_TONG_GIAI_NEN)} - nghi ngờ zip bomb`,
-      );
-    }
+  function kiemTranByte(byteEntry: number): void {
+    if (byteEntry > TRAN_MOT_ENTRY) throw loiVuotTranMotEntry();
+    if (tongByteDaGiaiNen > TRAN_TONG_GIAI_NEN) throw loiVuotTranTong();
   }
 
   async function* docEntryTheoLuong(entryName: string): AsyncGenerator<string> {
@@ -72,42 +85,18 @@ export function moPhienDocZip(buf: Buffer): PhienDocZip {
     // Từ chối SỚM theo kích thước KHAI BÁO trong central directory - rẻ,
     // nhưng KHÔNG đáng tin tuyệt đối (spec cho phép khai gian), nên vòng lặp
     // dưới vẫn phải đếm byte THẬT trong lúc giải nén, không chỉ dựa vào đây.
-    if (entry.uncompSize > TRAN_MOT_ENTRY) {
-      throw new Error(
-        `Entry "${entryName}" khai kích thước giải nén ${formatMB(entry.uncompSize)}, vượt quá giới hạn ${formatMB(TRAN_MOT_ENTRY)} - nghi ngờ zip bomb`,
-      );
-    }
-    if (tongByteDaGiaiNen + entry.uncompSize > TRAN_TONG_GIAI_NEN) {
-      throw new Error(
-        `Tổng dữ liệu giải nén của file vượt quá giới hạn ${formatMB(TRAN_TONG_GIAI_NEN)} - nghi ngờ zip bomb`,
-      );
-    }
+    if (entry.uncompSize > TRAN_MOT_ENTRY) throw loiVuotTranMotEntry();
+    if (tongByteDaGiaiNen + entry.uncompSize > TRAN_TONG_GIAI_NEN) throw loiVuotTranTong();
 
     const compData = duLieuNenCuaEntry(buf, entry);
 
     if (entry.method === 0) {
       // STORED - không nén, kích thước thật CHÍNH LÀ compData.length
       tongByteDaGiaiNen += compData.length;
-      kiemTranByte(entryName, compData.length);
+      kiemTranByte(compData.length);
       yield compData.toString("utf-8");
       return;
     }
-
-    // Tỉ lệ nén tính trên byte NÉN thật (compData.length, không phải khai báo
-    // compSize - hai giá trị luôn khớp vì cùng đọc từ central directory,
-    // nhưng dùng compData.length rõ ràng hơn về việc đây là dữ liệu đưa vào
-    // inflate). Miễn kiểm nếu nén ra dưới TRAN_MIEN_KIEM_TI_LE - entry nhỏ
-    // nhiễu mạnh và không đe doạ gì dù tỉ lệ cao.
-    //
-    // Ghi chú đã kiểm bằng test (xem zip-stream-entry.test.ts): với đúng 3
-    // con số hiện tại (entry 32 MB / tỉ lệ 500 / miễn kiểm dưới 1 MB), chốt
-    // này KHÔNG BAO GIỜ là chốt chặn đầu tiên cho MỘT entry đơn - muốn tỉ lệ
-    // vượt 500 mà phần nén còn đủ lớn để không bị miễn kiểm (>= 1 MB) thì
-    // phần giải nén phải > 500 MB, lúc đó `kiemTranByte` (trần MỘT entry, 32
-    // MB) đã ném từ lâu. Giữ lại vì đây là con số brief yêu cầu (phòng khi
-    // sau này trần entry được nới lỏng), không phải vì đã đo được nó bắt
-    // thêm được ca nào ngoài trần entry với bộ số hiện tại.
-    const mienKiemTiLe = compData.length < TRAN_MIEN_KIEM_TI_LE;
 
     const inflate = zlib.createInflateRaw();
     inflate.setEncoding("utf8"); // StringDecoder tự đệm byte dở ở ranh giới chunk - tiếng Việt an toàn
@@ -124,9 +113,23 @@ export function moPhienDocZip(buf: Buffer): PhienDocZip {
         const bytes = Buffer.byteLength(chunk, "utf8");
         byteEntry += bytes;
         tongByteDaGiaiNen += bytes;
-        kiemTranByte(entryName, byteEntry);
-        if (!mienKiemTiLe && byteEntry > compData.length * TI_LE_NEN_TOI_DA) {
-          throw new Error(
+        kiemTranByte(byteEntry);
+
+        // Miễn kiểm tỉ lệ khi CHƯA ĐỌC ĐỦ ngưỡng OUTPUT (byteEntry, KHÔNG
+        // phải cỡ nén compData.length đầu vào) - đúng cách Apache POI làm
+        // (ZipSecureFile.MIN_INFLATE_RATIO: chưa đọc đủ 100 KiB OUTPUT thì
+        // chưa xét tỉ lệ). Bản trước đây miễn theo compData.length (cỡ NÉN)
+        // khiến chốt này thành code chết: với entry 32 MB / miễn dưới 1 MB
+        // nén, để tỉ lệ vượt 500 MÀ còn đủ lớn để không miễn (>= 1 MB nén)
+        // thì phần giải nén phải > 500 MB - lúc đó trần MỘT entry (32 MB) đã
+        // chặn từ lâu, tỉ lệ không bao giờ kịp là chốt đầu tiên. Miễn theo
+        // OUTPUT thì bom-1mb.docx thật (1,7 KB nén -> 1 MB, tỉ lệ ~596:1) bị
+        // bắt NGAY ở mốc 1 MB output - đúng con số nghiên cứu đo, xem test.
+        if (byteEntry >= TRAN_MIEN_KIEM_TI_LE && byteEntry > compData.length * TI_LE_NEN_TOI_DA) {
+          // Tỉ lệ nén phi thực tế LÀ hình dạng khả nghi thật (OOXML thật cao
+          // nhất đo được 50,2x; máy sinh thoái hoá tới 292,9x) - giữ chữ
+          // "nghi ngờ zip bomb".
+          throw new LoiVuotTran(
             `Entry "${entryName}" có tỉ lệ nén vượt quá ${TI_LE_NEN_TOI_DA}:1 - nghi ngờ zip bomb`,
           );
         }
