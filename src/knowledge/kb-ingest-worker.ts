@@ -86,7 +86,7 @@ async function xuLyMotNguon(n: KbSourceTomTat): Promise<void> {
       throw new Error("Tài liệu không có nội dung để cắt đoạn (có thể chỉ chứa tiêu đề hoặc trống)");
     }
 
-    luuDoan(n.id, doan);
+    luuDoan(n.id, doan, n.ten);
     // Vừa xử lý XONG - cấp lại budget lượt thử mới, đúng lý do reset ở
     // datTrangThai(): so_lan_thu không tự lùi theo trạng thái, phải truyền
     // tường minh.

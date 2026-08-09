@@ -10,11 +10,13 @@ import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 let dataDir: string;
 let tuning: typeof import("./runtime-tuning-settings.js");
 let database: typeof import("../conversation/database.js");
+let env: typeof import("./env.js").env;
 
 before(async () => {
   dataDir = setupTestEnv({ LLM_MAX_STEPS: "8", LLM_REASONING_EFFORT: "medium" });
   tuning = await import("./runtime-tuning-settings.js");
   database = await import("../conversation/database.js");
+  ({ env } = await import("./env.js"));
 });
 
 after(() => {
@@ -145,5 +147,44 @@ describe("validateTuning - ràng buộc chéo", () => {
   it("trần token thấp mà trần tài liệu cao thì chặn - đúng ca môi trường test đang dính", () => {
     const loi = tuning.validateTuning({ DOCUMENT_MAX_CHARS: 20_000, LLM_MAX_OUTPUT_TOKENS: 2048 });
     assert.ok(loi.some((l) => /tài liệu/.test(l)), "2048 token không viết nổi 20.000 ký tự");
+  });
+
+  describe("kb: trần kết quả phải chứa nổi số đoạn x độ dài đoạn (I2)", () => {
+    it("dashboard từ chối tổ hợp mà trần nhỏ hơn tổng đoạn sẽ lấy", () => {
+      const loi = tuning.validateTuning({ KB_TOP_K: 20, KB_CHUNK_CHARS: 1600, KB_MAX_RESULT_CHARS: 4000 });
+      assert.ok(loi.length > 0, "tổ hợp này làm phần lớn đoạn bị vứt lặng lẽ mà không ai báo");
+    });
+
+    it("hạ KB_MAX_RESULT_CHARS xuống dưới mức cần cho cấu hình HIỆN CÓ cũng bị chặn dù chỉ sửa một ô", () => {
+      // Đúng cơ chế validateTuning: chỉ ô sửa nằm trong `sau`, KB_TOP_K/KB_CHUNK_CHARS
+      // lấy giá trị HIỆN TẠI (mặc định) - vẫn phải bắt được, không cần gửi đủ 3 ô.
+      const loi = tuning.validateTuning({ KB_MAX_RESULT_CHARS: 600 });
+      assert.ok(loi.length > 0, "chỉ gửi 1 ô vẫn phải bắt được khi kết hợp với giá trị hiện tại đã vượt trần");
+    });
+
+    it("tổ hợp có đủ chỗ thì KHÔNG bị chặn - đối chứng cho ca trên", () => {
+      const loi = tuning.validateTuning({ KB_TOP_K: 3, KB_CHUNK_CHARS: 1000, KB_MAX_RESULT_CHARS: 4000 });
+      assert.deepEqual(loi, [], `3*(1000+60)+500=3680 <= 4000 phải hợp lệ, nhận: ${JSON.stringify(loi)}`);
+    });
+
+    it("mặc định PHÁT HÀNH của chính repo (env.ts) THỎA ràng buộc chéo", () => {
+      // Bất biến chống hồi quy quan trọng nhất của phase này: mặc định TỰ MÂU
+      // THUẪN chính là lỗi gốc của I2 (KB_TOP_K=5 và =20 từng cho ra kết quả
+      // GIỐNG HỆT NHAU vì KB_MAX_RESULT_CHARS mặc định quá nhỏ). Đọc THẲNG
+      // `env` (không hardcode literal như các test khác trong file này) - CỐ Ý
+      // khác quy ước: setupTestEnv() không override bất kỳ biến KB_* nào, nên
+      // `env.KB_*` ở đây LÀ giá trị người dùng thật nhận được; đọc thẳng mới
+      // bắt được hồi quy trong TƯƠNG LAI (ai đó đổi một mặc định mà quên cái
+      // kia) - hardcode literal chỉ khoá cứng lại đúng bộ số hôm nay, không
+      // canh được lần đổi sau.
+      assert.deepEqual(
+        tuning.validateTuning({
+          KB_TOP_K: env.KB_TOP_K,
+          KB_CHUNK_CHARS: env.KB_CHUNK_CHARS,
+          KB_MAX_RESULT_CHARS: env.KB_MAX_RESULT_CHARS,
+        }),
+        [],
+      );
+    });
   });
 });

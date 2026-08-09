@@ -23,8 +23,11 @@ export type ThamSoCat = { coDoanToiDa: number; chongLan: number };
 
 type DoanChuaGanSo = { tieuDe: string; noiDung: string };
 
-/** Heading markdown: 1-6 dấu #, có khoảng trắng, có chữ theo sau */
-const HEADING_RE = /^#{1,6}\s+(.+)$/;
+/** Heading markdown: 1-6 dấu #, có khoảng trắng, có chữ theo sau. Nhóm 1 = số dấu # (cấp), nhóm 2 = chữ tiêu đề */
+const HEADING_RE = /^(#{1,6})\s+(.+)$/;
+
+/** Số cấp heading tối đa markdown hỗ trợ (khớp `#{1,6}` ở trên) */
+const CAP_TOI_DA = 6;
 
 /**
  * Vị trí cắt tốt nhất trong `text.slice(0, maxLen)`: ưu tiên xuống dòng gần
@@ -112,6 +115,13 @@ export function catThanhDoan(
   const overlapChars = Math.max(0, Math.floor(maxLen * (p.chongLan / 100)));
 
   const ketQua: DoanChuaGanSo[] = [];
+  // Ngăn xếp tiêu đề theo CẤP (chỉ số 1..6, chỉ số 0 luôn rỗng, không dùng) -
+  // sửa đúng lỗi I1: bản cũ chỉ giữ MỘT `tieuDeHienTai`, bị H2 ghi đè trước khi
+  // có đoạn nào chốt dưới H1, nên H1 (thường TRÙNG TÊN TÀI LIỆU) không bao giờ
+  // vào chỉ mục khi có H2 bên dưới. Gặp heading cấp N thì XÓA mọi cấp SÂU HƠN
+  // N (sang mục mới thì heading con cũ không còn hợp lệ) rồi ghép các cấp còn
+  // lại (nông -> sâu) thành breadcrumb "H1 > H2 > H3".
+  const nganXepTieuDe: string[] = new Array(CAP_TOI_DA + 1).fill("");
   let tieuDeHienTai = "";
   let buffer = "";
 
@@ -133,12 +143,18 @@ export function catThanhDoan(
     const khopTieuDe = HEADING_RE.exec(dong[0]!.trim());
     let than = doanVan;
     if (khopTieuDe) {
-      // Sang mục mới: chốt lại mọi thứ đang gom dưới tiêu đề CŨ trước khi đổi
+      // Sang mục mới: chốt lại mọi thứ đang gom dưới breadcrumb CŨ trước khi đổi
       chotBuffer();
-      tieuDeHienTai = khopTieuDe[1]!.trim();
+      const cap = khopTieuDe[1]!.length;
+      nganXepTieuDe[cap] = khopTieuDe[2]!.trim();
+      for (let l = cap + 1; l <= CAP_TOI_DA; l++) nganXepTieuDe[l] = "";
+      tieuDeHienTai = nganXepTieuDe.filter(Boolean).join(" > ");
       than = dong.slice(1).join("\n").trim();
     }
-    if (!than) continue; // heading không kèm thân bài (vd cuối văn bản) - bỏ qua
+    // Heading không kèm thân bài NGAY DƯỚI (vd "# Tiêu đề tài liệu" đứng một
+    // mình rồi mới tới "## Mục con") - KHÔNG bỏ qua breadcrumb: ngăn xếp ở
+    // trên đã ghi nhận nó rồi, chỉ không có gì để CHỐT thành đoạn ở vòng này.
+    if (!than) continue;
 
     const ghep = buffer ? `${buffer}\n\n${than}` : than;
     if (ghep.length <= maxLen) {

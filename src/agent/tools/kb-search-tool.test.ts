@@ -186,27 +186,128 @@ describe("kb_search - trần ký tự áp cho TOÀN BỘ kết quả", () => {
   });
 
   it("kết quả bị cắt về đúng trần ký tự (đuôi tài liệu biến mất), có câu báo đã cắt", async () => {
-    // 200 (ví dụ minh họa trong brief) THẤP HƠN min=500 của chính tham số này
-    // (xem tuning-definitions.ts) nên getTuning() sẽ âm thầm rơi về mặc định
-    // 4000 - dùng đúng trần MIN hợp lệ để phép đặt tuning này có tác dụng thật.
+    // `setTuning` ghi thẳng xuống DB, KHÔNG đi qua `validateTuning` (route
+    // dashboard mới kiểm ràng buộc chéo lúc GHI) - dùng được để dựng đúng ca
+    // biên "trần nhỏ hơn cả một đoạn" mà vẫn có tác dụng thật qua `getTuning`.
     tuning.setTuning("KB_MAX_RESULT_CHARS", 500);
     try {
       const kq = await run(makeCtx(), { cau_hoi: "bảo hành" });
-      // Cắt tại ĐÚNG maxChars cộng phần vỏ nối thêm (câu báo + thẻ đóng, ~62 ký
-      // tự đo được trước khi có nonce, +9 ký tự cho hậu tố nonce 8 hex + gạch
-      // dưới) - không phải một ngưỡng rộng rãi bất kỳ cũng xanh được.
-      assert.ok(kq.length <= 500 + 80, `dài ${kq.length}, trần 500 + phần vỏ (~71)`);
+      // Đóng gói TRƯỚC rồi mới bọc (I2 fix): ngân sách nội dung = trần trừ
+      // phần vỏ, nên kết quả cuối LUÔN nằm gọn trong trần - không còn "trần +
+      // phần vỏ nối thêm" như cách cắt-khối-đã-bọc cũ.
+      assert.ok(kq.length <= 500, `dài ${kq.length}, phải nằm gọn trong trần 500`);
       // Bằng chứng cắt THẬT: đuôi tài liệu (chỉ nằm ở cuối, xa điểm cắt 500)
       // phải biến mất khỏi kết quả trả về.
       assert.doesNotMatch(kq, new RegExp(DUOI_TAI_LIEU), "đuôi tài liệu vẫn còn -> chưa cắt thật");
       assert.match(kq, /đã rút gọn/i);
-      // Cắt xong vẫn phải khép ĐÚNG thẻ mang NONCE của thẻ mở - đây chính là
-      // đường code `trichTheDongThuc` phải chạy (ghép cứng `</noi_dung_ngoai>`
-      // không nonce là bug: không khớp thẻ mở, model đọc phần sau như đã ra
-      // khỏi khối tin cậy).
+      // Cắt xong vẫn phải khép ĐÚNG thẻ mang NONCE của thẻ mở - `noiDungDaDongGoi`
+      // đi vào `wrapUntrustedContent` một LẦN DUY NHẤT (không cắt khối đã bọc
+      // như cách cũ) nên thẻ đóng luôn khớp sẵn, không cần trích riêng.
       const hauTo = new RegExp(`^<${markers.THE_NOI_DUNG_NGOAI}(_[0-9a-f]+)?\\b`).exec(kq)?.[1] ?? "";
       assert.notEqual(hauTo, "", "phải trích được nonce từ thẻ mở - nếu rỗng thì test này không đo được gì");
       assert.match(kq, new RegExp(`</${markers.THE_NOI_DUNG_NGOAI}${hauTo}>$`));
+    } finally {
+      tuning.setTuning("KB_MAX_RESULT_CHARS", null);
+    }
+  });
+});
+
+describe("kb_search - đóng gói theo ngân sách (I2: KB_TOP_K có tác dụng thật, không cắt giữa đoạn)", () => {
+  /**
+   * n nguồn, mỗi nguồn 1 đoạn chứa 40 token có dạng CHỐNG ĐỤNG ĐỘ:
+   * `TOK<i>_<jj>Z` với `jj` LUÔN 2 chữ số (đệm 0) và tận cùng bắt buộc là chữ
+   * `Z`. Cắt cụt CHỈ bỏ từ ĐUÔI (đúng cách `catOKhoangTrang` cắt) nên một token
+   * bị cắt LUÔN mất chữ `Z` cuối - không có cách nào cắt cụt mà vẫn trùng một
+   * token HOÀN CHỈNH khác. Thử phiên bản đầu `TOK<i>_<j>` (không đệm số, không
+   * hậu tố): `TOK3_39` cắt cụt còn `TOK3_3` lại TRÙNG token thật (i=3, j=3) -
+   * cắt cụt vẫn "khớp mẫu" nên phép phá #5 XANH GIẢ. Đã tự bắt lỗi này bằng
+   * cách chạy thử phép phá TRƯỚC khi tin bộ test, xem report.
+   */
+  function napNhieuDoan(n: number): void {
+    for (let i = 0; i < n; i++) {
+      const tokens = Array.from({ length: 40 }, (_, j) => `TOK${i}_${String(j).padStart(2, "0")}Z`);
+      napNguon(AGENT_ID, `Nguồn bảo hành ${i}`, [`Bảo hành sản phẩm: ${tokens.join(" ")}.`]);
+    }
+  }
+
+  function demNhan(kq: string): number {
+    return (kq.match(/\[Nguồn: /g) ?? []).length;
+  }
+
+  /** Mọi token bắt đầu bằng "TOK" trong `kq` phải khớp NGUYÊN VẸN mẫu của nó -
+   * bị cắt cụt mất chữ Z cuối (`TOK3_01Z` -> `TOK3_0`) sẽ trượt regex này, và
+   * KHÔNG thể trùng một token hoàn chỉnh khác (xem docstring `napNhieuDoan`).
+   * Bỏ dấu chấm câu cuối TRƯỚC khi kiểm (token cuối câu dính liền dấu chấm, vd
+   * "TOK3_39Z.") - đó là dấu câu hợp lệ của câu gốc, không phải dấu hiệu bị cắt. */
+  function moiTokenNguyenVen(kq: string): boolean {
+    const tokens = kq.match(/\S+/g) ?? [];
+    return tokens
+      .filter((t) => t.startsWith("TOK"))
+      .every((t) => /^TOK\d+_\d{2}Z$/.test(t.replace(/\.$/, "")));
+  }
+
+  /**
+   * Bỏ phần VỎ (thẻ mở + 3 dòng dặn dò + dòng trống + thẻ đóng), chỉ giữ phần
+   * NỘI DUNG đã đóng gói - hình dạng cố định của `wrapUntrustedContent` (5 dòng
+   * đầu là vỏ mở, dòng cuối là thẻ đóng) nên cắt bằng CHỈ SỐ DÒNG là an toàn.
+   */
+  function layNoiDungDaDongGoi(kq: string): string {
+    return kq.split("\n").slice(5, -1).join("\n");
+  }
+
+  /**
+   * Kiểm MẠNH hơn `moiTokenNguyenVen`: mỗi MẢNH (tách theo dải phân cách giữa
+   * các đoạn) phải HOẶC chạy trọn tới token cuối cùng của chính đoạn đó
+   * (`TOK<i>_39Z.`), HOẶC kết thúc bằng nhãn "đã rút gọn". Cần thêm kiểm này vì
+   * `moiTokenNguyenVen` có LỖ: nó chỉ soi những gì trông giống token TOK - một
+   * nhát cắt rơi đúng vào phần NHÃN "[Nguồn: ...]" (TRƯỚC khi chạm token TOK
+   * nào) không đụng token nào cả nên lọt qua, dù rõ ràng đó vẫn là một mảnh bị
+   * cắt cụt giữa chừng. Tự bắt được lỗ này lúc chạy phép phá #5 lần đầu (xem
+   * report) - "không đoạn nào bị cắt giữa chừng" từng XANH GIẢ vì lý do này.
+   */
+  function moiManhHoanChinhHoacDaRutGon(kq: string): boolean {
+    const manh = layNoiDungDaDongGoi(kq).split("\n\n---\n\n");
+    return manh.every((m) => /TOK\d+_39Z\.$/.test(m) || m.endsWith("đã rút gọn]"));
+  }
+
+  it("tăng KB_TOP_K làm model thấy NHIỀU đoạn hơn (bản cũ: 5 và 20 cho ra chuỗi giống hệt nhau)", async () => {
+    napNhieuDoan(8);
+    tuning.setTuning("KB_TOP_K", 2);
+    try {
+      const it_ = await run(makeCtx(), { cau_hoi: "bảo hành" });
+      tuning.setTuning("KB_TOP_K", 5);
+      const nhieu = await run(makeCtx(), { cau_hoi: "bảo hành" });
+      assert.ok(demNhan(nhieu) > demNhan(it_), `topK=2 ra ${demNhan(it_)} đoạn, topK=5 ra ${demNhan(nhieu)} - không đổi`);
+    } finally {
+      tuning.setTuning("KB_TOP_K", null);
+    }
+  });
+
+  it("không đoạn nào bị cắt giữa chừng ở trần vừa phải - vừa thì lấy nguyên, không vừa thì bỏ hẳn", async () => {
+    napNhieuDoan(8);
+    tuning.setTuning("KB_MAX_RESULT_CHARS", 2000);
+    try {
+      const kq = await run(makeCtx(), { cau_hoi: "bảo hành" });
+      assert.ok(moiTokenNguyenVen(kq), `có token bị cắt cụt giữa chừng: ${JSON.stringify(kq)}`);
+      assert.ok(
+        moiManhHoanChinhHoacDaRutGon(kq),
+        `có mảnh (nhãn hoặc nội dung) bị cắt cụt giữa chừng: ${JSON.stringify(kq)}`,
+      );
+    } finally {
+      tuning.setTuning("KB_MAX_RESULT_CHARS", null);
+    }
+  });
+
+  it("phần vỏ và ba dòng dặn dò LUÔN nguyên vẹn kể cả ở trần nhỏ nhất", async () => {
+    // PHẢI dùng nội dung ĐỦ DÀI để trần 500 THẬT SỰ ép cắt (đoạn ngắn không
+    // bao giờ chạm nhánh cắt, test sẽ xanh dù thứ tự đóng gói/bọc sai - tự bắt
+    // được khi thử phép phá #4: fixture ngắn ban đầu không hề đỏ).
+    napNhieuDoan(8);
+    tuning.setTuning("KB_MAX_RESULT_CHARS", 500);
+    try {
+      const kq = await run(makeCtx(), { cau_hoi: "bảo hành" });
+      assert.match(kq, /DỮ LIỆU/); // câu dặn model coi đây là dữ liệu
+      assert.match(kq, new RegExp(`</${markers.THE_NOI_DUNG_NGOAI}[^>]*>$`));
     } finally {
       tuning.setTuning("KB_MAX_RESULT_CHARS", null);
     }

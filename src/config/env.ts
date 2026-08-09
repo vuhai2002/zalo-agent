@@ -268,9 +268,12 @@ const envSchema = z.object({
   SCHEDULER_RUN_LOG_KEEP: z.coerce.number().int().min(5).max(1000).default(50),
 
   // ===== Kho tri thức (KB): cắt tài liệu nạp lên thành đoạn để tra bằng bm25 =====
-  // 1600 ký tự xấp xỉ 400 token với tiếng Việt (~4 ký tự/token) - đúng khoảng
-  // chuẩn ngành cho nội dung hỏi đáp (400-512 token/đoạn).
-  KB_CHUNK_CHARS: z.coerce.number().int().min(400).max(4000).default(1600),
+  // 1200 ký tự xấp xỉ 300 token với tiếng Việt (~4 ký tự/token) - đoạn nhỏ hơn
+  // giúp bm25 chính xác hơn (avgdl nhỏ, chuẩn hóa độ dài đỡ phạt oan đoạn dài)
+  // và nhét được nhiều đoạn hơn trong cùng KB_MAX_RESULT_CHARS. Đi kèm ràng
+  // buộc chéo ở runtime-tuning-settings.ts: KB_MAX_RESULT_CHARS phải đủ chỗ
+  // cho KB_TOP_K đoạn cỡ này, không thì phần cuối bị vứt lặng lẽ.
+  KB_CHUNK_CHARS: z.coerce.number().int().min(400).max(4000).default(1200),
   // Đo 1/2026 trên SPLADE + Mistral-8B: chồng lấn không có lợi ích rõ rệt nên
   // mặc định thấp - vẫn chỉnh được vì kho của người dùng khác corpus benchmark.
   KB_CHUNK_OVERLAP_PERCENT: z.coerce.number().int().min(0).max(50).default(10),
@@ -281,8 +284,10 @@ const envSchema = z.object({
   // 10-20, k nhỏ hơn làm top của mỗi danh sách có trọng lượng hơn.
   KB_RRF_K: z.coerce.number().int().min(5).max(100).default(20),
   // Trần ký tự cho TOÀN BỘ chuỗi kết quả tool kb_search (thẻ bọc + tên nguồn +
-  // nội dung), không phải riêng từng đoạn.
-  KB_MAX_RESULT_CHARS: z.coerce.number().int().min(500).max(20_000).default(4000),
+  // nội dung), không phải riêng từng đoạn. 8000 ~ 3.200 token ~ 3,6% ngân sách
+  // an toàn của một lượt (128k * 0.7) - đủ chỗ cho KB_TOP_K=5 đoạn KB_CHUNK_CHARS
+  // =1200 (ràng buộc chéo ở runtime-tuning-settings.ts canh ba số này).
+  KB_MAX_RESULT_CHARS: z.coerce.number().int().min(500).max(20_000).default(8000),
   // Trần dung lượng mỗi file nạp lên Kho tri thức - chặn ở TẦNG ĐỌC (middleware
   // hono/body-limit đọc theo luồng, huỷ ngay khi vượt trần) chứ không đợi đọc
   // hết vào RAM rồi mới báo quá lớn.

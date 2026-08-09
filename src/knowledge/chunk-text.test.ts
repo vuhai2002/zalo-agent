@@ -90,6 +90,49 @@ describe("catThanhDoan - chồng lấn (chongLan)", () => {
   });
 });
 
+describe("catThanhDoan - breadcrumb tiêu đề (I1: H1 không thân bài từng bị vứt hẳn)", () => {
+  const MAC_DINH = { coDoanToiDa: 2000, chongLan: 0 };
+
+  it("breadcrumb giữ cả ba cấp, không chỉ cấp gần nhất", () => {
+    const d = catThanhDoan("# Chính sách\n\n## Đổi trả\n\n### Điều kiện\n\nCòn nguyên tem.", MAC_DINH);
+    const doan = d.find((x) => x.noiDung.includes("nguyên tem"))!;
+    assert.match(doan.tieuDe, /Chính sách.*Đổi trả.*Điều kiện/);
+  });
+
+  it("H1 KHÔNG kèm thân bài ngay dưới (chỉ có H2 bên dưới) vẫn vào breadcrumb của đoạn dưới H2 - đúng lỗi I1 gốc", () => {
+    // Tái hiện chính xác ca đã đo hỏng: H1 đứng một mình rồi mới tới H2, không
+    // đoạn nào chốt được ngay dưới H1 nên bản cũ (`tieuDeHienTai` bị H2 ghi đè)
+    // làm tên tài liệu biến mất khỏi MỌI đoạn.
+    const d = catThanhDoan(
+      "# Bảng giá dịch vụ LITEspace 2026\n\n## Gói cơ bản\nGiá 2.000.000đ mỗi tháng.\n\n## Gói nâng cao\nGiá 5.000.000đ mỗi tháng.",
+      MAC_DINH,
+    );
+    assert.ok(
+      d.every((x) => x.tieuDe.includes("Bảng giá dịch vụ LITEspace 2026")),
+      `tên tài liệu (H1) phải có mặt trong breadcrumb của MỌI đoạn: ${JSON.stringify(d.map((x) => x.tieuDe))}`,
+    );
+    const goiCoBan = d.find((x) => x.noiDung.includes("2.000.000"))!;
+    assert.match(goiCoBan.tieuDe, /Bảng giá dịch vụ LITEspace 2026.*Gói cơ bản/);
+  });
+
+  it("sang heading CÙNG CẤP (anh em) thì thay thế, không cộng dồn vào breadcrumb", () => {
+    const d = catThanhDoan("# Một\n\nNội dung một.\n\n# Hai\n\nNội dung hai.", MAC_DINH);
+    const doanHai = d.find((x) => x.noiDung.includes("Nội dung hai"))!;
+    assert.equal(doanHai.tieuDe, "Hai", "H1 mới phải THAY THẾ H1 cũ, không ghép thành 'Một > Hai'");
+  });
+
+  it("heading cấp NÔNG hơn xóa breadcrumb của các cấp SÂU hơn đã ghi trước đó", () => {
+    // H1 > H2 > H3, rồi quay lại một H2 KHÁC cùng cha - H3 cũ không còn hợp lệ
+    // nữa, breadcrumb của đoạn dưới H2 mới không được mang theo H3 cũ.
+    const d = catThanhDoan(
+      "# Gốc\n\n## Nhánh A\n\n### Lá cũ\n\nNội dung lá cũ.\n\n## Nhánh B\n\nNội dung nhánh B.",
+      MAC_DINH,
+    );
+    const doanNhanhB = d.find((x) => x.noiDung.includes("Nội dung nhánh B"))!;
+    assert.equal(doanNhanhB.tieuDe, "Gốc > Nhánh B", `breadcrumb còn dính 'Lá cũ': ${doanNhanhB.tieuDe}`);
+  });
+});
+
 describe("catThanhDoan - lọc dải Tags (ASCII smuggling) lúc nạp", () => {
   const MAC_DINH = { coDoanToiDa: 2000, chongLan: 0 };
 

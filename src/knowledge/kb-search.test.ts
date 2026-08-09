@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
+// Module THUẦN (không đụng env/DB) - import tĩnh an toàn, không cần chờ setupTestEnv()
+import { catThanhDoan } from "./chunk-text.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 
 let dataDir: string;
@@ -46,6 +48,25 @@ function napNguon(ten: string, noiDungs: string[]): { id: string } {
     nguon.id,
     noiDungs.map((noiDung, thuTu) => ({ thuTu, tieuDe: "", noiDung })),
   );
+  return nguon;
+}
+
+const THAM_SO_CAT_MAC_DINH = { coDoanToiDa: 2000, chongLan: 0 };
+
+/**
+ * Nạp qua ĐÚNG đường nạp THẬT (`catThanhDoan` -> `luuDoan`, đúng cách
+ * `kb-ingest-worker.ts` làm với nguồn `loai: "text"`) - KHÔNG dựng fixture
+ * bằng `luuDoan` trực tiếp như `napNguon` ở trên. Đường nối phase 02 <-> phase
+ * 03 (chunk-text.ts -> kb-chunk-store.ts) chưa có test nào phủ trước phase
+ * này, và đó là lý do I1 (tra đúng TÊN TÀI LIỆU ra rỗng) lọt qua hai vòng rà
+ * soát trước - test dựng fixture tắt bằng `luuDoan({tieuDe: "", ...})` không
+ * bao giờ chạm nhánh heading của `catThanhDoan`.
+ */
+function napQuaWorker(ten: string, chu: string): { id: string } {
+  const nguon = store.taoNguon({ ten, loai: "text", noiDungGoc: chu });
+  const doan = catThanhDoan(chu, THAM_SO_CAT_MAC_DINH);
+  chunkStore.luuDoan(nguon.id, doan, nguon.ten);
+  binding.datNguonChoAgent(AGENT, [...binding.nguonCuaAgent(AGENT), nguon.id]);
   return nguon;
 }
 
@@ -102,6 +123,38 @@ describe("timTrongKhoTriThuc - bm25 trên dữ liệu tiếng Việt thật", ()
   });
 });
 
+describe("timTrongKhoTriThuc - tra bằng TÊN TÀI LIỆU/TÊN NGUỒN (I1, qua đường nạp THẬT)", () => {
+  it("tra bằng chính tiêu đề H1 của tài liệu ra đúng đoạn", () => {
+    // Ca đã đo hỏng: H1 không có thân bài ngay dưới nên bị bỏ qua, và
+    // `tieuDeHienTai` bị H2 ghi đè trước khi kịp có đoạn nào chốt dưới H1 -
+    // "chính sách đổi trả" (tên tài liệu) tra ra 0 dòng dù nội dung đúng nằm
+    // trong kho.
+    //
+    // Tên NGUỒN cố tình KHÔNG chứa chữ nào của câu hỏi ("Tài liệu vận hành" -
+    // không "chính", "sách", "đổi", hay "trả") - tự bắt được lúc chạy phép phá
+    // #1: fixture đầu dùng tên nguồn "Chính sách" (trùng 2 từ với câu hỏi) làm
+    // test XANH GIẢ khi breadcrumb bị sabotage, vì phang vẫn khớp qua tenNguon
+    // chứ không qua breadcrumb đang được kiểm.
+    napQuaWorker(
+      "Tài liệu vận hành",
+      "# Chính sách đổi trả\n\n## Điều kiện\n\nHàng còn nguyên tem.\n\n## Thời hạn\n\nTrong vòng 7 ngày.",
+    );
+    const kq = search.timTrongKhoTriThuc({ cauHoi: "chính sách đổi trả", agentId: AGENT });
+    assert.ok(kq.length > 0, "tra đúng tên tài liệu (H1) mà ra rỗng");
+    assert.match(
+      kq[0]!.tieuDe,
+      /Chính sách đổi trả/,
+      `breadcrumb phải mang tên tài liệu (H1), thực tế: "${kq[0]!.tieuDe}"`,
+    );
+  });
+
+  it("tra bằng TÊN NGUỒN ra đúng đoạn", () => {
+    napQuaWorker("Bảng giá quán", "Cà phê 25.000đ.");
+    const kq = search.timTrongKhoTriThuc({ cauHoi: "bảng giá quán", agentId: AGENT });
+    assert.ok(kq.length > 0, "tra đúng tên nguồn mà ra rỗng");
+  });
+});
+
 describe("timTrongKhoTriThuc - cách ly theo nguồn", () => {
   it("chỉ tìm trong nguồn ĐÃ BẬT cho agent đó", () => {
     const nguonA = napNguon("nguồn A", ["Bảo hành 12 tháng cho mọi sản phẩm."]);
@@ -139,5 +192,37 @@ describe("timTrongKhoTriThuc - cách ly theo nguồn", () => {
     const kq = search.timTrongKhoTriThuc({ cauHoi: "bảo hành", agentId: AGENT, soLuong: 5 });
     assert.equal(kq.length, 1);
     assert.equal(kq[0]!.sourceId, nguonDung.id);
+  });
+});
+
+describe("timTrongKhoTriThuc - khử trùng nội dung (I3)", () => {
+  it("hai nguồn nội dung y hệt chỉ chiếm MỘT slot", () => {
+    const nguonA = napQuaWorker("Nguồn A", "Cà phê 25.000đ.");
+    const nguonB = napQuaWorker("Nguồn B", "Cà phê 25.000đ.");
+    const kq = search.timTrongKhoTriThuc({ cauHoi: "cà phê", agentId: AGENT, soLuong: 5 });
+    assert.equal(kq.length, 1, `phải khử còn 1, ra: ${JSON.stringify(kq.map((x) => x.sourceId))}`);
+    assert.ok(
+      kq[0]!.sourceId === nguonA.id || kq[0]!.sourceId === nguonB.id,
+      "đoạn còn lại phải là bản của A hoặc B (giữ bản xếp hạng cao nhất, không phải bản khác)",
+    );
+  });
+
+  it("khử trùng KHÔNG làm thiếu: vẫn đủ soLuong đoạn khác nhau", () => {
+    // `timTheoTuKhoa` LIMIT đúng trong SQL nên khử SAU đó sẽ THIẾU nếu không
+    // lấy dư trước (đúng lỗi gốc) - 2 đoạn trùng + 5 đoạn khác nhau, xin 5, kỳ
+    // vọng đủ 5 (khử 1 đoạn trùng rồi lấy bù đoạn thứ 6 đang xếp hạng thấp hơn
+    // nhưng còn tồn tại, KHÔNG dừng lại ở 4).
+    napQuaWorker("Nguồn A", "Cà phê 25.000đ.");
+    napQuaWorker("Nguồn B", "Cà phê 25.000đ.");
+    for (let i = 0; i < 5; i++) napQuaWorker(`Khác ${i}`, `Cà phê loại ${i} giá ${i}0.000đ.`);
+    const kq = search.timTrongKhoTriThuc({ cauHoi: "cà phê", agentId: AGENT, soLuong: 5 });
+    assert.equal(kq.length, 5, `khử trùng xong bị hụt: ${JSON.stringify(kq.map((x) => x.noiDung))}`);
+  });
+
+  it("nội dung KHÁC nhau (dù tương tự) không bị khử oan", () => {
+    napQuaWorker("Nguồn A", "Cà phê 25.000đ.");
+    napQuaWorker("Nguồn B", "Cà phê 30.000đ.");
+    const kq = search.timTrongKhoTriThuc({ cauHoi: "cà phê", agentId: AGENT, soLuong: 5 });
+    assert.equal(kq.length, 2, "hai đoạn giá khác nhau bị khử nhầm thành một");
   });
 });

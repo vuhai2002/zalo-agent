@@ -25,15 +25,23 @@ const chenFtsStmt = db.prepare(`INSERT INTO kb_chunks_fts (rowid, phang) VALUES 
  * THAY THẾ toàn bộ đoạn của nguồn, không cộng dồn: mỗi lần cắt lại tài liệu
  * (phase 02) coi như một bản chốt mới, không phải bản vá thêm vào bản cũ - xóa
  * sạch đoạn cũ (cả FTS lẫn `kb_chunks`) rồi chèn lại từ đầu, trong một giao dịch.
+ *
+ * `tenNguon` mặc định "" (KHÔNG bắt buộc) - cố ý, để không phải sửa hàng chục
+ * chỗ gọi hàm này chỉ để nạp fixture (chúng không cần tên nguồn vào chỉ mục).
+ * Đường nạp THẬT (`kb-ingest-worker.ts`) PHẢI truyền tên nguồn thật: thiếu nó
+ * thì tra đúng TÊN TÀI LIỆU/TÊN NGUỒN ra rỗng (I1) vẫn còn nguyên.
  */
-export function luuDoan(sourceId: string, doan: DoanMoi[]): void {
+export function luuDoan(sourceId: string, doan: DoanMoi[], tenNguon = ""): void {
   trongGiaoDich(db, () => {
     xoaFtsCuaNguonStmt.run(sourceId);
     xoaDoanCuaNguonStmt.run(sourceId);
     for (const d of doan) {
-      // Tiêu đề CŨNG vào cột phang: khách hỏi bằng chữ nằm trong tiêu đề (vd
-      // "chính sách đổi trả") phải tìm ra được đoạn, không chỉ khớp nội dung.
-      const phang = boDauTiengViet(`${d.tieuDe} ${d.noiDung}`.trim());
+      // Tên nguồn + tiêu đề (breadcrumb H1>H2>H3, xem chunk-text.ts) CŨNG vào
+      // cột phang: khách hỏi bằng chính TÊN TÀI LIỆU hay TÊN NGUỒN (vd "chính
+      // sách đổi trả", "bảng giá quán") phải tìm ra được đoạn, không chỉ khớp
+      // thân bài - đúng lỗi I1. `filter(Boolean)` bỏ phần rỗng để không để lại
+      // khoảng trắng thừa khi tenNguon/tieuDe trống.
+      const phang = boDauTiengViet([tenNguon, d.tieuDe, d.noiDung].filter(Boolean).join(" "));
       const result = chenDoanStmt.run(sourceId, d.thuTu, d.tieuDe, d.noiDung, phang);
       chenFtsStmt.run(Number(result.lastInsertRowid), phang);
     }

@@ -4,11 +4,12 @@ import { getTuning } from "../../config/runtime-tuning-settings.js";
 import { timTrongKhoTriThuc, type KetQuaKb } from "../../knowledge/kb-search.js";
 import { createLogger } from "../../shared/logger.js";
 import { khuGiaMaoTrongDoan, khuNgoacVuongTrongNhan } from "./khu-gia-mao-nhan-nguon.js";
+import { dongGoiTheoNganSach } from "./kb-pack-result.js";
 import { KB_SEARCH_DESCRIPTION } from "./kb-search-tool-description.js";
 import type { ToolContext } from "./index.js";
 import { locKyTuAn } from "./tag-ky-tu-an.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
-import { trichTheDongThuc, wrapUntrustedContent } from "./wrap-untrusted-content.js";
+import { wrapUntrustedContent } from "./wrap-untrusted-content.js";
 
 /**
  * Tool cho model tự tra Kho tri thức của agent (nạp bằng TOOL, không tự nhét
@@ -73,22 +74,23 @@ export function createKbSearchTool(ctx: ToolContext) {
           );
         }
 
-        const noiDung = ketQua.map(dinhDangDoan).join("\n\n---\n\n");
-        const boc = wrapUntrustedContent(noiDung, `kho tri thức: ${cau_hoi}`);
-
-        // Trần áp cho TOÀN BỘ chuỗi kết quả (đã gồm thẻ bọc + tên nguồn), không
-        // phải riêng nội dung từng đoạn - 5 đoạn x 1600 ký tự đã đủ đẩy ngữ
-        // cảnh sát trần.
+        const nguon = `kho tri thức: ${cau_hoi}`;
         const maxChars = getTuning("KB_MAX_RESULT_CHARS");
-        if (boc.length <= maxChars) return boc;
 
-        // Vẫn giữ thẻ đóng ở cuối sau khi cắt, để khối `<noi_dung_ngoai_...>`
-        // không bị bỏ dở - cắt xong nối thêm câu báo + thẻ đóng nên chuỗi ra có
-        // thể dài hơn maxChars một chút (phần vỏ), chấp nhận được. PHẢI trích
-        // đúng thẻ đóng có NONCE của lần bọc này (`trichTheDongThuc`) - ghép
-        // thẻ đóng KHÔNG nonce ở đây là bug: nó không khớp thẻ mở, phần bị cắt
-        // đọc như đã ra khỏi khối tin cậy dù nội dung vẫn còn nằm trong đó.
-        return `${boc.slice(0, maxChars)}\n[...đã rút gọn, kho còn nhiều nội dung hơn]\n${trichTheDongThuc(boc)}`;
+        // ĐÓNG GÓI TRƯỚC rồi mới BỌC SAU (I2 - cách cũ bọc trước rồi cắt cả
+        // khối đã bọc, nên trần bao gồm luôn phần vỏ, không cách nào chừa chỗ
+        // cho nó, và cắt giữa chừng làm hỏng cả nghĩa câu lẫn cấu trúc nhãn).
+        //
+        // Ngân sách NỘI DUNG = trần trừ phần vỏ - đo phần vỏ CHÍNH XÁC bằng
+        // cách bọc thử một placeholder 1 ký tự rồi trừ 1: `wrapUntrustedContent`
+        // ghép [thẻ mở, 3 dòng dặn dò, dòng trống, NỘI DUNG, thẻ đóng] bằng
+        // "\n".join - phần vỏ (mọi phần tử trừ nội dung) có độ dài CỐ ĐỊNH với
+        // cùng `nguon`, không phụ thuộc nội dung thật sẽ đóng gói vào đó.
+        const voLen = wrapUntrustedContent("x", nguon).length - 1;
+        const nganSachNoiDung = Math.max(0, maxChars - voLen);
+        const noiDungDaDongGoi = dongGoiTheoNganSach(ketQua.map(dinhDangDoan), nganSachNoiDung);
+
+        return wrapUntrustedContent(noiDungDaDongGoi, nguon);
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         log.error({ err, cauHoi: cau_hoi }, "Tool kb_search lỗi");

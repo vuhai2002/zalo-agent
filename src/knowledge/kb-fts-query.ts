@@ -31,6 +31,13 @@ export type KetQuaFts = { chunkId: number };
  * TRONG WHERE, không lấy top rồi lọc sau: lấy top-50 rồi lọc còn vài nguồn
  * là mất kết quả đúng đang nằm ở hạng ngoài 50.
  *
+ * `soLuong` ở ĐÂY là số dòng LIMIT thẳng vào SQL - KHÔNG phải số đoạn cuối
+ * cùng trả cho model. Caller (`kb-search.ts`) cố ý truyền một số LỚN HƠN số
+ * đoạn cần để chừa chỗ khử trùng SAU: khử trùng SAU khi đã LIMIT đúng số cần
+ * thì thiếu kết quả (hai đoạn trùng chiếm 2 trong số ít suất, khử xong hụt
+ * mất một suất chứ không lấy bù đoạn khác) - hàm này không tự biết chuyện đó,
+ * chỉ chạy đúng LIMIT được truyền vào.
+ *
  * `rowid` của `kb_chunks_fts` chính là `kb_chunks.id` (gán tường minh lúc
  * chèn ở `kb-chunk-store.ts`) nên JOIN thẳng qua đó, không cần bảng trung gian.
  *
