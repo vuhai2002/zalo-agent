@@ -382,11 +382,14 @@ describe("gán nguồn cho agent", () => {
     // route CHẶN Ở SCHEMA (do .max(64)), không phải lọt xuống rồi mới bị từ
     // chối vì "không tồn tại". Đã tự phá: bỏ .max(64) khỏi phần tử vẫn ra 400
     // nhưng qua thông điệp "Nguồn không tồn tại" - assertion dưới đây bắt được.
-    const body = (await res.json()) as { error?: string };
-    assert.match(
-      body.error ?? "",
-      /Dữ liệu không hợp lệ/,
-      `phải bị chặn ở SCHEMA (độ dài phần tử), không phải ở bước kiểm tồn tại - nhận: ${JSON.stringify(body)}`,
+    // Bất biến CẤU TRÚC thay vì neo vào chữ: `issues` chỉ xuất hiện ở nhánh
+    // schema Zod thất bại (`c.json({ error, issues: parsed.error.issues })`) -
+    // nhánh "không tồn tại" không có field này. Mạnh hơn so khớp message vì
+    // không phụ thuộc câu chữ cụ thể, chỉ phụ thuộc ĐƯỜNG CODE nào trả về.
+    const body = (await res.json()) as { error?: string; issues?: unknown };
+    assert.ok(
+      Array.isArray(body.issues),
+      `phải bị chặn ở SCHEMA (độ dài phần tử) - route đó luôn kèm 'issues', không phải ở bước kiểm tồn tại - nhận: ${JSON.stringify(body)}`,
     );
     assert.deepEqual(binding.nguonCuaAgent("a1"), []);
   });
@@ -434,6 +437,18 @@ describe("gán nguồn cho agent", () => {
 
     const res = await resPromise;
     assert.equal(res.status, 400, `agent đã xóa giữa chừng vẫn phải bị từ chối - nhận ${res.status}`);
+    // KHÔNG chỉ kiểm status: nếu `hono/body-limit` đổi hành vi (rút cạn luồng,
+    // hoặc cắt cụt body) thì `c.req.json()` hỏng ra `{error: "Dữ liệu không
+    // hợp lệ"}` - CŨNG là 400, nhưng vì lý do hoàn toàn khác (parse lỗi, không
+    // phải vì agent đã xóa) và cả cửa sổ đua đã biến mất mà test vẫn xanh.
+    // Kiểm đúng message của nhánh "agent không tồn tại" để chắc chắn response
+    // 400 tới từ ĐÚNG nhánh code đang được đo.
+    const body = (await res.json()) as { error?: string };
+    assert.equal(
+      body.error,
+      "Agent không tồn tại",
+      `400 phải tới từ nhánh kiểm agent, không phải nhánh parse lỗi - nhận: ${JSON.stringify(body)}`,
+    );
     assert.deepEqual(
       binding.nguonCuaAgent("a-toctou"),
       [],

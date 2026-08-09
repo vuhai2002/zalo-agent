@@ -16,6 +16,19 @@ describe("catThanhDoan - ranh giới tự nhiên", () => {
     // ra ngoài cửa sổ cắt đầu tiên và test tự đỏ vì lý do SAI - không phải I14).
     const cau = "Chính sách đổi trả áp dụng cho đơn hàng. ";
     const chu = cau.repeat(10); // 410 ký tự, một đoạn văn liền, nhiều câu ngắn
+
+    // Chốt trên SỐ ĐOẠN ĐẦU RA (`d.length` bên dưới) không canh được I14 lặp
+    // lại - phản ví dụ đã đo: 6 đoạn ngắn nối bằng "\n\n" với coDoanToiDa 20
+    // cũng ra đủ soDoan=6 (qua nhánh tách đoạn ở `catThanhDoan`), nhưng
+    // `viTriCatTotNhat` không hề được gọi (0 lần) - vòng `while` trong
+    // `catVanBanPhang` chỉ chạy khi input là MỘT đoạn văn LIỀN (không "\n")
+    // dài hơn hẳn `coDoanToiDa`. Phải canh trực tiếp ĐẦU VÀO, không canh số
+    // đoạn đầu ra.
+    assert.ok(
+      !chu.includes("\n") && chu.length > 60 * 3,
+      "đầu vào phải là MỘT đoạn văn dài hơn hẳn trần thì vòng cắt mới chạy",
+    );
+
     const d = catThanhDoan(chu, { coDoanToiDa: 60, chongLan: 0 });
 
     assert.ok(d.length >= 5, `chỉ ra ${d.length} đoạn - vòng cắt có thể không chạy`);
