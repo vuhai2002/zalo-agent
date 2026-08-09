@@ -116,10 +116,30 @@ describe("catThanhDoan - lọc dải Tags (ASCII smuggling) lúc nạp", () => {
     assert.equal(doan[0]!.noiDung, chu, "nội dung hợp lệ phải nguyên vẹn TỪNG BYTE, không chỉ 'giống giống'");
   });
 
-  it("bốn ký tự hiển-thị-rỗng khác (Hangul filler, Braille blank, Mathematical Bold) cũng bị lọc lúc nạp", () => {
-    const an = "ㅤᅟ⠀\u{1D41D}";
-    const doan = catThanhDoan(`Bảng giá bình thường.${an}`, MAC_DINH);
-    const gop = doan.map((d) => d.noiDung).join("");
-    assert.equal(gop.includes(an), false, "một trong bốn ký tự hiển-thị-rỗng còn sót sau khi cắt đoạn");
+  // Vòng rà soát lần 3 (Important 2) - test hụt thứ 12: khẳng định gốc dùng
+  // `gop.includes(an) === false` trên CHUỖI GHÉP nhiều ký tự liền nhau - lọc
+  // được 1/4 (hay 3/4) đã đủ làm chuỗi ghép không còn nguyên vẹn, XANH GIẢ dù
+  // các ký tự kia lọt nguyên văn. Sửa: đo TỪNG ký tự riêng. Danh sách cũng cập
+  // nhật đúng bản I6 đã sửa (bỏ U+1D41D, thêm U+1160/U+FFA0).
+  const KY_TU_HIEN_THI_RONG = [
+    ["Hangul Filler U+3164", "ㅤ"],
+    ["Hangul Choseong Filler U+115F", "ᅟ"],
+    ["Hangul Jungseong Filler U+1160", "ᅠ"],
+    ["Halfwidth Hangul Filler U+FFA0", "ﾠ"],
+    ["Braille Pattern Blank U+2800", "⠀"],
+  ] as const;
+
+  it("MỖI ký tự hiển-thị-rỗng lẻ đều bị lọc lúc nạp (không chỉ 'ít nhất một trong số')", () => {
+    for (const [ten, kyTu] of KY_TU_HIEN_THI_RONG) {
+      const doan = catThanhDoan(`Bảng giá bình thường.${kyTu}`, MAC_DINH);
+      const gop = doan.map((d) => d.noiDung).join("");
+      assert.equal(gop.includes(kyTu), false, `${ten}: còn sót sau khi cắt đoạn`);
+    }
+  });
+
+  it("U+1D41D (Mathematical Bold Small D) KHÔNG bị lọc - đã loại khỏi bộ lọc vì đổi NGHĨA công thức toán", () => {
+    const congThuc = "đạo hàm 𝐝x/𝐝t";
+    const doan = catThanhDoan(congThuc, MAC_DINH);
+    assert.equal(doan[0]!.noiDung, congThuc, "U+1D41D bị lọc mất - đổi nghĩa công thức toán, đúng lỗi I6 đã sửa");
   });
 });

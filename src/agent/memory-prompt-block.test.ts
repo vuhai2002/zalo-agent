@@ -111,16 +111,64 @@ describe("khoiDieuDaNho", () => {
       assert.doesNotMatch(khoi, /[\u{E0000}-\u{E007F}]/u, "dải Tags còn sót trong khối điều đã nhớ");
     });
 
-    it("bốn ký tự hiển-thị-rỗng khác (Hangul filler, Braille blank, Mathematical Bold) cũng bị lọc khỏi nội dung fact", () => {
-      const an = "ㅤᅟ⠀\u{1D41D}";
-      const khoi = khoiDieuDaNho([f(`Ghi chú${an} bình thường.`)]);
-      assert.equal(khoi.includes(an), false, "một trong bốn ký tự hiển-thị-rỗng còn sót");
+    // Vòng rà soát lần 3 (Important 2) - test hụt thứ 11: khẳng định gốc dùng
+    // `khoi.includes(an) === false` trên CHUỖI GHÉP 4 ký tự liền nhau. Nếu bản
+    // vá chỉ lọc được 1/4 (hay 3/4) ký tự thì chuỗi ghép ĐÃ KHÔNG CÒN nguyên
+    // vẹn nữa (thiếu 1 ký tự là gãy chuỗi), nên `includes` vẫn trả `false` -
+    // XANH GIẢ dù 3 ký tự kia lọt nguyên văn. Tên ca ("bốn ký tự") hứa nhiều
+    // hơn khẳng định đo được ("ít nhất một"). Sửa: đo TỪNG ký tự riêng.
+    //
+    // Danh sách cũng cập nhật đúng bản I6 đã sửa: BỎ U+1D41D (Mathematical
+    // Bold Small D - đổi NGHĨA công thức toán, không phải làm nhiễu), THÊM
+    // U+1160 và U+FFA0 (hai filler Hangul còn lại - đã mua giá làm hỏng chữ
+    // Hàn thì mua đủ cả họ, không dừng ở 2/4).
+    const KY_TU_HIEN_THI_RONG = [
+      ["Hangul Filler U+3164", "ㅤ"],
+      ["Hangul Choseong Filler U+115F", "ᅟ"],
+      ["Hangul Jungseong Filler U+1160", "ᅠ"],
+      ["Halfwidth Hangul Filler U+FFA0", "ﾠ"],
+      ["Braille Pattern Blank U+2800", "⠀"],
+    ] as const;
+
+    it("MỖI ký tự hiển-thị-rỗng lẻ đều bị lọc khỏi nội dung fact (không chỉ 'ít nhất một trong số')", () => {
+      for (const [ten, kyTu] of KY_TU_HIEN_THI_RONG) {
+        const khoi = khoiDieuDaNho([f(`Ghi chú${kyTu} bình thường.`)]);
+        assert.equal(khoi.includes(kyTu), false, `${ten}: còn sót`);
+      }
+    });
+
+    it("U+1D41D (Mathematical Bold Small D) KHÔNG bị lọc - đã loại khỏi bộ lọc vì đổi NGHĨA công thức toán", () => {
+      const congThuc = "đạo hàm 𝐝x/𝐝t"; // U+1D41D - lọc mất sẽ đổi thành phép chia x/t
+      const khoi = khoiDieuDaNho([f(congThuc)]);
+      assert.ok(khoi.includes(congThuc), "U+1D41D bị lọc mất - đổi nghĩa công thức toán, đúng lỗi I6 đã sửa");
     });
 
     it("emoji ghép, cờ vùng KHÔNG bị đụng trong nội dung fact (locKyTuAn dùng chung, đã đo an toàn ở chunk-text.test.ts)", () => {
       const emoji = "👨‍👩‍👧‍👦 🇻🇳";
       const khoi = khoiDieuDaNho([f(`Thích ${emoji}`)]);
       assert.ok(khoi.includes(emoji), "emoji hợp lệ bị đụng - locKyTuAn không nên chạm tới");
+    });
+
+    // Bộ mẫu hợp lệ ĐẦY ĐỦ, dùng lại y hệt ở wrap-untrusted-content.test.ts và
+    // kb-search-tool.test.ts để so 3 đường cùng lúc - xem bảng trong report.
+    const MAU_HOP_LE = [
+      ["emoji ghép ZWJ", "👨‍👩‍👧‍👦"],
+      ["cờ vùng quốc gia (KHÔNG phải cờ vùng con)", "🇻🇳"],
+      ["tiếng Ba Tư (ZWNJ là chữ)", "می‌خواهم"],
+      ["Devanagari (tổ hợp)", "क्षि"],
+      ["ký tự hợp âm/toàn rộng", "½ ﬁ m²"],
+      ["dấu câu tiếng Trung", "你好，世界。"],
+      ["tiếng Ả Rập thường", "مرحبا بالعالم"],
+      ["tiếng Hàn thường (âm tiết ghép sẵn, KHÔNG phải filler)", "안녕하세요"],
+      ["Braille CÓ chấm (KHÔNG phải U+2800 mẫu rỗng)", "⠁⠃⠉⠙⠑"],
+      ["ký hiệu toán (KHÁC U+1D41D đã bị loại khỏi bộ lọc)", "∑ ∫ √ π ≠ ∞"],
+    ] as const;
+
+    it("bộ mẫu hợp lệ đầy đủ đi qua NGUYÊN VẸN TỪNG BYTE trong nội dung fact", () => {
+      for (const [ten, m] of MAU_HOP_LE) {
+        const khoi = khoiDieuDaNho([f(`Ghi chú: ${m}`)]);
+        assert.ok(khoi.includes(m), `${ten}: mất nguyên vẹn "${m}"`);
+      }
     });
   });
 });

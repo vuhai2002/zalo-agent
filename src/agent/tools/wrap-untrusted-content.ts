@@ -48,6 +48,7 @@ import { randomBytes } from "node:crypto";
 // bộ canh chỉ neo TIỀN TỐ (`<noi_dung_ngoai`), nên hậu tố nonce thêm vào không
 // đòi sửa gì ở đó.
 import { THE_NOI_DUNG_NGOAI as THE } from "../prompt-leak-markers.js";
+import { locKyTuAn } from "./tag-ky-tu-an.js";
 
 /**
  * Bắt cả thẻ mở lẫn thẻ đóng DẠNG GỐC (không nonce) - CHỊU ký tự xen: ghép
@@ -88,7 +89,15 @@ export function wrapUntrustedContent(noiDung: string, nguon: string): string {
   // sớm ranh giới ngay từ dòng ĐẦU. Phải khử CẢ tên thẻ (như `antoan`) LẪN
   // `<`/`>` (attribute không có ranh giới đóng riêng như nội dung khối) rồi mới
   // cắt độ dài.
-  const nguonAnToan = nguon
+  //
+  // `locKyTuAn` chạy TRƯỚC TIÊN, NGAY TẠI ĐÂY (không phải ở từng call site):
+  // vòng rà soát an toàn tìm ra `web-fetch-tool.ts` truyền `page.title` THÔ
+  // vào `nguon` - dải Tags giấu trong `<title>` trang lạ (hoặc dòng `Title:`
+  // của Jina) đi thẳng vào DÒNG KHUNG `<noi_dung_ngoai_xxxx nguon="...">`, còn
+  // lộ liễu hơn nằm trong thân. Lọc MỘT LẦN ở đây phủ luôn CẢ BA call site
+  // (kb-search-tool.ts, web-search-tool.ts, web-fetch-tool.ts) - không phải
+  // nhớ gọi riêng ở từng nơi.
+  const nguonAnToan = locKyTuAn(nguon)
     .replace(TEN_THE_RE, DANG_KHU)
     .replace(/[<>"\n]/g, " ")
     .slice(0, 200);

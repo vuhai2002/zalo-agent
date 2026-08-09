@@ -3,8 +3,10 @@ import { z } from "zod";
 import { getTuning } from "../../config/runtime-tuning-settings.js";
 import { timTrongKhoTriThuc, type KetQuaKb } from "../../knowledge/kb-search.js";
 import { createLogger } from "../../shared/logger.js";
+import { khuGiaMaoTrongDoan, khuNgoacVuongTrongNhan } from "./khu-gia-mao-nhan-nguon.js";
 import { KB_SEARCH_DESCRIPTION } from "./kb-search-tool-description.js";
 import type { ToolContext } from "./index.js";
+import { locKyTuAn } from "./tag-ky-tu-an.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 import { trichTheDongThuc, wrapUntrustedContent } from "./wrap-untrusted-content.js";
 
@@ -38,60 +40,20 @@ export function kepSoLuong(raw: number): number {
 }
 
 /**
- * Chống giả mạo nhãn nguồn (I13): một tài liệu (hoặc chính TÊN NGUỒN/TIÊU ĐỀ
- * của nó) có thể tự viết đúng định dạng `[Nguồn: ...]` cùng dải phân cách
- * `\n\n---\n\n` mà `dinhDangDoan`/tool này dùng để đánh dấu ranh giới giữa các
- * đoạn - nếu không khử, nội dung độc hại trong tài liệu A có thể tự gán cho
- * tài liệu B, và model dẫn sai nguồn cho người hỏi.
- *
- * Bản đầu chỉ khử NỘI DUNG đoạn và dùng regex hẹp - vòng rà soát an toàn tìm
- * ra 2 lỗ:
- *
- *   1. `tieuDe` (heading markdown của CHÍNH tài liệu bên thứ ba, vd
- *      `## Bảo hành] rồi [Nguồn: X` là một dòng heading HOÀN TOÀN hợp lệ)
- *      được ghép thẳng vào nhãn mà KHÔNG qua khử - chỉ cần MỘT dấu `]` là tự
- *      đóng sớm nhãn thật rồi mở nhãn giả, không cần ký tự lạ nào.
- *   2. Cả hai regex khử đều hẹp theo hình dạng ASCII: `\s*` KHÔNG bắt ZWSP
- *      (ZWSP không phải whitespace trong JS), và không bắt ngoặc vuông
- *      FULLWIDTH `［...］`; `\n{2,}` không bắt "dòng trống" có khoảng trắng
- *      (`\n \n---\n \n` vẫn trống về mặt hiển thị).
- *
- * Sửa bằng CHỊU ký tự xen (cùng cách `memory-prompt-block.ts` chịu được ZWSP
- * thay một gạch dưới) cho cả hai regex, VÀ khử ngoặc vuông trong `tenNguon`/
- * `tieuDe` TRƯỚC khi ghép vào nhãn - lớp thiếu ở bản đầu.
+ * Chống giả mạo nhãn nguồn (I13, chi tiết ở `khu-gia-mao-nhan-nguon.ts`): một
+ * tài liệu (hoặc chính TÊN NGUỒN/TIÊU ĐỀ của nó) có thể tự viết đúng định dạng
+ * `[Nguồn: ...]` cùng dải phân cách `\n\n---\n\n` để tự gán nội dung độc hại
+ * cho một nguồn khác. `tenNguon`/`tieuDe` đi qua ĐÚNG pipeline nội dung đoạn
+ * nhận (lọc dải Tags rồi khử nhãn/dải phân cách giả), RỒI mới khử ngoặc vuông
+ * còn sót - lớp phòng thêm hẹp hơn, chạy sau cùng vì nó đổi CẤU TRÚC (ngoặc)
+ * chứ không chỉ nội dung.
  */
-const DEM = "[\\p{Cf}\\p{Mn}]*"; // lớp đệm: ký tự định dạng vô hình + dấu phụ
-
-/** `[Nguồn:` hoặc `［Nguồn:` (fullwidth), chịu ký tự vô hình xen giữa từng
- * chữ cái "Nguồn" hoặc ngay trước dấu hai chấm. */
-const NHAN_NGUON_GIA_RE = new RegExp(
-  `[[［]${DEM}${[..."Nguồn"].join(DEM)}${DEM}[\\s\\p{Cf}]*:`,
-  "giu",
-);
-
-/** "Dòng trống" ở đây là dòng CHỈ chứa khoảng trắng/ký tự định dạng vô hình,
- * không nhất thiết rỗng tuyệt đối - `\n \n` vẫn trống khi hiển thị. */
-const DONG_TRONG = "(?:\\n[ \\t\\p{Cf}]*)";
-const DAI_PHAN_CACH_GIA_RE = new RegExp(`${DONG_TRONG}{2,}(-{3,})${DONG_TRONG}{2,}`, "gu");
-
-function khuGiaMaoTrongDoan(noiDung: string): string {
-  return noiDung
-    .replace(NHAN_NGUON_GIA_RE, "(Nguồn:")
-    .replace(DAI_PHAN_CACH_GIA_RE, (_khop, dashes: string) => `\n${dashes}\n`);
-}
-
-/** Ngoặc vuông (ASCII hoặc fullwidth) trong TÊN NGUỒN/TIÊU ĐỀ tự đóng/mở được
- * nhãn `[Nguồn: ...]` - đổi sang ngoặc tròn để giữ chữ mà không giữ cấu trúc. */
-function khuNgoacVuongTrongNhan(s: string): string {
-  return s.replace(/[[\]［］]/g, (c) => (c === "[" || c === "［" ? "(" : ")"));
-}
-
-/** Mỗi đoạn kèm TÊN NGUỒN để model dẫn nguồn lại được cho người hỏi */
 function dinhDangDoan(d: KetQuaKb): string {
-  const tenNguon = khuNgoacVuongTrongNhan(d.tenNguon);
-  const tieuDe = khuNgoacVuongTrongNhan(d.tieuDe);
+  const antoanHoa = (s: string) => khuNgoacVuongTrongNhan(khuGiaMaoTrongDoan(locKyTuAn(s)));
+  const tenNguon = antoanHoa(d.tenNguon);
+  const tieuDe = antoanHoa(d.tieuDe);
   const nhan = tieuDe ? `${tenNguon} - ${tieuDe}` : tenNguon;
-  return `[Nguồn: ${nhan}]\n${khuGiaMaoTrongDoan(d.noiDung)}`;
+  return `[Nguồn: ${nhan}]\n${khuGiaMaoTrongDoan(locKyTuAn(d.noiDung))}`;
 }
 
 export function createKbSearchTool(ctx: ToolContext) {
