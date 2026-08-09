@@ -9,6 +9,7 @@ import { useUnsavedChangesPrompt } from "../shared/use-unsaved-changes-prompt";
 import { kiemForm, thanhPatch, tuAgent, type AgentDetailForm } from "./agent-detail-form";
 import { AgentFormLayout } from "./agent-form-layout";
 import { AgentIdentitySection } from "./agent-identity-section";
+import { useAgentKbRefreshBridge } from "./agent-kb-refresh-bridge";
 
 /**
  * Trang sửa một agent. Tách khỏi màn TẠO (`agent-create-modal.tsx`) vì hai việc
@@ -33,6 +34,7 @@ export function AgentDetailPage() {
   const [daLuu, setDaLuu] = useState(false);
   const [busy, setBusy] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
+  const { kbDirty, onKbDirtyChange, kbRefreshSignal, onKbSaved } = useAgentKbRefreshBridge();
 
   useEffect(() => {
     let huy = false;
@@ -60,7 +62,11 @@ export function AgentDetailPage() {
   };
 
   const banDau = agent ? tuAgent(agent) : null;
-  const coDoi = Boolean(form && banDau && JSON.stringify(form) !== JSON.stringify(banDau));
+  const coDoiForm = Boolean(form && banDau && JSON.stringify(form) !== JSON.stringify(banDau));
+  // I17: khối Kho tri thức giữ state riêng (ngoài AgentDetailForm) - gộp dirty
+  // vào chốt RỜI TRANG, KHÔNG gộp vào nút "Lưu thay đổi" (nút đó chỉ ghi form;
+  // KB lưu qua nút riêng - gộp sẽ bật nhầm nút Lưu dù form chưa đổi gì).
+  const coDoiRoiTrang = coDoiForm || kbDirty;
 
   /**
    * Một hộp thoại dùng cho MỌI đường rời trang - nút "Quay lại" lẫn sidebar.
@@ -85,11 +91,11 @@ export function AgentDetailPage() {
     [confirm],
   );
 
-  useUnsavedChangesPrompt(coDoi, hoiRoiTrang);
+  useUnsavedChangesPrompt(coDoiRoiTrang, hoiRoiTrang);
 
   /** Rời trang bằng nút "Quay lại". Ô persona nhận tới 8000 ký tự - mất là mất thật. */
   async function roiTrang() {
-    if (coDoi && !(await hoiRoiTrang())) return;
+    if (coDoiRoiTrang && !(await hoiRoiTrang())) return;
     navigate("/agents");
   }
 
@@ -149,15 +155,15 @@ export function AgentDetailPage() {
             <button
               type="button"
               onClick={roiTrang}
-              className="rounded-lg border border-line px-4 py-2 text-[14px] font-medium text-ink-soft hover:bg-tile"
+              className="cursor-pointer rounded-lg border border-line px-4 py-2 text-[14px] font-medium text-ink-soft hover:bg-tile"
             >
               Quay lại
             </button>
             <button
               type="button"
               onClick={luu}
-              disabled={busy || !coDoi || form.name.trim() === ""}
-              className="rounded-lg bg-zalo-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-zalo-600 disabled:opacity-50"
+              disabled={busy || !coDoiForm || form.name.trim() === ""}
+              className="cursor-pointer rounded-lg bg-zalo-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-zalo-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? "Đang lưu..." : "Lưu thay đổi"}
             </button>
@@ -166,7 +172,7 @@ export function AgentDetailPage() {
       />
 
       {loi && <p className="mb-4 text-[13px] text-red-600 dark:text-red-400">{loi}</p>}
-      {daLuu && !coDoi && (
+      {daLuu && !coDoiForm && (
         <p className="mb-4 text-[13px] text-emerald-600 dark:text-emerald-400">Đã lưu thay đổi.</p>
       )}
 
@@ -175,13 +181,11 @@ export function AgentDetailPage() {
         onChange={doi}
         soTaiKhoan={agent.accountCount}
         agentId={agent.id}
+        onKbDirtyChange={onKbDirtyChange}
+        onKbSaved={onKbSaved}
+        kbRefreshSignal={kbRefreshSignal}
         danhTinh={
-          <AgentIdentitySection
-            id={agent.id}
-            isDefault={agent.isDefault}
-            form={form}
-            onChange={doi}
-          />
+          <AgentIdentitySection id={agent.id} isDefault={agent.isDefault} form={form} onChange={doi} />
         }
       />
 

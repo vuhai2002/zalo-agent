@@ -3,13 +3,15 @@ import path from "node:path";
 import { Hono } from "hono";
 import { getAgent } from "../../config/agent-store.js";
 import { DINH_DANG_HO_TRO, laDinhDangHoTro } from "../../knowledge/doc-text-extract.js";
-import { datNguonChoAgent, nguonCuaAgent } from "../../knowledge/kb-agent-binding.js";
+import { agentCuaNguon, datNguonChoAgent, nguonCuaAgent } from "../../knowledge/kb-agent-binding.js";
+import { demDoan, layDoanCuaNguon } from "../../knowledge/kb-chunk-store.js";
 import { luuFile, xoaFile } from "../../knowledge/kb-file-store.js";
 import { danhSachNguonGon, locIdTonTai } from "../../knowledge/kb-source-queries.js";
 import { layNguon, taoNguon, datTrangThai, xoaNguon } from "../../knowledge/kb-source-store.js";
 import { createLogger } from "../../shared/logger.js";
 import {
   chanTranDungLuong,
+  chunksQuerySchema,
   khopChuKyThat,
   putAgentSourcesSchema,
   tenNguonSchema,
@@ -122,6 +124,27 @@ export const kbRoutes = new Hono()
     datTrangThai(id, "cho_xu_ly", { soLanThu: 0 });
     return c.json({ source: layNguon(id) });
   })
+
+  // I21: trang xem đoạn đã cắt của một nguồn - PHÂN TRANG bắt buộc (xem lý do
+  // ở `chunksQuerySchema`). `tieuDe` luôn kèm theo (kể cả rỗng) - đây là
+  // breadcrumb duy nhất để người vận hành tự phát hiện bot đọc sai cấu trúc
+  // tài liệu mà không cần bật AGENT_TRACE_ENABLED.
+  .get("/sources/:id/chunks", (c) => {
+    const id = c.req.param("id");
+    if (!layNguon(id)) return c.json({ error: "Không tìm thấy nguồn" }, 404);
+    const parsed = chunksQuerySchema.safeParse({
+      offset: c.req.query("offset"),
+      limit: c.req.query("limit"),
+    });
+    if (!parsed.success) return c.json({ error: "Tham số phân trang không hợp lệ" }, 400);
+    const { offset, limit } = parsed.data;
+    return c.json({ items: layDoanCuaNguon(id, offset, limit), total: demDoan(id) });
+  })
+
+  // I19: agent nào đang gán nguồn này - dashboard đọc TRƯỚC khi hiện hộp xác
+  // nhận xóa, để nói thật số agent sẽ mất quyền tra cứu thay vì cảnh báo
+  // chung chung không nói gì cụ thể.
+  .get("/sources/:id/agents", (c) => c.json({ agentIds: agentCuaNguon(c.req.param("id")) }))
 
   .delete("/sources/:id", (c) => {
     const id = c.req.param("id");

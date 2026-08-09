@@ -1,7 +1,13 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../dashboard-api-client";
 import { useChotNen } from "../shared/backdrop-close-guard";
 import { DINH_DANG_HO_TRO } from "../shared/kb-formats";
+import {
+  layNhanTranDungLuong,
+  layThongDiepVuotTran,
+  layTranDungLuongMB,
+  vuotTranDungLuong,
+} from "./kb-upload-size-guard";
 
 type Tab = "file" | "text";
 
@@ -18,10 +24,38 @@ export function KbAddSourceModal({ onClose, onCreated }: { onClose: () => void; 
   const [noiDung, setNoiDung] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [tranMB, setTranMB] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nen = useChotNen(onClose);
 
+  // I20: đọc trần dung lượng THẬT từ cấu hình (không hard-code) để hiện ngay
+  // trên modal và chặn SỚM ở client - server vẫn là chốt cuối cùng nếu tải
+  // chưa xong kịp lúc người dùng chọn file (tranMB còn null thì không chặn).
+  useEffect(() => {
+    let huy = false;
+    api.tuning
+      .get()
+      .then((d) => !huy && setTranMB(layTranDungLuongMB(d.values)))
+      .catch(() => {});
+    return () => {
+      huy = true;
+    };
+  }, []);
+
   const hopLe = tab === "file" ? Boolean(ten.trim() && file) : Boolean(ten.trim() && noiDung.trim());
+
+  function chonFile(f: File | null) {
+    setError("");
+    if (f && tranMB !== null && vuotTranDungLuong(f.size, tranMB)) {
+      setError(layThongDiepVuotTran(f.name, tranMB));
+      setFile(null);
+      // Xóa giá trị input gốc - không thì chọn LẠI đúng file đó không bắn
+      // onChange lần nữa (trình duyệt coi value không đổi).
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setFile(f);
+  }
 
   async function luu() {
     if (!hopLe) return;
@@ -93,13 +127,18 @@ export function KbAddSourceModal({ onClose, onCreated }: { onClose: () => void; 
 
           {tab === "file" ? (
             <div>
-              <span className="mb-1.5 block text-[13px] font-medium text-ink">File</span>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <span className="text-[13px] font-medium text-ink">File</span>
+                {tranMB !== null && (
+                  <span className="text-[12px] text-ink-soft">{layNhanTranDungLuong(tranMB)}</span>
+                )}
+              </div>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept={DINH_DANG_HO_TRO.map((d) => `.${d}`).join(",")}
                 className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => chonFile(e.target.files?.[0] ?? null)}
               />
               <button
                 type="button"

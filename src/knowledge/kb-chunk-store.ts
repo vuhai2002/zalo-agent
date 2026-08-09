@@ -54,6 +54,29 @@ export function demDoan(sourceId: string): number {
   return (demDoanStmt.get(sourceId) as { n: number }).n;
 }
 
+export type DoanCuaNguon = { thuTu: number; tieuDe: string; noiDung: string };
+type DoanCuaNguonRow = { thu_tu: number; tieu_de: string; noi_dung: string };
+
+const layTrangDoanStmt = db.prepare(`
+  SELECT thu_tu, tieu_de, noi_dung FROM kb_chunks
+   WHERE source_id = ?
+   ORDER BY thu_tu ASC
+   LIMIT ? OFFSET ?
+`);
+
+/**
+ * Trang đoạn đã cắt của MỘT nguồn, PHÂN TRANG bắt buộc (I21 - dashboard) -
+ * một nguồn dài (sách hướng dẫn cả trăm trang) có thể cắt ra hàng nghìn đoạn,
+ * kéo hết về một lần là đúng lỗi OOM mà `kb-route-guards.ts` đã chặn ở đường
+ * upload, không thể mở lại ở đường ĐỌC. `tieuDe` LUÔN đi kèm (kể cả rỗng) -
+ * đây là breadcrumb duy nhất để người vận hành tự nhận ra bot đọc nhầm cấu
+ * trúc tài liệu (H1>H2>H3, xem chunk-text.ts) mà không cần bật AGENT_TRACE_ENABLED.
+ */
+export function layDoanCuaNguon(sourceId: string, offset: number, limit: number): DoanCuaNguon[] {
+  const rows = layTrangDoanStmt.all(sourceId, limit, offset) as unknown as DoanCuaNguonRow[];
+  return rows.map((r) => ({ thuTu: r.thu_tu, tieuDe: r.tieu_de, noiDung: r.noi_dung }));
+}
+
 type DoanTraNguoc = { id: number; sourceId: string; tenNguon: string; tieuDe: string; noiDung: string };
 type DoanTraNguocRow = {
   id: number;

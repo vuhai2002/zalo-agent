@@ -3,20 +3,32 @@ import { api, ApiError, type KbSourceListItem } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { IconFileText } from "../shared/dashboard-icons";
-import { EmptyRow, TableShell } from "../shared/ui-bits";
+import { nhanKhopTuKhoa } from "../shared/fold-for-search";
+import { EmptyRow, ListToolbar, TableShell } from "../shared/ui-bits";
 import { KbAddSourceModal } from "./kb-add-source-modal";
+import { KbChunksModal } from "./kb-chunks-modal";
+import { xayThongDiepXoaNguon } from "./kb-delete-warning-message";
+import { conViecDoiXuLy } from "./kb-poll-guard";
 import { KbSourceRow } from "./kb-source-row";
+
+// Phân trang phía CLIENT - `GET /api/kb/sources` chưa hỗ trợ offset/limit,
+// và số nguồn của một kho thực tế hiếm khi vượt vài chục.
+const KICH_TRANG = 20;
 
 /**
  * Trang Kho tri thức: nạp tài liệu (file hoặc gõ tay) để agent tra cứu qua
  * tool `kb_search`. Xử lý (đọc file, cắt đoạn) chạy NỀN - trang này tự làm
- * mới định kỳ để thấy trạng thái `cho_xu_ly` -> `san_sang` mà không cần F5.
+ * mới định kỳ để thấy trạng thái `cho_xu_ly` -> `san_sang` mà không cần F5,
+ * nhưng DỪNG hẳn khi không còn nguồn nào đang chờ xử lý (B7).
  */
 export function KnowledgePage() {
   const [sources, setSources] = useState<KbSourceListItem[] | null>(null);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [adding, setAdding] = useState(false);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [xemDoanCua, setXemDoanCua] = useState<KbSourceListItem | null>(null);
   const { confirm, confirmDialog } = useConfirmDialog();
 
   const reload = useCallback(() => {
@@ -34,12 +46,20 @@ export function KnowledgePage() {
 
   useEffect(() => {
     reload();
-    // Việc cắt đoạn chạy ở worker nền (kb-ingest-worker.ts, quét mỗi 5s) - tự
-    // làm mới để trạng thái cho_xu_ly/dang_xu_ly chuyển sang san_sang/hong mà
-    // người dùng không phải tự bấm F5.
-    const timer = window.setInterval(reload, 4000);
-    return () => window.clearInterval(timer);
   }, [reload]);
+
+  // B7: chỉ hẹn tải lại tiếp khi CÒN nguồn đang chờ worker xử lý - dừng hẳn
+  // khi mọi nguồn đã san_sang/hong, không chạy setInterval vô thời hạn. Effect
+  // chạy lại mỗi khi `sources` đổi (kể cả do reload() gọi từ chỗ khác, như sau
+  // khi thêm nguồn hay bấm "Xử lý lại") nên poll TỰ KHỞI ĐỘNG LẠI đúng lúc có
+  // việc mới, không cần một effect riêng để canh việc đó.
+  useEffect(() => {
+    if (!sources || !conViecDoiXuLy(sources)) return;
+    const timer = window.setTimeout(reload, 4000);
+    return () => window.clearTimeout(timer);
+  }, [sources, reload]);
+
+  useEffect(() => setPage(0), [query]);
 
   async function reindex(id: string) {
     await api.kb.reindex(id);
@@ -47,10 +67,17 @@ export function KnowledgePage() {
   }
 
   async function remove(source: KbSourceListItem) {
-    const ok = await confirm({
-      title: `Xóa nguồn "${source.ten}"?`,
-      message: "Toàn bộ đoạn đã cắt của nguồn này cũng bị xóa, agent không tra cứu được nữa. Không khôi phục được.",
-    });
+    // I19: hỏi ĐÚNG trước khi xóa - lấy trước số agent đang gán nguồn này để
+    // nói thật họ sẽ mất quyền tra cứu. Route lỗi thì vẫn cho xóa tiếp (không
+    // chặn cả luồng chỉ vì không đếm được), nhưng câu chữ phải nói thật là
+    // "không kiểm tra được", không ngầm định 0 (xem kb-delete-warning-message.ts).
+    let agentIds: string[] | null;
+    try {
+      agentIds = (await api.kb.agentsUsingSource(source.id)).agentIds;
+    } catch {
+      agentIds = null;
+    }
+    const ok = await confirm({ title: `Xóa nguồn "${source.ten}"?`, message: xayThongDiepXoaNguon(agentIds) });
     if (!ok) return;
     setActionError("");
     try {
@@ -60,6 +87,10 @@ export function KnowledgePage() {
       setActionError(err instanceof ApiError ? err.message : "Xóa thất bại");
     }
   }
+
+  const daLoc = (sources ?? []).filter((s) => nhanKhopTuKhoa(s.ten, query));
+  const hasMore = (page + 1) * KICH_TRANG < daLoc.length;
+  const trang = daLoc.slice(page * KICH_TRANG, (page + 1) * KICH_TRANG);
 
   return (
     <div>
@@ -80,17 +111,36 @@ export function KnowledgePage() {
       {actionError && <p className="mb-4 text-[13px] text-red-600 dark:text-red-400">{actionError}</p>}
       {loadError && <p className="mb-4 text-[13px] text-red-600 dark:text-red-400">{loadError}</p>}
 
+      {sources !== null && sources.length > 0 && (
+        <ListToolbar
+          query={query}
+          onQuery={setQuery}
+          placeholder="Tìm theo tên nguồn..."
+          page={page}
+          hasMore={hasMore}
+          onPage={setPage}
+        />
+      )}
+
       <TableShell
         headers={["Tên", "Loại", "Định dạng", "Trạng thái", "Số đoạn", "Dung lượng", "Ngày", ""]}
-        minWidth={920}
+        minWidth={980}
       >
         {sources === null ? (
           <EmptyRow colSpan={8} text="Đang tải..." />
         ) : sources.length === 0 ? (
           <EmptyRow colSpan={8} text='Chưa có nguồn nào - bấm "Thêm nguồn" để nạp tài liệu đầu tiên' />
+        ) : trang.length === 0 ? (
+          <EmptyRow colSpan={8} text={`Không có nguồn nào khớp "${query}"`} />
         ) : (
-          sources.map((s) => (
-            <KbSourceRow key={s.id} source={s} onReindex={() => reindex(s.id)} onDelete={() => void remove(s)} />
+          trang.map((s) => (
+            <KbSourceRow
+              key={s.id}
+              source={s}
+              onReindex={() => reindex(s.id)}
+              onDelete={() => void remove(s)}
+              onViewChunks={() => setXemDoanCua(s)}
+            />
           ))
         )}
       </TableShell>
@@ -104,6 +154,8 @@ export function KnowledgePage() {
           }}
         />
       )}
+
+      {xemDoanCua && <KbChunksModal source={xemDoanCua} onClose={() => setXemDoanCua(null)} />}
 
       {confirmDialog}
     </div>

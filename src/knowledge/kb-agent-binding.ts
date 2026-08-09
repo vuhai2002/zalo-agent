@@ -19,6 +19,21 @@ export function nguonCuaAgent(agentId: string): string[] {
   return rows.map((r) => r.source_id);
 }
 
+const layAgentTheoNguonStmt = db.prepare(
+  `SELECT agent_id FROM agent_kb_sources WHERE source_id = ? ORDER BY agent_id`,
+);
+
+/**
+ * Chiều NGƯỢC của `nguonCuaAgent` - agent nào đang gán nguồn này. Dashboard
+ * (I19) đọc hàm này TRƯỚC khi hiện hộp xác nhận xóa nguồn: xóa xong các agent
+ * này mất quyền tra cứu ngay lập tức, hộp thoại phải nói thật con số đó thay
+ * vì câu cảnh báo chung chung không nói gì cụ thể.
+ */
+export function agentCuaNguon(sourceId: string): string[] {
+  const rows = layAgentTheoNguonStmt.all(sourceId) as unknown as { agent_id: string }[];
+  return rows.map((r) => r.agent_id);
+}
+
 const xoaGanCuaAgentStmt = db.prepare(`DELETE FROM agent_kb_sources WHERE agent_id = ?`);
 const chenGanStmt = db.prepare(`INSERT INTO agent_kb_sources (agent_id, source_id) VALUES (?, ?)`);
 

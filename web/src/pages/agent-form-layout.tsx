@@ -20,6 +20,9 @@ export function AgentFormLayout({
   onChange,
   soTaiKhoan,
   agentId,
+  onKbDirtyChange,
+  onKbSaved,
+  kbRefreshSignal,
 }: {
   danhTinh: ReactNode;
   form: AgentDetailForm;
@@ -27,6 +30,10 @@ export function AgentFormLayout({
   soTaiKhoan: number;
   /** Xem `AgentToolsSection` - chỉ trang SỬA truyền, trang TẠO bỏ trống */
   agentId?: string;
+  /** Cầu nối I17/I18 (xem `agent-kb-refresh-bridge.ts`) - chỉ có khi agentId có */
+  onKbDirtyChange?: (dirty: boolean) => void;
+  onKbSaved?: () => void;
+  kbRefreshSignal?: number;
 }) {
   return (
     <div className="space-y-5">
@@ -46,9 +53,12 @@ export function AgentFormLayout({
         soTaiKhoan={soTaiKhoan}
         onChange={(disabledTools) => onChange({ disabledTools })}
         agentId={agentId}
+        refreshSignal={kbRefreshSignal}
       />
       {/* Chỉ trang SỬA có agentId - agent chưa tạo thì chưa có id để gán nguồn */}
-      {agentId && <AgentKbSourcesSection agentId={agentId} />}
+      {agentId && (
+        <AgentKbSourcesSection agentId={agentId} onDirtyChange={onKbDirtyChange} onSaved={onKbSaved} />
+      )}
     </div>
   );
 }

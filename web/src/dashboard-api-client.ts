@@ -129,6 +129,9 @@ export type KbSourceItem = {
  */
 export type KbSourceListItem = Omit<KbSourceItem, "noiDungGoc">;
 
+/** Một đoạn đã cắt của nguồn - `GET /api/kb/sources/:id/chunks` (I21, trang xem đoạn) */
+export type KbChunkItem = { thuTu: number; tieuDe: string; noiDung: string };
+
 export type ContactItem = {
   accountId: string;
   userId: string;
@@ -411,6 +414,12 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({ sourceIds }),
       }),
+    chunks: (sourceId: string, offset: number, limit: number) =>
+      request<{ items: KbChunkItem[]; total: number }>(
+        `/api/kb/sources/${encodeURIComponent(sourceId)}/chunks?offset=${offset}&limit=${limit}`,
+      ),
+    agentsUsingSource: (sourceId: string) =>
+      request<{ agentIds: string[] }>(`/api/kb/sources/${encodeURIComponent(sourceId)}/agents`),
   },
 
   provider: () => request<ProviderSettings>("/api/provider"),

@@ -17,6 +17,7 @@ let cookie: string;
 let store: typeof import("../../knowledge/kb-source-store.js");
 let fileStore: typeof import("../../knowledge/kb-file-store.js");
 let binding: typeof import("../../knowledge/kb-agent-binding.js");
+let chunkStore: typeof import("../../knowledge/kb-chunk-store.js");
 let tuning: typeof import("../../config/runtime-tuning-settings.js");
 let agents: typeof import("../../config/agent-store.js");
 let database: typeof import("../../conversation/database.js");
@@ -32,6 +33,7 @@ before(async () => {
   store = await import("../../knowledge/kb-source-store.js");
   fileStore = await import("../../knowledge/kb-file-store.js");
   binding = await import("../../knowledge/kb-agent-binding.js");
+  chunkStore = await import("../../knowledge/kb-chunk-store.js");
   tuning = await import("../../config/runtime-tuning-settings.js");
   agents = await import("../../config/agent-store.js");
   database = await import("../../conversation/database.js");
@@ -278,6 +280,66 @@ describe("POST /api/kb/sources/:id/reindex", () => {
   });
 });
 
+describe("GET /api/kb/sources/:id/chunks", () => {
+  it("trả đoạn có phân trang, kèm breadcrumb tieuDe để tự phát hiện lỗi đọc file", async () => {
+    const n = store.taoNguon({ ten: "bảng giá", loai: "text", noiDungGoc: "x" });
+    chunkStore.luuDoan(n.id, [
+      { thuTu: 0, tieuDe: "Bảng giá > Combo A", noiDung: "100.000đ" },
+      { thuTu: 1, tieuDe: "Bảng giá > Combo B", noiDung: "150.000đ" },
+    ]);
+    const res = await app.request(`/api/kb/sources/${n.id}/chunks?offset=0&limit=20`, { headers: { cookie } });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { items: { tieuDe?: string; noiDung: string }[]; total: number };
+    assert.equal(Array.isArray(body.items), true);
+    assert.equal(body.total, 2);
+    assert.equal(body.items[0]!.tieuDe, "Bảng giá > Combo A");
+  });
+
+  it("offset/limit cắt đúng trang, không trả dư đoạn của trang khác", async () => {
+    const n = store.taoNguon({ ten: "nhiều đoạn", loai: "text", noiDungGoc: "x" });
+    chunkStore.luuDoan(
+      n.id,
+      Array.from({ length: 5 }, (_, i) => ({ thuTu: i, tieuDe: "", noiDung: `đoạn ${i}` })),
+    );
+    const res = await app.request(`/api/kb/sources/${n.id}/chunks?offset=2&limit=2`, { headers: { cookie } });
+    const body = (await res.json()) as { items: { noiDung: string }[]; total: number };
+    assert.deepEqual(body.items.map((i) => i.noiDung), ["đoạn 2", "đoạn 3"]);
+    assert.equal(body.total, 5, "total phải là TỔNG số đoạn, không phải số đoạn của trang này");
+  });
+
+  it("limit vượt trần (100) bị từ chối 400, không lọt xuống kéo cả bảng", async () => {
+    const n = store.taoNguon({ ten: "x", loai: "text", noiDungGoc: "x" });
+    const res = await app.request(`/api/kb/sources/${n.id}/chunks?limit=101`, { headers: { cookie } });
+    assert.equal(res.status, 400);
+  });
+
+  it("nguồn không tồn tại trả 404", async () => {
+    const res = await app.request("/api/kb/sources/khong-ton-tai/chunks", { headers: { cookie } });
+    assert.equal(res.status, 404);
+  });
+});
+
+describe("GET /api/kb/sources/:id/agents", () => {
+  it("trả đúng danh sách agent đang gán nguồn này - dashboard dùng để cảnh báo trước khi xóa", async () => {
+    agents.createAgent({ id: "a1", name: "Agent A1" });
+    agents.createAgent({ id: "a2", name: "Agent A2" });
+    const n = store.taoNguon({ ten: "n", loai: "text", noiDungGoc: "x" });
+    binding.datNguonChoAgent("a1", [n.id]);
+    binding.datNguonChoAgent("a2", [n.id]);
+    const res = await app.request(`/api/kb/sources/${n.id}/agents`, { headers: { cookie } });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { agentIds: string[] };
+    assert.equal(body.agentIds.length, 2);
+  });
+
+  it("nguồn chưa agent nào gán trả mảng rỗng", async () => {
+    const n = store.taoNguon({ ten: "n", loai: "text", noiDungGoc: "x" });
+    const res = await app.request(`/api/kb/sources/${n.id}/agents`, { headers: { cookie } });
+    const body = (await res.json()) as { agentIds: string[] };
+    assert.deepEqual(body.agentIds, []);
+  });
+});
+
 describe("DELETE /api/kb/sources/:id", () => {
   it("DELETE xóa cả dòng DB lẫn file trên đĩa", async () => {
     const duongDan = fileStore.luuFile("src-del", "txt", Buffer.from("x"));
@@ -466,6 +528,8 @@ describe("auth", () => {
       ["POST", "/api/kb/sources/file"],
       ["DELETE", "/api/kb/sources/x"],
       ["POST", "/api/kb/sources/x/reindex"],
+      ["GET", "/api/kb/sources/x/chunks"],
+      ["GET", "/api/kb/sources/x/agents"],
       ["GET", "/api/kb/agents/a/sources"],
       ["PUT", "/api/kb/agents/a/sources"],
     ] as const;

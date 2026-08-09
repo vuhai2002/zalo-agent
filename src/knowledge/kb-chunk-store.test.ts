@@ -125,3 +125,38 @@ describe("kb-chunk-store - layDoanTheoId", () => {
     assert.deepEqual(chunkStore.layDoanTheoId([]), []);
   });
 });
+
+describe("kb-chunk-store - layDoanCuaNguon (phân trang, dùng cho trang xem đoạn I21)", () => {
+  it("trả đúng trang theo offset/limit, thứ tự theo thuTu", () => {
+    chunkStore.luuDoan(id, [
+      { thuTu: 0, tieuDe: "", noiDung: "đoạn 0" },
+      { thuTu: 1, tieuDe: "", noiDung: "đoạn 1" },
+      { thuTu: 2, tieuDe: "", noiDung: "đoạn 2" },
+      { thuTu: 3, tieuDe: "", noiDung: "đoạn 3" },
+    ]);
+    const trang1 = chunkStore.layDoanCuaNguon(id, 0, 2);
+    const trang2 = chunkStore.layDoanCuaNguon(id, 2, 2);
+    assert.deepEqual(trang1.map((d) => d.noiDung), ["đoạn 0", "đoạn 1"]);
+    assert.deepEqual(trang2.map((d) => d.noiDung), ["đoạn 2", "đoạn 3"]);
+  });
+
+  it("kèm tiêu đề (breadcrumb) - đây là cách duy nhất người vận hành tự phát hiện lỗi đọc file", () => {
+    chunkStore.luuDoan(id, [{ thuTu: 0, tieuDe: "Chính sách > Đổi trả", noiDung: "Trong vòng 7 ngày" }]);
+    const [doan] = chunkStore.layDoanCuaNguon(id, 0, 20);
+    assert.equal(doan!.tieuDe, "Chính sách > Đổi trả");
+  });
+
+  it("nguồn khác không lẫn đoạn vào nhau", () => {
+    const idKhac = store.taoNguon({ ten: "nguồn khác", loai: "text", noiDungGoc: "y" }).id;
+    chunkStore.luuDoan(id, [{ thuTu: 0, tieuDe: "", noiDung: "của nguồn 1" }]);
+    chunkStore.luuDoan(idKhac, [{ thuTu: 0, tieuDe: "", noiDung: "của nguồn khác" }]);
+    const ketQua = chunkStore.layDoanCuaNguon(id, 0, 20);
+    assert.equal(ketQua.length, 1);
+    assert.equal(ketQua[0]!.noiDung, "của nguồn 1");
+  });
+
+  it("offset vượt quá tổng số đoạn trả về mảng rỗng, không throw", () => {
+    chunkStore.luuDoan(id, [{ thuTu: 0, tieuDe: "", noiDung: "đoạn duy nhất" }]);
+    assert.deepEqual(chunkStore.layDoanCuaNguon(id, 100, 20), []);
+  });
+});

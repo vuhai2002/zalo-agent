@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError, type KbSourceListItem } from "../dashboard-api-client";
 import { ToggleKnob } from "../shared/ui-bits";
 import { AgentFormSection } from "./agent-form-field";
+import { laCoDoiNguon } from "./kb-agent-sources-dirty";
 
 /**
  * Nhóm "Kho tri thức" của trang sửa agent - chọn nguồn agent này được PHÉP đọc
@@ -11,8 +12,19 @@ import { AgentFormSection } from "./agent-form-field";
  * TỰ LƯU RIÊNG (nút "Lưu nguồn đã chọn"), KHÔNG đi qua nút "Lưu thay đổi" của
  * cả trang: gán nguồn nằm ở bảng `agent_kb_sources` hoàn toàn tách khỏi bản ghi
  * agent, không phải một trường trong `AgentDetailForm`.
+ *
+ * `onDirtyChange`/`onSaved` (I17/I18) báo state riêng của khối này lên trang
+ * cha - xem `agent-kb-refresh-bridge.ts` cho lý do đầy đủ.
  */
-export function AgentKbSourcesSection({ agentId }: { agentId: string }) {
+export function AgentKbSourcesSection({
+  agentId,
+  onDirtyChange,
+  onSaved,
+}: {
+  agentId: string;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSaved?: () => void;
+}) {
   const [sources, setSources] = useState<KbSourceListItem[] | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [banDau, setBanDau] = useState<Set<string>>(new Set());
@@ -49,7 +61,14 @@ export function AgentKbSourcesSection({ agentId }: { agentId: string }) {
     });
   }
 
-  const coDoi = checked.size !== banDau.size || [...checked].some((id) => !banDau.has(id));
+  const coDoi = laCoDoiNguon(checked, banDau);
+
+  // I17: báo cờ dirty lên trang cha MỖI LẦN nó đổi - kể cả lúc mount (dirty
+  // bắt đầu là false, banDau === checked) để trang cha luôn đồng bộ, không
+  // lệch pha nếu component này unmount/mount lại.
+  useEffect(() => {
+    onDirtyChange?.(coDoi);
+  }, [coDoi, onDirtyChange]);
 
   async function luu() {
     setBusy(true);
@@ -59,6 +78,9 @@ export function AgentKbSourcesSection({ agentId }: { agentId: string }) {
       setBanDau(new Set(sourceIds));
       setChecked(new Set(sourceIds));
       setDaLuu(true);
+      // I18: badge kb_search phải đổi ngay, không đợi F5 - báo trang cha tải
+      // lại catalog tool SAU KHI lưu thành công.
+      onSaved?.();
     } catch (err) {
       setLoi(err instanceof ApiError ? err.message : "Lưu thất bại");
     } finally {

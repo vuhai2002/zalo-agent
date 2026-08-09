@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { KbSourceListItem } from "../dashboard-api-client";
 import { ApiError } from "../dashboard-api-client";
 import { Badge, formatTime } from "../shared/ui-bits";
-import { IconUndo } from "../shared/dashboard-icons";
+import { IconEye, IconUndo } from "../shared/dashboard-icons";
 
 /** "1,2 KB" / "3,4 MB" từ số byte - 0 byte (nguồn gõ tay) hiện "-" */
 function formatBytes(soByte: number): string {
@@ -23,10 +23,13 @@ export function KbSourceRow({
   source,
   onReindex,
   onDelete,
+  onViewChunks,
 }: {
   source: KbSourceListItem;
   onReindex: () => Promise<void>;
   onDelete: () => void;
+  /** I21: mở modal xem đoạn đã cắt - cách duy nhất người vận hành tự phát hiện lỗi đọc file */
+  onViewChunks: () => void;
 }) {
   const [dangXuLyLai, setDangXuLyLai] = useState(false);
   const [loiXuLyLai, setLoiXuLyLai] = useState("");
@@ -79,6 +82,14 @@ export function KbSourceRow({
               {dangXuLyLai ? "Đang xử lý..." : "Xử lý lại"}
             </button>
           )}
+          <button
+            onClick={onViewChunks}
+            title="Xem đoạn đã cắt"
+            className="flex cursor-pointer items-center gap-1 text-[13px] text-ink-soft hover:underline hover:text-ink"
+          >
+            <IconEye size={14} />
+            Xem đoạn
+          </button>
           <button
             onClick={onDelete}
             className="cursor-pointer text-[13px] text-red-600 hover:underline dark:text-red-400"

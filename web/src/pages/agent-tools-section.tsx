@@ -27,6 +27,7 @@ export function AgentToolsSection({
   soTaiKhoan,
   onChange,
   agentId,
+  refreshSignal,
 }: {
   disabledTools: string[];
   /** Số tài khoản Zalo đang gắn agent này - mỗi tài khoản còn một lớp tắt riêng */
@@ -39,6 +40,12 @@ export function AgentToolsSection({
    * nguồn cho một id chưa tồn tại).
    */
   agentId?: string;
+  /**
+   * I18: đổi giá trị (bất kỳ, chỉ cần khác lần trước) để buộc tải lại catalog -
+   * dùng sau khi lưu nguồn Kho tri thức, để badge kb_search đổi ngay thay vì
+   * đợi F5. Xem `agent-kb-refresh-bridge.ts`.
+   */
+  refreshSignal?: number;
 }) {
   const [tools, setTools] = useState<ToolCatalogItem[] | null>(null);
   const [loi, setLoi] = useState("");
@@ -58,7 +65,7 @@ export function AgentToolsSection({
     return () => {
       huy = true;
     };
-  }, [agentId]);
+  }, [agentId, refreshSignal]);
 
   const tat = new Set(disabledTools);
 

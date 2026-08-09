@@ -56,6 +56,16 @@ export const textSourceSchema = z.object({
   noiDung: z.string(),
 });
 
+// Trang xem đoạn (I21, dashboard) PHẢI phân trang - một nguồn dài có thể cắt
+// ra hàng nghìn đoạn, `limit` không trần thì một tham số query tùy ý kéo cả
+// bảng `kb_chunks` của một nguồn về một lần, đúng lớp OOM mà route upload đã
+// chặn ở đường GHI, không thể bỏ ngỏ ở đường ĐỌC. `.coerce` vì query string
+// luôn là chuỗi.
+export const chunksQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 export const putAgentSourcesSchema = z.object({
   sourceIds: z
     .array(

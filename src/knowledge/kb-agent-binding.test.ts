@@ -70,3 +70,21 @@ describe("kb-agent-binding - đặt lại là THAY THẾ", () => {
     assert.deepEqual(binding.nguonCuaAgent("a1"), [n1.id]);
   });
 });
+
+describe("kb-agent-binding - agentCuaNguon (chiều ngược)", () => {
+  it("một nguồn được nhiều agent gán thì trả đủ cả hai id", () => {
+    binding.datNguonChoAgent("a1", [n1.id]);
+    binding.datNguonChoAgent("a2", [n1.id]);
+    assert.deepEqual(binding.agentCuaNguon(n1.id), ["a1", "a2"]);
+  });
+
+  it("nguồn chưa agent nào gán thì trả rỗng", () => {
+    assert.deepEqual(binding.agentCuaNguon(n1.id), []);
+  });
+
+  it("chỉ trả agent gán ĐÚNG nguồn này, không lẫn nguồn khác", () => {
+    binding.datNguonChoAgent("a1", [n1.id]);
+    binding.datNguonChoAgent("a2", [n2.id]);
+    assert.deepEqual(binding.agentCuaNguon(n1.id), ["a1"]);
+  });
+});

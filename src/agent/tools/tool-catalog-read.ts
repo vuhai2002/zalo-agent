@@ -82,8 +82,13 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
      * đều không rỗng nên hai nhánh không bao giờ lẫn nhau).
      */
     available: (scope) => (scope.agent.id === "" ? coNguonNao() : nguonCuaAgent(scope.agent.id).length > 0),
+    // I18: câu cũ bảo "vào tab Kho tri thức để nạp/gán" - tab đó chỉ NẠP tài
+    // liệu, không có ô gán nào (subtitle của chính tab đó cũng nói vậy). Ô
+    // gán nằm ở khối Kho tri thức NGAY BÊN DƯỚI danh sách công cụ này, trên
+    // trang sửa agent - nói đúng một chỗ, không đẩy người vận hành đi vòng.
     unavailableHint:
-      "Kho tri thức chưa có nguồn nào, hoặc agent này chưa được gán nguồn - vào tab Kho tri thức để nạp/gán",
+      "Kho tri thức chưa có nguồn nào (nạp ở trang Kho tri thức), hoặc agent này chưa được gán nguồn - " +
+      "tick nguồn ở khối Kho tri thức ngay bên dưới, trên trang Agents",
     build: (ctx) => createKbSearchTool(ctx),
   },
 ];
