@@ -2,12 +2,11 @@ import { tool } from "ai";
 import { z } from "zod";
 import { getTuning } from "../../config/runtime-tuning-settings.js";
 import { timTrongKhoTriThuc, type KetQuaKb } from "../../knowledge/kb-search.js";
-import { THE_NOI_DUNG_NGOAI } from "../prompt-leak-markers.js";
 import { createLogger } from "../../shared/logger.js";
 import { KB_SEARCH_DESCRIPTION } from "./kb-search-tool-description.js";
 import type { ToolContext } from "./index.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
-import { wrapUntrustedContent } from "./wrap-untrusted-content.js";
+import { trichTheDongThuc, wrapUntrustedContent } from "./wrap-untrusted-content.js";
 
 /**
  * Tool cho model tự tra Kho tri thức của agent (nạp bằng TOOL, không tự nhét
@@ -38,10 +37,28 @@ export function kepSoLuong(raw: number): number {
   return Math.min(SO_LUONG_MAX, Math.max(SO_LUONG_MIN, Math.trunc(raw)));
 }
 
+/**
+ * Chống giả mạo nhãn nguồn (I13): một tài liệu có thể tự viết đúng định dạng
+ * `[Nguồn: ...]` cùng dải phân cách `\n\n---\n\n` mà `dinhDangDoan`/tool này
+ * dùng để đánh dấu ranh giới giữa các đoạn - nếu không khử, nội dung độc hại
+ * trong tài liệu A có thể tự gán cho tài liệu B, và model dẫn sai nguồn cho
+ * người hỏi. Đổi dấu `[` thành `(` là đủ phá regex nhận nhãn (không cần đụng
+ * chữ), và gom dải phân cách giả về MỘT xuống dòng (không còn khớp mẫu 2 dòng
+ * trống bao quanh mà `join("\n\n---\n\n")` dùng để nối các đoạn thật).
+ */
+const NHAN_NGUON_GIA_RE = /\[(\s*Nguồn\s*:)/gi;
+const DAI_PHAN_CACH_GIA_RE = /\n{2,}(-{3,})\n{2,}/g;
+
+function khuGiaMaoTrongDoan(noiDung: string): string {
+  return noiDung
+    .replace(NHAN_NGUON_GIA_RE, "($1")
+    .replace(DAI_PHAN_CACH_GIA_RE, "\n$1\n");
+}
+
 /** Mỗi đoạn kèm TÊN NGUỒN để model dẫn nguồn lại được cho người hỏi */
 function dinhDangDoan(d: KetQuaKb): string {
   const nhan = d.tieuDe ? `${d.tenNguon} - ${d.tieuDe}` : d.tenNguon;
-  return `[Nguồn: ${nhan}]\n${d.noiDung}`;
+  return `[Nguồn: ${nhan}]\n${khuGiaMaoTrongDoan(d.noiDung)}`;
 }
 
 export function createKbSearchTool(ctx: ToolContext) {
@@ -70,10 +87,13 @@ export function createKbSearchTool(ctx: ToolContext) {
         const maxChars = getTuning("KB_MAX_RESULT_CHARS");
         if (boc.length <= maxChars) return boc;
 
-        // Vẫn giữ thẻ đóng ở cuối sau khi cắt, để khối `<noi_dung_ngoai>` không
-        // bị bỏ dở - cắt xong nối thêm câu báo + thẻ đóng nên chuỗi ra có thể
-        // dài hơn maxChars một chút (phần vỏ), chấp nhận được.
-        return `${boc.slice(0, maxChars)}\n[...đã rút gọn, kho còn nhiều nội dung hơn]\n</${THE_NOI_DUNG_NGOAI}>`;
+        // Vẫn giữ thẻ đóng ở cuối sau khi cắt, để khối `<noi_dung_ngoai_...>`
+        // không bị bỏ dở - cắt xong nối thêm câu báo + thẻ đóng nên chuỗi ra có
+        // thể dài hơn maxChars một chút (phần vỏ), chấp nhận được. PHẢI trích
+        // đúng thẻ đóng có NONCE của lần bọc này (`trichTheDongThuc`) - ghép
+        // thẻ đóng KHÔNG nonce ở đây là bug: nó không khớp thẻ mở, phần bị cắt
+        // đọc như đã ra khỏi khối tin cậy dù nội dung vẫn còn nằm trong đó.
+        return `${boc.slice(0, maxChars)}\n[...đã rút gọn, kho còn nhiều nội dung hơn]\n${trichTheDongThuc(boc)}`;
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         log.error({ err, cauHoi: cau_hoi }, "Tool kb_search lỗi");

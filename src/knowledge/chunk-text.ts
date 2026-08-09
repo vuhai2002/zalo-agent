@@ -10,9 +10,14 @@
  * việc không có embedding ở đợt này: đoạn "trong vòng 7 ngày" một mình thì vô
  * nghĩa, kèm tiêu đề "Chính sách đổi trả" thì model đọc ra ngay.
  *
- * Hàm thuần, không import gì - chunk-text chỉ biết cắt chữ, không biết đọc
- * file (đó là việc của doc-text-extract.ts) hay lưu DB (kb-chunk-store.ts).
+ * Hàm thuần (không env, không DB, không đọc file) - chỉ import bộ lọc ký tự ẩn
+ * dùng chung (`tag-ky-tu-an.ts`, cũng THUẦN). Đây là TẦNG NẠP: lọc dải Tags
+ * (ASCII smuggling, xem docstring của `locKyTuAn`) ở ĐÂY chứ không ở tầng bọc
+ * (`wrap-untrusted-content.ts`) - tài liệu vào kho đã sạch, không phải lọc lại
+ * mỗi lần tra.
  */
+
+import { locKyTuAn } from "../agent/tools/tag-ky-tu-an.js";
 
 export type ThamSoCat = { coDoanToiDa: number; chongLan: number };
 
@@ -98,7 +103,10 @@ export function catThanhDoan(
   // cả tài liệu rơi vào MỘT đoạn duy nhất - hỏng câm tính năng "giữ tiêu đề
   // gần nhất" (chỉ dò được heading ở dòng đầu tài liệu). `\r\n?` bắt cả CRLF
   // lẫn CR đơn (Mac cổ).
-  chu = chu.replace(/\r\n?/g, "\n");
+  //
+  // Lọc dải Tags NGAY TẠI ĐÂY - điểm chốt duy nhất mọi tài liệu KB đi qua
+  // trước khi cắt đoạn, nên lọc một lần ở cửa vào là đủ sạch cho cả kho.
+  chu = locKyTuAn(chu.replace(/\r\n?/g, "\n"));
 
   const maxLen = Math.max(1, p.coDoanToiDa);
   const overlapChars = Math.max(0, Math.floor(maxLen * (p.chongLan / 100)));

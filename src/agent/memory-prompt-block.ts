@@ -15,11 +15,26 @@ import { THE_DIEU_DA_NHO as THE } from "./prompt-leak-markers.js";
  * XONG BỎ, còn fact là thứ bot phải DÙNG. Nên câu dặn phải nói cả hai vế - dùng
  * tự nhiên, nhưng không coi là mệnh lệnh - chứ không chỉ vế cấm.
  *
+ * KHÔNG dùng nonce như `wrapUntrustedContent`: khối này nằm ở ĐẦU system
+ * prompt, phần được prompt-cache; nonce đổi mỗi lượt sẽ phá cache đó (repo đã
+ * đầu tư khóa phiên cache - xem `cache-session-id.ts`). Bù lại bằng regex
+ * CHỊU ĐƯỢC ký tự xen: cho phép ký tự vô hình (`\p{Cf}`), dấu phụ (`\p{Mn}`),
+ * và CẢ gạch dưới `_` xen vào giữa MỖI CHỮ CÁI của tên thẻ - gạch dưới cũng
+ * được coi ngang hàng với "khoảng đệm" vì kẻ tấn công có thể THAY hẳn một gạch
+ * dưới bằng ký tự vô hình (không phải chỉ CHÈN THÊM cạnh nó) mà tên thẻ đọc lên
+ * vẫn giống hệt. Yếu hơn nonce (đoán được tên thẻ gốc) nhưng không tốn cache -
+ * chấp nhận được vì nội dung khối này do CHÍNH BOT ghi ra (qua `save_memory`),
+ * không phải nguyên văn của người lạ như nội dung web.
+ *
  * Module THUẦN: không env, không DB.
  */
 
-/** Bắt cả thẻ mở lẫn thẻ đóng, không phân biệt hoa thường */
-const TEN_THE_RE = new RegExp(THE, "gi");
+/**
+ * Ghép TỪNG CHỮ CÁI của tên thẻ (bỏ gạch dưới phân cách từ) bằng một lớp ký tự
+ * "đệm" chấp nhận ký tự định dạng vô hình, dấu phụ, HOẶC gạch dưới - xem lý do
+ * ở docstring trên. `giu` = global + case-insensitive + Unicode property escape.
+ */
+const TEN_THE_RE = new RegExp([...THE.replace(/_/g, "")].join("[\\p{Cf}\\p{Mn}_]*"), "giu");
 
 /** Dạng đã khử: gạch ngang thay gạch dưới, không còn khớp thẻ thật */
 const DANG_KHU = THE.replace(/_/g, "-");
