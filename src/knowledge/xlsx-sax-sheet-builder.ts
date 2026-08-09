@@ -73,14 +73,10 @@ export function taoXlsxSheetSaxBuilder(
   }
 
   /**
-   * Chèn ô rỗng cho cột bị nhảy cóc (ô rỗng hẳn Excel bỏ khỏi XML, hoặc ô có
-   * định dạng nhưng tự đóng) - không thì ô sau dính sát ô trước, lệch cột.
-   *
-   * BẮT BUỘC đếm CÔNG CẤP PHÁT (ô đệm + chính ô này) TRƯỚC vòng lặp `push`,
-   * bất kể hàng có chữ hay không: hàng toàn ô rỗng bị lọc bỏ ở `</row>`
-   * TRƯỚC khi cộng vào `tongKyTu`, nên `TRAN_TONG_KY_TU_TRICH` không bắt
-   * được ca này. `TRAN_SO_COT_EXCEL` chỉ chặn MỘT lần gọi phình to, không
-   * chặn NHIỀU HÀNG lặp lại - xem `TRAN_TONG_SO_O` cho số đo cụ thể.
+   * Chèn ô rỗng cho cột bị nhảy cóc - không thì ô sau dính sát ô trước, lệch
+   * cột. Đếm CÔNG CẤP PHÁT (ô đệm + chính ô này) TRƯỚC vòng lặp `push`, bất
+   * kể hàng có chữ hay không: hàng toàn ô rỗng bị lọc bỏ ở `</row>` TRƯỚC khi
+   * cộng vào `tongKyTu`, nên `TRAN_TONG_KY_TU_TRICH` không bắt được ca này.
    */
   function themOVaoDong(giaTri: string, chiSoCot: number): void {
     // Math.max(1, ...) - KHÔNG BAO GIỜ hoàn quỹ. `dongHienTai` reset mỗi
@@ -107,7 +103,9 @@ export function taoXlsxSheetSaxBuilder(
 
   function chiSoCotCua(tag: SaxesTagNS): number {
     const chuCai = giaTriThuocTinh(tag, "r")?.match(/^[A-Za-z]+/)?.[0];
-    if (!chuCai) return cotKyVong;
+    // Ô không r= thừa kế cotKyVong - kẹp CÙNG trần XFD như nhánh có r= dưới
+    // đây, không thì chuỗi ô không r= sau XFD1 đẩy cotKyVong vượt 16.384.
+    if (!chuCai) return Math.min(cotKyVong, TRAN_SO_COT_EXCEL);
     const chiSo = chuCotThanhChiSo(chuCai.toUpperCase());
     // BẮT BUỘC kẹp: cột thật tối đa của Excel là XFD = 16.384. Không kẹp thì
     // themOVaoDong() cấp phát mảng theo chiSo KHÔNG TRẦN - r="AAAAAAA1" (7

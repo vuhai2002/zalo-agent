@@ -2,6 +2,7 @@ import zlib from "node:zlib";
 import { centralEntries, duLieuNenCuaEntry } from "./read-zip-entry.js";
 import {
   LoiVuotTran,
+  type NguonChanTran,
   TI_LE_NEN_TOI_DA,
   TRAN_MIEN_KIEM_TI_LE,
   TRAN_MOT_ENTRY,
@@ -52,13 +53,13 @@ function formatMB(bytes: number): string {
  * thường. Chữ "zip bomb" CHỈ dành cho ca hình dạng bất thường THẬT SỰ (tỉ lệ
  * nén phi thực tế) - xem nhánh kiểm tỉ lệ trong `docEntryTheoLuong`.
  */
-function loiVuotTranMotEntry(entryName: string, nguon: "khai-bao" | "do-that"): LoiVuotTran {
+function loiVuotTranMotEntry(entryName: string, nguon: NguonChanTran): LoiVuotTran {
   return new LoiVuotTran(
     `File này quá lớn để xử lý (một phần bên trong giải nén ra vượt quá giới hạn ${formatMB(TRAN_MOT_ENTRY)} cho một phần). Hãy rút gọn nội dung hoặc tách thành nhiều file nhỏ hơn.`,
     { entryName, nguon },
   );
 }
-function loiVuotTranTong(entryName: string, nguon: "khai-bao" | "do-that"): LoiVuotTran {
+function loiVuotTranTong(entryName: string, nguon: NguonChanTran): LoiVuotTran {
   return new LoiVuotTran(
     `File này quá lớn để xử lý (tổng nội dung bên trong giải nén ra vượt quá giới hạn ${formatMB(TRAN_TONG_GIAI_NEN)}). Hãy rút gọn nội dung hoặc tách thành nhiều file nhỏ hơn.`,
     { entryName, nguon },
@@ -67,6 +68,9 @@ function loiVuotTranTong(entryName: string, nguon: "khai-bao" | "do-that"): LoiV
 function loiVuotTranSoEntry(soEntry: number): LoiVuotTran {
   return new LoiVuotTran(
     `File này có quá nhiều phần bên trong (${soEntry}, trần là ${TRAN_SO_ENTRY}). Hãy gộp lại hoặc tách thành nhiều file nhỏ hơn.`,
+    // Đọc THẲNG số entry từ central directory - chưa giải nén gì -> "khai-bao",
+    // đúng nghĩa hệt lý do phát hiện 4 tồn tại (lệch trước đây là undefined).
+    { nguon: "khai-bao" },
   );
 }
 

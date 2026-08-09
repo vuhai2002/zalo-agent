@@ -135,6 +135,15 @@ export const TRAN_SO_COT_EXCEL = 16384;
 export const TRAN_TONG_SO_O = 2_000_000;
 
 /**
+ * Nguồn thông tin dùng để CHẶN: "khai-bao" đọc thẳng kích thước/số lượng KHAI
+ * trong central directory - rẻ (chưa giải nén gì) nhưng có thể bị khai gian.
+ * "do-that" đếm TRỰC TIẾP trong lúc giải nén/xử lý - luôn đúng, không thể
+ * khai gian né. Export alias để mọi nơi dùng lại (`LoiVuotTran`,
+ * `zip-stream-entry.ts`) không chép tay literal union nhiều lần.
+ */
+export type NguonChanTran = "khai-bao" | "do-that";
+
+/**
  * Ném khi vượt BẤT KỲ trần nào ở trên - đánh dấu để `xml-sax-scan.ts` không
  * vô tình dịch một lỗi ĐÃ tiếng Việt sẵn (từ `zip-stream-entry.ts` hoặc chính
  * state machine docx/xlsx) thành "XML không hợp lệ: ..." chung chung. Trước
@@ -154,12 +163,9 @@ export const TRAN_TONG_SO_O = 2_000_000;
  */
 export class LoiVuotTran extends Error {
   readonly entryName?: string;
-  /** "khai-bao": chặn SỚM theo kích thước KHAI BÁO trong central directory,
-   * chưa đọc thật (rẻ nhưng có thể bị khai gian). "do-that": chặn khi ĐANG
-   * đếm byte thật lúc giải nén/xử lý - luôn đúng, không thể khai gian né. */
-  readonly nguon?: "khai-bao" | "do-that";
+  readonly nguon?: NguonChanTran;
 
-  constructor(message: string, chiTiet?: { entryName?: string; nguon?: "khai-bao" | "do-that" }) {
+  constructor(message: string, chiTiet?: { entryName?: string; nguon?: NguonChanTran }) {
     super(message);
     this.name = "LoiVuotTran";
     this.entryName = chiTiet?.entryName;

@@ -152,6 +152,31 @@ describe("extract-xlsx-text - trần cột Excel (Critical: r= của người ng
     assert.match(chu, /Cot cuoi$/);
   });
 
+  it("ô KHÔNG có r= sau ô XFD1 không đẩy số cột vượt 16.384 - kẹp cotKyVong đúng trần (O1)", async () => {
+    // chiSoCotCua() trả THẲNG cotKyVong cho ô không r= (thừa kế cột kế tiếp
+    // mong đợi), NHƯNG trước khi sửa không kẹp trần XFD ở nhánh này - chỉ
+    // nhánh CÓ r= (test trên) mới kẹp. Đã đo TRƯỚC khi sửa: XFD1 rồi 5.000 ô
+    // không r= ra 21.385 cột MỘT hàng, không ném lỗi nào - mâu thuẫn với
+    // chính test "XFD là cột cuối cùng hợp lệ" ở trên. Sau khi sửa
+    // (Math.min(cotKyVong, TRAN_SO_COT_EXCEL)), mọi ô không r= SAU XFD1 chỉ
+    // đè lên đúng cột 16.384 - không có gì để ném (đây không phải đường DoS,
+    // TRAN_TONG_SO_O đã chặn phần công cấp phát), chỉ là chốt lại đúng số cột.
+    // Ô XFD1 ghi "9" TRƯỚC, nhưng mọi ô không r= SAU đó đều đè lên đúng cột
+    // 16.384 (kẹp đúng) nên "9" bị GHI ĐÈ bởi lần ghi cuối ("1") - đây LÀ hệ
+    // quả đúng của việc kẹp (không phải bug: ô không r= luôn "đè lên ô liền
+    // trước" theo đúng ngữ nghĩa cột nhảy cóc, kẹp chỉ ngăn nó vượt XFD). Chỉ
+    // có DUY NHẤT một hàng trong fixture này nên `chu` chính là hàng đó -
+    // KHÔNG được .trim() trước khi split(" | "): hàng có 16.383 ô rỗng ĐẦU
+    // nên chuỗi bắt đầu bằng một khoảng trắng THẬT SỰ thuộc dấu nối đầu tiên -
+    // trim() nuốt mất ký tự đó và làm lệch số phần tử đếm ra (đã tự đo khi
+    // viết test này: trim() làm soCot đếm hụt xuống 16.383).
+    const hang = '<c r="XFD1"><v>9</v></c>' + "<c><v>1</v></c>".repeat(5000);
+    const buf = xlsxTuSheetVaChuoi(`<row>${hang}</row>`, []);
+    const chu = await docChuTuFile(buf, "xlsx");
+    const soCot = chu.split(" | ").length;
+    assert.equal(soCot, 16384, `phải đúng 16.384 cột (trần XFD), đo được ${soCot}`);
+  });
+
   it("100.000 hàng ô rỗng ở cột XFD bị từ chối trong dưới 1 giây - trần theo CÔNG CẤP PHÁT, không theo chữ trích ra", async () => {
     // Ca ĐÃ ĐO hỏng: kẹp trần MỘT ô (TRAN_SO_COT_EXCEL, test ở trên) chỉ hạ
     // cấp bug từ "giết process" (OOM fatal) xuống "khoá event loop hàng

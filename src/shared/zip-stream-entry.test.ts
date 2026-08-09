@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 // Module thuần (chỉ đụng zip/zlib) - không chạm env/DB nên import tĩnh được
 import { moPhienDocZip } from "./zip-stream-entry.js";
+import { LoiVuotTran } from "../knowledge/ooxml-limits.js";
 import { buildZipBuffer, buildZipBufferTaiSuDungNen, chuKhoNen } from "../knowledge/ooxml-zip-test-helper.js";
 
 async function gomHetChunk(gen: AsyncGenerator<string>): Promise<{ text: string; soChunk: number }> {
@@ -76,6 +77,11 @@ describe("zip-stream-entry - trần an toàn", () => {
       assert.match(err.message, /quá lớn để xử lý/i);
       assert.match(err.message, /vượt quá giới hạn/i);
       assert.doesNotMatch(err.message, /zip bomb/i, "không được buộc tội file to thật là zip bomb");
+      // Kích thước đọc THẲNG entry.uncompSize trong central directory (chưa
+      // giải nén byte nào) -> "khai-bao", không phải đếm thật lúc giải nén.
+      assert.ok(err instanceof LoiVuotTran);
+      assert.equal(err.entryName, "word/document.xml");
+      assert.equal(err.nguon, "khai-bao");
       return true;
     });
   });
@@ -103,6 +109,12 @@ describe("zip-stream-entry - trần an toàn", () => {
       assert.match(err.message, /quá lớn để xử lý/i);
       assert.match(err.message, /vượt quá giới hạn/i);
       assert.doesNotMatch(err.message, /zip bomb/i, "không được buộc tội file to thật là zip bomb");
+      // Ném ở nhánh SỚM (tongByteDaGiaiNen thật của a.xml+b.xml CỘNG
+      // entry.uncompSize KHAI của c.xml, chưa giải nén byte nào của c.xml) ->
+      // "khai-bao", dù 2 entry trước đó đã đọc thật.
+      assert.ok(err instanceof LoiVuotTran);
+      assert.equal(err.entryName, "c.xml");
+      assert.equal(err.nguon, "khai-bao");
       return true;
     });
   });
@@ -130,6 +142,11 @@ describe("zip-stream-entry - trần an toàn", () => {
       // thật - GIỮ chữ "zip bomb" ở đây (xác nhận DƯƠNG, không chỉ kiểm phủ
       // định ở 2 test trên).
       assert.match(err.message, /zip bomb/i);
+      // Ném GIỮA vòng lặp streaming, so `byteEntry` ĐẾM THẬT lúc giải nén
+      // (không phải kích thước khai trong central directory) -> "do-that".
+      assert.ok(err instanceof LoiVuotTran);
+      assert.equal(err.entryName, "word/document.xml");
+      assert.equal(err.nguon, "do-that");
       return true;
     });
   });
@@ -149,6 +166,11 @@ describe("zip-stream-entry - trần an toàn", () => {
       assert.match(err.message, /quá nhiều phần bên trong/i);
       assert.match(err.message, /257/);
       assert.doesNotMatch(err.message, /zip bomb/i, "không được buộc tội 257 entry là zip bomb");
+      // Đọc THẲNG số entry trong central directory, chưa giải nén gì ->
+      // "khai-bao". Không gắn với MỘT entry cụ thể nào -> entryName undefined.
+      assert.ok(err instanceof LoiVuotTran);
+      assert.equal(err.entryName, undefined);
+      assert.equal(err.nguon, "khai-bao");
       return true;
     });
   });
