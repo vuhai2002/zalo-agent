@@ -143,12 +143,22 @@ const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => s
   {
     // I2: trần kết quả phải CHỨA NỔI những gì kb_search sắp nhét vào, không thì
     // các đoạn cuối bị vứt lặng lẽ (đúng lỗi gốc: KB_TOP_K=5 và =20 từng cho ra
-    // kết quả GIỐNG HỆT NHAU vì trần quá nhỏ so với cả hai). `60` = nhãn
-    // "[Nguồn: ...]" (~46 ký tự) + dải phân cách "\n\n---\n\n" (7 ký tự) + biên;
-    // `500` = phần vỏ (thẻ bọc + ba dòng dặn dò) ở ca xấu nhất đã đo được.
+    // kết quả GIỐNG HỆT NHAU vì trần quá nhỏ so với cả hai).
+    //
+    // Hai hằng số đo THẬT bằng `wrapUntrustedContent` + `dinhDangDoan` (vòng rà
+    // soát lần 2 sau bản đầu dùng số áng chừng quá thấp - script đo trong
+    // report task-4):
+    //  - `140` = chi phí MỖI ĐOẠN ngoài phần thân bài: nhãn `[Nguồn: <tên
+    //    nguồn> - <breadcrumb>]\n` (đo 43-134 ký tự tùy tên nguồn/breadcrumb
+    //    dài ngắn - breadcrumb 3 cấp CHÍNH phase này thêm vào dễ chạm 40-60 ký
+    //    tự) + dải phân cách "\n\n---\n\n" (7). `60` cũ chỉ đủ khi tên nguồn +
+    //    breadcrumb <= 40 ký tự - không đủ cho breadcrumb 3 cấp.
+    //  - `520` = phần vỏ (thẻ bọc + ba dòng dặn dò), đo được 313 (nguồn rỗng)
+    //    tới ĐÚNG TRẦN 513 (nguon bị cắt ở 200 ký tự trong `wrapUntrustedContent`
+    //    - không thể vượt mốc này). `500` cũ đã THẤP HƠN ca xấu nhất thật.
     keys: ["KB_MAX_RESULT_CHARS", "KB_TOP_K", "KB_CHUNK_CHARS"],
     check: (so) =>
-      so("KB_MAX_RESULT_CHARS") < so("KB_TOP_K") * (so("KB_CHUNK_CHARS") + 60) + 500
+      so("KB_MAX_RESULT_CHARS") < so("KB_TOP_K") * (so("KB_CHUNK_CHARS") + 140) + 520
         ? `Trần ký tự kết quả (${so("KB_MAX_RESULT_CHARS")}) nhỏ hơn tổng chỗ mà ${so("KB_TOP_K")} đoạn x ${so("KB_CHUNK_CHARS")} ký tự cần - kết quả sẽ bị cắt và mấy đoạn cuối không bao giờ tới được bot. Hạ số đoạn hoặc độ dài đoạn, hoặc nâng trần ký tự kết quả.`
         : null,
   },

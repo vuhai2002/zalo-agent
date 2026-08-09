@@ -7,6 +7,7 @@ let store: typeof import("./kb-source-store.js");
 let fileStore: typeof import("./kb-file-store.js");
 let worker: typeof import("./kb-ingest-worker.js");
 let database: typeof import("../conversation/database.js");
+let boDauTiengViet: typeof import("../shared/bo-dau-tieng-viet.js").boDauTiengViet;
 
 before(async () => {
   dataDir = setupTestEnv();
@@ -14,6 +15,7 @@ before(async () => {
   fileStore = await import("./kb-file-store.js");
   worker = await import("./kb-ingest-worker.js");
   database = await import("../conversation/database.js");
+  ({ boDauTiengViet } = await import("../shared/bo-dau-tieng-viet.js"));
 });
 
 /** Nội dung chunk hiện có của một nguồn, đọc trực tiếp qua DB - không cần biết id đoạn */
@@ -201,5 +203,41 @@ describe("kb-ingest-worker - hai vòng chồng lấn không được xử lý tr
       "vòng A giành lại và xử lý CHỒNG lên y dù vòng B đã xong - đúng race brief mô tả",
     );
     assert.equal(store.layNguon(y.id)!.trangThai, "san_sang");
+  });
+});
+
+describe("kb-ingest-worker - tên nguồn vào chỉ mục qua ĐÚNG mối nối sản xuất (I1, Critical 2 vòng rà soát lần 2)", () => {
+  // `kb-search.test.ts#napQuaWorker` mô phỏng CHÍNH XÁC thao tác của worker
+  // (catThanhDoan -> luuDoan(id, doan, ten)) NHƯNG trong test, không đi qua
+  // worker thật - nếu ai xóa `n.ten` khỏi dòng `luuDoan(n.id, doan, n.ten)`
+  // của CHÍNH kb-ingest-worker.ts thì mọi test trước đó (kể cả napQuaWorker)
+  // vẫn xanh, vì chúng không hề gọi qua worker. Test này đi qua ĐÚNG
+  // `worker.xuLyMotVong()` (spawn worker thread thật, giành nguồn thật, ghi
+  // DB thật) để khóa chặt đúng MỐI NỐI sản xuất mà brief phase 04 chỉ đích
+  // danh còn thiếu test.
+  it("worker thật (loai: text) ghi tên nguồn vào cột phang, không phải chỉ test tự mô phỏng lại thao tác", async () => {
+    // Tên nguồn KHÔNG chứa từ nào trùng với nội dung - nếu phang chỉ khớp nhờ
+    // trùng lặp tình cờ với nội dung thì test này không đo được gì.
+    const ten = "Chính sách vận hành xưởng ABC";
+    const n = store.taoNguon({
+      ten,
+      loai: "text",
+      noiDungGoc: "Điều khoản riêng tư không liên quan chuyện khác.",
+    });
+
+    await worker.xuLyMotVong();
+
+    const sau = store.layNguon(n.id)!;
+    assert.equal(sau.trangThai, "san_sang", "worker phải xử lý xong nguồn text bình thường");
+
+    const rows = database.db.prepare("SELECT phang FROM kb_chunks WHERE source_id = ?").all(n.id) as {
+      phang: string;
+    }[];
+    assert.ok(rows.length > 0, "phải có ít nhất một đoạn được ghi");
+    const tenDaBoDau = boDauTiengViet(ten);
+    assert.ok(
+      rows.every((r) => r.phang.includes(tenDaBoDau)),
+      `phang phải chứa tên nguồn đã bỏ dấu "${tenDaBoDau}" - thực tế: ${JSON.stringify(rows)}`,
+    );
   });
 });

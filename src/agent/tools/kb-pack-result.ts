@@ -16,6 +16,19 @@
  * cụt còn hơn trả về rỗng, nên cắt nó ở ranh giới khoảng trắng gần nhất (không
  * cắt giữa từ) rồi ghi rõ đã rút gọn.
  *
+ * Bỏ hẳn đoạn (nhánh phổ biến hơn - đã có ít nhất một đoạn trọn vẹn) LUÔN kèm
+ * một dòng báo "còn N đoạn nữa không đủ chỗ" (Important a, vòng rà soát lần
+ * 1): thiếu dòng này thì model KHÔNG PHÂN BIỆT được "đã đọc hết top-k" với
+ * "bị cắt bớt vì hết ngân sách" - đúng thứ dễ đẻ ra câu trả lời tự tin từ một
+ * kho tri thức đọc thiếu mà không tự biết.
+ *
+ * BẤT BIẾN MỀM, không phải cứng: kết quả trả về có thể dài hơn `nganSachNoiDung`
+ * TỐI ĐA vài chục ký tự (độ dài `DANH_DAU_RUT_GON` hoặc dòng "còn N đoạn nữa"
+ * vừa thêm) - caller không nên coi độ dài trả về là chặn cứng tuyệt đối, chỉ
+ * là "gần đúng ngân sách đã xin". Đủ tốt cho mục đích chống tràn ngữ cảnh; nếu
+ * cần chặn cứng tuyệt đối thì phải trừ trước cả hai chuỗi báo này khỏi ngân
+ * sách trước khi đóng gói - chưa làm vì độ lệch quá nhỏ để đáng thêm phức tạp.
+ *
  * Hàm THUẦN - không env, không DB, không log - cùng mẫu với
  * `../trim-context-to-budget.ts`.
  */
@@ -23,6 +36,7 @@
 export const KB_PACK_SEPARATOR = "\n\n---\n\n";
 
 const DANH_DAU_RUT_GON = "\n[...đoạn này đã rút gọn]";
+const danhDauConThieu = (soDoan: number) => `\n\n[...còn ${soDoan} đoạn nữa không đủ chỗ]`;
 
 /**
  * Cắt `s` về tối đa `gioiHan` ký tự, lùi về khoảng trắng gần nhất để không cắt
@@ -45,7 +59,8 @@ function catOKhoangTrang(s: string, gioiHan: number): string {
  */
 export function dongGoiTheoNganSach(doanDaDinhDang: string[], nganSachNoiDung: number): string {
   let ketQua = "";
-  for (const doan of doanDaDinhDang) {
+  for (let i = 0; i < doanDaDinhDang.length; i++) {
+    const doan = doanDaDinhDang[i]!;
     const ung = ketQua ? `${ketQua}${KB_PACK_SEPARATOR}${doan}` : doan;
     if (ung.length <= nganSachNoiDung) {
       ketQua = ung;
@@ -56,9 +71,14 @@ export function dongGoiTheoNganSach(doanDaDinhDang: string[], nganSachNoiDung: n
       // Đoạn ĐẦU TIÊN đã không vừa - cắt nó thay vì trả về rỗng hoàn toàn.
       const choNoiDung = Math.max(1, nganSachNoiDung - DANH_DAU_RUT_GON.length);
       ketQua = catOKhoangTrang(doan, choNoiDung) + DANH_DAU_RUT_GON;
+    } else {
+      // Đã có ít nhất một đoạn trọn vẹn - đoạn NÀY và mọi đoạn còn lại (kể cả
+      // chưa từng thử) đều bị bỏ hẳn. `doanDaDinhDang.length - i` = đoạn hiện
+      // tại + mọi đoạn phía sau chưa xét tới.
+      ketQua += danhDauConThieu(doanDaDinhDang.length - i);
     }
-    // Ngân sách đã hết: các đoạn còn lại (kể cả đoạn vừa thử) bị BỎ HẲN, không
-    // cắt giữa chừng - đây chính là điểm khác cách cũ.
+    // Ngân sách đã hết: các đoạn còn lại bị BỎ HẲN, không cắt giữa chừng - đây
+    // chính là điểm khác cách cũ.
     break;
   }
   return ketQua;

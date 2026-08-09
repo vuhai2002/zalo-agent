@@ -287,7 +287,13 @@ const envSchema = z.object({
   // nội dung), không phải riêng từng đoạn. 8000 ~ 3.200 token ~ 3,6% ngân sách
   // an toàn của một lượt (128k * 0.7) - đủ chỗ cho KB_TOP_K=5 đoạn KB_CHUNK_CHARS
   // =1200 (ràng buộc chéo ở runtime-tuning-settings.ts canh ba số này).
-  KB_MAX_RESULT_CHARS: z.coerce.number().int().min(500).max(20_000).default(8000),
+  //
+  // min NÂNG lên 2000 (từ 500, vòng rà soát lần 2): đo được phần VỎ một mình
+  // (thẻ bọc + ba dòng dặn dò) đã tốn 313-513 ký tự tùy độ dài câu hỏi - ở
+  // min cũ 500, một câu hỏi hơi dài (nguồn ~200 ký tự) làm ngân sách NỘI DUNG
+  // = 0, model nhận đúng 1 ký tự nội dung dù kho có bao nhiêu đoạn khớp. 2000
+  // chừa tối thiểu ~1480 ký tự nội dung ở ca xấu nhất.
+  KB_MAX_RESULT_CHARS: z.coerce.number().int().min(2000).max(20_000).default(8000),
   // Trần dung lượng mỗi file nạp lên Kho tri thức - chặn ở TẦNG ĐỌC (middleware
   // hono/body-limit đọc theo luồng, huỷ ngay khi vượt trần) chứ không đợi đọc
   // hết vào RAM rồi mới báo quá lớn.

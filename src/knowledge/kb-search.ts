@@ -20,9 +20,16 @@ export type KetQuaKb = { sourceId: string; tenNguon: string; tieuDe: string; noi
 // khử trùng SAU đó (hai nguồn chép y hệt nhau chỉ giữ 1) sẽ THIẾU nếu không
 // lấy dư - một cặp trùng chiếm 2 trong số suất ít ỏi, khử xong hụt mất một
 // suất chứ không tự lấy bù đoạn khác đang nằm ngoài LIMIT. x3 đủ chừa chỗ cho
-// ca thực tế nhất (một vài bản trùng lặp), không cần dựng trên số đo cụ thể
-// nào - lấy dư QUÁ ít vẫn thiếu, lấy dư QUÁ nhiều chỉ tốn thêm một truy vấn
-// rẻ (bảng `kb_chunks_fts` của một bot cá nhân không lớn).
+// ca thực tế nhất (một vài bản trùng lặp), lấy dư QUÁ nhiều chỉ tốn thêm một
+// truy vấn rẻ (bảng `kb_chunks_fts` của một bot cá nhân không lớn).
+//
+// CHƯA đo được số lượng bản trùng THẬT của một kho tri thức thật (không có
+// dữ liệu người dùng để đo) - x3 là suy luận, không phải số đo. Ca hỏng nếu
+// suy luận sai: kho có NHIỀU hơn `soLuong * (HE_SO_LAY_DU - 1)` bản trùng
+// đồng hạng cho cùng một câu hỏi (vd soLuong=5 mà có >10 bản gần như y hệt
+// nhau đều khớp top) thì khử trùng vẫn THIẾU đúng kiểu I3 mô tả - chỉ ở quy
+// mô nhỏ hơn hẳn bug gốc (LIMIT=soLuong, x1). Nếu gặp ca này thật, nâng
+// `HE_SO_LAY_DU` chứ đừng đổi kiến trúc.
 const HE_SO_LAY_DU = 3;
 
 export function timTrongKhoTriThuc(p: { cauHoi: string; agentId: string; soLuong?: number }): KetQuaKb[] {

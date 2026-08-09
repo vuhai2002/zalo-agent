@@ -613,7 +613,7 @@ const TUNING_BY_KEY = {
     group: "kb",
     label: "Trần ký tự cho kết quả tra kho",
     hint: "Áp cho TOÀN BỘ chuỗi kết quả tool kb_search (đã gồm thẻ bọc và tên nguồn), không phải riêng từng đoạn - nhiều đoạn cộng lại đủ đẩy ngữ cảnh sát trần. Phải đủ chỗ cho Số đoạn trả về x Độ dài mỗi đoạn, không thì đoạn nào không vừa bị bỏ hẳn (không cắt cụt giữa chừng).",
-    min: 500,
+    min: 2000,
     max: 20_000,
     unit: "ký tự",
   },

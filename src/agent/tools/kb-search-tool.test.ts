@@ -166,38 +166,48 @@ describe("kb_search - nhánh rỗng", () => {
 });
 
 describe("kb_search - trần ký tự áp cho TOÀN BỘ kết quả", () => {
-  // Chuỗi CHỈ xuất hiện ở CUỐI fixture (xa hơn hẳn điểm cắt 500 ký tự) - dùng
-  // làm bằng chứng THẬT của việc cắt: một khẳng định chỉ đo ĐỘ DÀI (như bản cũ
+  // Chuỗi CHỈ xuất hiện ở CUỐI fixture (xa hơn hẳn điểm cắt) - dùng làm bằng
+  // chứng THẬT của việc cắt: một khẳng định chỉ đo ĐỘ DÀI (như bản cũ
   // `kq.length < 700`) vẫn xanh dù bỏ hẳn phần cắt, cắt sai mốc (vd
   // `maxChars * 2`), hay cắt `noiDung` thay vì cắt `boc` (không tính phần vỏ) -
   // độ dài vẫn tình cờ lọt dưới ngưỡng rộng rãi đó. Đo nội dung ĐUÔI mới phân
   // biệt được "có cắt thật" với "trùng hợp đủ ngắn".
   const DUOI_TAI_LIEU = "DUOI_TAI_LIEU_CHI_XUAT_HIEN_O_DAY_kmqzx789";
+  // Trần MIN hiện là 2000 (vòng rà soát lần 2 - vỏ một mình đã 313-513 ký tự,
+  // min 500 cũ cho phép ngân sách nội dung = 0). Nội dung phải đủ DÀI để vượt
+  // ngân sách nội dung ở trần 2000 (~1665 ký tự = 2000 - vỏ ~335) - bản đầu
+  // chỉ ~460 ký tự nên KHÔNG BAO GIỜ chạm nhánh cắt dù đặt trần 500, làm test
+  // XANH GIẢ ở mọi mã (tự phát hiện lúc rà soát, xem report). Đệm thêm câu
+  // "Quy định thêm" lặp lại để chắc chắn vượt ngân sách.
+  const NOI_DUNG_DAI =
+    "Bảo hành 12 tháng cho mọi sản phẩm, đổi mới trong 30 ngày đầu nếu lỗi nhà sản xuất. " +
+    "Đổi trả trong 7 ngày kể từ ngày nhận hàng, sản phẩm còn nguyên tem. " +
+    "Điều khoản bổ sung: mọi khiếu nại phải gửi trong vòng 24 giờ kể từ khi phát hiện lỗi, " +
+    "kèm ảnh chụp hóa đơn và sản phẩm lỗi, gửi về email cskh@vidu.test hoặc gọi hotline " +
+    "1900-1234 trong giờ hành chính từ 8h đến 17h các ngày trong tuần. " +
+    "Quy định thêm: sản phẩm phải còn nguyên hộp, tem bảo hành và hóa đơn mua hàng hợp lệ. ".repeat(16) +
+    `${DUOI_TAI_LIEU}.`;
 
   beforeEach(() => {
-    napNguon(AGENT_ID, "Chính sách bảo hành", [
-      "Bảo hành 12 tháng cho mọi sản phẩm, đổi mới trong 30 ngày đầu nếu lỗi nhà sản xuất. " +
-        "Đổi trả trong 7 ngày kể từ ngày nhận hàng, sản phẩm còn nguyên tem. " +
-        "Điều khoản bổ sung: mọi khiếu nại phải gửi trong vòng 24 giờ kể từ khi phát hiện lỗi, " +
-        "kèm ảnh chụp hóa đơn và sản phẩm lỗi, gửi về email cskh@vidu.test hoặc gọi hotline " +
-        "1900-1234 trong giờ hành chính từ 8h đến 17h các ngày trong tuần. " +
-        `${DUOI_TAI_LIEU}.`,
-    ]);
+    napNguon(AGENT_ID, "Chính sách bảo hành", [NOI_DUNG_DAI]);
   });
 
   it("kết quả bị cắt về đúng trần ký tự (đuôi tài liệu biến mất), có câu báo đã cắt", async () => {
     // `setTuning` ghi thẳng xuống DB, KHÔNG đi qua `validateTuning` (route
     // dashboard mới kiểm ràng buộc chéo lúc GHI) - dùng được để dựng đúng ca
-    // biên "trần nhỏ hơn cả một đoạn" mà vẫn có tác dụng thật qua `getTuning`.
-    tuning.setTuning("KB_MAX_RESULT_CHARS", 500);
+    // biên "trần nhỏ hơn cả một đoạn" mà vẫn có tác dụng thật qua `getTuning`
+    // (2000 = đúng min hiện hành, thấp hơn sẽ bị `getTuning` kẹp về mặc định).
+    tuning.setTuning("KB_MAX_RESULT_CHARS", 2000);
     try {
       const kq = await run(makeCtx(), { cau_hoi: "bảo hành" });
       // Đóng gói TRƯỚC rồi mới bọc (I2 fix): ngân sách nội dung = trần trừ
       // phần vỏ, nên kết quả cuối LUÔN nằm gọn trong trần - không còn "trần +
-      // phần vỏ nối thêm" như cách cắt-khối-đã-bọc cũ.
-      assert.ok(kq.length <= 500, `dài ${kq.length}, phải nằm gọn trong trần 500`);
-      // Bằng chứng cắt THẬT: đuôi tài liệu (chỉ nằm ở cuối, xa điểm cắt 500)
-      // phải biến mất khỏi kết quả trả về.
+      // phần vỏ nối thêm" như cách cắt-khối-đã-bọc cũ. Đây CHÍNH LÀ khẳng định
+      // phân biệt được code cũ/mới (code cũ nối thẻ đóng SAU khi cắt nên vượt
+      // trần ~40-70 ký tự - đo thật 571 ký tự ở trần 500 lúc rà soát).
+      assert.ok(kq.length <= 2000, `dài ${kq.length}, phải nằm gọn trong trần 2000`);
+      // Bằng chứng cắt THẬT: đuôi tài liệu (chỉ nằm ở cuối, xa điểm cắt) phải
+      // biến mất khỏi kết quả trả về.
       assert.doesNotMatch(kq, new RegExp(DUOI_TAI_LIEU), "đuôi tài liệu vẫn còn -> chưa cắt thật");
       assert.match(kq, /đã rút gọn/i);
       // Cắt xong vẫn phải khép ĐÚNG thẻ mang NONCE của thẻ mở - `noiDungDaDongGoi`
@@ -214,7 +224,7 @@ describe("kb_search - trần ký tự áp cho TOÀN BỘ kết quả", () => {
 
 describe("kb_search - đóng gói theo ngân sách (I2: KB_TOP_K có tác dụng thật, không cắt giữa đoạn)", () => {
   /**
-   * n nguồn, mỗi nguồn 1 đoạn chứa 40 token có dạng CHỐNG ĐỤNG ĐỘ:
+   * n nguồn, mỗi nguồn 1 đoạn chứa `tokensPerDoan` token có dạng CHỐNG ĐỤNG ĐỘ:
    * `TOK<i>_<jj>Z` với `jj` LUÔN 2 chữ số (đệm 0) và tận cùng bắt buộc là chữ
    * `Z`. Cắt cụt CHỈ bỏ từ ĐUÔI (đúng cách `catOKhoangTrang` cắt) nên một token
    * bị cắt LUÔN mất chữ `Z` cuối - không có cách nào cắt cụt mà vẫn trùng một
@@ -222,28 +232,40 @@ describe("kb_search - đóng gói theo ngân sách (I2: KB_TOP_K có tác dụng
    * hậu tố): `TOK3_39` cắt cụt còn `TOK3_3` lại TRÙNG token thật (i=3, j=3) -
    * cắt cụt vẫn "khớp mẫu" nên phép phá #5 XANH GIẢ. Đã tự bắt lỗi này bằng
    * cách chạy thử phép phá TRƯỚC khi tin bộ test, xem report.
+   *
+   * `tokensPerDoan` mặc định 40 (~400 ký tự/đoạn) - đủ cho các ca "bỏ hẳn đoạn
+   * không vừa". Test "tăng KB_TOP_K" cần đoạn TO HƠN HẲN (đúng cỡ
+   * `KB_CHUNK_CHARS` thật ~1200-1800) để ngân sách THẬT SỰ bị ép ở vài đoạn
+   * đầu - đoạn quá nhỏ (bản đầu, vòng rà soát lần 2) không bao giờ chạm trần
+   * dù trần MẶC ĐỊNH, làm khẳng định "topK có tác dụng" xanh mà không đo được
+   * gì (đúng cả ở code cũ lẫn mới, không phân biệt được).
    */
-  function napNhieuDoan(n: number): void {
+  function napNhieuDoan(n: number, tokensPerDoan = 40): void {
     for (let i = 0; i < n; i++) {
-      const tokens = Array.from({ length: 40 }, (_, j) => `TOK${i}_${String(j).padStart(2, "0")}Z`);
+      const tokens = Array.from({ length: tokensPerDoan }, (_, j) => `TOK${i}_${String(j).padStart(3, "0")}Z`);
       napNguon(AGENT_ID, `Nguồn bảo hành ${i}`, [`Bảo hành sản phẩm: ${tokens.join(" ")}.`]);
     }
   }
 
-  function demNhan(kq: string): number {
-    return (kq.match(/\[Nguồn: /g) ?? []).length;
+  /** Đếm số đoạn HOÀN CHỈNH (chạy trọn tới token cuối, không bị cắt cụt hay bỏ
+   * dở) - mạnh hơn đếm nhãn "[Nguồn: " đơn thuần: nhãn của một đoạn bị cắt cụt
+   * vẫn hiện ra (nhãn nằm ở ĐẦU đoạn, cắt xảy ra sau đó), nên đếm nhãn không
+   * phân biệt được "N đoạn ĐẦY ĐỦ" với "N đoạn, đoạn cuối cụt lủn". Regex khớp
+   * thẳng "TOK<i>_<3 chữ số>Z." bất kể vỏ/nhãn bao quanh dạng gì. */
+  function demDoanHoanChinh(kq: string): number {
+    return (kq.match(/TOK\d+_\d{3}Z\./g) ?? []).length;
   }
 
   /** Mọi token bắt đầu bằng "TOK" trong `kq` phải khớp NGUYÊN VẸN mẫu của nó -
-   * bị cắt cụt mất chữ Z cuối (`TOK3_01Z` -> `TOK3_0`) sẽ trượt regex này, và
+   * bị cắt cụt mất chữ Z cuối (`TOK3_001Z` -> `TOK3_00`) sẽ trượt regex này, và
    * KHÔNG thể trùng một token hoàn chỉnh khác (xem docstring `napNhieuDoan`).
    * Bỏ dấu chấm câu cuối TRƯỚC khi kiểm (token cuối câu dính liền dấu chấm, vd
-   * "TOK3_39Z.") - đó là dấu câu hợp lệ của câu gốc, không phải dấu hiệu bị cắt. */
+   * "TOK3_039Z.") - đó là dấu câu hợp lệ của câu gốc, không phải dấu hiệu bị cắt. */
   function moiTokenNguyenVen(kq: string): boolean {
     const tokens = kq.match(/\S+/g) ?? [];
     return tokens
       .filter((t) => t.startsWith("TOK"))
-      .every((t) => /^TOK\d+_\d{2}Z$/.test(t.replace(/\.$/, "")));
+      .every((t) => /^TOK\d+_\d{3}Z$/.test(t.replace(/\.$/, "")));
   }
 
   /**
@@ -257,27 +279,51 @@ describe("kb_search - đóng gói theo ngân sách (I2: KB_TOP_K có tác dụng
 
   /**
    * Kiểm MẠNH hơn `moiTokenNguyenVen`: mỗi MẢNH (tách theo dải phân cách giữa
-   * các đoạn) phải HOẶC chạy trọn tới token cuối cùng của chính đoạn đó
-   * (`TOK<i>_39Z.`), HOẶC kết thúc bằng nhãn "đã rút gọn". Cần thêm kiểm này vì
-   * `moiTokenNguyenVen` có LỖ: nó chỉ soi những gì trông giống token TOK - một
-   * nhát cắt rơi đúng vào phần NHÃN "[Nguồn: ...]" (TRƯỚC khi chạm token TOK
-   * nào) không đụng token nào cả nên lọt qua, dù rõ ràng đó vẫn là một mảnh bị
-   * cắt cụt giữa chừng. Tự bắt được lỗ này lúc chạy phép phá #5 lần đầu (xem
-   * report) - "không đoạn nào bị cắt giữa chừng" từng XANH GIẢ vì lý do này.
+   * các đoạn) phải HOẶC chạy trọn tới token CUỐI CÙNG của chính đoạn đó (chỉ
+   * token cuối mới dính liền dấu chấm - `TOK<i>_<jjj>Z.` - mọi token khác đều
+   * cách nhau bằng dấu cách, không có dấu chấm), HOẶC kết thúc bằng nhãn "đã
+   * rút gọn"/"còn N đoạn nữa". Không hardcode chỉ số token cuối (test dùng
+   * nhiều `tokensPerDoan` khác nhau) - dấu chấm TỰ đánh dấu đúng vị trí đó.
+   * Cần thêm kiểm này vì `moiTokenNguyenVen` có LỖ: nó chỉ soi những gì trông
+   * giống token TOK - một nhát cắt rơi đúng vào phần NHÃN "[Nguồn: ...]"
+   * (TRƯỚC khi chạm token TOK nào) không đụng token nào cả nên lọt qua, dù rõ
+   * ràng đó vẫn là một mảnh bị cắt cụt giữa chừng. Tự bắt được lỗ này lúc chạy
+   * phép phá #5 lần đầu (xem report) - "không đoạn nào bị cắt giữa chừng"
+   * từng XANH GIẢ vì lý do này.
+   *
+   * Nhãn "còn N đoạn nữa" (Important a, vòng rà soát lần 2) nối liền vào MẢNH
+   * CUỐI bằng "\n\n" chứ không qua dải phân cách - bỏ nó ra trước khi kiểm mảnh
+   * cuối có chạy trọn tới token cuối hay không.
    */
   function moiManhHoanChinhHoacDaRutGon(kq: string): boolean {
     const manh = layNoiDungDaDongGoi(kq).split("\n\n---\n\n");
-    return manh.every((m) => /TOK\d+_39Z\.$/.test(m) || m.endsWith("đã rút gọn]"));
+    return manh.every((m) => {
+      const boNhanConThieu = m.replace(/\n\n\[\.\.\.còn \d+ đoạn nữa không đủ chỗ\]$/, "");
+      return /TOK\d+_\d{3}Z\.$/.test(boNhanConThieu) || m.endsWith("đã rút gọn]");
+    });
   }
 
-  it("tăng KB_TOP_K làm model thấy NHIỀU đoạn hơn (bản cũ: 5 và 20 cho ra chuỗi giống hệt nhau)", async () => {
-    napNhieuDoan(8);
+  it("tăng KB_TOP_K làm model thấy NHIỀU đoạn hơn khi ngân sách THẬT SỰ bị ép", async () => {
+    // Đoạn PHẢI đủ to (~2000 ký tự, cỡ vài lần KB_CHUNK_CHARS thật) để ngân
+    // sách mặc định (8000 - vỏ ~335 = ~7665) không đủ chỗ cho topK=5 - ca đầu
+    // (40 token/đoạn ~400 ký tự) KHÔNG BAO GIỜ chạm trần dù topK=2 hay 5, làm
+    // khẳng định "topK có tác dụng" xanh dù không đo được gì thật (tự phát
+    // hiện lúc rà soát: đo lại đúng fixture cũ trên CHÍNH code cũ vẫn xanh,
+    // vì cả hai topK đều được đưa vào NGUYÊN VẸN, không hàm nào chạm nhánh cắt
+    // - xem report). Dùng `demDoanHoanChinh` (đếm đoạn HOÀN CHỈNH, không phải
+    // đếm nhãn) - nhãn của một đoạn bị cắt cụt vẫn hiện ra vì nhãn nằm ở ĐẦU.
+    napNhieuDoan(8, 200);
     tuning.setTuning("KB_TOP_K", 2);
     try {
       const it_ = await run(makeCtx(), { cau_hoi: "bảo hành" });
       tuning.setTuning("KB_TOP_K", 5);
       const nhieu = await run(makeCtx(), { cau_hoi: "bảo hành" });
-      assert.ok(demNhan(nhieu) > demNhan(it_), `topK=2 ra ${demNhan(it_)} đoạn, topK=5 ra ${demNhan(nhieu)} - không đổi`);
+      const soDoanIt = demDoanHoanChinh(it_);
+      const soDoanNhieu = demDoanHoanChinh(nhieu);
+      assert.ok(soDoanNhieu > soDoanIt, `topK=2 ra ${soDoanIt} đoạn hoàn chỉnh, topK=5 ra ${soDoanNhieu} - không đổi`);
+      // Bằng chứng ngân sách THẬT SỰ bị ép ở topK=5 (nếu không, test này chỉ
+      // đo lại đúng số đã yêu cầu, không đo gì về việc cắt/bỏ đoạn).
+      assert.ok(soDoanNhieu < 5, `ngân sách không hề bị ép ở topK=5 (đủ chỗ cho cả 5) - fixture cần to hơn: ${soDoanNhieu}`);
     } finally {
       tuning.setTuning("KB_TOP_K", null);
     }
@@ -293,21 +339,40 @@ describe("kb_search - đóng gói theo ngân sách (I2: KB_TOP_K có tác dụng
         moiManhHoanChinhHoacDaRutGon(kq),
         `có mảnh (nhãn hoặc nội dung) bị cắt cụt giữa chừng: ${JSON.stringify(kq)}`,
       );
+      // Important a (vòng rà soát lần 2): ở trần này, 8 nguồn khớp nhưng
+      // KB_TOP_K mặc định (5) và ngân sách không đủ chỗ cho cả 5 - phần bị bỏ
+      // hẳn PHẢI để lại dấu vết, không thì model không phân biệt được "đã đọc
+      // hết" với "bị cắt bớt". Không chốt cứng SỐ đoạn còn thiếu (dễ vỡ theo
+      // fixture) - chỉ chốt bất biến "có dấu vết", cộng bằng chứng gián tiếp
+      // qua `demDoanHoanChinh` (đoạn hoàn chỉnh phải ÍT HƠN 5 = KB_TOP_K, tức
+      // thật sự có đoạn bị bỏ, không phải trùng hợp không có gì để bỏ).
+      assert.match(kq, /còn \d+ đoạn nữa không đủ chỗ/, `thiếu dấu vết đoạn bị bỏ: ${JSON.stringify(kq)}`);
+      assert.ok(demDoanHoanChinh(kq) < 5, `fixture phải ép ra ca CÓ đoạn bị bỏ (đủ chỗ cả 5 thì test này vô nghĩa): ${demDoanHoanChinh(kq)} đoạn hoàn chỉnh`);
     } finally {
       tuning.setTuning("KB_MAX_RESULT_CHARS", null);
     }
   });
 
   it("phần vỏ và ba dòng dặn dò LUÔN nguyên vẹn kể cả ở trần nhỏ nhất", async () => {
-    // PHẢI dùng nội dung ĐỦ DÀI để trần 500 THẬT SỰ ép cắt (đoạn ngắn không
-    // bao giờ chạm nhánh cắt, test sẽ xanh dù thứ tự đóng gói/bọc sai - tự bắt
+    // PHẢI dùng nội dung ĐỦ DÀI để trần THẬT SỰ ép cắt (đoạn ngắn không bao
+    // giờ chạm nhánh cắt, test sẽ xanh dù thứ tự đóng gói/bọc sai - tự bắt
     // được khi thử phép phá #4: fixture ngắn ban đầu không hề đỏ).
+    //
+    // 2000 = ĐÚNG min hiện hành (vòng rà soát lần 2, nâng từ 500 - vỏ một mình
+    // đã 313-513 ký tự). Test CŨ dùng 500 vẫn còn sau khi nâng min - `getTuning`
+    // kẹp 500 (dưới min) về THẲNG mặc định 8000, xóa sạch tác dụng đặt tuning,
+    // làm test XANH GIẢ (không hề chạm nhánh cắt) - tự phát hiện lúc rà soát,
+    // đúng lớp lỗi "test tiện dùng số cũ mà quên nó đã ngoài khoảng hợp lệ".
     napNhieuDoan(8);
-    tuning.setTuning("KB_MAX_RESULT_CHARS", 500);
+    tuning.setTuning("KB_MAX_RESULT_CHARS", 2000);
     try {
       const kq = await run(makeCtx(), { cau_hoi: "bảo hành" });
       assert.match(kq, /DỮ LIỆU/); // câu dặn model coi đây là dữ liệu
       assert.match(kq, new RegExp(`</${markers.THE_NOI_DUNG_NGOAI}[^>]*>$`));
+      // Bất biến PHÂN BIỆT được code cũ/mới: code cũ nối thẻ đóng SAU khi cắt
+      // nên vượt trần (đo thật lúc rà soát: 2071 ở trần 2000 với đúng fixture
+      // này) - code mới đóng gói trước rồi bọc một lần, luôn nằm gọn trong trần.
+      assert.ok(kq.length <= 2000, `dài ${kq.length}, phải nằm gọn trong trần 2000`);
     } finally {
       tuning.setTuning("KB_MAX_RESULT_CHARS", null);
     }
