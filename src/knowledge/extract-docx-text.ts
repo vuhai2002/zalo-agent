@@ -1,39 +1,40 @@
-import { decodeHtmlEntities } from "../shared/html-entities.js";
-import { readZipEntryText } from "../shared/read-zip-entry.js";
+import { quetXmlTheoLuong } from "../shared/xml-sax-scan.js";
+import { moPhienDocZip } from "../shared/zip-stream-entry.js";
+import { taoDocxSaxBuilder } from "./docx-sax-paragraph-builder.js";
 
 /**
- * `word/document.xml` -> chữ thuần, mỗi `<w:p>` (đoạn Word) thành một dòng.
+ * `word/document.xml` -> chữ thuần, mỗi `<w:p>` (đoạn Word) hoặc mỗi bảng
+ * thành một "đoạn", nối bằng "\n\n". Đoạn mang heading (qua `w:outlineLvl`
+ * hoặc `pStyle` "HeadingN") được đổi thành dòng markdown "#...# chữ" - để
+ * `chunk-text.ts` nhận diện được tiêu đề bằng ĐÚNG luật nó đã dùng cho
+ * .txt/.md.
  *
- * Đoạn mang `pStyle` "HeadingN" được đổi thành dòng markdown "#...# chữ" -
- * để `chunk-text.ts` nhận diện được tiêu đề bằng ĐÚNG luật nó đã dùng cho
- * .txt/.md: tài liệu Word có heading cũng được hưởng phép "giữ tiêu đề gần
- * nhất" như văn bản thường, không cần chunk-text biết gì về XML của docx.
+ * Viết trên SAX (`docx-sax-paragraph-builder.ts`) qua luồng giải nén có trần
+ * (`zip-stream-entry.ts`), THAY hẳn cặp regex `PARAGRAPH_RE`/`RUN_TEXT_RE` cũ.
+ * Lý do: nghiên cứu đo được cặp regex đó là gốc của 3 lỗi Critical - ReDoS
+ * bậc hai (bom 1,7 KB khoá event loop 38 giây), tab stop biến thành XML thô
+ * (`<w:tab w:val="left" ...>` khớp nhầm `<w:t[^>]*>`), và bảng mất cấu trúc
+ * hàng. Xem `plans/260809-remediation-kho-tri-thuc/reports/
+ * nghien-cuu-doc-ooxml-an-toan.md` mục 1 cho từng ca hỏng đã đo trên file
+ * Word thật.
  */
-
-const HEADING_STYLE_RE = /<w:pStyle\s+w:val="Heading([1-9])"/;
-const RUN_TEXT_RE = /<w:t[^>]*>([\s\S]*?)<\/w:t>/g;
-const PARAGRAPH_RE = /<w:p\b[^>]*>[\s\S]*?<\/w:p>/g;
-
-function textOfParagraph(p: string): string {
-  let raw = "";
-  for (const m of p.matchAll(RUN_TEXT_RE)) raw += m[1];
-  return decodeHtmlEntities(raw);
-}
-
 export async function extractDocxText(buf: Buffer): Promise<string> {
-  // readZipEntryText đã ném lỗi tiếng Việt đọc được khi buf không phải zip
-  // hợp lệ hoặc thiếu document.xml - không cần bọc thêm lớp lỗi ở đây.
-  const xml = readZipEntryText(buf, "word/document.xml");
+  const phien = moPhienDocZip(buf);
+  const builder = taoDocxSaxBuilder();
+  // moPhienDocZip/docEntryTheoLuong đã ném lỗi tiếng Việt đọc được khi buf
+  // không phải zip hợp lệ, thiếu document.xml, hoặc vượt bất kỳ trần nào -
+  // không cần bọc thêm lớp lỗi ở đây.
+  await quetXmlTheoLuong(phien.docEntryTheoLuong("word/document.xml"), builder);
 
-  const doan: string[] = [];
-  for (const m of xml.matchAll(PARAGRAPH_RE)) {
-    const p = m[0];
-    const text = textOfParagraph(p).trim();
-    if (!text) continue;
-
-    const heading = HEADING_STYLE_RE.exec(p);
-    doan.push(heading ? `${"#".repeat(Number(heading[1]))} ${text}` : text);
+  const ketQua = builder.layDoanVanBan().join("\n\n");
+  if (!ketQua.trim()) {
+    // Trả chuỗi rỗng thì worker (kb-ingest-worker.ts) đánh dấu nguồn
+    // "san_sang, 0 đoạn" - nguồn độc (docx chỉ toàn ảnh/đối tượng) trông như
+    // nguồn khỏe mạnh. NÉM để nhánh "hong" của worker bắt được, đúng nguyên
+    // tắc "extractor phải ném khi không trích được chữ nào".
+    throw new Error(
+      "Không đọc được chữ nào từ file docx (có thể chỉ chứa ảnh/đối tượng, không có văn bản)",
+    );
   }
-
-  return doan.join("\n\n");
+  return ketQua;
 }

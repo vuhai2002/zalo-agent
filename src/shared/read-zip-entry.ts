@@ -38,9 +38,14 @@ const CENTRAL_HEADER_SIGNATURE = 0x02014b50;
  *
  * Hai giới hạn của cơ chế này, cần nhớ để không tưởng nó chặn được nhiều hơn
  * thực tế:
- * - Trần áp theo TỪNG ENTRY, không phải theo cả file zip. `extract-xlsx-text.ts`
- *   đọc `sharedStrings.xml` CỘNG mọi `sheetN.xml` trong cùng một file - tổng
- *   dung lượng giải nén của một file .xlsx vẫn không có trần chung.
+ * - Trần áp theo TỪNG ENTRY, không phải theo cả file zip - hàm này (và
+ *   `readZipEntryText`/`listZipEntries`) không có khái niệm "phiên đọc" nên
+ *   không cộng dồn được nhiều lời gọi. Nhánh ĐỌC của Kho tri thức (đọc
+ *   `sharedStrings.xml` CỘNG mọi `sheetN.xml`) không còn đi qua các hàm này -
+ *   xem `zip-stream-entry.ts` (dùng lại `centralEntries` xuất ở dưới) cho
+ *   trần TỔNG cả archive. Ba hàm ở file này giữ nguyên hành vi một-lần-một-
+ *   entry, phục vụ đường GHI của bot (`render-docx.ts`/`render-xlsx.ts`) và
+ *   test đọc ngược nội dung đã ghi.
  * - `maxOutputLength` của zlib kiểm THEO TỪNG CHUNK trong lúc giải nén (không
  *   phải trần cấp phát trước), nên bộ nhớ đỉnh vẫn có thể chạm gần tới trần
  *   này trước khi `inflateRawSync` kịp ném lỗi - trần này giảm rủi ro OOM,
@@ -48,9 +53,23 @@ const CENTRAL_HEADER_SIGNATURE = 0x02014b50;
  */
 const TRAN_GIAI_NEN_MAC_DINH = 300 * 1024 * 1024;
 
-type CentralEntry = { name: string; method: number; compSize: number; localOffset: number };
+export type CentralEntry = {
+  name: string;
+  method: number;
+  compSize: number;
+  /** Kích thước SAU giải nén theo khai báo của central directory - KHÔNG
+   * đáng tin tuyệt đối (spec cho phép khai gian), chỉ dùng để từ chối SỚM
+   * trước khi giải nén; caller vẫn phải đếm byte thật trong lúc giải nén. */
+  uncompSize: number;
+  localOffset: number;
+};
 
-function* centralEntries(buf: Buffer): Generator<CentralEntry> {
+/**
+ * Duyệt central directory - export cho `zip-stream-entry.ts` dùng lại (đọc
+ * theo luồng kèm trần tổng), tránh viết trùng logic parse central directory
+ * đã đúng và đã kiểm chứng ở đây.
+ */
+export function* centralEntries(buf: Buffer): Generator<CentralEntry> {
   const eocd = buf.lastIndexOf(EOCD_SIGNATURE);
   if (eocd < 0) throw new Error("Không phải file zip hợp lệ (thiếu End Of Central Directory)");
 
@@ -68,10 +87,24 @@ function* centralEntries(buf: Buffer): Generator<CentralEntry> {
       name: buf.subarray(off + 46, off + 46 + nameLen).toString("utf-8"),
       method: buf.readUInt16LE(off + 10),
       compSize: buf.readUInt32LE(off + 20),
+      uncompSize: buf.readUInt32LE(off + 24),
       localOffset: buf.readUInt32LE(off + 42),
     };
     off += 46 + nameLen + extraLen + commentLen;
   }
+}
+
+/**
+ * Dữ liệu NÉN thô của 1 entry (chưa giải nén) - cắt theo LOCAL header vì độ
+ * dài name/extra ở đó có thể khác central directory. Export cho
+ * `zip-stream-entry.ts` dùng lại: đường đọc theo luồng cần chính lát cắt này
+ * để đưa vào `zlib.createInflateRaw()` thay vì `inflateRawSync` một phát.
+ */
+export function duLieuNenCuaEntry(buf: Buffer, entry: CentralEntry): Buffer {
+  const nameLen = buf.readUInt16LE(entry.localOffset + 26);
+  const extraLen = buf.readUInt16LE(entry.localOffset + 28);
+  const start = entry.localOffset + 30 + nameLen + extraLen;
+  return buf.subarray(start, start + entry.compSize);
 }
 
 /**
@@ -88,11 +121,7 @@ export function readZipEntry(
 ): Buffer | null {
   for (const entry of centralEntries(buf)) {
     if (entry.name !== entryName) continue;
-    // Độ dài name/extra ở LOCAL header có thể khác central - phải đọc lại từ đó
-    const nameLen = buf.readUInt16LE(entry.localOffset + 26);
-    const extraLen = buf.readUInt16LE(entry.localOffset + 28);
-    const start = entry.localOffset + 30 + nameLen + extraLen;
-    const data = buf.subarray(start, start + entry.compSize);
+    const data = duLieuNenCuaEntry(buf, entry);
     if (entry.method === 0) return data;
     try {
       // maxOutputLength làm zlib kiểm dung lượng NGAY TRONG LÚC giải nén, ném
