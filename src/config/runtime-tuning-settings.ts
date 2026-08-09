@@ -145,22 +145,26 @@ const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => s
     // các đoạn cuối bị vứt lặng lẽ (đúng lỗi gốc: KB_TOP_K=5 và =20 từng cho ra
     // kết quả GIỐNG HỆT NHAU vì trần quá nhỏ so với cả hai).
     //
-    // Hai hằng số đo THẬT bằng `wrapUntrustedContent` + `dinhDangDoan` (vòng rà
-    // soát lần 2 sau bản đầu dùng số áng chừng quá thấp - script đo trong
-    // report task-4):
-    //  - `140` = chi phí MỖI ĐOẠN ngoài phần thân bài: nhãn `[Nguồn: <tên
-    //    nguồn> - <breadcrumb>]\n` (đo 43-134 ký tự tùy tên nguồn/breadcrumb
-    //    dài ngắn - breadcrumb 3 cấp CHÍNH phase này thêm vào dễ chạm 40-60 ký
-    //    tự) + dải phân cách "\n\n---\n\n" (7). `60` cũ chỉ đủ khi tên nguồn +
-    //    breadcrumb <= 40 ký tự - không đủ cho breadcrumb 3 cấp.
-    //  - `520` = phần vỏ (thẻ bọc + ba dòng dặn dò), đo được 313 (nguồn rỗng)
-    //    tới ĐÚNG TRẦN 513 (nguon bị cắt ở 200 ký tự trong `wrapUntrustedContent`
-    //    - không thể vượt mốc này). `500` cũ đã THẤP HƠN ca xấu nhất thật.
-    keys: ["KB_MAX_RESULT_CHARS", "KB_TOP_K", "KB_CHUNK_CHARS"],
-    check: (so) =>
-      so("KB_MAX_RESULT_CHARS") < so("KB_TOP_K") * (so("KB_CHUNK_CHARS") + 140) + 520
-        ? `Trần ký tự kết quả (${so("KB_MAX_RESULT_CHARS")}) nhỏ hơn tổng chỗ mà ${so("KB_TOP_K")} đoạn x ${so("KB_CHUNK_CHARS")} ký tự cần - kết quả sẽ bị cắt và mấy đoạn cuối không bao giờ tới được bot. Hạ số đoạn hoặc độ dài đoạn, hoặc nâng trần ký tự kết quả.`
-        : null,
+    // Vòng rà soát lần 3: công thức vòng 2 (chunkChars + 140) bỏ sót CHỒNG LẤN
+    // (`chenChongLan`, chunk-text.ts - đoạn SAU cùng heading nối thêm tới
+    // `chunkChars * overlapPercent/100` ký tự của đoạn trước, mặc định 10% ->
+    // nội dung thật ~1320 với chunk=1200) - sửa bằng nhân `chunkChars *
+    // (1 + overlapPercent/100)`. `150`/đoạn = 13 (khung nhãn) + 80 (tên nguồn,
+    // ca CAO thực tế - KHÔNG phải trần cứng 200 của `kb-routes.ts:62`: cộng
+    // 210 thay 150 làm mặc định đã chốt `KB_MAX_RESULT_CHARS=8000` tự vi phạm
+    // luật, `5*(1200*1.1+210)+520=8170>8000` - xem report task-4 mục Important
+    // 3 về khe hở còn lại: tên nguồn 200 ký tự CỘNG breadcrumb sâu CÙNG lúc
+    // với chồng lấn cao) + 50 (breadcrumb 3 cấp, đúng "điểm cân bằng" nghiên
+    // cứu heading-aware chunking) + 7 (dải phân cách). `520` = phần vỏ (thẻ
+    // bọc + 3 dòng dặn dò), đo được 313-513 (513 = trần cứng thật, `nguon` bị
+    // cắt ở 200 ký tự trong `wrapUntrustedContent`).
+    keys: ["KB_MAX_RESULT_CHARS", "KB_TOP_K", "KB_CHUNK_CHARS", "KB_CHUNK_OVERLAP_PERCENT"],
+    check: (so) => {
+      const doDaiThucToiDa = so("KB_CHUNK_CHARS") * (1 + so("KB_CHUNK_OVERLAP_PERCENT") / 100);
+      return so("KB_MAX_RESULT_CHARS") < so("KB_TOP_K") * (doDaiThucToiDa + 150) + 520
+        ? `Trần ký tự kết quả (${so("KB_MAX_RESULT_CHARS")}) nhỏ hơn tổng chỗ mà ${so("KB_TOP_K")} đoạn x ${so("KB_CHUNK_CHARS")} ký tự (cộng chồng lấn ${so("KB_CHUNK_OVERLAP_PERCENT")}%) cần - kết quả sẽ bị cắt và mấy đoạn cuối không bao giờ tới được bot. Hạ số đoạn, độ dài đoạn hay chồng lấn, hoặc nâng trần ký tự kết quả.`
+        : null;
+    },
   },
 ];
 

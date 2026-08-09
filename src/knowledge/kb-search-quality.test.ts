@@ -149,11 +149,13 @@ describe("timTrongKhoTriThuc - một tài liệu lớn không chiếm trọn slo
 
     const kq = search.timTrongKhoTriThuc({ cauHoi: "chính sách bảo hành", agentId: AGENT, soLuong: 5 });
     const soNguonKhacNhau = new Set(kq.map((x) => x.sourceId)).size;
-    // Ghi số THẬT - không tự chỉnh ngưỡng để test luôn xanh. Đây là bằng
-    // chứng đo được: xem report task-4 mục "Important c" để biết số liệu này
-    // đã được đối chiếu bằng tay lúc viết test, không phải suy luận.
+    // Ghi số THẬT - không tự chỉnh ngưỡng để test luôn xanh. Đo được 4/4 nguồn
+    // còn thấy trong top-5 (vòng rà soát lần 2) - ngưỡng 3 (không phải 4, chốt
+    // đúng số đo) chỉ chặn ca hỏng NẶNG "tài liệu lớn đẩy gần hết nguồn khác ra
+    // khỏi top-k", không tối ưu hoá mức độ lạc đề hiện tại (xem report task-4
+    // mục "Important c").
     assert.ok(
-      soNguonKhacNhau >= 2,
+      soNguonKhacNhau >= 3,
       `tài liệu lớn (6 mục, breadcrumb đều chứa "chính sách") có dấu hiệu CHIẾM TRỌN top-k - chỉ còn ${soNguonKhacNhau} nguồn khác nhau trong ${kq.length} kết quả: ${JSON.stringify(kq.map((x) => ({ nguon: x.tenNguon, tieuDe: x.tieuDe, diem: x.diem })))}`,
     );
   });

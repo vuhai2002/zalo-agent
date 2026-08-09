@@ -16,18 +16,22 @@
  * cụt còn hơn trả về rỗng, nên cắt nó ở ranh giới khoảng trắng gần nhất (không
  * cắt giữa từ) rồi ghi rõ đã rút gọn.
  *
- * Bỏ hẳn đoạn (nhánh phổ biến hơn - đã có ít nhất một đoạn trọn vẹn) LUÔN kèm
- * một dòng báo "còn N đoạn nữa không đủ chỗ" (Important a, vòng rà soát lần
- * 1): thiếu dòng này thì model KHÔNG PHÂN BIỆT được "đã đọc hết top-k" với
- * "bị cắt bớt vì hết ngân sách" - đúng thứ dễ đẻ ra câu trả lời tự tin từ một
- * kho tri thức đọc thiếu mà không tự biết.
+ * Bỏ hẳn đoạn (dù ở nhánh "đã có ít nhất một đoạn trọn vẹn" hay nhánh "đoạn
+ * ĐẦU TIÊN bị cắt mà vẫn còn đoạn khác phía sau") LUÔN kèm một dòng báo "còn N
+ * đoạn nữa không đủ chỗ" (Important a, vòng rà soát lần 1 + lần 3): thiếu dòng
+ * này thì model KHÔNG PHÂN BIỆT được "đã đọc hết top-k" với "bị cắt bớt vì hết
+ * ngân sách" - đúng thứ dễ đẻ ra câu trả lời tự tin từ một kho tri thức đọc
+ * thiếu mà không tự biết. Vòng rà soát lần 3 phát hiện nhánh "cắt đoạn đầu"
+ * ban đầu VẪN thiếu dấu vết này khi còn đoạn khác chưa từng được xét.
  *
- * BẤT BIẾN MỀM, không phải cứng: kết quả trả về có thể dài hơn `nganSachNoiDung`
- * TỐI ĐA vài chục ký tự (độ dài `DANH_DAU_RUT_GON` hoặc dòng "còn N đoạn nữa"
- * vừa thêm) - caller không nên coi độ dài trả về là chặn cứng tuyệt đối, chỉ
- * là "gần đúng ngân sách đã xin". Đủ tốt cho mục đích chống tràn ngữ cảnh; nếu
- * cần chặn cứng tuyệt đối thì phải trừ trước cả hai chuỗi báo này khỏi ngân
- * sách trước khi đóng gói - chưa làm vì độ lệch quá nhỏ để đáng thêm phức tạp.
+ * BẤT BIẾN CỨNG (vòng rà soát lần 3, sửa từ "mềm"): kết quả trả về KHÔNG BAO
+ * GIỜ dài hơn `nganSachNoiDung`. Bản trước trừ ngân sách cho câu báo SAU khi
+ * đã đóng gói xong (nối thêm rồi mới xong) - quét thật 31 cỡ đoạn x 201 mức
+ * trần đo được 396 tổ hợp vượt trần. Bản này trừ TRƯỚC: dành sẵn chỗ cho câu
+ * báo DÀI NHẤT có thể cần dùng (`nhanDaiNhat`, tính đúng ca xấu nhất - đoạn
+ * đầu bị cắt VÀ còn N đoạn khác - CẢ HAI câu báo xuất hiện cùng lúc) rồi mới
+ * đóng gói trong phần ngân sách còn lại. Xem chứng minh + test quét trong
+ * `kb-pack-result.test.ts`.
  *
  * Hàm THUẦN - không env, không DB, không log - cùng mẫu với
  * `../trim-context-to-budget.ts`.
@@ -58,24 +62,35 @@ function catOKhoangTrang(s: string, gioiHan: number): string {
  * caller tự trừ phần vỏ ra khỏi trần tổng trước khi gọi hàm này.
  */
 export function dongGoiTheoNganSach(doanDaDinhDang: string[], nganSachNoiDung: number): string {
+  // Dành sẵn chỗ cho câu báo DÀI NHẤT có thể cần dùng - TRƯỚC khi đóng gói,
+  // không phải sau (xem docstring đầu file). `doanDaDinhDang.length` là chặn
+  // trên an toàn cho N trong "còn N đoạn nữa" (N luôn <= tổng số đoạn).
+  const nhanDaiNhat = DANH_DAU_RUT_GON.length + danhDauConThieu(doanDaDinhDang.length).length;
+  const nganSachThuc = Math.max(1, nganSachNoiDung - nhanDaiNhat);
+
   let ketQua = "";
   for (let i = 0; i < doanDaDinhDang.length; i++) {
     const doan = doanDaDinhDang[i]!;
     const ung = ketQua ? `${ketQua}${KB_PACK_SEPARATOR}${doan}` : doan;
-    if (ung.length <= nganSachNoiDung) {
+    if (ung.length <= nganSachThuc) {
       ketQua = ung;
       continue;
     }
 
+    // conLai = đoạn hiện tại (vừa thất bại) + mọi đoạn phía sau chưa xét tới.
+    const conLai = doanDaDinhDang.length - i;
     if (ketQua === "") {
       // Đoạn ĐẦU TIÊN đã không vừa - cắt nó thay vì trả về rỗng hoàn toàn.
-      const choNoiDung = Math.max(1, nganSachNoiDung - DANH_DAU_RUT_GON.length);
+      const choNoiDung = Math.max(1, nganSachThuc - DANH_DAU_RUT_GON.length);
       ketQua = catOKhoangTrang(doan, choNoiDung) + DANH_DAU_RUT_GON;
+      // Đoạn đầu bị cắt KHÔNG có nghĩa nó là đoạn DUY NHẤT - còn đoạn khác
+      // phía sau (chưa từng được thử, vì vòng lặp `break` ngay dưới) thì phải
+      // báo luôn, không thì model tưởng "đoạn cụt này" là toàn bộ kết quả.
+      if (conLai > 1) ketQua += danhDauConThieu(conLai - 1);
     } else {
-      // Đã có ít nhất một đoạn trọn vẹn - đoạn NÀY và mọi đoạn còn lại (kể cả
-      // chưa từng thử) đều bị bỏ hẳn. `doanDaDinhDang.length - i` = đoạn hiện
-      // tại + mọi đoạn phía sau chưa xét tới.
-      ketQua += danhDauConThieu(doanDaDinhDang.length - i);
+      // Đã có ít nhất một đoạn trọn vẹn - đoạn NÀY và mọi đoạn còn lại đều bị
+      // bỏ hẳn.
+      ketQua += danhDauConThieu(conLai);
     }
     // Ngân sách đã hết: các đoạn còn lại bị BỎ HẲN, không cắt giữa chừng - đây
     // chính là điểm khác cách cũ.

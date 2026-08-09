@@ -163,8 +163,29 @@ describe("validateTuning - ràng buộc chéo", () => {
     });
 
     it("tổ hợp có đủ chỗ thì KHÔNG bị chặn - đối chứng cho ca trên", () => {
-      const loi = tuning.validateTuning({ KB_TOP_K: 3, KB_CHUNK_CHARS: 1000, KB_MAX_RESULT_CHARS: 4000 });
-      assert.deepEqual(loi, [], `3*(1000+60)+500=3680 <= 4000 phải hợp lệ, nhận: ${JSON.stringify(loi)}`);
+      // Công thức thật (vòng rà soát lần 3, cộng cả chồng lấn):
+      // KB_TOP_K * (KB_CHUNK_CHARS*(1+overlap%/100) + 150) + 520. Overlap
+      // không truyền -> lấy mặc định 10%: 3*(1000*1.1+150)+520 = 4270 <= 4500.
+      const loi = tuning.validateTuning({ KB_TOP_K: 3, KB_CHUNK_CHARS: 1000, KB_MAX_RESULT_CHARS: 4500 });
+      assert.deepEqual(loi, [], `3*(1000*1.1+150)+520=4270 <= 4500 phải hợp lệ, nhận: ${JSON.stringify(loi)}`);
+    });
+
+    it("chồng lấn cao đẩy nội dung thật vượt trần dù KB_CHUNK_CHARS trông có vẻ vừa (Important 3, vòng rà soát lần 3)", () => {
+      // Ca ĐÚNG người rà soát đo: topK=10, chunk=1200, chồng lấn 50% -> nội
+      // dung THẬT mỗi đoạn tới 1800 ký tự (1200*1.5), không phải 1200. Luật
+      // BỎ chồng lấn (vòng 2) đòi 10*(1200+140)+520=13920 - trần 15000 sẽ lọt
+      // qua. Luật CÓ chồng lấn (vòng 3) đòi 10*(1200*1.5+150)+520=20020 -
+      // cùng trần 15000 phải bị chặn.
+      const loi = tuning.validateTuning({
+        KB_TOP_K: 10,
+        KB_CHUNK_CHARS: 1200,
+        KB_CHUNK_OVERLAP_PERCENT: 50,
+        KB_MAX_RESULT_CHARS: 15_000,
+      });
+      assert.ok(
+        loi.length > 0,
+        "chồng lấn 50% đẩy nhu cầu thật lên ~20.020 - trần 15.000 phải bị chặn, không được lọt qua như luật thiếu số hạng chồng lấn",
+      );
     });
 
     it("mặc định PHÁT HÀNH của chính repo (env.ts) THỎA ràng buộc chéo", () => {
