@@ -204,10 +204,22 @@ export function Pager({
 export function TableShell({
   headers,
   minWidth = 720,
+  ghimCotCuoi = false,
   children,
 }: {
   headers: string[];
   minWidth?: number;
+  /**
+   * GHIM cột cuối vào mép phải khi bảng phải cuộn ngang. Bật cho bảng mà cột
+   * cuối là NÚT THAO TÁC: cột thao tác bị đẩy ra ngoài khung là tính năng biến
+   * mất với người dùng - họ không có lý do gì để đoán rằng phải cuộn ngang mới
+   * thấy. Đã xảy ra thật ở trang Kho tri thức ("không thấy chỗ xem nội dung đã
+   * nạp" trong khi nút vẫn luôn được render).
+   *
+   * Cột được ghim PHẢI có nền đục (`bg-surface` dưới đây) - nếu không thì chữ
+   * của các cột đang cuộn bên dưới xuyên qua.
+   */
+  ghimCotCuoi?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -216,7 +228,12 @@ export function TableShell({
         <thead>
           <tr className="border-b border-line text-[11px] uppercase tracking-wider text-ink-soft">
             {headers.map((h, i) => (
-              <th key={i} className="whitespace-nowrap px-4 py-3 font-semibold">
+              <th
+                key={i}
+                className={`whitespace-nowrap px-4 py-3 font-semibold${
+                  ghimCotCuoi && i === headers.length - 1 ? " sticky right-0 z-10 bg-surface" : ""
+                }`}
+              >
                 {h}
               </th>
             ))}
@@ -227,6 +244,13 @@ export function TableShell({
     </div>
   );
 }
+
+/**
+ * Lớp CSS cho ô cuối của một DÒNG trong bảng bật `ghimCotCuoi`. Xuất ra hằng số
+ * thay vì để mỗi dòng tự chép: chép tay thì header ghim mà thân bảng không, hoặc
+ * ngược lại - lệch một bên là cột ghim trong suốt và chữ chồng lên nhau.
+ */
+export const O_GHIM_PHAI = "sticky right-0 z-10 bg-surface";
 
 /** Thanh công cụ trên bảng: tìm kiếm + bộ lọc (vd account) + phân trang */
 export function ListToolbar({

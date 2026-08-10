@@ -3,10 +3,13 @@ import { api, ApiError, type KbSourceListItem } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { useConfirmDialog } from "../shared/confirm-dialog";
 import { IconFileText } from "../shared/dashboard-icons";
+import { useVungTha } from "../shared/file-drop-zone";
 import { nhanKhopTuKhoa } from "../shared/fold-for-search";
 import { EmptyRow, ListToolbar, TableShell } from "../shared/ui-bits";
 import { KbAddSourceModal } from "./kb-add-source-modal";
+import { KbAssignAgentsModal } from "./kb-assign-agents-modal";
 import { KbChunksModal } from "./kb-chunks-modal";
+import { KbGuideModal } from "./kb-guide-modal";
 import { xayThongDiepXoaNguon } from "./kb-delete-warning-message";
 import { trangCuoiCungConDuLieu } from "./kb-page-clamp";
 import { KbSourceRow } from "./kb-source-row";
@@ -48,7 +51,20 @@ export function KnowledgePage() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const [xemDoanCua, setXemDoanCua] = useState<KbSourceListItem | null>(null);
+  const [ganAgentCho, setGanAgentCho] = useState<KbSourceListItem | null>(null);
+  const [xemHuongDan, setXemHuongDan] = useState(false);
+  const [fileTha, setFileTha] = useState<File | null>(null);
   const { confirm, confirmDialog } = useConfirmDialog();
+
+  // Thả file vào bảng = mở modal Thêm nguồn với file đã chọn sẵn. Không tự nạp
+  // thẳng: mỗi nguồn cần một TÊN, và tên gợi ý từ tên file phải cho người dùng
+  // xem lại được trước khi nó đi vào mọi kết quả kb_search sau này.
+  const { dangKeo: dangKeoFile, handlers: handlersTha } = useVungTha(
+    useCallback((f: File) => {
+      setFileTha(f);
+      setAdding(true);
+    }, []),
+  );
 
   const reload = useCallback(() => {
     api.kb
@@ -122,14 +138,22 @@ export function KnowledgePage() {
       <PageHeader
         icon={IconFileText}
         title="Kho tri thức"
-        subtitle="Tài liệu nạp ở đây được cắt đoạn để agent tra cứu qua công cụ kb_search - gán nguồn cho từng agent ở trang Agents"
+        subtitle="Tài liệu nạp ở đây được cắt đoạn để agent tra cứu qua công cụ kb_search - nạp xong phải GÁN cho agent thì bot mới đọc được"
         aside={
-          <button
-            onClick={() => setAdding(true)}
-            className="cursor-pointer rounded-lg bg-zalo-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-zalo-600"
-          >
-            Thêm nguồn
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setXemHuongDan(true)}
+              className="cursor-pointer rounded-lg border border-line px-3 py-2 text-[14px] font-medium text-ink-soft hover:bg-tile hover:text-ink"
+            >
+              Hướng dẫn
+            </button>
+            <button
+              onClick={() => setAdding(true)}
+              className="cursor-pointer rounded-lg bg-zalo-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-zalo-600"
+            >
+              Thêm nguồn
+            </button>
+          </div>
         }
       />
 
@@ -147,38 +171,67 @@ export function KnowledgePage() {
         />
       )}
 
-      <TableShell
-        headers={["Tên", "Loại", "Định dạng", "Trạng thái", "Số đoạn", "Dung lượng", "Ngày", ""]}
-        minWidth={980}
-      >
-        {sources === null ? (
-          <EmptyRow colSpan={8} text="Đang tải..." />
-        ) : sources.length === 0 ? (
-          <EmptyRow colSpan={8} text='Chưa có nguồn nào - bấm "Thêm nguồn" để nạp tài liệu đầu tiên' />
-        ) : trang.length === 0 ? (
-          <EmptyRow colSpan={8} text={`Không có nguồn nào khớp "${query}"`} />
-        ) : (
-          trang.map((s) => (
-            <KbSourceRow
-              key={s.id}
-              source={s}
-              onReindex={() => reindex(s.id)}
-              onDelete={() => void remove(s)}
-              onViewChunks={() => setXemDoanCua(s)}
-            />
-          ))
+      {/* Vùng thả bao trọn bảng: thả file ở đâu trong khu vực này cũng mở modal
+          Thêm nguồn với file đã chọn sẵn. Viền sáng khi đang kéo là phản hồi
+          duy nhất cho biết thả được - không có nó thì tính năng vô hình. */}
+      <div {...handlersTha} className="relative">
+        <TableShell
+          headers={["Tên", "Định dạng", "Trạng thái", "Agent đang dùng", "Số đoạn", "Dung lượng", "Ngày", ""]}
+          minWidth={1040}
+          ghimCotCuoi
+        >
+          {sources === null ? (
+            <EmptyRow colSpan={8} text="Đang tải..." />
+          ) : sources.length === 0 ? (
+            <EmptyRow colSpan={8} text='Chưa có nguồn nào - bấm "Thêm nguồn" hoặc kéo thả file vào đây' />
+          ) : trang.length === 0 ? (
+            <EmptyRow colSpan={8} text={`Không có nguồn nào khớp "${query}"`} />
+          ) : (
+            trang.map((s) => (
+              <KbSourceRow
+                key={s.id}
+                source={s}
+                onReindex={() => reindex(s.id)}
+                onDelete={() => void remove(s)}
+                onViewChunks={() => setXemDoanCua(s)}
+                onAssignAgents={() => setGanAgentCho(s)}
+              />
+            ))
+          )}
+        </TableShell>
+        {dangKeoFile && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl border-2 border-dashed border-zalo-500 bg-zalo-50/80 dark:bg-zalo-950/60">
+            <span className="text-[15px] font-medium text-zalo-700 dark:text-zalo-300">Thả file để thêm nguồn</span>
+          </div>
         )}
-      </TableShell>
+      </div>
 
       {adding && (
         <KbAddSourceModal
-          onClose={() => setAdding(false)}
+          fileBanDau={fileTha ?? undefined}
+          onClose={() => {
+            setAdding(false);
+            setFileTha(null);
+          }}
           onCreated={() => {
             setAdding(false);
+            setFileTha(null);
             reload();
           }}
         />
       )}
+
+      {ganAgentCho && (
+        <KbAssignAgentsModal
+          source={ganAgentCho}
+          onClose={() => setGanAgentCho(null)}
+          // Tải lại để cột "Agent đang dùng" đổi ngay, không phải chờ nhịp poll
+          // kế tiếp - người vừa bấm Lưu cần thấy kết quả của chính thao tác đó.
+          onSaved={reload}
+        />
+      )}
+
+      {xemHuongDan && <KbGuideModal onClose={() => setXemHuongDan(false)} />}
 
       {xemDoanCua && <KbChunksModal source={xemDoanCua} onClose={() => setXemDoanCua(null)} />}
 
