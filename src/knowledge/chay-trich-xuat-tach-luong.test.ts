@@ -160,10 +160,14 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
       assert.ok(loi instanceof LoiTrichXuatBiNgatGiuaChung, "phải là LoiTrichXuatBiNgatGiuaChung, không phải Error thường");
 
       // Khẳng định QUAN TRỌNG NHẤT của test này: worker THẬT SỰ chết (sự kiện
-      // 'exit' bắn ra), không chỉ terminate() được GỌI. Trần 300ms đủ rộng so
-      // với chi phí terminate() thật (đo phase này: ~2,2ms để cắt vòng lặp CPU
-      // đồng bộ) - nếu terminate() bị bỏ (phép phá #3), promise này không bao
-      // giờ resolve và nhánh timeout dưới sẽ thắng, làm test đỏ đúng chỗ.
+      // 'exit' bắn ra), không chỉ terminate() được GỌI.
+      //
+      // Trần 3000ms (KHÔNG phải 300ms như bản đầu): trần này chỉ để phân biệt
+      // "có gọi terminate()" với "không bao giờ exit" - phép phá tương ứng (bỏ
+      // hẳn terminate()) KHÔNG BAO GIỜ resolve, nên nới rộng 10 lần vẫn phân
+      // biệt được y hệt, chỉ bỏ đi phần nhấp nháy khi máy đang bận. 300ms quá
+      // sát: chi phí terminate() thật chỉ ~2,2ms nhưng một máy đang chạy đầy
+      // tiến trình khác có thể trễ lịch hơn thế nhiều lần.
       assert.ok(thoatWorker, "terminate() không được gọi nên không có gì để theo dõi sự kiện exit");
       let timer: NodeJS.Timeout | undefined;
       try {
@@ -171,8 +175,8 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
           thoatWorker,
           new Promise((_resolve, reject) => {
             timer = setTimeout(
-              () => reject(new Error("worker không tự thoát (sự kiện 'exit') trong 300ms sau khi bị terminate()")),
-              300,
+              () => reject(new Error("worker không tự thoát (sự kiện 'exit') trong 3000ms sau khi bị terminate()")),
+              3000,
             );
           }),
         ]);

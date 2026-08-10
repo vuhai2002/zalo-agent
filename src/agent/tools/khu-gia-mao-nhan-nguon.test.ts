@@ -67,6 +67,54 @@ describe("khuDaiPhanCachGia - phải SIÊU TẬP regex lồng CŨ (vòng 2) (Low
 });
 
 describe("khuGiaMaoTrongDoan - hiệu năng TUYẾN TÍNH (vòng rà soát lần 3 + 4)", () => {
+  /**
+   * Thời gian MỖI LẦN GỌI, đo bằng HAI lớp chống nhiễu - biên 20 và 50 ms giữ
+   * NGUYÊN, thủ phạm nhấp nháy không phải biên mà là phép đo.
+   *
+   * Lớp 1 - TRUNG BÌNH TRÊN MỘT LOẠT: đo một phát thì mẫu số `nho` chỉ
+   * 0,07-0,11 ms, tức cùng cỡ với chính nhiễu lịch của hệ điều hành. Chạy
+   * `soLap` lần rồi chia ra đưa một loạt lên ~15 ms, để một lần GC hay một
+   * nhát preempt không còn nhân đôi được số đo.
+   *
+   * Lớp 2 - MIN CỦA 5 LOẠT: khuôn đã có sẵn ở `shared/html-to-text.test.ts`
+   * ("Đo một phát từng bị đỏ oan"). Nhiễu chỉ CỘNG THÊM thời gian chứ không
+   * bao giờ trừ đi, nên min là số đo sạch nhất.
+   *
+   * Đo hiệu quả thật (bản sao logic, 400 vòng mỗi mức, đếm số lần vi phạm
+   * `tiLe < 20` và tỉ lệ lớn nhất gặp phải):
+   *
+   * | tải máy | đo một phát | chỉ min 5 loạt | hai lớp (bản này) |
+   * |---|---|---|---|
+   * | rảnh | 1 (33,3) | 0 (14,8) | 0 (16,1) |
+   * | 4 tiến trình đốt CPU | 0 (12,9) | 0 (9,2) | 0 (9,6) |
+   * | 32 tiến trình đốt CPU | 304 (75,3) | 98 (57,6) | 41 (40,6) |
+   *
+   * Nói cho đúng: hai lớp này LÀM GIẢM chứ KHÔNG XOÁ HẲN nhấp nháy - ở mức 32
+   * tiến trình đốt CPU (máy bị bỏ đói nặng hơn hẳn mọi lần chạy `pnpm test`
+   * thật) vẫn còn 41/400. Mọi phép đo theo đồng hồ đều vậy; muốn xoá hẳn thì
+   * phải đếm SỐ PHÉP TÍNH thay vì đo thời gian, tức phải chèn bộ đếm vào chính
+   * code sản phẩm - giá đắt hơn thứ đang bảo vệ. Đừng "chữa" bằng cách nới
+   * biên: biên 20/50 ms chính là thứ phân biệt tuyến tính với bậc hai.
+   *
+   * `soLap` tự co theo tốc độ thật (không chốt cứng 200): một bản regex bậc
+   * hai tốn ~441 ms MỘT lần gọi thì `soLap` về 1, nên test vẫn ĐỎ NHANH thay
+   * vì chạy 200 x 441 ms x 5 loạt. Đã kiểm: phép phá "quay lại regex lồng
+   * vòng 2" làm test đỏ sau ~21 giây.
+   */
+  function doMoiLanGoi(chay: () => void): number {
+    chay(); // khởi động JIT trước khi đo, tránh nhiễu compile lần đầu
+    const t0 = performance.now();
+    chay();
+    const motLan = performance.now() - t0;
+    const soLap = Math.max(1, Math.min(200, Math.ceil(15 / Math.max(motLan, 0.001))));
+    const motLoat = (): number => {
+      const t = performance.now();
+      for (let i = 0; i < soLap; i++) chay();
+      return (performance.now() - t) / soLap;
+    };
+    return Math.min(...Array.from({ length: 5 }, motLoat));
+  }
+
   it("khử dải phân cách: thời gian TĂNG TUYẾN TÍNH theo độ dài, KHÔNG phải bậc hai (Important 1)", () => {
     const doTre = (n: number): number => {
       // PHẢI có dấu "-" ở đâu đó: `khuDaiPhanCachGia` có lối tắt
@@ -77,11 +125,8 @@ describe("khuGiaMaoTrongDoan - hiệu năng TUYẾN TÍNH (vòng rà soát lần
       // "quay lại regex lồng" vẫn đỏ 1461ms nhưng chỉ vì bản CŨ không có lối
       // tắt đó, không chứng minh bản MỚI tuyến tính).
       const doc = `${"\n ".repeat(n)}\n---\n`;
-      const t0 = performance.now();
-      khuGiaMaoTrongDoan(doc);
-      return performance.now() - t0;
+      return doMoiLanGoi(() => khuGiaMaoTrongDoan(doc));
     };
-    doTre(1000); // khởi động JIT trước khi đo, tránh nhiễu compile lần đầu
 
     const nho = doTre(3000);
     const lon = doTre(24000); // gấp 8 lần độ dài của "nho"
@@ -103,11 +148,8 @@ describe("khuGiaMaoTrongDoan - hiệu năng TUYẾN TÍNH (vòng rà soát lần
     // bậc hai dù `locKyTuAn` không lọc ZWSP nên payload tới nơi nguyên vẹn.
     const doTre = (n: number): number => {
       const doc = `[Nguồn${"​".repeat(n)}x`;
-      const t0 = performance.now();
-      khuGiaMaoTrongDoan(doc);
-      return performance.now() - t0;
+      return doMoiLanGoi(() => khuGiaMaoTrongDoan(doc));
     };
-    doTre(1000);
 
     const nho = doTre(2000);
     const lon = doTre(16000); // gấp 8 lần độ dài của "nho"
