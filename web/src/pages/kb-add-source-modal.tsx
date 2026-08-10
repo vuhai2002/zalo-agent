@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError } from "../dashboard-api-client";
 import { useChotNen } from "../shared/backdrop-close-guard";
+import { FileDropZone } from "../shared/file-drop-zone";
 import { DINH_DANG_HO_TRO } from "../shared/kb-formats";
+import { tenNguonTuTenFile } from "./kb-source-name-from-file";
 import {
   layNhanTranDungLuong,
   layThongDiepVuotTran,
@@ -17,15 +19,23 @@ type Tab = "file" | "text";
  * Đóng modal ngay sau khi tạo THÀNH CÔNG lệnh tạo, không đợi worker xử lý xong -
  * bảng nguồn ở trang cha tự cập nhật trạng thái khi poll lại.
  */
-export function KbAddSourceModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function KbAddSourceModal({
+  onClose,
+  onCreated,
+  fileBanDau,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  /** File thả thẳng vào bảng ở trang cha - modal mở ra đã chọn sẵn file này */
+  fileBanDau?: File;
+}) {
   const [tab, setTab] = useState<Tab>("file");
-  const [ten, setTen] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [ten, setTen] = useState(fileBanDau ? tenNguonTuTenFile(fileBanDau.name) : "");
+  const [file, setFile] = useState<File | null>(fileBanDau ?? null);
   const [noiDung, setNoiDung] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [tranMB, setTranMB] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const nen = useChotNen(onClose);
 
   // I20: đọc trần dung lượng THẬT từ cấu hình (không hard-code) để hiện ngay
@@ -49,13 +59,26 @@ export function KbAddSourceModal({ onClose, onCreated }: { onClose: () => void; 
     if (f && tranMB !== null && vuotTranDungLuong(f.size, tranMB)) {
       setError(layThongDiepVuotTran(f.name, tranMB));
       setFile(null);
-      // Xóa giá trị input gốc - không thì chọn LẠI đúng file đó không bắn
-      // onChange lần nữa (trình duyệt coi value không đổi).
-      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
     setFile(f);
+    // Điền sẵn tên nguồn từ tên file khi ô tên còn trống - bỏ một bước gõ tay
+    // cho ca thường gặp nhất. Người dùng sửa lại được, và đã gõ gì rồi thì
+    // KHÔNG đè lên.
+    if (f) setTen((truoc) => (truoc.trim() ? truoc : tenNguonTuTenFile(f.name)));
   }
+
+  // Trần dung lượng tải về BẤT ĐỒNG BỘ, nên có khung hở: file được chọn (bấm,
+  // thả, hoặc thả từ trang cha) TRƯỚC khi `tranMB` về thì không nhánh nào kiểm
+  // nó. Kiểm lại đúng một lần khi trần vừa tới, để người dùng biết ngay thay vì
+  // bấm Lưu rồi mới ăn lỗi từ server.
+  useEffect(() => {
+    if (tranMB === null || !file) return;
+    if (vuotTranDungLuong(file.size, tranMB)) {
+      setError(layThongDiepVuotTran(file.name, tranMB));
+      setFile(null);
+    }
+  }, [tranMB, file]);
 
   async function luu() {
     if (!hopLe) return;
@@ -133,24 +156,12 @@ export function KbAddSourceModal({ onClose, onCreated }: { onClose: () => void; 
                   <span className="text-[12px] text-ink-soft">{layNhanTranDungLuong(tranMB)}</span>
                 )}
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
+              <FileDropZone
+                onFile={(f) => chonFile(f)}
                 accept={DINH_DANG_HO_TRO.map((d) => `.${d}`).join(",")}
-                className="hidden"
-                onChange={(e) => chonFile(e.target.files?.[0] ?? null)}
+                moTa={DINH_DANG_HO_TRO.join(", ")}
+                tenFileDaChon={file?.name}
               />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full cursor-pointer rounded-lg border border-dashed border-line bg-tile/40 px-4 py-6 text-center text-[13px] text-ink-soft hover:border-zalo-400 hover:bg-tile"
-              >
-                {file ? (
-                  <span className="font-medium text-ink">{file.name}</span>
-                ) : (
-                  <>Bấm để chọn file - {DINH_DANG_HO_TRO.join(", ")}</>
-                )}
-              </button>
             </div>
           ) : (
             <div>
