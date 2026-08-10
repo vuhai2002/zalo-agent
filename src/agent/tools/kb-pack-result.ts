@@ -33,6 +33,20 @@
  * đóng gói trong phần ngân sách còn lại. Xem chứng minh + test quét trong
  * `kb-pack-result.test.ts`.
  *
+ * PHẠM VI của bất biến đó - đọc kỹ trước khi dựa vào: nó nói về ĐẦU RA CỦA
+ * HÀM NÀY so với `nganSachNoiDung` NÓ ĐƯỢC ĐƯA, KHÔNG nói gì về chuỗi CUỐI
+ * CÙNG mà `kb-search-tool.ts` gửi cho model. Chuỗi cuối cùng còn đi qua
+ * `wrapUntrustedContent` sau đó, và có thời gian bước bọc đó LÀM DÀI RA thêm
+ * 13,8% (chuỗi thay thế dài hơn chuỗi bị thay - đã sửa ở `DANG_KHU`). Hai
+ * vòng rà soát đã chứng minh một mệnh đề ĐÚNG nhưng không phải mệnh đề cần:
+ * phép quét 6.000+ tổ hợp dưới đây chỉ đo hàm này, còn thứ trần
+ * `KB_MAX_RESULT_CHARS` thật sự phải chặn là chuỗi cuối cùng - ca đó đo ở
+ * `kb-search-tool.test.ts`, không phải ở đây.
+ *
+ * Bất biến cũng KHÔNG áp cho ngân sách nhỏ hơn câu báo (~70 ký tự): sàn
+ * `Math.max(1, ...)` ưu tiên "trả về thứ gì đó" hơn là giữ trần. Ca đó không
+ * tới được từ dashboard/.env vì `KB_MAX_RESULT_CHARS` đã có sàn 2000.
+ *
  * Hàm THUẦN - không env, không DB, không log - cùng mẫu với
  * `../trim-context-to-budget.ts`.
  */

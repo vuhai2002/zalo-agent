@@ -57,8 +57,30 @@ import { locKyTuAn } from "./tag-ky-tu-an.js";
  */
 const TEN_THE_RE = new RegExp([...THE.replace(/_/g, "")].join("[\\p{Cf}\\p{Mn}_]*"), "giu");
 
-/** Dạng đã khử: gạch ngang thay gạch dưới, không còn khớp tên thẻ gốc */
-const DANG_KHU = THE.replace(/_/g, "-");
+/**
+ * Dạng đã khử: gạch ngang thay gạch dưới nên không còn khớp `TEN_THE_RE`
+ * (gạch ngang KHÔNG nằm trong lớp đệm `[\p{Cf}\p{Mn}_]`).
+ *
+ * BẮT BUỘC không dài hơn khớp NGẮN NHẤT có thể của `TEN_THE_RE` - tức
+ * `THE.replace(/_/g, "")` = "noidungngoai", 12 ký tự. Nhờ vậy `String.replace`
+ * bên dưới KHÔNG BAO GIỜ làm chuỗi DÀI RA, và bất biến
+ * `wrapUntrustedContent(x).length === voLen + x.length` giữ đúng cho MỌI nội
+ * dung - đó là bất biến mà `kb-search-tool.ts` dựa vào để chừa ngân sách.
+ *
+ * Bản trước dùng thẳng `THE.replace(/_/g, "-")` = "noi-dung-ngoai" (14 ký tự),
+ * tức DÀI HƠN khớp ngắn nhất 2 ký tự. Hệ quả đo được ở `kb_search` với trần
+ * mặc định 8000: ngân sách nội dung 7665, đóng gói ra 7603 (đạt), nhưng sau
+ * khi bọc thành 9100 - VƯỢT TRẦN 1100 ký tự (+13,8%). Nội dung tài liệu đi
+ * thẳng qua `locKyTuAn`/`khuGiaMaoTrongDoan` mà không đụng chuỗi này, nên
+ * người soạn tài liệu ĐIỀU KHIỂN ĐƯỢC mức tràn (nhồi càng nhiều lần khớp thì
+ * tràn càng nhiều). Cắt lại chuỗi ĐÃ BỌC là hướng sai: phải nối lại thẻ đóng
+ * mang nonce, thêm một đường dễ hỏng vào đúng lớp ranh giới an toàn.
+ *
+ * Đổi CHUỖI THAY THẾ không làm HẸP tập bắt: `TEN_THE_RE` (thứ quyết định bắt
+ * được những gì) giữ nguyên từng ký tự - xem test siêu tập ở
+ * `wrap-untrusted-content.test.ts`.
+ */
+const DANG_KHU = "khoi-ngoai";
 
 /** 4 byte ngẫu nhiên -> 8 ký tự hex, đủ để không đoán được trước khi nội dung
  * được viết ra (kẻ tấn công soạn nội dung TRƯỚC khi biết nonce của lần gọi). */

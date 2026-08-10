@@ -195,6 +195,76 @@ describe("wrapUntrustedContent - chống cắt sớm ranh giới (thẻ giả tr
   });
 });
 
+describe("wrapUntrustedContent - bước bọc KHÔNG được làm nội dung DÀI RA (I5)", () => {
+  /**
+   * `kb-search-tool.ts` chừa ngân sách bằng cách đo phần VỎ một lần
+   * (`wrapUntrustedContent("x", nguon).length - 1`) rồi trừ khỏi trần. Phép
+   * tính đó chỉ đúng nếu bước bọc giữ NGUYÊN độ dài nội dung. Bản trước thay
+   * khớp ngắn nhất "noidungngoai" (12) bằng "noi-dung-ngoai" (14) - dài thêm 2
+   * ký tự MỖI lần khớp, mà số lần khớp do NGƯỜI SOẠN TÀI LIỆU quyết định.
+   */
+  const soLanKhopToiDa = (n: number) => Math.floor(n / THE.replace(/_/g, "").length);
+
+  it("nội dung nhồi kín chuỗi kích hoạt: khối bọc KHÔNG dài hơn vỏ + nội dung", () => {
+    const nguon = "kho tri thức: bảo hành";
+    const voLen = wrapUntrustedContent("x", nguon).length - 1;
+    // Nhồi kín khớp NGẮN NHẤT (12 ký tự) - mật độ khớp cao nhất có thể, tức ca
+    // xấu nhất cho phép thay.
+    const noiDung = "noidungngoai".repeat(700);
+    const ra = wrapUntrustedContent(noiDung, nguon);
+    const soKhop = soLanKhopToiDa(noiDung.length);
+    // NGẮN ĐI thì không sao (chỉ phí một ít ngân sách), DÀI RA mới phá phép
+    // trừ vỏ của kb-search-tool. Với chuỗi thay thế cũ ("noi-dung-ngoai", 14
+    // ký tự) chỗ này dài thêm đúng 2 x soKhop ký tự.
+    assert.ok(
+      ra.length <= voLen + noiDung.length,
+      `bọc làm DÀI RA ${ra.length - voLen - noiDung.length} ký tự trên ${soKhop} lần khớp`,
+    );
+    // Fixture phải THẬT SỰ đi qua phép thay - không thì khẳng định trên vô nghĩa
+    assert.ok(soKhop >= 700, `fixture phải có nhiều lần khớp, đo được ${soKhop}`);
+    assert.equal(ra.includes("noidungngoai"), false, "chuỗi kích hoạt còn nguyên - phép thay không chạy");
+  });
+
+  it("bất biến CHUNG: TỪNG hình dạng khớp một, khối bọc KHÔNG BAO GIỜ dài hơn vỏ + nội dung", () => {
+    const nguon = "x";
+    const voLen = wrapUntrustedContent("x", nguon).length - 1;
+    // TỪNG hình dạng chạy RIÊNG, không trộn chung một chuỗi: hình dạng DÀI
+    // (có gạch dưới/ký tự vô hình xen) bị thay bằng chuỗi ngắn nên co lại, đủ
+    // để BÙ phần dài ra của hình dạng NGẮN nếu trộn lẫn - và thế là phép đo
+    // tổng xanh trong khi một hình dạng vẫn đang làm tràn. Đã tự bắt lỗi này
+    // bằng cách chạy phép phá TRƯỚC khi tin bộ test: bản trộn chung KHÔNG đỏ
+    // khi trả `DANG_KHU` về chuỗi dài, dù hai ca test khác đỏ đúng.
+    const hinhDang: [string, string][] = [
+      ["khớp NGẮN NHẤT (không ký tự xen)", "noidungngoai"],
+      ["tên thẻ gốc (gạch dưới)", THE],
+      ["có ZWSP xen giữa", "noi​dung​ngoai"],
+      ["viết HOA", "NOIDUNGNGOAI"],
+      ["gạch dưới rải khắp", "n_o_i_d_u_n_g_n_g_o_a_i"],
+      ["thẻ đóng giả", `</${THE}>`],
+      ["chữ thường, không khớp gì", "chữ tiếng Việt bình thường"],
+    ];
+    for (const [ten, mau] of hinhDang) {
+      for (const noi of [" ", "", "\n", "."]) {
+        for (const lap of [1, 2, 7, 30, 100]) {
+          const noiDung = Array.from({ length: lap }, () => mau).join(noi);
+          const ra = wrapUntrustedContent(noiDung, nguon);
+          assert.ok(
+            ra.length <= voLen + noiDung.length,
+            `${ten} (nối ${JSON.stringify(noi)}, lặp ${lap}): DÀI RA ${ra.length - voLen - noiDung.length} ký tự`,
+          );
+        }
+      }
+    }
+  });
+
+  it("chuỗi thay thế vẫn KHÔNG khớp lại tên thẻ gốc - ngắn đi không được đánh đổi bằng khử hụt", () => {
+    // Nếu chuỗi thay thế tự nó khớp `TEN_THE_RE` thì phép khử thành vô nghĩa.
+    const ra = wrapUntrustedContent(`${DAI} ${THE} ${DAI}`, "x");
+    const phanNoiDung = ra.split("\n").slice(5, -1).join("\n");
+    assert.equal(phanNoiDung.includes(THE), false, "tên thẻ gốc còn sống sót trong nội dung sau khi khử");
+  });
+});
+
 describe("wrapUntrustedContent - lọc dải Tags trong THAM SỐ NGUON (Critical 2, vòng rà soát lần 3)", () => {
   it("dải Tags giấu trong nguon (vd page.title của web_fetch) bị lọc - nằm ngay DÒNG KHUNG, lộ liễu hơn nằm trong thân", () => {
     // Ca thật: web-fetch-tool.ts truyền page.title (rút từ <title> trang lạ,

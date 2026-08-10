@@ -42,6 +42,12 @@ describe("dongGoiTheoNganSach - ba nhánh", () => {
     assert.ok(kq.length > 0, "không được trả rỗng");
     assert.match(kq, /đã rút gọn/, "phải ghi rõ đã rút gọn");
     assert.ok(!kq.includes(doan[0]!), "không được chứa nguyên văn đoạn gốc (phải bị cắt thật)");
+    // Chốt BIÊN `conLai > 1` (khoảng trống vòng rà soát cuối): đoạn đầu bị cắt
+    // mà KHÔNG còn đoạn nào phía sau thì TUYỆT ĐỐI không được báo "còn N đoạn".
+    // Grep `doesNotMatch(/còn \d+ đoạn/)` trước đây chỉ có ở nhánh "đủ chỗ",
+    // nên đổi `conLai > 1` thành `conLai >= 1` (lệch một) không test nào đỏ -
+    // model sẽ đọc "còn 0 đoạn nữa không đủ chỗ", vừa sai vừa khó hiểu.
+    assert.doesNotMatch(kq, /còn \d+ đoạn/, `chỉ có ĐÚNG 1 đoạn, không được báo còn đoạn nào: ${JSON.stringify(kq)}`);
   });
 
   it("cắt đoạn đầu VÀ còn đoạn khác phía sau: PHẢI báo cả hai (Important 1, vòng rà soát lần 3)", () => {

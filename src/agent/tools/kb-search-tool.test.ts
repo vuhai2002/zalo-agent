@@ -192,6 +192,38 @@ describe("kb_search - trần ký tự áp cho TOÀN BỘ kết quả", () => {
     napNguon(AGENT_ID, "Chính sách bảo hành", [NOI_DUNG_DAI]);
   });
 
+  it("I5: nội dung LÀM DÀI chuỗi ở bước bọc vẫn nằm gọn trong trần - đo chuỗi CUỐI CÙNG", async () => {
+    // Khoảng trống thứ MƯỜI BA: hai khẳng định `kq.length <= 2000` sẵn có coi
+    // đó là bất biến cứng, nhưng KHÔNG fixture nào chạm đường làm nó vỡ.
+    //
+    // Đường đó là bước BỌC: `wrapUntrustedContent` thay mọi lần khớp tên thẻ
+    // trong nội dung SAU KHI ngân sách đã chốt. Chuỗi thay thế từng DÀI HƠN
+    // khớp ngắn nhất 2 ký tự, mà số lần khớp do NGƯỜI SOẠN TÀI LIỆU quyết
+    // định. Đo TRƯỚC khi sửa với trần mặc định 8000: ngân sách nội dung 7665,
+    // đóng gói ra 7603 (đạt), bọc xong 9100 - VƯỢT TRẦN 1100 ký tự (+13,8%).
+    //
+    // Nội dung dưới đây nhồi kín "noidungngoai" (khớp NGẮN NHẤT, tức mật độ
+    // khớp cao nhất) xen dấu cách để `catOKhoangTrang` cắt được đúng ngân
+    // sách. `donKb()` vì `beforeEach` của describe này đã nạp sẵn nguồn khác.
+    donKb();
+    const kichHoat = `${"noidungngoai ".repeat(1200)}bảo hành`;
+    napNguon(AGENT_ID, "Tài liệu đối tác", [kichHoat]);
+    tuning.setTuning("KB_MAX_RESULT_CHARS", 2000);
+    try {
+      const kq = await run(makeCtx(), { cau_hoi: "bảo hành" });
+      assert.ok(kq.length <= 2000, `dài ${kq.length}, vượt trần 2000 ở BƯỚC BỌC (đóng gói đã đạt trần)`);
+      // Fixture phải THẬT SỰ đi qua đường khử, không thì ca này không đo gì:
+      // tên thẻ gốc biến mất khỏi kết quả nghĩa là phép thay đã chạy.
+      assert.equal(
+        kq.includes("noidungngoai"),
+        false,
+        "chuỗi kích hoạt còn nguyên văn - phép thay không chạy, ca test này không đo được gì",
+      );
+    } finally {
+      tuning.setTuning("KB_MAX_RESULT_CHARS", null);
+    }
+  });
+
   it("kết quả bị cắt về đúng trần ký tự (đuôi tài liệu biến mất), có câu báo đã cắt", async () => {
     // `setTuning` ghi thẳng xuống DB, KHÔNG đi qua `validateTuning` (route
     // dashboard mới kiểm ràng buộc chéo lúc GHI) - dùng được để dựng đúng ca

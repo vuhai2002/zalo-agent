@@ -12,9 +12,11 @@
 
 /**
  * Tên thẻ bọc nội dung ngoài. `wrapUntrustedContent` đổi MỌI lần xuất hiện của
- * chuỗi này trong nội dung web thành `noi-dung-ngoai` (gạch ngang) trước khi
- * bọc, nên một trang web không thể tự làm câu trả lời chứa nó - dấu hiệu này
- * gần như chỉ có thể tới từ chính system prompt.
+ * chuỗi này trong nội dung web thành `khoi-ngoai` trước khi bọc, nên một trang
+ * web không thể tự làm câu trả lời chứa nó - dấu hiệu này gần như chỉ có thể
+ * tới từ chính system prompt. (Chuỗi thay thế NGẮN HƠN chuỗi bị thay là có
+ * chủ đích, để phép thay không làm chuỗi dài ra - xem `DANG_KHU` ở
+ * `wrap-untrusted-content.ts`.)
  *
  * Ngoại lệ đã biết: người dùng gõ thẳng chuỗi này vào Zalo rồi bot nhại lại.
  * Chấp nhận chặn nhầm ca đó - người gõ đúng tên thẻ nội bộ là đang dò, không
