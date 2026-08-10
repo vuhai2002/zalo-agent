@@ -1,6 +1,24 @@
 import type { KbSourceStatus } from "../dashboard-api-client";
 import { nenHenLuotKe, type KetQuaTaiNguon } from "./kb-poll-guard";
 
+/**
+ * CHƯA ĐƯỢC NỐI VÀO GIAO DIỆN (rà soát vòng 6, phase 06). `knowledge-page.tsx`
+ * đã LÙI về `setInterval(reload, 4000)` đơn giản sau 5 vòng vá liên tiếp đẻ ra
+ * 4 hồi quy mới rồi tới "25/540 kịch bản hệ thống tự mâu thuẫn" (quét vét cạn
+ * ở vòng 6: `sourcesDaBiet` của chính HEAD nói "còn việc" mà không có timer
+ * nào đang chờ) - "dừng poll khi hết việc" chỉ là tối ưu Minor, không phải
+ * lỗi Important. File này (cùng `kb-poll-guard.ts`) GIỮ LẠI nguyên vẹn làm
+ * tri thức sống về các bất biến đã học được qua 5 vòng vá + điểm khởi đầu
+ * cho ai làm lại tối ưu đó - xem mục "dừng poll khi rảnh" trong roadmap (báo
+ * cáo phase 06) cho bảng 9 chiều làm điều kiện nghiệm thu và hướng vá
+ * `dangBay === 0` đã đo đóng được 25/25 kịch bản còn lại, không vỡ test nào.
+ *
+ * BIẾT TRƯỚC: bản dưới đây (`taoVongPoll`) mới khóa được 8/9 chiều - chiều
+ * thứ 9 (chống MÂU THUẪN NỘI TẠI giữa `sourcesDaBiet` và trạng thái timer)
+ * CHƯA đóng. Đừng coi 12 test trong `kb-poll-loop.test.ts` là bằng chứng đủ -
+ * chúng chỉ phủ 8 chiều đầu.
+ */
+
 const CHU_KY_MS = 4000;
 
 /**

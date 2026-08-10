@@ -1,6 +1,17 @@
 import type { KbSourceStatus } from "../dashboard-api-client";
 
 /**
+ * CHƯA ĐƯỢC NỐI VÀO GIAO DIỆN (rà soát vòng 6, phase 06). `knowledge-page.tsx`
+ * đã LÙI về `setInterval(reload, 4000)` đơn giản sau 5 vòng vá liên tiếp đẻ ra
+ * 4 hồi quy mới rồi tới "25/540 kịch bản hệ thống tự mâu thuẫn" - "dừng poll
+ * khi hết việc" chỉ là tối ưu Minor, không phải lỗi Important. File này (cùng
+ * `kb-poll-loop.ts`) GIỮ LẠI nguyên vẹn làm tri thức sống về các bất biến đã
+ * học được + điểm khởi đầu cho ai làm lại tối ưu đó - xem mục "dừng poll khi
+ * rảnh" trong roadmap (báo cáo phase 06) cho bảng 9 chiều làm điều kiện
+ * nghiệm thu và hướng vá đã đo đóng được 25/25 kịch bản còn lại.
+ */
+
+/**
  * Còn nguồn nào ĐANG chờ worker nền xử lý không (`cho_xu_ly`/`dang_xu_ly`) -
  * quyết định trang Kho tri thức có cần hẹn giờ tải lại tiếp hay dừng hẳn.
  *
@@ -17,13 +28,14 @@ export function conViecDoiXuLy(sources: { trangThai: KbSourceStatus }[]): boolea
 /**
  * Kết quả một lần thử tải danh sách nguồn - `thanhCong: false` không kèm
  * `items` vì không có gì mới để đọc, chỉ kèm `loi` (tùy chọn) để tầng áp dụng
- * UI (`kb-source-poll.ts`) hiện đúng thông điệp lỗi mà không phải tự bắt lại
- * exception ở một chỗ khác.
+ * UI hiện đúng thông điệp lỗi mà không phải tự bắt lại exception ở một chỗ
+ * khác.
  *
  * Generic theo `T` (mặc định chỉ cần `trangThai`) - `kb-poll-guard.test.ts`
- * dùng fixture tối giản `{ trangThai }`, còn `kb-source-poll.ts` (component
- * thật) cần NGUYÊN `KbSourceListItem[]` (đủ trường cho `setSources`) để
- * `apDung` (`kb-poll-loop.ts`) không phải ép kiểu mất an toàn.
+ * dùng fixture tối giản `{ trangThai }`, còn hook React nối vào component
+ * thật (nếu tối ưu này được nối lại - xem ghi chú "CHƯA ĐƯỢC NỐI VÀO GIAO
+ * DIỆN" ở đầu file) cần NGUYÊN `KbSourceListItem[]` (đủ trường cho
+ * `setSources`) để `apDung` (`kb-poll-loop.ts`) không phải ép kiểu mất an toàn.
  */
 export type KetQuaTaiNguon<T extends { trangThai: KbSourceStatus } = { trangThai: KbSourceStatus }> =
   | { thanhCong: true; items: T[] }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type KbSourceListItem } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
 import { useConfirmDialog } from "../shared/confirm-dialog";
@@ -9,7 +9,6 @@ import { KbAddSourceModal } from "./kb-add-source-modal";
 import { KbChunksModal } from "./kb-chunks-modal";
 import { xayThongDiepXoaNguon } from "./kb-delete-warning-message";
 import { trangCuoiCungConDuLieu } from "./kb-page-clamp";
-import { useKbSourcePoll } from "./kb-source-poll";
 import { KbSourceRow } from "./kb-source-row";
 
 // Phân trang phía CLIENT - `GET /api/kb/sources` chưa hỗ trợ offset/limit,
@@ -19,17 +18,59 @@ const KICH_TRANG = 20;
 /**
  * Trang Kho tri thức: nạp tài liệu (file hoặc gõ tay) để agent tra cứu qua
  * tool `kb_search`. Xử lý (đọc file, cắt đoạn) chạy NỀN - trang này tự làm
- * mới định kỳ để thấy trạng thái `cho_xu_ly` -> `san_sang` mà không cần F5,
- * nhưng DỪNG hẳn khi không còn nguồn nào đang chờ xử lý (B7).
+ * mới định kỳ để thấy trạng thái `cho_xu_ly` -> `san_sang` mà không cần F5.
+ *
+ * LÙI CÓ CHỦ Ý (rà soát vòng 6, phase 06): 5 vòng liền đã thử tối ưu "dừng
+ * poll khi hết việc" (B7) bằng vòng lặp tự quản lý lịch hẹn giờ
+ * (`kb-poll-loop.ts` nối qua một lớp hook React đã xóa) - hạng mục đó CHỈ là
+ * Minor của đợt rà soát trước, không nằm trong 5 lỗi Important (I17-I21) mà
+ * phase 06 sinh ra để sửa. Cả 5 vòng đều đẻ ra hồi quy MỚI (chết sau 1 lần
+ * tải hỏng, không tự khởi động lại, chồng lượt tái nhập, ghi sổ sai thứ tự,
+ * rồi tới "25/540 kịch bản hệ thống tự mâu thuẫn" ở vòng thứ năm) - trạng
+ * thái cuối cùng vẫn HẸP HƠN `setInterval` nguyên bản ở những chiều đo được.
+ * `setInterval` đơn giản hơn vì đúng cấu trúc: không bao giờ dừng nên không
+ * bao giờ "quên khởi động lại", không chết sau một lần tải hỏng, không có
+ * cửa sổ tái nhập của riêng nó. Cái giá đổi lại: ~900 request/giờ mỗi tab
+ * đang mở trên một endpoint đã bỏ toàn văn (`danhSachNguonGon`) - đây là
+ * hành vi đã chạy suốt đời tính năng trước phase 06, không phải hồi quy.
+ *
+ * `kb-poll-loop.ts`/`kb-poll-guard.ts` (khóa được 8/9 chiều) + bộ test của
+ * chúng GIỮ LẠI nguyên vẹn, KHÔNG nối vào giao diện - xem docstring đầu 2
+ * file đó. Đây là tri thức sống về các bất biến đã học được qua 5 vòng vá,
+ * và điểm khởi đầu cho ai làm lại tối ưu này (đã có hướng vá đo được đóng
+ * nốt chiều 9 - ghi ở "Vấn đề / băn khoăn" của report phase 06).
  */
 export function KnowledgePage() {
-  const { sources, loadError, reload } = useKbSourcePoll();
+  const [sources, setSources] = useState<KbSourceListItem[] | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const [xemDoanCua, setXemDoanCua] = useState<KbSourceListItem | null>(null);
   const { confirm, confirmDialog } = useConfirmDialog();
+
+  const reload = useCallback(() => {
+    api.kb
+      .sources()
+      .then((d) => {
+        setSources(d.items);
+        setLoadError("");
+      })
+      .catch((err: unknown) => {
+        setSources((cu) => cu ?? []);
+        setLoadError(err instanceof ApiError ? err.message : "Không tải được danh sách nguồn");
+      });
+  }, []);
+
+  useEffect(() => {
+    reload();
+    // Việc cắt đoạn chạy ở worker nền (kb-ingest-worker.ts, quét mỗi 5s) - tự
+    // làm mới để trạng thái cho_xu_ly/dang_xu_ly chuyển sang san_sang/hong mà
+    // người dùng không phải tự bấm F5.
+    const timer = window.setInterval(reload, 4000);
+    return () => window.clearInterval(timer);
+  }, [reload]);
 
   const daLoc = (sources ?? []).filter((s) => nhanKhopTuKhoa(s.ten, query));
 
