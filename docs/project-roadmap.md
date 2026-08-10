@@ -3984,17 +3984,25 @@ XÓA khỏi danh sách dưới đây - không lặp lại.
   trả `soHangFts` bằng PHÉP GÁN `= soDoan` chứ không đếm thật; lỗi HẠ TẦNG
   (`new Worker` ném, worker không nạp được module) đang bị gán nhãn chung
   "tài liệu độc" như lỗi nội dung; nhánh "giành thất bại vì ném lỗi SQL" đánh
-  `hong` vĩnh viễn thay vì trả về `cho_xu_ly` để thử lại; hạ
-  `KB_MAX_INGEST_ATTEMPTS` ngay lúc một nguồn đang chạy có thể làm nó kẹt
-  `cho_xu_ly` không xử lý tiếp.
+  `hong` vĩnh viễn thay vì trả về `cho_xu_ly` để thử lại.
+- Hạ `KB_MAX_INGEST_ATTEMPTS` lúc đang chạy làm nguồn đã tiêu quá số lượt mới
+  KẸT ở `cho_xu_ly` (`giaNguonChoXuLy` không giành nữa). Đây KHÔNG phải hành vi
+  có sẵn từ trước như bản roadmap trước ghi: cột `so_lan_thu` là cột MỚI của
+  chính đợt sửa này, trước đó không có bộ đếm nào để mà chạm trần. Dashboard
+  giờ đã có đường thoát (nút "Xử lý lại" hiện cho cả `cho_xu_ly`, cấp lại lượt
+  thử) - phần CÒN TREO là bản thân trạng thái kẹt: không có gì tự phát hiện và
+  tự gỡ, phải có người nhìn thấy rồi bấm.
 
 **Đọc file**
 
-- `extract-xlsx-text.ts` decode HTML entity HAI LẦN ở nhánh ô kiểu `"s"`
-  (chuỗi dùng chung đã decode một lần lúc dựng `chuoiDungChung`, decode lại
-  lần hai lúc lấy giá trị ô) - lệch với nhánh `inlineStr` chỉ decode một lần.
-  Chưa gây lỗi thấy được (entity kép hiếm gặp trong dữ liệu thật) nhưng dễ vỡ
-  khi gặp `&amp;amp;`.
+- `thayTheEscapeExcel` chạy HAI LẦN trên cùng một chuỗi ở nhánh ô kiểu `"s"`
+  (một lần lúc dựng `chuoiDungChung` tại `</si>`, lần hai lúc lấy giá trị ô
+  trong `giaTriOTheoLoai`) - lệch với nhánh `inlineStr` chỉ chạy một lần. Đây
+  là escape RIÊNG CỦA EXCEL cho ký tự điều khiển (`_x000D_` -> xuống dòng),
+  KHÔNG phải entity XML/HTML - parser XML không đụng tới nó, bộ đọc tự thay.
+  (Bản roadmap trước ghi nhầm là "decode HTML entity hai lần" và nêu ví dụ
+  `&amp;amp;` - sai cả cơ chế lẫn ví dụ.) Chưa gây lỗi thấy được nhưng dễ vỡ
+  với ô chứa chuỗi đã tự escape phần `_x005F_`.
 - pdfjs (qua `unpdf`) in thẳng ra console (`Warning: Indexing all PDF
   objects...`), đi vòng qua pino - nên truyền `verbosity: 0` cho
   `getDocumentProxy`.
@@ -4076,13 +4084,47 @@ XÓA khỏi danh sách dưới đây - không lặp lại.
   (đã quét 72.800 tổ hợp cấu hình hợp lệ, 0 vi phạm) - đây chỉ là CHẤT LƯỢNG
   cảnh báo admin sai, không phải lỗ hổng runtime. Fix thật phải chặn độ dài
   heading LÚC INGEST (`chunk-text.ts`), không phải vặn hằng số ở tầng validate.
-- `kb-pack-result.ts:27-28` docstring khẳng định "BẤT BIẾN CỨNG... KHÔNG BAO
-  GIỜ dài hơn [trần]" VÔ ĐIỀU KIỆN - thực tế có điều kiện tiên quyết
-  `nganSachNoiDung >= nhanDaiNhat`; dưới ngưỡng đó (~59-70 ký tự) có thể vượt
-  trần tới 60 ký tự. `kb-pack-result.test.ts` cũng thiếu assertion BIÊN: mutate
-  nhánh cắt-đầu-1-đoạn từ `conLai > 1` thành `conLai >= 1` (ra
-  "...còn 0 đoạn nữa...") vẫn qua lọt 3 khẳng định hiện có - cần thêm
-  `assert.doesNotMatch(/còn \d+ đoạn/)` khi `conLai === 0`.
+- `catOKhoangTrang` (`kb-pack-result.ts`) lùi tới khoảng trắng CUỐI CÙNG trong
+  lát cắt, nên văn bản KHÔNG có dấu cách ASCII (tiếng Trung/Nhật, URL dài,
+  bảng dán từ Excel) bị cắt về gần như không còn gì: đo được một đoạn 24.010
+  ký tự với ngân sách 7.665 ra đúng **32 ký tự**. Không phải lỗ hổng (vẫn dưới
+  trần) nhưng là mất nội dung âm thầm - model đọc được một mẩu cụt mà tưởng đó
+  là cả đoạn. Hướng rẻ: chỉ lùi khi điểm lùi còn giữ được phần lớn ngân sách
+  (ví dụ >= 80%), không thì cắt cứng.
+
+**Còn treo sau vòng rà soát toàn nhánh (đợt sửa CUỐI)**
+
+- Đoạn của lần nạp CŨ vẫn tra được sau khi nguồn chuyển `hong`: dashboard hiện
+  "Hỏng" trong khi `kb_search` vẫn trả nội dung của lần nạp trước đó (`luuDoan`
+  chỉ ghi đè khi có lần nạp THÀNH CÔNG mới). Hai mặt nói ngược nhau - người vận
+  hành thấy nguồn hỏng thì tưởng bot không còn đọc được nó nữa. Chưa chốt hướng:
+  xoá đoạn cũ lúc đánh `hong` là mất dữ liệu đang dùng được, giữ nguyên thì phải
+  nói rõ trên giao diện ("Hỏng - bot vẫn dùng bản nạp lúc <thời điểm>").
+- Chốt cỡ file lệch tầng: client đo CHÍNH FILE, server đo CẢ BODY multipart
+  (file + tên + ranh giới form). File đúng bằng trần qua được kiểm ở client rồi
+  ăn 413 ở server, không có câu giải thích nào khớp với thứ người dùng vừa thấy.
+- `web/src/pages/kb-poll-loop.ts` (160 dòng) + `kb-poll-guard.ts` (64 dòng) là
+  code CHẾT CÓ CHỦ ĐÍCH - không file nào ngoài chính chúng import (chỉ còn hai
+  dòng comment nhắc tên ở `knowledge-page.tsx`), kèm 394 dòng test / 22 ca. Giữ
+  lại theo quyết định đã chốt khi lùi trang Kho tri thức về `setInterval` (commit
+  `da04c86`). GHI RÕ ở đây để lần dọn sau không ai xoá nhầm, và cũng đừng nối
+  lại vào trang mà không đọc trước lý do đã lùi.
+- Nhánh XUỐNG DÒNG của `viTriCatTotNhat` (`chunk-text.ts:41`) chưa test nào
+  chạm, dù docstring gọi nó là nhánh ưu tiên CAO NHẤT. Đo bằng bộ đếm cắm tạm
+  vào ba nhánh, chạy `chunk-text.test.ts` + `kb-search-quality.test.ts` +
+  `kb-ingest-worker.test.ts`: `{goi: 19, xuongDong: 0, cauCham: 9, cung: 10}` -
+  đúng lớp lỗi "đường sống không có test" vừa vá ở chỗ khác.
+- Đường PDF (`unpdf`/pdfjs) không có trần nào ngoài `KB_MAX_FILE_MB` và
+  `KB_EXTRACT_TIMEOUT_MS` - không có tương đương của `ooxml-limits.ts` (số
+  trang, chữ trích ra, tỉ lệ nén). Sau đợt này `KB_EXTRACT_MAX_RAM_MB` là hàng
+  rào RAM duy nhất cho đường đó.
+- `trichTheDongThuc` (`wrap-untrusted-content.ts`) hiện KHÔNG ai gọi: nó được
+  thêm cho hướng "cắt lại chuỗi đã bọc", mà I5 đã chọn hướng khác (rút ngắn
+  chuỗi thay thế). Quyết định giữ hay xoá nên đi cùng lần dọn `kb-poll-*`.
+- `memory-prompt-block.ts` dùng cùng khuôn `DANG_KHU = THE.replace(/_/g, "-")`
+  mà `wrap-untrusted-content.ts` vừa phải bỏ vì làm chuỗi DÀI RA (`dieudanho` 9
+  ký tự -> `dieu-da-nho` 11). Chưa gây lỗi vì khối trí nhớ không đi qua phép trừ
+  ngân sách như `kb_search`, nhưng cùng một cái bẫy đang nằm sẵn ở đó.
 
 **Test-only nợ nhỏ (đọc OOXML)**
 
