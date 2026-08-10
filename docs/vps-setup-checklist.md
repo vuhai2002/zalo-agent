@@ -94,7 +94,7 @@ Hai điều dễ sai:
 
 Cần đúng hai thứ, và phải đi **cùng nhau**:
 
-1. `<thư-mục-dữ-liệu>` (SQLite + cookie đã mã hóa + ảnh).
+1. `<thư-mục-dữ-liệu>` (SQLite + cookie đã mã hóa + ảnh + tài liệu Kho tri thức trong `kb/`).
 2. `CREDENTIALS_ENCRYPTION_KEY` trong `.env.production`.
 
 Thiếu khóa thì bản backup vô dụng - nó là thứ giải mã cookie Zalo và mọi API key

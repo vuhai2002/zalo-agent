@@ -8,6 +8,7 @@ import {
   IconGlobe,
   IconImage,
   IconMessage,
+  IconSearch,
   IconSliders,
 } from "../shared/dashboard-icons";
 
@@ -26,7 +27,10 @@ const ICON_BY_GROUP: Record<string, IconFn> = {
   context: IconDatabase,
   web: IconGlobe,
   documents: IconFileText,
-  kb: IconFileText,
+  // Không dùng chung IconFileText với "documents": nhóm kia là TẠO file
+  // Word/Excel, nhóm này là TRA CỨU tài liệu đã nạp - trùng icon làm hai mục
+  // trông như cùng một tính năng trên nav trái.
+  kb: IconSearch,
   images: IconImage,
   sending: IconMessage,
   logs: IconClock,

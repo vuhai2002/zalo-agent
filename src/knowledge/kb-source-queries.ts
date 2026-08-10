@@ -11,6 +11,19 @@ import type { KbSource, KbSourceRow, TrangThaiNguon } from "./kb-source-store.js
 export type KbSourceTomTat = Omit<KbSource, "noiDungGoc">;
 type KbSourceRowGon = Omit<KbSourceRow, "noi_dung_goc">;
 
+/**
+ * `KbSource` đầy đủ (đã đọc ngược từ DB, vd sau `taoNguon`/`layNguon`) -> bản
+ * GỌN không `noiDungGoc`, dùng cho response API. `POST /sources/text` và
+ * `POST /sources/:id/reindex` (`kb-routes.ts`) trước đây dội nguyên toàn văn
+ * vừa gõ/đang lưu về client - cùng họ lỗi với "GET /sources lộ toàn văn" đã vá
+ * ở vòng rà soát trước, sót lại ở hai route này vì chúng đọc qua `taoNguon`/
+ * `layNguon` (đầy đủ) chứ không qua `danhSachNguonGon`.
+ */
+export function boNoiDungGoc(s: KbSource): KbSourceTomTat {
+  const { noiDungGoc: _bo, ...gon } = s;
+  return gon;
+}
+
 function mapRowGon(row: KbSourceRowGon): KbSourceTomTat {
   return {
     id: row.id,

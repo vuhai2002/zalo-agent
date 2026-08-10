@@ -139,7 +139,7 @@ Log cũng ghi ra file trong `<dữ-liệu>/logs/` (xoay theo ngày, giữ
 
 Chỉ cần hai thứ, và phải đi **cùng nhau**:
 
-1. Thư mục dữ liệu (SQLite + cookie đã mã hóa + ảnh).
+1. Thư mục dữ liệu (SQLite + cookie đã mã hóa + ảnh + tài liệu Kho tri thức trong `kb/`).
 2. `CREDENTIALS_ENCRYPTION_KEY`.
 
 ```bash

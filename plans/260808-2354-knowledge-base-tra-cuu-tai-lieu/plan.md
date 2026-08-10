@@ -66,6 +66,10 @@ gọn, không cần song song.
 
 - **Lớp vector/embedding.** RRF đã chừa sẵn chỗ; chỉ làm sau khi chạy thật và
   đo được tỉ lệ trượt. Đo nền: tìm theo từ khóa đúng 3/4 câu hỏi mẫu.
+  > **Đính chính:** đo lại sau đó ra **4/4** câu hỏi mẫu đúng hạng 1, không
+  > phải 3/4 - xem `docs/project-roadmap.md` mục 'Ca "mấy giờ đóng cửa" - đo
+  > lại ra 4/4 hạng 1, không phải 3/4 như bản đầu'. Dòng trên giữ nguyên làm
+  > bản ghi lịch sử của thời điểm lập kế hoạch.
 - **Đồng bộ thư mục tự động** (kiểu `VaultSyncWorker` của goclaw). Nguồn ở đây
   do người vận hành nạp qua dashboard, không có thư mục nào để theo dõi.
 - **Liên kết giữa tài liệu** (`vault_links`, wikilink). Chưa có nhu cầu.

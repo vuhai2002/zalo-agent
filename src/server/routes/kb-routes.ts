@@ -5,7 +5,7 @@ import { getAgent } from "../../config/agent-store.js";
 import { DINH_DANG_HO_TRO, laDinhDangHoTro } from "../../knowledge/doc-text-extract.js";
 import { datNguonChoAgent, nguonCuaAgent } from "../../knowledge/kb-agent-binding.js";
 import { luuFile, xoaFile } from "../../knowledge/kb-file-store.js";
-import { danhSachNguonGon, locIdTonTai } from "../../knowledge/kb-source-queries.js";
+import { boNoiDungGoc, danhSachNguonGon, locIdTonTai } from "../../knowledge/kb-source-queries.js";
 import { layNguon, taoNguon, datTrangThai, xoaNguon } from "../../knowledge/kb-source-store.js";
 import { createLogger } from "../../shared/logger.js";
 import { kbInspectRoutes } from "./kb-inspect-routes.js";
@@ -51,7 +51,9 @@ export const kbRoutes = new Hono()
 
     const source = taoNguon({ ten, loai: "text", noiDungGoc: noiDung });
     log.info({ sourceId: source.id }, "Tạo nguồn Kho tri thức (gõ tay)");
-    return c.json({ source }, 201);
+    // Không dội nguyên `noiDungGoc` về - client vừa gõ xong nội dung đó, không
+    // cần server trả lại; cùng luật với GET /sources (danhSachNguonGon).
+    return c.json({ source: boNoiDungGoc(source) }, 201);
   })
 
   .post("/sources/file", chanTranDungLuong, async (c) => {
@@ -121,7 +123,9 @@ export const kbRoutes = new Hono()
     // không phải retry tự động - cho nguồn một cơ hội đầy đủ, không cộng dồn
     // lượt thử đã tiêu ở lần trước.
     datTrangThai(id, "cho_xu_ly", { soLanThu: 0 });
-    return c.json({ source: layNguon(id) });
+    // Không dội nguyên `noiDungGoc` về - nguồn gõ tay có thể dài hàng chục
+    // nghìn ký tự, cùng lỗi đã vá ở GET /sources (danhSachNguonGon).
+    return c.json({ source: boNoiDungGoc(layNguon(id)!) });
   })
 
   // I19 + I21: xem `kb-inspect-routes.ts` - tách ra để file này giữ dưới 200 dòng.

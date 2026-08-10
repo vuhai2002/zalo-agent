@@ -12,15 +12,20 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 - **Kho tri thức**: nạp tài liệu (txt/md/docx/xlsx/pdf hoặc gõ tay) ở trang
   "Kho tri thức" trên dashboard, bot tra được nội dung qua tool `kb_search`
-  (FTS5 + bm25, hợp nhất bằng RRF - chừa sẵn chỗ cho lớp vector đợt sau). Xử lý
-  (đọc file, cắt đoạn theo ranh giới tiêu đề/đoạn văn) chạy ở vòng nền riêng,
-  REQUEST upload trả về ngay không phải đợi xử lý xong. Vòng nền vẫn chạy
-  CHUNG event loop với bot (`node:sqlite` đồng bộ) - nhả nhịp giữa mỗi nguồn để
-  nhiều nguồn xếp hàng không dồn thành một khối, nhưng một nguồn ĐƠN rất lớn
-  (gần trần `KB_MAX_FILE_MB`) vẫn giữ nhịp bot trong lúc ghi. Mỗi agent chỉ đọc
-  được nguồn đã bật cho nó ở trang sửa agent - mặc định KHÔNG bật nguồn nào.
-  File nạp lên bị kiểm chữ ký thật (magic bytes), không tin đuôi tên; lưu theo
-  id sinh ra chứ không dùng tên người dùng đặt.
+  (FTS5 + bm25, hợp nhất bằng RRF - chừa sẵn chỗ cho lớp vector đợt sau).
+  REQUEST upload trả về ngay, không đợi xử lý xong. Đọc file + cắt đoạn chạy
+  trong `worker_threads` riêng - không chặn bot khi trích xuất tài liệu nặng,
+  và một tài liệu độc quay CPU vô hạn cũng bị `terminate()` cắt được (luồng
+  chính không bao giờ đứng chờ). Việc còn giữ nhịp bot là bước GHI
+  `kb_chunks`/FTS xuống SQLite (chỉ luồng chính được mở kết nối DB) - chi phí
+  bám theo TỔNG LƯỢNG CHỮ ghi xuống, không phải số đoạn: đo 3 tài liệu, hai
+  tài liệu CÙNG 20MB nhưng số đoạn lệch nhau gấp 3 lần (23.164 và 68.986) chỉ
+  lệch ~15% thời gian ghi; một tài liệu 1/3 dung lượng (6,7MB) nhưng SỐ ĐOẠN
+  khớp tài liệu 20MB đầu tiên lại ghi đúng ~1/3 thời gian. Mỗi
+  agent chỉ đọc được nguồn đã bật cho nó ở trang sửa agent - mặc định KHÔNG bật
+  nguồn nào. File nạp lên bị kiểm chữ ký thật (magic bytes) cho docx/xlsx/pdf,
+  không tin đuôi tên - txt/md không có chữ ký cố định nên chấp nhận mọi byte;
+  lưu theo id sinh ra chứ không dùng tên người dùng đặt.
 - Agent tự khai được bộ công cụ của mình (`agents.disabled_tools`), GIAO với bộ
   công cụ của tài khoản Zalo. Công cụ dùng được là phần không bên nào tắt - agent
   khai năng lực, tài khoản áp chính sách, không bên nào bật ngược lại được bên

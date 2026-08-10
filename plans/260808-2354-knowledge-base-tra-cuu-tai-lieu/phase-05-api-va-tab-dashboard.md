@@ -82,6 +82,15 @@ Một vòng `xuLyMotVong` làm đúng chuỗi này cho TỪNG nguồn `cho_xu_ly
 4. `datTrangThai(id, "san_sang", { soDoan })`, hoặc `"hong"` kèm `loi` nếu bước
    2 hay 3 ném. Try/catch bọc TỪNG nguồn, không bọc cả vòng.
 
+> **Đính chính:** bước 1 ở đợt SỬA lỗi sau đó đổi từ `datTrangThai(id,
+> "dang_xu_ly")` (UPDATE vô điều kiện) sang `giaNguonChoXuLy(id, tranLanThu)`
+> (so sánh-rồi-đổi NGUYÊN TỬ trong một câu UPDATE, kèm tăng `so_lan_thu`) -
+> UPDATE vô điều kiện cho phép hai vòng xử lý chồng lấn thời gian thật giành
+> LẠI được nguồn nhau đã xử lý xong, gây xử lý trùng. Code hiện tại đúng hơn
+> bản mô tả ở đây; xem `src/knowledge/kb-source-queries.ts#giaNguonChoXuLy` và
+> mục "Kho tri thức" ở `docs/system-architecture.md`. Đoạn trên giữ nguyên làm
+> bản ghi lịch sử của thiết kế ban đầu.
+
 Xóa nguồn ở route phải theo đúng thứ tự: `layNguon(id)` lấy `duongDan` TRƯỚC,
 rồi `xoaNguon(id)`, rồi `xoaFile(duongDan)`. Xóa dòng DB trước mà chưa cầm
 `duongDan` là mất luôn đường tìm tới file.

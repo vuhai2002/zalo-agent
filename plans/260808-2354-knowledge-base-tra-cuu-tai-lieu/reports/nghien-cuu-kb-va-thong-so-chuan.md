@@ -126,6 +126,15 @@ Ca trượt đáng ghi: "đồng" (tiền) bỏ dấu thành "dong", trùng "đ�
 là "dong", nên đoạn phí vận chuyển bị đẩy lên trên đoạn giờ làm việc. Đây là
 điểm yếu cố hữu của tìm theo từ khóa và là lý do lớp vector đáng có ở đợt sau.
 
+> **Đính chính (không sửa lại bảng trên - đây là số đo TẠI THỜI ĐIỂM nghiên
+> cứu này):** đo lại trên fixture thật của `kb-search.test.ts` cho ra **4/4**
+> câu hỏi đúng hạng 1, kể cả "mấy giờ đóng cửa" - đoạn "Giờ làm việc" khớp BA
+> từ khác nhau sau khi bỏ dấu ("gio", "dong" từ "đóng", "cua") nên thắng đoạn
+> "Phí vận chuyển" (chỉ khớp một từ "dong" từ "đồng"). Va chạm bỏ dấu
+> "đóng"/"đồng" vẫn là rủi ro CÓ THẬT về nguyên tắc, chỉ là CHƯA kích hoạt trên
+> bộ 4 đoạn hiện có. Xem `docs/project-roadmap.md` mục 'Ca "mấy giờ đóng
+> cửa"...' cho số đo đầy đủ và lý do thắng/thua.
+
 ### Embedding khả thi mà không đổi nhà cung cấp
 
 9router có sẵn tầng embeddings: `open-sse/handlers/embeddingsCore.js` cộng các

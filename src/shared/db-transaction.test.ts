@@ -24,6 +24,24 @@ function taoDbGia(loiRollback?: Error): { db: DatabaseSync; lenhDaGoi: string[] 
   return { db: dbGia as unknown as DatabaseSync, lenhDaGoi };
 }
 
+/**
+ * KHÔNG BAO GIỜ được GỌI ở runtime (không nằm trong `describe`/`it` nào cả) -
+ * tồn tại DUY NHẤT để `tsc --noEmit` typecheck dòng `@ts-expect-error` bên
+ * trong. Chốt hồi quy cho `NotPromise<T>` của `db-transaction.ts`: callback
+ * `async` phải bị chặn Ở TẦNG KIỂU (không có test RUNTIME nào bắt được việc
+ * này - `COMMIT` chạy đồng bộ ngay sau `viec()` nên callback async "vẫn chạy
+ * được" ở runtime, chỉ sai NGẦM vì transaction đã đóng trước khi việc thật
+ * xong). Nếu ai đó nới `viec: () => NotPromise<T>` trở lại thành `() => T`,
+ * dòng dưới hết còn là lỗi kiểu, và `@ts-expect-error` biến thành lỗi "Unused
+ * '@ts-expect-error' directive" - `pnpm typecheck` đỏ ngay, không cần
+ * `node --test` chạy tới đây.
+ */
+function _khongGoiChiDeTypecheckCallbackAsyncBiChanOKieu(db: DatabaseSync): void {
+  // @ts-expect-error - callback async PHẢI bị chặn ở kiểu (NotPromise<T>)
+  trongGiaoDich(db, async () => 42);
+}
+void _khongGoiChiDeTypecheckCallbackAsyncBiChanOKieu;
+
 describe("trongGiaoDich", () => {
   it("đường thành công: BEGIN IMMEDIATE rồi COMMIT, trả về đúng giá trị của viec()", () => {
     const { db, lenhDaGoi } = taoDbGia();

@@ -96,8 +96,9 @@ async function xuLyMotNguon(n: KbSourceTomTat): Promise<void> {
       // Worker bị buộc dừng (quá hạn hoặc chết bất thường) - KHÔNG BIẾT tài
       // liệu hỏng thật hay chỉ máy chậm/OOM thoáng qua, nên KHÔNG đánh "hong"
       // ngay: để nguyên "dang_xu_ly" (đã đặt bởi giaNguonChoXuLy), chờ
-      // goNguonKetDauTick() (đọc so_lan_thu, gọi lúc khởi động lại) quyết
-      // định thử lại hay bỏ hẳn.
+      // goNguonKetDauTick() (đọc so_lan_thu, gọi ĐẦU MỖI TICK - không chỉ lúc
+      // khởi động lại, xem docstring của chính hàm đó) quyết định thử lại hay
+      // bỏ hẳn.
       log.warn({ sourceId: n.id, loi: err.message }, "Worker trích xuất Kho tri thức bị dừng giữa chừng");
       return;
     }

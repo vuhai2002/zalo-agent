@@ -3902,8 +3902,22 @@ trượt vì va chạm bỏ dấu kiểu tương tự (không nhất thiết đ�
   bằng `setImmediate` giữa MỖI nguồn để nhiều nguồn xếp hàng không dồn thành
   một khối liền, nhưng một nguồn ĐƠN rất lớn (gần trần `KB_MAX_FILE_MB`) vẫn
   giữ nhịp bot trong lúc ghi - đo: nguồn 100MB tốn ~6s, phần lớn nằm ở vòng ghi
-  `kb_chunks`/FTS (65.700 đoạn), không phải lúc cắt đoạn (198ms). Trần dung
-  lượng chặn ở TẦNG ĐỌC (`hono/body-limit`, không đợi gom hết byte vào RAM),
+  `kb_chunks`/FTS (65.700 đoạn), không phải lúc cắt đoạn (198ms).
+  > **Đính chính (đợt SỬA lỗi sau đó):** đọc file + cắt đoạn đã CHUYỂN sang
+  > `worker_threads` riêng (không còn "không có worker thread riêng" như câu
+  > trên) - xem mục "Kho tri thức" ở `docs/system-architecture.md`. Việc còn
+  > giữ nhịp bot ngày nay CHỈ CÒN bước ghi DB, và chi phí đó bám theo TỔNG
+  > LƯỢNG CHỮ ghi xuống, KHÔNG phải số đoạn - đo 3 tài liệu để tách hai biến:
+  > (A) 20MB ít tiêu đề -> 23.164 đoạn ghi ~1,05s; (B) 20MB dày tiêu đề ->
+  > 68.986 đoạn (gấp ~3 lần đoạn của A, CÙNG byte) ghi ~1,2s - chỉ lệch ~15%
+  > dù đoạn gấp 3; (C) 6,7MB (đúng 1/3 byte của A) dựng riêng để KHỚP số đoạn
+  > với A (~24.228) ghi ~0,35s - đúng ~1/3 thời gian A, khớp tỉ lệ BYTE chứ
+  > không khớp số đoạn (A và C gần như cùng số đoạn). Một bản đo sơ bộ trước
+  > đó ("gấp 9 lần" cho 2 tài liệu CÙNG byte) không tái hiện lại được VÀ đã
+  > đo sai biến - chỉ đổi số đoạn ở cùng byte thì tác động thật rất yếu, biến
+  > quyết định là byte.
+
+  Trần dung lượng chặn ở TẦNG ĐỌC (`hono/body-limit`, không đợi gom hết byte vào RAM),
   kiểm chữ ký thật (magic bytes: PDF phải `%PDF`, docx/xlsx phải `PK`) thay vì
   tin đuôi tên, lưu file theo id sinh ra chứ không dùng tên người dùng đặt. Tab
   dashboard: bảng nguồn kèm trạng thái xử lý, modal thêm nguồn (tải file / gõ
@@ -3911,8 +3925,8 @@ trượt vì va chạm bỏ dấu kiểu tương tự (không nhất thiết đ�
 
 ### Kiểm chứng
 
-126 test mới qua cả 5 phase (1661 -> 1787), riêng phase 05 (route + worker
-nền + dashboard, gồm cả hai vòng rà soát sau đó) +39. Typecheck sạch cả
+132 test mới qua cả 5 phase (1661 -> 1793), riêng phase 05 (route + worker
+nền + dashboard, gồm cả hai vòng rà soát sau đó) +45. Typecheck sạch cả
 backend lẫn web. 13 phép phá đều đỏ đúng chỗ: 6 phép ở bản đầu của phase 05
 (bỏ kiểm trần dung lượng, tin đuôi tên thay vì magic bytes, dùng tên người
 dùng làm đường dẫn, xử lý đồng bộ trong handler, DELETE không xóa file, bỏ
@@ -3935,27 +3949,44 @@ danh sách đã xếp hạng. Trần số nguồn / tổng dung lượng kho ch�
 số liệu thật); trần theo TỪNG FILE (`KB_MAX_FILE_MB`) đã chặn ca hỏng rõ ràng
 nhất.
 
-### Việc còn treo của Kho tri thức (vòng rà soát toàn nhánh, dưới mức Important)
+**Bộ eval 20-30 cặp câu hỏi/đáp trên tài liệu THẬT** (không phải fixture dựng
+tay) cho riêng Kho tri thức - đo được tỉ lệ trả lời đúng/tra trượt thật, khác
+`kb-search.test.ts` (đo trên 4 đoạn dựng tay, chỉ chốt hồi quy). Người dùng đã
+CHỐT để sau khi có tài liệu thật để nạp - không phải việc bị quên, mà là chờ
+đúng điều kiện tiên quyết (kho phải có dữ liệu thật trước khi bộ eval có ý
+nghĩa).
 
-31 mục được vòng rà soát toàn nhánh triage: 3 lên mức phải sửa trước merge (đã
-gộp vào phần trên), 8 đóng lại (không đáng làm), 20 còn lại gộp thành các mục
-có nghĩa dưới đây.
+### Việc còn treo của Kho tri thức
 
-**Vòng nền (worker) - đường chỉnh sửa/xóa xen giữa lúc đang xử lý**
+Gộp hai đợt rà soát: đợt xây tính năng gốc (31 mục, xem lịch sử ở trên) và đợt
+SỬA lỗi sau đó (5 Critical + 23 Important đóng hết - ReDoS/OOM khi đọc OOXML,
+worker thread trích xuất, ranh giới nonce chống injection, chất lượng tra cứu,
+chống lạm dụng route, 5 vòng vá dashboard). Mục nào đã đóng ở đợt SỬA (system-
+architecture.md, `POST /reindex` lộ toàn văn, `wrapUntrustedContent` bỏ bọc
+dưới 32 ký tự, fixture Word/Excel thật, comment sai thời điểm giành lại) đã
+XÓA khỏi danh sách dưới đây - không lặp lại.
 
-- `datTrangThai` ở cuối `xuLyMotNguon` (`kb-ingest-worker.ts`) ghi `san_sang`/
-  `hong` VÔ ĐIỀU KIỆN, không kiểm còn giữ quyền giành như bước CLAIM đầu vòng
-  (`giaNguonChoXuLy`, so sánh-rồi-đổi nguyên tử). `POST /sources/:id/reindex`
-  xen giữa lúc một vòng khác đang xử lý CÙNG nguồn có thể bị worker cũ ghi đè
-  kết quả mới (`hong` của lần xử lý sau) bằng kết quả cũ (`san_sang`).
-- Xóa nguồn (`DELETE`) ngay lúc worker đang trích xuất để lại đoạn + hàng FTS
-  mồ côi - không đọc được qua `timTrongKhoTriThuc` (JOIN qua `kb_sources` nên
-  không rò dữ liệu), nhưng không có đường dọn, index phình dần.
+**Vòng nền (worker)**
+
+- Đoạn/hàng FTS mồ côi (nguồn bị xóa giữa lúc worker đang xử lý CHÍNH nó) đã
+  hết - `xuLyMotNguon` kiểm `layNguon(id)` lại trước khi ghi. Còn sót: dọn mồ
+  côi (`donDoanMoCoi()`) chỉ chạy MỘT LẦN lúc boot (`batDauWorker`), không
+  định kỳ trong lúc chạy - orphan từ một ca hiếm (crash giữa chừng, thao tác
+  DB tay) sẽ nằm lại tới lần khởi động lại kế tiếp, index phình dần.
 - `chayMotVongAnToan` có `try/finally` nhưng thiếu nhánh `catch` - khác mẫu
   `trongGiaoDich`/`scheduler-loop.ts` đã có. Lỗi bất ngờ ngoài `xuLyMotNguon`
   (vốn đã tự bắt lỗi từng nguồn) sẽ lọt thẳng ra callback `setInterval`.
 - `batDauWorker` không idempotent (gọi hai lần tạo hai interval) - khác
   `startScheduler` đã kiểm ca này.
+- Hiệu năng vòng nền: `layNguon` bị đọc lại 3 lần cho MỘT lượt xử lý (đã có
+  `locIdTonTai`/snapshot gọn để dùng); `KetQuaTrichXuat.chu` structured-clone
+  qua ranh giới worker tới 8MB rồi caller vứt luôn không dùng; `donDoanMoCoi`
+  trả `soHangFts` bằng PHÉP GÁN `= soDoan` chứ không đếm thật; lỗi HẠ TẦNG
+  (`new Worker` ném, worker không nạp được module) đang bị gán nhãn chung
+  "tài liệu độc" như lỗi nội dung; nhánh "giành thất bại vì ném lỗi SQL" đánh
+  `hong` vĩnh viễn thay vì trả về `cho_xu_ly` để thử lại; hạ
+  `KB_MAX_INGEST_ATTEMPTS` ngay lúc một nguồn đang chạy có thể làm nó kẹt
+  `cho_xu_ly` không xử lý tiếp.
 
 **Đọc file**
 
@@ -3967,41 +3998,194 @@ có nghĩa dưới đây.
 - pdfjs (qua `unpdf`) in thẳng ra console (`Warning: Indexing all PDF
   objects...`), đi vòng qua pino - nên truyền `verbosity: 0` cho
   `getDocumentProxy`.
-- Chưa có fixture docx/xlsx do Word/Excel THẬT ghi - mọi test round-trip hiện
-  đi qua chính `render-docx.ts`/`render-xlsx.ts` của repo, không phải file
-  người dùng thật tải lên (khác encoding, khác cách Word/Excel ghi XML).
 - Chưa nạp thử PDF thật 200 trang tiếng Việt có dấu - test hiện tại dùng PDF
-  dựng tay, ngắn.
+  dựng tay, ngắn (khác fixture docx/xlsx đã có bản Word/Excel thật ghi).
+- `giaTriThuocTinh` (đọc thuộc tính XML) nhân bản y hệt ở cả `docx-sax-*.ts`
+  lẫn `xlsx-sax-*.ts` - nên dồn về `xml-sax-scan.ts` một chỗ.
+- Lệch tầng: `src/shared/*` (zip-stream-entry.ts) import từ
+  `../knowledge/ooxml-limits.js` - ngược hướng phụ thuộc thông thường
+  (shared không nên biết về module nghiệp vụ cụ thể).
+- Ba mục NGHIÊN CỨU đề nghị tách việc riêng (chưa ước lượng effort):
+  - Ngày tháng trong ô Excel (số serial ngày + `numFmt`) - hiện đọc ra số
+    serial thô, không quy đổi thành ngày người đọc hiểu.
+  - Cascade heading NHIỀU CẤP cho docx qua `styles.xml` (`basedOn`) - hiện chỉ
+    đọc `outlineLvl`/`pStyle` trực tiếp trên từng đoạn, heading kế thừa cấp từ
+    style cha bị bỏ tiền tố `#` (mất thứ bậc, không mất chữ - đã xác nhận khe
+    hở hẹp lúc phase 01).
+  - Kiểm `read-zip-entry.ts`/`zip-stream-entry.ts` có chống được bom CHỒNG LẤN
+    entry kiểu Fifield (nhiều entry trỏ đè lên CÙNG một vùng byte trong file
+    zip, "quantum compression") hay chưa - chưa có test riêng cho lớp tấn công
+    này, khác hẳn lớp "một entry giải nén ra quá to" đã chặn.
 
 **API/route**
 
-- `POST /sources/:id/reindex` vẫn trả nguyên dòng nguồn kèm toàn văn
-  (`noiDungGoc`) - cùng họ lỗi với "`GET /sources` lộ toàn văn" đã vá ở vòng
-  rà soát thứ nhất, sót lại ở route reindex.
 - `locIdTonTai` không tự cắt khúc danh sách khi dựng câu `IN (...)` - chỉ dựa
   vào `.max(500)` ở MỘT route gọi nó (`PUT /agents/:id/sources`); caller thứ
   hai sau này không tự nhớ đặt trần tương tự sẽ mở lại đúng lỗi
-  `SQLITE_LIMIT_VARIABLE_NUMBER` đã vá ở vòng rà soát thứ hai.
+  `SQLITE_LIMIT_VARIABLE_NUMBER` đã vá trước đó.
+- `GET /api/kb/sources` vẫn trả `duongDan` dù không trang nào trên dashboard
+  đọc field đó. HOÃN có lý do (không phải "rẻ"): `KbSourceTomTat` là type DÙNG
+  CHUNG giữa response API và nội bộ worker (worker cần `duongDan` để đọc file
+  từ đĩa) - bỏ field khỏi type sẽ cần tách thành hai type riêng (response vs
+  nội bộ), một refactor thật chứ không phải xóa một dòng. Giá trị bảo mật thấp:
+  `duongDan` chỉ là `kb/<id-ngẫu-nhiên>.<dinhDang>`, không đoán được nội dung
+  hay đường dẫn hệ thống từ đó.
 
 **Frontend**
 
 - `web/src/shared/kb-formats.ts` chép tay `DINH_DANG_HO_TRO` trùng với
   `doc-text-extract.ts` phía backend - không có gì canh hai bên khỏi lệch khi
   thêm định dạng mới (dashboard build riêng, không import được module backend).
+- **Trang TẠO agent hiện `kb_search` "khả dụng" SAI** khi Kho tri thức đã có
+  bất kỳ nguồn nào, dù agent mới chắc chắn CHƯA được gán nguồn nào (bảng
+  `agent_kb_sources` không thể có dòng cho một agent chưa tồn tại). Nguyên
+  nhân: trang tạo không truyền `agentId` (đúng thiết kế - agent chưa có id
+  thật), nên `GET /api/tools` không kèm `?agentId=` và rơi vào quy ước
+  `SCOPE_KHONG_CO_AGENT_THAT` (`id: ""`) mà `tool-routes.ts` vốn dựng riêng
+  cho trang **Tools phạm vi tài khoản** (không có agent cụ thể, câu hỏi đúng
+  tầm ở đó là "kho ĐÃ có nguồn nào chưa" qua `coNguonNao()`). Hai ngữ cảnh
+  "không biết agent nào" (trang Tools) và "agent chắc chắn CHƯA gán gì" (trang
+  Tạo) đang dùng CHUNG một quy ước `id === ""`, dù ý nghĩa đúng khác nhau.
+  HOÃN vì cần thiết kế lại cách phân biệt hai ngữ cảnh (không chỉ đổi một
+  dòng) - hướng khả thi đã nghĩ tới: truyền id NHÁP của agent (`banNhap.id`,
+  đã sinh sẵn từ tên) làm `agentId` thật, và nới `dungScope()` trong
+  `tool-routes.ts` để không đòi `getAgent(agentId)` phải tồn tại khi gọi từ
+  luồng tạo mới - `nguonCuaAgent(idNháp)` tự nhiên trả rỗng vì bảng chưa có
+  dòng nào cho id đó, không cần sửa gì ở `tool-catalog-read.ts`.
+- `agent-kb-sources-section.tsx` gọi cùng MỘT thao tác (chọn/bỏ chọn nguồn cho
+  agent) bằng ba tên khác nhau trong code và UI (biến `checked` = "tick",
+  component `ToggleKnob` = "gạt", `aria-label` = "Bật tắt") - thuần đặt tên
+  không nhất quán, không có lỗi hành vi (cả ba đều gọi chung hàm `toggle`).
+  HOÃN vì giá trị thấp so với rủi ro đổi tên lan ra nhiều chỗ.
 
-**Test hụt**
+**Chất lượng tra cứu / ngân sách**
+
+- Tài liệu LỚN có thể chiếm nhiều slot top-k của MỘT câu hỏi (mọi đoạn cùng
+  tài liệu đều mang tên nguồn + breadcrumb giống nhau) - đo được 2/5 slot bị
+  một tài liệu chiếm, điểm RRF 0,04167 và 0,04000 so với 0,04348 của đoạn khác
+  nguồn. HOÃN vì CHƯA ĐO TRÊN TÀI LIỆU THẬT (không phải vì chi phí migration -
+  `kb_chunks_fts` là FTS5 thường, DROP+CREATE+INSERT lại không mất đoạn, ~15
+  dòng SQL, kết luận "tốn migration" trước đó đã bị bác). Hai hướng rẻ không
+  đụng schema đã có sẵn: (a) trần đa dạng theo nguồn ở bước xếp hạng (tối đa 2
+  đoạn/sourceId trong top-k, ngay cạnh vòng khử trùng có sẵn); (b) chỉ nhét
+  breadcrumb + tên nguồn vào phang của đoạn ĐẦU mỗi tài liệu.
+- Breadcrumb tiêu đề (`nganXepTieuDe`, `chunk-text.ts`) KHÔNG có trần độ dài -
+  heading 6 cấp có thể dài ~375 ký tự, vượt xa hằng số ràng buộc chéo `150`
+  (khung nhãn + tên nguồn) dùng để validate `KB_MAX_RESULT_CHARS` trên
+  dashboard. Runtime vẫn AN TOÀN TUYỆT ĐỐI nhờ trần cứng `dongGoiTheoNganSach`
+  (đã quét 72.800 tổ hợp cấu hình hợp lệ, 0 vi phạm) - đây chỉ là CHẤT LƯỢNG
+  cảnh báo admin sai, không phải lỗ hổng runtime. Fix thật phải chặn độ dài
+  heading LÚC INGEST (`chunk-text.ts`), không phải vặn hằng số ở tầng validate.
+- `kb-pack-result.ts:27-28` docstring khẳng định "BẤT BIẾN CỨNG... KHÔNG BAO
+  GIỜ dài hơn [trần]" VÔ ĐIỀU KIỆN - thực tế có điều kiện tiên quyết
+  `nganSachNoiDung >= nhanDaiNhat`; dưới ngưỡng đó (~59-70 ký tự) có thể vượt
+  trần tới 60 ký tự. `kb-pack-result.test.ts` cũng thiếu assertion BIÊN: mutate
+  nhánh cắt-đầu-1-đoạn từ `conLai > 1` thành `conLai >= 1` (ra
+  "...còn 0 đoạn nữa...") vẫn qua lọt 3 khẳng định hiện có - cần thêm
+  `assert.doesNotMatch(/còn \d+ đoạn/)` khi `conLai === 0`.
+
+**Test-only nợ nhỏ (đọc OOXML)**
+
+- `xml:space="preserve"` thực tế bị `.trim()` xóa mất trong một số đường -
+  khẳng định hiện tại dùng khớp chuỗi con nên không phân biệt được.
+- `ooxml-zip-test-helper.ts` chỉ dùng cho test nhưng không mang đuôi
+  `.test.ts` - lệch quy ước đặt tên của repo.
+- Bộ test OOXML mới cấp phát ~33MB + 3x25MB + 4x20MB TRONG CÙNG một tiến
+  trình `node --test` - cộng dồn vào thời gian/bộ nhớ đỉnh của cả suite.
+- `TRAN_TONG_SO_O` (2 triệu ô) không phủ chi phí PARSE của hình dạng `<row/>`
+  không có ô nào bên trong - khuếch đại ước tính thấp (~1:6 theo byte), CHƯA
+  đo trực tiếp.
+- Test "hình dạng B" (ô đệm nhảy cột) dựng tới 100.000 hàng dù bị từ chối
+  ngay ở hàng ~123 - dữ liệu test thừa, không sai nhưng tốn thời gian chạy vô
+  ích.
+
+**Test hụt route/PUT**
 
 - Test 413 (payload quá lớn) chỉ chạm nhánh STREAMING (`app.request` không tự
   đặt `Content-Length`) - trình duyệt thật LUÔN gửi `Content-Length` nên đi
-  qua nhánh short-circuit theo header, và nhánh đó CHƯA có test riêng. Giá trị
-  cao nhất trong nhóm test hụt: code có thể đúng nhưng chưa ai khóa nó lại.
-- `wrapUntrustedContent` bỏ bọc HOÀN TOÀN khi nội dung dưới 32 ký tự
-  (`TOI_THIEU`) - một đoạn KB rất ngắn (vd "Có, miễn phí.") đi thẳng vào
-  prompt không có ranh giới `<noi_dung_ngoai>`. Rủi ro thấp (đoạn ngắn khó
-  giấu chỉ thị) nhưng là biên chưa được đo.
+  qua nhánh short-circuit theo header của `hono/body-limit`, và nhánh đó CHƯA
+  có test riêng. Giá trị cao nhất trong nhóm test hụt: code có thể đúng nhưng
+  chưa ai khóa nó lại.
+- `PUT /agents/:id/sources` dùng CHUNG trần `KB_MAX_FILE_MB` (mặc định 20,
+  chỉnh 1-100MB) cho một payload hợp lệ tối đa chỉ ~32KB (500 id x 64 ký tự) -
+  trần đúng nhưng RẤT rộng so với dữ liệu thật, chưa có trần riêng.
+- Test trần body PUT chỉ khẳng định status `413`, không khẳng định `binding`
+  (agent_kb_sources) vẫn rỗng - thiếu vế "không ghi gì xuống DB".
+- `assert.match(body.error, /Dữ liệu không hợp lệ/)` neo vào CHỮ - có bất biến
+  CẤU TRÚC mạnh hơn (`Array.isArray(body.issues)`) không phụ thuộc câu chữ.
+- Nhánh `xuongDong` (ưu tiên CAO NHẤT theo docstring) của `viTriCatTotNhat`
+  chưa test nào chạm (đo 0/19 lần gọi trên toàn bộ đầu vào hiện có).
+- Ngưỡng `60*3` và `coDoanToiDa: 60` trong test là hai literal ĐỘC LẬP, không
+  tham chiếu chung một biến - đổi một bên dễ quên đổi bên kia.
 
-**Tài liệu**
+**Ranh giới chống injection (nonce + regex chịu ký tự xen)**
 
-- `docs/system-architecture.md` chưa có một chữ nào về Kho tri thức - kiến
-  trúc cắt đoạn/FTS5/RRF hiện chỉ nằm trong roadmap này, chưa có bản tóm tắt
-  kiến trúc như các module khác.
+- `trichTheDongThuc` trả nonce CỤT khi chuỗi bị cắt GIỮA nonce (biên `\b` khớp
+  cả biên cuối); test hiện tại không bắt được vì helper test dùng ĐÚNG regex
+  đó để dựng lại kỳ vọng.
+- `trichTheDongThuc` TIN vào ĐẦU chuỗi (không tự kiểm) - cần ghi rõ hợp đồng
+  này vào docstring cho người gọi sau.
+- Regex chịu ký tự xen của `memory-prompt-block.ts` khớp cả "dieudanho" (0 ký
+  tự đệm giữa các chữ) - rộng hơn cần thiết nhưng chưa gây hỏng thấy được.
+- `</dieu_da nho>` (dấu cách ASCII thay gạch dưới) vẫn lọt qua bộ khử của
+  memory - ĐÁNH ĐỔI ĐÃ CHẤP NHẬN: thêm `\s` vào lớp ký tự đệm sẽ khử nhầm cụm
+  tiếng Việt hợp lệ "dieu da nho".
+- `normalize("NFC")` mở một đường lọt nhỏ: NFC ghép dấu tổ hợp vào chữ CUỐI,
+  đẩy payload `[Nguồń:` ra khỏi tầm lớp `\p{Mn}` - đã TUYÊN BỐ ngoài
+  phạm vi trong docstring, hàng rào CHÍNH vẫn là nonce (mục này không phá được
+  ranh giới, chỉ là một ca giả mạo nhãn nguồn hẹp).
+- 3 test mới ở `khu-gia-mao-nhan-nguon.test.ts` (dòng 148/157/166) chỉ có NỬA
+  khẳng định (chỉ `includes`, thiếu `doesNotMatch`) - chưa đạt chuẩn "giữ cả
+  hai" mà chính đợt sửa lỗi này đặt ra.
+- `NGOAC_MO`/`DAU_HAI_CHAM` trong file test là bản CHÉP TAY của
+  `CAP_NGOAC`/`DAU_HAI_CHAM_RE_CLASS` (không export từ source) - đúng lỗi "lặp
+  danh sách hai nơi" mà docstring của chính module đó tự cấm.
+
+**Khoảng trống hạ tầng test**
+
+Chưa có hạ tầng test render REACT THẬT (React Testing Library / jsdom) - mọi
+test frontend hiện tại đều test logic thuần (hook tách khỏi component, dựng
+lại bằng runtime tối giản tự viết). Nửa DƯỚI của một số phép phá thủ công
+(thân effect BÊN TRONG component thật, không phải logic đã tách ra) không có
+compiler hay test nào canh được - phải tự chạy tay để xác nhận.
+
+### Dừng poll khi rảnh (trang Kho tri thức) - điều kiện nghiệm thu
+
+**Lịch sử ngắn gọn:** một mục MINOR ("poll 4 giây chạy vĩnh viễn kể cả khi mọi
+nguồn đã `san_sang`") kéo theo 5 vòng vá liên tiếp, 4 hồi quy, rồi bị LÙI hẳn
+về `setInterval` đơn giản (`kb-poll-loop.ts`/`kb-poll-guard.ts` giữ lại làm
+tài liệu sống + điểm khởi đầu, nhưng KHÔNG được wire vào runtime - code chết
+có chủ đích). setInterval đúng ĐẮN theo cấu trúc ở mọi chiều dưới đây (nó
+không bao giờ dừng nên không có gì để "quên khởi động lại" hay "chết sau một
+lần lỗi") - thứ duy nhất nó thiếu là chiều 2, và đó CHƯA BAO GIỜ là lỗi, chỉ
+là tối ưu hiệu năng cho một trang quản trị (~900 request/giờ mỗi tab đang mở,
+trên một endpoint đã bỏ toàn văn).
+
+**Ai làm lại tối ưu này PHẢI xuất phát từ bảng 9 chiều dưới đây làm điều kiện
+nghiệm thu** - đừng bắt đầu lại từ đầu, 5 vòng trước đã trả giá để tìm ra
+từng chiều:
+
+| # | Chiều (bất biến cần giữ) | Vì sao quan trọng |
+|---|---|---|
+| 1 | Còn việc (`dang_xu_ly`/`cho_xu_ly`) thì HẸN LƯỢT POLL TIẾP THEO | Lý do tồn tại của poll - không hẹn tiếp thì UI đứng yên dù server còn việc |
+| 2 | Hết việc (mọi nguồn `san_sang`/`hong`) thì DỪNG hẳn, không tự bắn nữa | Mục tiêu tối ưu ban đầu - tránh ~900 request/giờ vô ích mỗi tab đang mở |
+| 3 | Unmount (rời trang) thì DỌN sạch mọi timer đang chờ | Thiếu thì gọi API + `setSources` trên component đã unmount - lỗi React thật |
+| 4 | Một lần RELOAD HỎNG (lỗi mạng) vẫn phải HẸN LƯỢT TIẾP | Bug gốc của vòng 1: nhánh catch không hẹn lại -> poll chết sau MỘT lần lỗi mạng thoáng qua |
+| 5 | KHÔNG hẹn CHỒNG nhiều timer cùng lúc | Thiếu thì rò timer - timer mồ côi bắn sau khi trang đã đổi trạng thái, có thể sống qua cả unmount |
+| 6 | Poll đã DỪNG (hết việc) phải TỰ KHỞI ĐỘNG LẠI khi có việc mới (thêm nguồn / bấm Xử lý lại) | Bug của vòng 2: dừng đúng nhưng không sống lại - người vận hành phải F5 tay sau MỌI thao tác |
+| 7 | KHÔNG hai lượt `motLuot` chạy CHỒNG NHAU (chống tái nhập) | Bug của vòng 3: hai lượt bay song song (vd 2 dòng reindex cùng lúc) làm timer bị GHI ĐÈ, bỏ rơi timer của lượt trước |
+| 8 | Lượt VỀ MUỘN (chồng lấn) vẫn phải được phép GHI SỔ "server nói còn việc" nếu nó CHƯA bị một lượt mới hơn ghi đè | Bug của vòng 4: chặn đúng QUYỀN ÁP UI nhưng chặn NHẦM LUÔN quyền ghi sổ - lượt cũ về muộn nói "còn việc" bị vứt luôn, mất luôn cơ sở để hẹn lượt kế |
+| 9 | Tri thức "còn việc" ĐÃ GHI (chiều 8) phải THỰC SỰ lái vòng lặp hẹn tiếp - không được đứng yên với sổ sách tự mâu thuẫn | Bug của vòng 5 (residual, đo được 25/540 kịch bản hệ thống tự mâu thuẫn: sổ nói "còn việc" mà timer=0) - tách QUYỀN GHI khỏi QUYỀN HẸN (vòng 4) chưa đủ, còn cần ai đó ĐỌC lại sổ rồi hẹn |
+
+**Hướng vá đã ĐO nhưng CHƯA CÀI** (nếu làm lại): điều kiện dừng đổi từ đếm số
+nguồn chưa xong sang so sánh trực tiếp `dangBay === 0` (số lượt `motLuot`
+đang bay) - đã đo đóng được 25/25 kịch bản tự mâu thuẫn của chiều 9 mà không
+vỡ test nào trong 8 chiều kia. Còn thiếu quyết định riêng cho MẶT UI: cần thêm
+khái niệm `theDaAp` (thế hệ ĐÃ ÁP LÊN UI, tách khỏi `theDaGhi` - thế hệ đã ghi
+vào sổ tri thức nội bộ) để tránh UI hiển thị dữ liệu của một lượt cũ hơn lượt
+đã render gần nhất.
+
+**Giới hạn di sản** (có từ TRƯỚC cả 5 vòng vá, không phải lỗi mới): lần TẢI
+ĐẦU TIÊN hỏng (`sourcesDaBiet === null` ngay từ đầu, vd mở trang đúng lúc API
+vừa restart) làm poll chết luôn từ lúc khởi tạo - phải F5 tay. Chưa chiều nào
+trong 9 chiều ở trên phủ ca này.

@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 // Module thuần (chỉ đụng zip/regex) - không chạm env/DB nên import tĩnh được
 import { docChuTuFile } from "./doc-text-extract.js";
 import { renderDocx } from "../documents/render-docx.js";
-import { chuKhoNen, docxChiCoAnh, docxTuXml, zipEntryQuaTran } from "./ooxml-zip-test-helper.js";
+import { buildZipBuffer, chuKhoNen, docxChiCoAnh, docxTuXml, zipEntryQuaTran } from "./ooxml-zip-test-helper.js";
 
 const wordTable = () =>
   fs.readFileSync(new URL("./fixtures/word-table.docx", import.meta.url));
@@ -54,6 +54,20 @@ describe("extract-docx-text (qua docChuTuFile)", () => {
       () => docChuTuFile(Buffer.from("khong phai file zip"), "docx"),
       /không phải file zip/i,
     );
+  });
+
+  it("file .zip đổi đuôi thành .docx (qua lọt kiểm chữ ký PK, thiếu word/document.xml) báo câu người vận hành đọc được", async () => {
+    // zip hợp lệ (nên "PK" ở kb-route-guards.ts vẫn khớp) nhưng KHÔNG có entry
+    // word/document.xml - đúng hình dạng một .zip/.xlsx bị đổi đuôi thành .docx.
+    const zipKhongPhaiDocx = buildZipBuffer([{ name: "readme.txt", data: Buffer.from("khong lien quan") }]);
+    await assert.rejects(() => docChuTuFile(zipKhongPhaiDocx, "docx"), (err: unknown) => {
+      assert.ok(err instanceof Error);
+      // Câu KHÔNG được nhắc "word/document.xml" (thuật ngữ nội bộ OOXML) -
+      // người vận hành đọc trên dashboard không biết đó là gì.
+      assert.doesNotMatch(err.message, /word\/document\.xml/);
+      assert.match(err.message, /không phải \.docx hợp lệ/i);
+      return true;
+    });
   });
 });
 

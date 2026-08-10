@@ -20,10 +20,23 @@ import { taoDocxSaxBuilder } from "./docx-sax-paragraph-builder.js";
  */
 export async function extractDocxText(buf: Buffer): Promise<string> {
   const phien = moPhienDocZip(buf);
+
+  // Chốt SỚM, câu người VẬN HÀNH đọc được: một .zip (hoặc .xlsx) đổi đuôi
+  // thành .docx qua lọt kiểm chữ ký "PK" (mọi file zip đều bắt đầu bằng đúng
+  // 2 byte đó, xem `kb-route-guards.ts`) nhưng thiếu hẳn word/document.xml.
+  // Không chốt ở đây thì lỗi rơi thẳng xuống `docEntryTheoLuong` với câu dành
+  // cho lập trình viên (`Không tìm thấy "word/document.xml" trong file`) -
+  // người đọc câu đó trên dashboard không biết "word/document.xml" là gì.
+  if (!phien.danhSachEntry().includes("word/document.xml")) {
+    throw new Error(
+      'File này không phải .docx hợp lệ (thiếu nội dung Word bên trong) - có thể là file .zip đổi đuôi tên, hoặc file .docx đã bị hỏng.',
+    );
+  }
+
   const builder = taoDocxSaxBuilder();
   // moPhienDocZip/docEntryTheoLuong đã ném lỗi tiếng Việt đọc được khi buf
-  // không phải zip hợp lệ, thiếu document.xml, hoặc vượt bất kỳ trần nào -
-  // không cần bọc thêm lớp lỗi ở đây.
+  // không phải zip hợp lệ hoặc vượt bất kỳ trần nào - không cần bọc thêm lớp
+  // lỗi ở đây (thiếu document.xml đã bị chặn ở trên).
   await quetXmlTheoLuong(phien.docEntryTheoLuong("word/document.xml"), builder);
 
   const ketQua = builder.layDoanVanBan().join("\n\n");

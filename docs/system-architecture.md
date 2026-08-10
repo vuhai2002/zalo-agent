@@ -117,6 +117,147 @@ Zalo servers <--ws/https--> zca-js (npm lib, unofficial)
 | Lớp làm sạch đầu ra (`zalo/sanitize-reply-text.ts`) đặt ở tầng CALLER, không đặt trong `sendReplyInParts` | `sendReplyInParts` phục vụ cả lượt chat lẫn lượt theo lịch, mà hai đường có luật khác nhau: lượt theo lịch phải kiểm `[SILENT]` TRƯỚC khi làm sạch (làm sạch trước thì bộ lọc bỏ mất chính cái nhãn mà nhánh im lặng dựa vào, và job "không có gì mới" sẽ nhắn mỗi sáng đúng thứ nó sinh ra để tránh), còn job hỏng thì IM chứ không nhắn câu lỗi kỹ thuật. Nội dung chặn: markdown (Zalo không render nên `**đậm**` hiện nguyên ký tự), rò system prompt (chặn HẲN - gửi nửa vời thì không ai biết phần nào còn rò), nhãn `[SILENT]` lọt vào chat thường. Dấu hiệu rò prompt lấy từ hằng số dùng chung `agent/prompt-leak-markers.ts` mà `persona-prompt.ts` nội suy vào - sửa lời persona mà quên sửa bộ canh thì lớp chặn im lặng ngừng hoạt động. Kiểm rò trên chữ GỐC trước khi bỏ định dạng, để `**Quy tắc an toàn...**` không lách được. CỐ Ý bỏ qua `__đậm__`/`_nghiêng_` (gạch dưới sống đầy trong tên file và URL thật) và chỉ bỏ DÒNG KẺ của bảng markdown chứ không dựng lại bảng - dòng kẻ không mang chữ nào nên bỏ là mất trắng, còn dựng lại bảng thành văn xuôi là đoán mò |
 | Ngưỡng guard bị kẹp xuống dưới `LLM_MAX_STEPS` lúc dựng, không hạ mặc định trong env | Ba số 5/8/5 bê từ `tool_guardrails.py` của Hermes nhưng bê thiếu ngữ cảnh: ở Hermes `max_iterations` mặc định là 90 nên 8 chỉ là 9% ngân sách, còn ở đây trần mặc định là 8 nên ngưỡng 8 đứng đúng bằng trần - mỗi step một lệnh gọi thì `stepCountIs` luôn dừng trước, bộ đếm không bao giờ chạm tới. Kẹp lúc dựng (`nguongTheoTranStep`) chứ không hạ mặc định để người đặt `LLM_MAX_STEPS=30` vẫn được đúng ba số của Hermes. Nói cho đúng mức lợi: với trần 8 thì kẹp chỉ đưa `chanCungToolLoi` từ 8 xuống 7, sớm hơn ĐÚNG một step - giá trị thật của guard nằm ở chỗ nó đếm được nhánh hỏng không-ném, kẹp chỉ để ngưỡng không nằm ngoài tầm với |
 
+## Kho tri thức
+
+RAG cấp đoạn cho tool `kb_search`: chủ bot nạp tài liệu (upload hoặc gõ tay),
+gán nguồn cho từng agent, bot tra bằng từ khóa (FTS5 + bm25, hợp nhất RRF).
+Toàn bộ mã nằm ở `src/knowledge/` (đọc file, cắt đoạn, tìm kiếm),
+`src/server/routes/kb-routes.ts` (tạo/đọc/xóa nguồn, upload, gán agent - KHÔNG
+có route sửa tên/nội dung nguồn) và
+`kb-inspect-routes.ts` (2 route CHỈ ĐỌC: xem đoạn đã cắt, agent nào đang gán
+một nguồn - tách riêng để `kb-routes.ts` giữ dưới 200 dòng).
+
+### Đường đi: từ upload tới câu trả lời
+
+```
+Dashboard (upload file / gõ tay)
+        |
+POST /api/kb/sources/file|text   (kb-routes.ts: chặn dung lượng ở TẦNG ĐỌC,
+        |                         kiểm chữ ký thật - magic bytes, lưu file
+        |                         data/kb/<fileId>.<dinhDang>, ghi DB "cho_xu_ly",
+        |                         TRẢ VỀ NGAY - không đợi xử lý xong)
+        |
+kb-ingest-worker.ts (setInterval 5s, luồng CHÍNH)
+        |    giành nguồn (UPDATE nguyên tử, so_lan_thu += 1 NGAY trong câu
+        |    UPDATE - không phải ở nhánh catch, vì nguồn làm worker TREO
+        |    không bao giờ chạy tới được code "sau khi hỏng")
+        v
+new Worker(kb-extract-worker.js)   <-- THREAD RIÊNG, xem mục dưới
+        |    đọc file (docx/xlsx qua SAX + trần chống zip bomb, pdf qua unpdf,
+        |    txt/md đọc thẳng) -> cắt đoạn theo tiêu đề/đoạn văn/câu
+        |    postMessage({ chu, doan })
+        v
+luuDoan()  (luồng CHÍNH - nơi DUY NHẤT được mở kết nối SQLite)
+        |    1 giao dịch: xóa đoạn+FTS cũ -> chèn kb_chunks -> chèn kb_chunks_fts
+        v
+datTrangThai(id, "san_sang", { soDoan })   <-- câu UPDATE riêng, SAU luuDoan()
+        v
+kb_search tool (agent loop, có mặt trong schema chỉ khi agent đã gán nguồn)
+        |    timTheoTuKhoa (bm25, lấy DƯ x3 để chừa chỗ khử trùng)
+        |    -> hopNhatRrf (đồng nhất với 1 danh sách, chừa chỗ thêm vector)
+        |    -> khử trùng nội dung -> đóng gói theo ngân sách ký tự
+        v
+wrapUntrustedContent(...)  ->  model  ->  câu trả lời có [Nguồn: ...]
+```
+
+### Lược đồ: 3 bảng thật + 1 bảng ảo FTS5
+
+`taoBangKnowledgeBase` (`kb-schema.ts`) chạy trong `runMigrations()`, CÙNG
+connection SQLite với mọi bảng khác. KHÔNG dùng `FOREIGN KEY` (`database.ts`
+không bật `PRAGMA foreign_keys`) - mọi nơi xóa `kb_sources` phải tự dọn 3 bảng
+kia tường minh trong một giao dịch (`kb-source-store.ts#xoaNguon`).
+
+| Bảng | Cột đáng chú ý | Vai trò |
+|---|---|---|
+| `kb_sources` | `trang_thai` (`cho_xu_ly`/`dang_xu_ly`/`san_sang`/`hong`), `so_lan_thu`, `noi_dung_goc` | Một dòng = một nguồn (file hoặc gõ tay). `so_lan_thu` là bộ đếm lần THỬ GIÀNH xử lý - chặn nguồn làm worker treo/chết lặp vô hạn (xem mục worker thread) |
+| `kb_chunks` | `source_id`, `thu_tu`, `tieu_de` (breadcrumb `H1 > H2 > H3`), `noi_dung`, `phang` | Một dòng = một đoạn đã cắt. `phang` là bản ĐÃ BỎ DẤU của `tenNguon + tieu_de + noi_dung` gộp lại - cột duy nhất FTS5 thật sự đọc |
+| `agent_kb_sources` | `agent_id`, `source_id` (khóa chính kép) | Nguồn nào agent nào ĐƯỢC PHÉP đọc - mặc định ĐÓNG (không có dòng = không đọc được gì, không phải đọc hết) |
+| `kb_chunks_fts` (ẢO, FTS5) | `phang`, `tokenize = 'unicode61'` | Bảng ảo THƯỜNG, không phải `content=''` - xóa hàng bằng `DELETE ... WHERE rowid = ?` bình thường, không cần câu `INSERT INTO fts(fts,rowid,...) VALUES('delete',...)` mà bản contentless đòi hỏi. `rowid` gán TƯỜNG MINH bằng đúng `kb_chunks.id` lúc chèn, để `bm25()` trả rowid tra ngược ra đúng đoạn |
+
+Vì sao cột `phang` đã bỏ dấu: `remove_diacritics 2` của FTS5 không xử lý được
+chữ `đ` (U+0111 là chữ cái riêng, không phải dấu phụ tổ hợp), nên tự bỏ dấu
+bằng `bo-dau-tieng-viet.ts` TRƯỚC khi ghi, thay vì dựa vào tokenizer.
+
+### Worker thread trích xuất - vì sao bắt buộc
+
+Đặt timeout cho code ĐỒNG BỘ đang quay CPU trên CÙNG một luồng là **không làm
+được**: `setTimeout`/`AbortSignal` chỉ được xét ở ranh giới event loop, mà một
+vòng lặp/regex đồng bộ đang quay không bao giờ nhả ranh giới đó cho tới khi
+xong. `worker.terminate()` là cách DUY NHẤT có thật để dừng nó giữa chừng - đo
+được cắt một vòng lặp CPU đồng bộ trong **2,2 ms**. Chi phí đổi lại: boot một
+worker mất **~30 ms** mỗi lần trích xuất - chấp nhận được vì đây là việc CHẠY
+NỀN (không nằm trong request upload). `node:sqlite` chạy được trong worker
+thread, nhưng module trích xuất (`kb-extract-worker.ts`) CỐ Ý không mở kết nối
+DB ở đó - giữ bất biến "một connection dùng chung cho cả process" bằng cách
+worker chỉ trích xuất + cắt đoạn, trả kết quả qua `postMessage`, luồng chính tự
+ghi DB sau khi nhận. `child_process.fork` bị loại vì tốn thêm ~53,5 MB RSS mỗi
+tiến trình con - đắt hơn hẳn so với một worker thread.
+
+`trichXuatTachLuong()` (`chay-trich-xuat-tach-luong.ts`) là chỗ dựng worker:
+timeout `KB_EXTRACT_TIMEOUT_MS` gọi `worker.terminate()` khi quá hạn, và lỗi
+được phân biệt hai loại - `LoiTrichXuatBiNgatGiuaChung` (worker bị buộc dừng
+hoặc chết bất thường, KHÔNG biết tài liệu hỏng thật hay chỉ máy chậm nên GIỮ
+NGUYÊN `dang_xu_ly` chờ tick sau xét lại theo `so_lan_thu`) khác với lỗi trích
+xuất THƯỜNG (file hỏng/định dạng lạ, đánh `hong` ngay). Cả đọc file LẪN cắt
+đoạn (`catThanhDoan`) đều chạy trong worker; chỉ bước GHI DB (`luuDoan`) còn
+lại trên luồng chính - đây là phần DUY NHẤT còn "giữ nhịp bot", và chi phí của
+nó bám theo TỔNG LƯỢNG CHỮ ghi xuống `kb_chunks`/FTS, KHÔNG phải số đoạn cắt
+ra - số đoạn chỉ là yếu tố phụ RẤT YẾU. Đo 3 tài liệu để tách hai biến: (A)
+20MB ít tiêu đề -> 23.164 đoạn, ghi ~1,05s; (B) 20MB dày tiêu đề -> 68.986
+đoạn (gấp ~3 lần đoạn của A, CÙNG byte với A) ghi ~1,2s - chỉ lệch ~15% dù số
+đoạn gấp 3; (C) 6,7MB (đúng 1/3 byte của A) dựng riêng để ra ~24.228 đoạn
+(khớp số đoạn của A) ghi ~0,35s - đúng ~1/3 thời gian của A, khớp tỉ lệ BYTE
+chứ không khớp số đoạn (A và C gần như CÙNG số đoạn). Kết luận: đổi số đoạn
+giữ nguyên byte chỉ tăng khoảng 15% thời gian; đổi byte giữ nguyên số đoạn thì
+thời gian đổi tỉ lệ thuận.
+
+### Thư mục `kb/` trên đĩa
+
+`data/kb/<fileId>.<dinhDang>` - `fileId` là 8 byte ngẫu nhiên
+(`randomBytes(8).toString("hex")`, sinh ở `kb-routes.ts:92`, TRUYỀN VÀO
+`luuFile()` của `kb-file-store.ts` chứ không sinh ở đó), KHÔNG PHẢI tên file
+người dùng đặt. `fileId` này CŨNG KHÔNG PHẢI `id` của dòng `kb_sources` - đó
+là một `randomBytes(8)` KHÁC, sinh riêng ở `kb-source-store.ts:77`
+(`taoNguon`) khi ghi dòng DB; hai id độc lập, xem comment tại chỗ sinh
+`fileId` ("Id lưu file KHÔNG PHẢI id của dòng DB"). Tên gốc chỉ lưu ở cột
+`kb_sources.ten` (hiển thị), không bao giờ chạm đường dẫn thật - `segmentAnToan`
+(`kb-file-store.ts`) còn lọc lại phòng id lỡ mang ký tự lạ, chặn `..`/`/`/`\`
+thoát khỏi thư mục. Nguồn `loai='text'` (gõ tay) không ghi file nào,
+`duong_dan` để trống, nội dung nằm thẳng trong cột `noi_dung_goc`.
+
+### Các trần đã đặt (kèm căn cứ)
+
+Toàn bộ nằm ở `src/knowledge/ooxml-limits.ts` (đọc OOXML) và
+`tuning-definitions.ts` nhóm `kb` (chỉnh được từ dashboard). Container tự host
+mặc định 768 MB RAM (`docker-compose.prod.yml`) -> Node old space **SUY RA**
+~384 MB (heuristic mặc định của V8 khi KHÔNG có cờ `--max-old-space-size` -
+repo không đặt cờ này ở đâu cả, `grep` xác nhận 0 kết quả ngoài comment đo
+đạc; V8 tự lấy `old_generation ~ physical/2` khi thiếu cờ) dùng CHUNG cho mọi
+tài khoản Zalo -> một lượt xử lý OOXML chỉ nên chiếm ~200 MB đỉnh.
+
+| Trần | Giá trị | Căn cứ |
+|---|---|---|
+| `TRAN_MOT_ENTRY` | 32 MB | Nửa `TRAN_TONG_GIAI_NEN` - `document.xml` lớn nhất đo được trên file Word thật là 7,13 MB (headroom 4,5x) |
+| `TRAN_TONG_GIAI_NEN` | 64 MB | Trần TỔNG cho cả archive (cộng dồn mọi entry đọc trong một phiên) - bắt được ca chia nhỏ archive (vd `sharedStrings.xml` + nhiều `sheetN.xml`, mỗi cái dưới trần entry mà tổng vẫn vượt) |
+| `TI_LE_NEN_TOI_DA` | 500:1 | Trần lý thuyết DEFLATE là 1032:1; OOXML thật đo cao nhất 50,2x. 500 nằm giữa 293 (file máy sinh thoái hóa) và 1028 - không dùng 100:1 kiểu Apache POI vì tiền lệ false-positive hàng loạt trên Excel hợp lệ |
+| `TRAN_SO_ENTRY` | 256 entry | Corpus OOXML thật đo trung bình 23,2 entry, cao nhất 99 (headroom 2,6x) - một .docx nhiều ảnh vẫn hợp lệ, chữ thông báo KHÔNG dùng từ "zip bomb" cho ca này |
+| `TRAN_DO_SAU_XML` | 256 cấp lồng | Chặn ReDoS/tràn stack của chính bộ đọc SAX - Word thật hiếm khi lồng quá ~20 cấp |
+| `TRAN_TONG_KY_TU_TRICH` | 8 MB chữ | Chặn "XML hợp lệ nhưng toàn chữ" - chữ thật thường chỉ chiếm 1-2% cỡ XML nên các trần zip/depth ở trên không bắt được dạng bom này |
+| `TRAN_SO_COT_EXCEL` | 16.384 (cột XFD) | Cột cuối cùng THẬT của Excel - chặn `r="AAAAAAA1"` (7 chữ cái) quy ra chỉ số cột hơn 321 triệu, từng gây OOM FATAL của V8 (không bắt được bằng try/catch, nặng hơn cả ReDoS vì giết hẳn process) |
+| `TRAN_TONG_SO_O` | 2.000.000 ô | Chặn CÔNG CẤP PHÁT do ô đệm (cột nhảy cóc), không phải chữ trích ra - một hàng toàn ô rỗng từng khiến vòng lặp lấp cột chạy ~1,6 tỉ lần `push`, khóa event loop 21,7 giây trên input chỉ 507 KB |
+| `KB_MAX_FILE_MB` | 1-100 MB (chỉnh được) | Chặn ở TẦNG ĐỌC (`hono/body-limit`), không đợi gom hết byte vào RAM |
+| `KB_EXTRACT_TIMEOUT_MS` | 5s-600s (chỉnh được) | Trần cho worker thread - quá hạn bị `terminate()`, không kẹt cả bot |
+| `KB_MAX_INGEST_ATTEMPTS` | 1-5 lần (chỉnh được) | Nguồn làm worker treo/chết lặp lại quá số lần này bị đánh `hong` hẳn, không thử lại vô hạn qua các lần khởi động lại |
+
+**Ràng buộc chéo** (`runtime-tuning-settings.ts`, nhóm `LUAT_CHEO`): `KB_MAX_RESULT_CHARS`
+phải đủ chỗ cho `KB_TOP_K x (KB_CHUNK_CHARS x (1 + KB_CHUNK_OVERLAP_PERCENT/100) + phần vỏ)`
+- thiếu ràng buộc này thì `KB_TOP_K=5` và `=20` có thể cho ra kết quả GIỐNG HỆT
+NHAU (các đoạn cuối bị vứt lặng lẽ vì trần kết quả quá nhỏ so với cả hai cấu
+hình). Đây là loại ràng buộc GIỮA nhiều tham số mà nhìn từng ô nhập rời nhau
+trên dashboard sẽ không ai nhận ra - luật chỉ áp khi người dùng đang đổi MỘT
+trong các tham số liên quan, để một cấu hình sẵn có lệch (đặt tay trong `.env`)
+không khóa cứng cả trang Cấu hình.
+
 ## Repo tham khảo
 
 Clone shallow (chỉ đọc, không build, không sửa) tại `D:\source-code\zalo-agent-references\` - đặt ngoài project để không dính vào git/pnpm/tsc:

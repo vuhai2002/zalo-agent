@@ -30,6 +30,8 @@ diem(doan) = tong theo tung danh sach cua  1 / (k + hang)
 **Chế độ OR, không phải AND.** FTS5 mặc định AND mọi từ - đo thật: "phi ship
 noi thanh" không khớp gì vì "ship" không có trong tài liệu. Đổi sang
 `"tu1" OR "tu2" ...` rồi để `bm25()` xếp hạng thì 3/4 câu hỏi mẫu ra đúng hạng 1.
+> **Đính chính:** đo lại ra **4/4**, không phải 3/4 - xem `docs/project-roadmap.md`
+> mục 'Ca "mấy giờ đóng cửa" - đo lại ra 4/4 hạng 1, không phải 3/4 như bản đầu'.
 
 **Bọc mỗi từ trong dấu nháy kép.** Câu hỏi của khách chứa `-`, `*`, `"`, `(` là
 cú pháp riêng của FTS5 - không bọc thì `MATCH` ném lỗi cú pháp và tool chết.
@@ -128,6 +130,11 @@ Dựng 4 đoạn kiểu tài liệu chăm sóc khách hàng, rồi khẳng đị
 hạng 1. **Câu thứ tư ("mấy giờ đóng cửa") CỐ Ý không khẳng định hạng 1** - lúc
 nghiên cứu đã đo là nó trượt vì "đồng" (tiền) và "đóng" bỏ dấu đều thành "dong",
 nên đoạn phí vận chuyển chen lên trên. Ghi lại làm mốc cho đợt vector.
+> **Đính chính:** controller đo lại giữa chừng và siết assertion của test lên
+> đúng hạng 1 - CẢ 4/4 câu đều ra đúng hạng 1 trên fixture thật (đoạn "Giờ làm
+> việc" khớp đa dạng 3 từ khác nhau nên thắng, xem `kb-search.test.ts`). Xem
+> `docs/project-roadmap.md` mục 'Ca "mấy giờ đóng cửa"...' cho số đo đầy đủ.
+> Đoạn trên giữ nguyên làm bản ghi lịch sử của dự đoán lúc lập kế hoạch.
 
 Fixture:
 
@@ -207,6 +214,8 @@ feat(kb): tìm kiếm FTS5 tiếng Việt và hợp nhất bằng RRF
 
 - RRF là module thuần, có test cho ca một danh sách và ca nhiều danh sách.
 - 3/4 câu hỏi mẫu ra đúng hạng 1; ca trượt được ghi lại làm mốc.
+  > **Đính chính:** đo lại ra 4/4 - xem `docs/project-roadmap.md` mục 'Ca "mấy
+  > giờ đóng cửa"...'.
 - Không có đường nào agent đọc được nguồn chưa bật.
 - 6/6 phép phá đỏ đúng chỗ.
 

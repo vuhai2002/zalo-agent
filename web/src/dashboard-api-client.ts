@@ -390,8 +390,13 @@ export const api = {
 
   kb: {
     sources: () => request<{ items: KbSourceListItem[] }>("/api/kb/sources"),
+    // `source` KHÔNG có `noiDungGoc` (kb-routes.ts trả bản gọn qua `boNoiDungGoc` -
+    // nội dung vừa gõ/đang lưu không cần dội ngược về client) - cùng lý do với
+    // `sources()`. uploadFile giữ `KbSourceItem` đầy đủ: nguồn loại 'file' có
+    // `noiDungGoc` luôn rỗng nên không có gì để lộ, và route đó (`/sources/file`)
+    // không qua `boNoiDungGoc`.
     createText: (ten: string, noiDung: string) =>
-      request<{ source: KbSourceItem }>("/api/kb/sources/text", {
+      request<{ source: KbSourceListItem }>("/api/kb/sources/text", {
         method: "POST",
         body: JSON.stringify({ ten, noiDung }),
       }),
@@ -404,7 +409,9 @@ export const api = {
       return requestFormData<{ source: KbSourceItem }>("/api/kb/sources/file", fd);
     },
     reindex: (id: string) =>
-      request<{ source: KbSourceItem }>(`/api/kb/sources/${encodeURIComponent(id)}/reindex`, { method: "POST" }),
+      request<{ source: KbSourceListItem }>(`/api/kb/sources/${encodeURIComponent(id)}/reindex`, {
+        method: "POST",
+      }),
     remove: (id: string) =>
       request<{ ok: true }>(`/api/kb/sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
     agentSources: (agentId: string) =>

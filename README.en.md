@@ -20,7 +20,7 @@ Provider-agnostic: any OpenAI-compatible endpoint or Anthropic.
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-1793%20passing-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-2007%20passing-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -99,7 +99,7 @@ Hono + React + Tailwind, served by the bot process itself at `http://127.0.0.1:3
 | Knowledge base | Upload documents or type them in, assign sources per agent for the `kb_search` tool |
 | Schedule | All jobs, dry-run now, per-run history |
 | Tools | Toggle the 14 tools per account; configure image generation and the vision sidecar |
-| Tuning | **56 runtime parameters**, applied live with no restart |
+| Tuning | **58 runtime parameters**, applied live with no restart |
 | Trace | Step-by-step replay of an agent turn: reasoning, tool calls, arguments |
 | Logs | System log viewer |
 
@@ -160,7 +160,7 @@ account plus QR login.
 pnpm dev                    # bot (watch mode) + dashboard
 pnpm build:web              # build the UI; the bot serves it at http://127.0.0.1:3900
 pnpm zalo-login acc-main    # QR login from the CLI (the web flow is easier)
-pnpm test                   # 1793 tests
+pnpm test                   # 2007 tests
 pnpm typecheck
 pnpm eval                   # 17 cases against a REAL model; no message ever reaches real Zalo
 ```
@@ -192,9 +192,9 @@ Image generation and the vision sidecar are configured separately, also OpenAI-c
 
 | | |
 |---|---|
-| Unit + integration tests | **1793**, on `node:test`, no external framework |
+| Unit + integration tests | **2007**, on `node:test`, no external framework |
 | Eval cases against a real model | **17** - measuring what tests cannot: does it research instead of guessing, ask when information is missing, format readably |
-| Source | ~34,500 lines excluding tests, across 299 files |
+| Source | ~37,500 lines excluding tests, across 325 files |
 
 Evals can inspect **the actual formatting sent to Zalo**, not just plain text, so presentation bugs
 are caught by machine rather than by the user noticing.
@@ -206,7 +206,7 @@ green test proves nothing if it is also green when the logic is wrong.
 
 ```
 src/
-├── config/        env (Zod), account store, agent store, 56 live-tunable parameters
+├── config/        env (Zod), account store, agent store, 58 live-tunable parameters
 ├── zalo/          QR login, encrypted credentials, listener + reconnect, message parsing,
 │                  sanitizer, markdown -> Zalo styles, byte-budget message splitting
 ├── agent/         agent loop (AI SDK), providers, persona, tools/ (14 tools)
@@ -214,6 +214,8 @@ src/
 ├── conversation/  SQLite: history, threads, contacts, usage, memory, images, summarizer
 ├── middleware/    allowlist + @mention, per-thread batching, send rate limiting
 ├── documents/     .docx / .xlsx generation
+├── knowledge/     Knowledge base - safe docx/xlsx/pdf/txt/md reading (streaming SAX +
+│                  zip-bomb caps), chunking, FTS5+RRF search, worker-thread extraction
 ├── images/        image generation, vision sidecar
 └── server/        dashboard API (Hono)
 web/               dashboard UI (React + Vite + Tailwind)

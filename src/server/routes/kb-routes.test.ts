@@ -224,6 +224,12 @@ describe("POST /api/kb/sources/text", () => {
     assert.equal(res.status, 413);
     assert.equal(store.danhSachNguon().length, 0, "không được tạo dòng DB khi nội dung vượt trần");
   });
+
+  it("response KHÔNG dội nguyên nội dung vừa gõ - client vừa gõ xong, không cần server trả lại", async () => {
+    const res = await guiJson("/api/kb/sources/text", "POST", { ten: "C", noiDung: "nội dung bí mật dài" });
+    const body = (await res.json()) as { source: Record<string, unknown> };
+    assert.equal("noiDungGoc" in body.source, false, "response vẫn còn field noiDungGoc");
+  });
 });
 
 describe("GET /api/kb/sources", () => {
@@ -277,6 +283,13 @@ describe("POST /api/kb/sources/:id/reindex", () => {
       "dang_xu_ly",
       "route KHÔNG được đổi trạng thái khi từ chối - lượt đang chạy phải là nơi duy nhất quyết định trạng thái cuối",
     );
+  });
+
+  it("response KHÔNG dội nguyên toàn văn - cùng lỗi đã vá ở GET /sources, sót lại ở route này", async () => {
+    const n = store.taoNguon({ ten: "n", loai: "text", noiDungGoc: "nội dung bí mật dài" });
+    const res = await app.request(`/api/kb/sources/${n.id}/reindex`, { method: "POST", headers: { cookie } });
+    const body = (await res.json()) as { source: Record<string, unknown> };
+    assert.equal("noiDungGoc" in body.source, false, "response vẫn còn field noiDungGoc");
   });
 });
 
