@@ -81,7 +81,9 @@ describe("khuGiaMaoTrongDoan - hiệu năng TUYẾN TÍNH (vòng rà soát lần
    * bao giờ trừ đi, nên min là số đo sạch nhất.
    *
    * Đo hiệu quả thật (bản sao logic, 400 vòng mỗi mức, đếm số lần vi phạm
-   * `tiLe < 20` và tỉ lệ lớn nhất gặp phải):
+   * `tiLe < 20` và tỉ lệ lớn nhất gặp phải). Số dưới đây đo trên MỘT MÁY CỤ
+   * THỂ - máy khác ra khác (một lần đo lại độc lập ra 2/400 ở hàng "rảnh");
+   * đọc chúng như thứ tự độ lớn giữa ba cách đo, không phải hằng số tái lập:
    *
    * | tải máy | đo một phát | chỉ min 5 loạt | hai lớp (bản này) |
    * |---|---|---|---|
@@ -103,9 +105,17 @@ describe("khuGiaMaoTrongDoan - hiệu năng TUYẾN TÍNH (vòng rà soát lần
    */
   function doMoiLanGoi(chay: () => void): number {
     chay(); // khởi động JIT trước khi đo, tránh nhiễu compile lần đầu
-    const t0 = performance.now();
-    chay();
-    const motLan = performance.now() - t0;
+    // MIN của 3 lần đo mồi, không phải một lần: `soLap` suy ra từ đây, nên
+    // đúng lần mồi bị preempt là `soLap` tụt về 1 và lớp "trung bình trên một
+    // loạt" mất tác dụng cho CẢ 5 loạt sau - tức lớp chống nhiễu tự bị nhiễu
+    // vô hiệu hoá. Min thì nhiễu chỉ làm `soLap` LỚN hơn, không nhỏ đi.
+    const motLan = Math.min(
+      ...Array.from({ length: 3 }, () => {
+        const t0 = performance.now();
+        chay();
+        return performance.now() - t0;
+      }),
+    );
     const soLap = Math.max(1, Math.min(200, Math.ceil(15 / Math.max(motLan, 0.001))));
     const motLoat = (): number => {
       const t = performance.now();

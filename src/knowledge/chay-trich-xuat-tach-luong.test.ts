@@ -10,6 +10,48 @@ import { docxChiCoAnh, docxNhieuChu } from "./ooxml-zip-test-helper.js";
 
 const MAC_DINH: ThamSoCat = { coDoanToiDa: 1600, chongLan: 10 };
 
+/**
+ * Theo dõi "luồng chính có sống trong lúc worker chạy không" mà KHÔNG phụ
+ * thuộc lịch của hệ điều hành.
+ *
+ * Cách CŨ (`assert.ok(nhip.length >= 10)` trên cửa sổ 300 ms, kỳ vọng ~30) chỉ
+ * chịu được hệ số 3x, mà `node --test` chạy nhiều file SONG SONG nên tải thật
+ * cao hơn hẳn - đo được đỏ 2/2 lần khi chạy full suite kèm 12 tiến trình đốt
+ * CPU, với thông điệp "chỉ chạy được 7 nhịp". Đếm ĐỦ N nhịp là đo tốc độ máy,
+ * không phải đo thứ cần đo.
+ *
+ * Cách MỚI đo đúng bất biến: luồng chính phải ĐÁP ỨNG ít nhất một lần trong
+ * NỬA ĐẦU quãng worker chạy. Nếu trích xuất chạy trên CÙNG luồng (đúng hồi quy
+ * cần chặn - kiến trúc trước khi có worker thread), vòng lặp đồng bộ giữ chặt
+ * event loop nên không nhịp nào phát được: mọi timer bị dồn lại, chỉ chạy SAU
+ * khi nhả. Ngân sách ở đây là NỬA quãng (~150ms trên quãng 300ms) cho MỘT lần
+ * đáp ứng của một interval 10ms - rộng gấp bội so với "đếm đủ 10 nhịp", mà một
+ * luồng bị khoá thì vẫn trượt bất kể máy nhanh cỡ nào.
+ *
+ * Vì sao NỬA ĐẦU chứ không phải "có nhịp nào đó trong cả quãng": bản đầu viết
+ * kiểu sau và phép phá cho thấy nó QUÁ YẾU - chèn một vòng khoá 400ms vào đầu
+ * `trichXuatTachLuong` vẫn XANH, vì phần sau của quãng chạy bình thường nên
+ * thừa nhịp để thoả. Neo vào nửa đầu bắt được cả ca khoá MỘT PHẦN.
+ */
+function theoDoiNhipLuongChinh(): { dung(): void; khangDinhKhongBiKhoa(batDau: number, ketThuc: number): void } {
+  const nhip: number[] = [];
+  const dem = setInterval(() => nhip.push(Date.now()), 10);
+  dem.unref(); // không cho interval này tự giữ tiến trình sống dù có quên dọn
+  return {
+    dung: () => clearInterval(dem),
+    khangDinhKhongBiKhoa(batDau, ketThuc) {
+      const giua = batDau + (ketThuc - batDau) / 2;
+      const nuaDau = nhip.filter((t) => t > batDau && t <= giua);
+      assert.ok(
+        nuaDau.length >= 1,
+        `luồng chính KHÔNG đáp ứng lần nào trong ${Math.round(giua - batDau)}ms đầu của quãng ` +
+          `${ketThuc - batDau}ms worker làm việc (tổng ${nhip.length} nhịp, ` +
+          `${nhip.filter((t) => t > batDau && t < ketThuc).length} nhịp trong cả quãng) - bị khoá`,
+      );
+    },
+  };
+}
+
 describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread", () => {
   it("trích xuất .txt thành công, trả đúng chữ và đoạn đã cắt qua worker", async () => {
     const buf = Buffer.from("# Bảo hành\n\n12 tháng kể từ ngày mua", "utf-8");
@@ -51,18 +93,18 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
     //
     // Đo trên Node 24.11.1: `resourceLimits` MẶC ĐỊNH là
     // `maxOldGenerationSizeMb: 4096` - worker cấp phát được 4092 MB rồi mới
-    // `ERR_WORKER_OUT_OF_MEMORY`. Container prod chỉ có 768 MB, nên OOM-killer
-    // giết CẢ tiến trình (SIGKILL, KHÔNG sự kiện JS nào) từ rất lâu trước mốc
-    // đó. Đặt trần rồi thì worker dừng đúng ở mốc xin (đo: xin 64 -> 56 MB,
-    // xin 256 -> 252 MB) và luồng chính nhận `'error'` bình thường.
+    // `ERR_WORKER_OUT_OF_MEMORY`, quá xa ngân sách 768 MB của container. Đặt
+    // trần rồi thì worker dừng đúng ở mốc xin (đo: xin 64 -> 56 MB, xin 256 ->
+    // 252 MB). Test này KHÔNG khẳng định cầu dao LUÔN cho một lỗi bắt được -
+    // xem "HAI GIỚI HẠN" ở `TRAN_RAM_WORKER_MB`; nó chỉ khẳng định đường đã
+    // nối đúng ở hình dạng cấp phát này.
     //
     // Hạ trần xuống 16 MB thay vì dựng "bom RAM": mọi trần ở `ooxml-limits.ts`
     // được đặt CHÍNH ĐỂ không tài liệu hợp lệ nào ăn nổi hàng trăm MB, nên
     // không có bom hợp lệ nào để dựng. Tài liệu 6 MB chữ dưới đây HỢP LỆ hoàn
     // toàn - chỉ vượt cái trần 16 MB cố tình hạ thấp của riêng test này.
-    const nhipTruoc: number[] = [];
-    const dem = setInterval(() => nhipTruoc.push(Date.now()), 10);
-    dem.unref();
+    const nhip = theoDoiNhipLuongChinh();
+    const batDau = Date.now();
     let loi: unknown;
     try {
       await assert.rejects(
@@ -94,15 +136,17 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
       // Phần ĐẮT GIÁ NHẤT của ca này: tiến trình test còn sống để chạy tiếp
       // tới đây (OOM worker không kéo theo tiến trình cha), và luồng chính
       // không hề bị khoá trong lúc worker ngốn RAM.
-      assert.ok(nhipTruoc.length >= 5, `luồng chính chỉ chạy được ${nhipTruoc.length} nhịp - bị khoá`);
+      nhip.khangDinhKhongBiKhoa(batDau, Date.now());
     } finally {
-      clearInterval(dem);
+      nhip.dung();
     }
   });
 
   // Test QUAN TRỌNG NHẤT của phase - đo đúng thứ bị hỏng: luồng chính có sống
-  // không khi worker quay CPU 100%. Khẳng định theo SỐ NHỊP chạy được, không
-  // theo thời gian tổng (thời gian tổng dao động theo máy, số nhịp thì không).
+  // không khi worker quay CPU 100%. Khẳng định bằng "có nhịp nào rơi vào GIỮA
+  // quãng worker chạy không" (xem `theoDoiNhipLuongChinh`), KHÔNG phải đếm đủ
+  // N nhịp: đếm đủ N là đo tốc độ máy, và đã đo được đỏ 2/2 lần khi chạy full
+  // suite kèm 12 tiến trình đốt CPU ("chỉ chạy được 7 nhịp" trên sàn 10).
   //
   // KỶ LUẬT DỌN TÀI NGUYÊN kép, cố ý: `dem.unref()` NGAY sau khi tạo (không
   // cho interval này tự giữ tiến trình sống dù có quên dọn) VÀ `clearInterval`
@@ -113,9 +157,8 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
   // treo VÔ HẠN thay vì thoát (đo thật: `timeout 25 node --test` trả rc=124,
   // xem báo cáo phase để đọc lại lần đo và phần chẩn đoán đã sửa).
   it("trích xuất quá hạn thì worker bị terminate và ném lỗi, luồng chính KHÔNG treo", async () => {
-    const nhipTruoc: number[] = [];
-    const dem = setInterval(() => nhipTruoc.push(Date.now()), 10);
-    dem.unref();
+    const nhip = theoDoiNhipLuongChinh();
+    const batDau = Date.now();
 
     // Theo dõi terminate() có THẬT SỰ được gọi không - độc lập với số nhịp đo
     // được ở dưới. Trên máy nhiều lõi, không gọi terminate() vẫn có thể để lọt
@@ -153,7 +196,7 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
       );
 
       assert.equal(terminateMock.mock.callCount(), 1, "worker.terminate() phải được gọi ĐÚNG 1 lần khi quá hạn");
-      assert.ok(nhipTruoc.length >= 10, `luồng chính chỉ chạy được ${nhipTruoc.length} nhịp trong lúc worker quay CPU - vẫn bị khoá`);
+      nhip.khangDinhKhongBiKhoa(batDau, Date.now());
       // Đúng LOẠI lỗi, không chỉ đúng chuỗi - kb-ingest-worker.ts dùng `instanceof`
       // để quyết định "để nguyên dang_xu_ly" hay "đánh hong ngay", một message
       // trùng khớp tình cờ từ lỗi loại khác sẽ đi nhầm nhánh.
@@ -185,7 +228,7 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
       }
     } finally {
       terminateMock.mock.restore();
-      clearInterval(dem);
+      nhip.dung();
     }
   });
 });
