@@ -3,7 +3,13 @@ import path from "node:path";
 import { Hono } from "hono";
 import { getAgent } from "../../config/agent-store.js";
 import { DINH_DANG_HO_TRO, laDinhDangHoTro } from "../../knowledge/doc-text-extract.js";
-import { datNguonChoAgent, nguonCuaAgent } from "../../knowledge/kb-agent-binding.js";
+import {
+  agentCuaNguon,
+  datAgentChoNguon,
+  datNguonChoAgent,
+  demAgentTheoNguon,
+  nguonCuaAgent,
+} from "../../knowledge/kb-agent-binding.js";
 import { luuFile, xoaFile } from "../../knowledge/kb-file-store.js";
 import { boNoiDungGoc, danhSachNguonGon, locIdTonTai } from "../../knowledge/kb-source-queries.js";
 import { layNguon, taoNguon, datTrangThai, xoaNguon } from "../../knowledge/kb-source-store.js";
@@ -14,6 +20,7 @@ import {
   chanTranDungLuong,
   khopChuKyThat,
   putAgentSourcesSchema,
+  putSourceAgentsSchema,
   tenNguonSchema,
   textSourceSchema,
 } from "./kb-route-guards.js";
@@ -36,7 +43,18 @@ export const kbRoutes = new Hono()
   // GỌN: không kèm noi_dung_goc - giao diện chỉ hiện metadata, và trang tự
   // làm mới mỗi vài giây nên kéo dư toàn văn (nguồn gõ tay có thể dài hàng
   // chục nghìn ký tự) là phí băng thông vô ích.
-  .get("/sources", (c) => c.json({ items: danhSachNguonGon() }))
+  // `soAgent` ghép ở TẦNG ROUTE, không nhét vào `danhSachNguonGon()`: hàm đó
+  // còn phục vụ đường khác không cần con số này, và ghép ở đây là MỘT câu
+  // GROUP BY cho cả bảng thay vì một truy vấn cho mỗi dòng.
+  //
+  // Vì sao giao diện cần nó: nguồn nạp xong hiện "Sẵn sàng" (đã cắt đoạn) dù
+  // KHÔNG agent nào đọc được - mọi tín hiệu trên màn hình nói "xong rồi" trong
+  // khi bot vẫn không thấy tài liệu. `soAgent = 0` là thứ duy nhất phân biệt
+  // được hai trạng thái đó.
+  .get("/sources", (c) => {
+    const dem = demAgentTheoNguon();
+    return c.json({ items: danhSachNguonGon().map((n) => ({ ...n, soAgent: dem.get(n.id) ?? 0 })) });
+  })
 
   // `chanTranDungLuong` là hàng phòng thủ DUY NHẤT cho dung lượng ở route này
   // (không thêm kiểm tra byte trùng lặp trong handler): `noiDung` luôn là một
@@ -181,4 +199,33 @@ export const kbRoutes = new Hono()
     datNguonChoAgent(agentId, parsed.data.sourceIds);
     log.info({ agentId, soNguon: parsed.data.sourceIds.length }, "Đặt lại nguồn Kho tri thức cho agent");
     return c.json({ sourceIds: nguonCuaAgent(agentId) });
+  })
+
+  // Chiều NGƯỢC của route ngay trên: gán MỘT nguồn cho nhiều agent, để người
+  // nạp tài liệu gán được ngay tại trang Kho tri thức thay vì phải nhớ tên
+  // nguồn rồi đi sang trang Agents tìm từng agent một.
+  .put("/sources/:id/agents", chanTranBodyGanNguon, async (c) => {
+    const sourceId = c.req.param("id");
+
+    const parsed = putSourceAgentsSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "Dữ liệu không hợp lệ", issues: parsed.error.issues }, 400);
+
+    // Cùng thứ tự với route trên và cùng lý do (I9/TOCTOU): kiểm sự tồn tại
+    // phải nằm SAU khi đã đọc xong body. Nguồn bị xóa đúng lúc route còn đang
+    // đọc body thì `datAgentChoNguon` vẫn ghi - dòng mồ côi lách qua phép dọn
+    // trong `xoaNguon` (chỉ chạy LÚC xóa, không có gì chạy lại sau đó).
+    if (!layNguon(sourceId)) return c.json({ error: "Không tìm thấy nguồn" }, 404);
+
+    // Đối xứng với nhánh `locIdTonTai` của route trên: chặn gán cho agent
+    // KHÔNG TỒN TẠI (id gõ sai, hoặc agent vừa bị xóa). Số agent bị `.max(200)`
+    // chặn nên vòng lặp này có trần; không có route nào tra hàng loạt agent
+    // theo id nên gọi `getAgent` từng cái là đúng công cụ sẵn có.
+    const agentKhongTonTai = parsed.data.agentIds.filter((id) => !getAgent(id));
+    if (agentKhongTonTai.length > 0) {
+      return c.json({ error: `Agent không tồn tại: ${agentKhongTonTai.join(", ")}` }, 400);
+    }
+
+    datAgentChoNguon(sourceId, parsed.data.agentIds);
+    log.info({ sourceId, soAgent: parsed.data.agentIds.length }, "Đặt lại agent đọc được nguồn");
+    return c.json({ agentIds: agentCuaNguon(sourceId) });
   });

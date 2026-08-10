@@ -582,6 +582,126 @@ describe("gán nguồn cho agent", () => {
   });
 });
 
+/**
+ * Chiều NGƯỢC: gán MỘT nguồn cho nhiều agent ngay tại trang Kho tri thức.
+ *
+ * Vì sao cần đường này dù `PUT /agents/:id/sources` đã có: người vừa nạp tài
+ * liệu nghĩ theo "tài liệu này cho ai đọc". Nguồn nạp xong không agent nào đọc
+ * được thì `kb_search` KHÔNG vào toolset (`tool-catalog-read.ts`) - bot không
+ * giấu kho, nó không biết kho tồn tại. Mà bảng vẫn hiện "Sẵn sàng".
+ */
+describe("PUT /sources/:id/agents - gán ngược", () => {
+  it("gán nguồn cho nhiều agent, đọc lại thấy đúng ở CẢ HAI chiều", async () => {
+    const n = store.taoNguon({ ten: "Bảng giá", loai: "text", noiDungGoc: "x" });
+    agents.createAgent({ id: "ban-hang", name: "Bán hàng" });
+    agents.createAgent({ id: "ho-tro", name: "Hỗ trợ" });
+
+    const res = await guiJson(`/api/kb/sources/${n.id}/agents`, "PUT", { agentIds: ["ban-hang", "ho-tro"] });
+    assert.equal(res.status, 200);
+
+    assert.deepEqual(binding.agentCuaNguon(n.id), ["ban-hang", "ho-tro"]);
+    // Chiều kia phải thấy cùng một sự thật - hai đường ghi chung một bảng, đọc
+    // lệch nhau nghĩa là một trong hai đang đọc sai trục.
+    assert.deepEqual(binding.nguonCuaAgent("ban-hang"), [n.id]);
+  });
+
+  it("THAY THẾ chứ không cộng dồn - bỏ tick hết là không agent nào đọc được", async () => {
+    const n = store.taoNguon({ ten: "Bảng giá", loai: "text", noiDungGoc: "x" });
+    agents.createAgent({ id: "ban-hang", name: "Bán hàng" });
+    await guiJson(`/api/kb/sources/${n.id}/agents`, "PUT", { agentIds: ["ban-hang"] });
+
+    await guiJson(`/api/kb/sources/${n.id}/agents`, "PUT", { agentIds: [] });
+    assert.deepEqual(binding.agentCuaNguon(n.id), [], "cộng dồn thì gỡ quyền không bao giờ có tác dụng");
+  });
+
+  it("chỉ đụng nguồn ĐANG gán, không xóa gán của nguồn khác cùng agent", async () => {
+    // `datAgentChoNguon` xóa theo `source_id`; xóa nhầm theo `agent_id` (chép
+    // từ hàm chiều kia) sẽ làm gán một nguồn cho agent A gỡ mất MỌI nguồn khác
+    // của A - hỏng câm, không lỗi nào bắn ra.
+    const n1 = store.taoNguon({ ten: "Bảng giá", loai: "text", noiDungGoc: "x" });
+    const n2 = store.taoNguon({ ten: "Chính sách", loai: "text", noiDungGoc: "y" });
+    agents.createAgent({ id: "ban-hang", name: "Bán hàng" });
+
+    await guiJson(`/api/kb/sources/${n1.id}/agents`, "PUT", { agentIds: ["ban-hang"] });
+    await guiJson(`/api/kb/sources/${n2.id}/agents`, "PUT", { agentIds: ["ban-hang"] });
+
+    assert.deepEqual(binding.nguonCuaAgent("ban-hang").sort(), [n1.id, n2.id].sort());
+  });
+
+  it("nguồn không tồn tại thì 404, không ghi dòng mồ côi", async () => {
+    agents.createAgent({ id: "ban-hang", name: "Bán hàng" });
+    const res = await guiJson("/api/kb/sources/khong-co-that/agents", "PUT", { agentIds: ["ban-hang"] });
+    assert.equal(res.status, 404);
+    assert.deepEqual(binding.nguonCuaAgent("ban-hang"), []);
+  });
+
+  it("agent không tồn tại thì 400 và KHÔNG ghi gì cả", async () => {
+    const n = store.taoNguon({ ten: "Bảng giá", loai: "text", noiDungGoc: "x" });
+    agents.createAgent({ id: "co-that", name: "Có thật" });
+
+    // Một id thật + một id ma: phải từ chối TRỌN yêu cầu, không ghi phần hợp lệ
+    // rồi bỏ phần còn lại - ghi một nửa là người dùng thấy "đã lưu" trong khi
+    // danh sách thật khác thứ họ vừa tick.
+    const res = await guiJson(`/api/kb/sources/${n.id}/agents`, "PUT", { agentIds: ["co-that", "khong-co-that"] });
+    assert.equal(res.status, 400);
+    assert.deepEqual(binding.agentCuaNguon(n.id), []);
+  });
+
+  it("từng phần tử agentIds có trần độ dài", async () => {
+    const n = store.taoNguon({ ten: "Bảng giá", loai: "text", noiDungGoc: "x" });
+    const res = await guiJson(`/api/kb/sources/${n.id}/agents`, "PUT", { agentIds: ["x".repeat(200)] });
+    assert.equal(res.status, 400);
+  });
+
+  it("body khổng lồ bị chặn ở TẦNG ĐỌC, không nuốt hết vào RAM", async () => {
+    const n = store.taoNguon({ ten: "Bảng giá", loai: "text", noiDungGoc: "x" });
+    const than = JSON.stringify({ agentIds: Array.from({ length: 400 }, () => "x".repeat(8000)) });
+    const res = await app.request(`/api/kb/sources/${n.id}/agents`, {
+      method: "PUT",
+      body: than,
+      headers: { cookie, "content-type": "application/json" },
+    });
+    assert.equal(res.status, 413);
+  });
+});
+
+describe("GET /sources - cột soAgent", () => {
+  it("nguồn chưa gán ai có soAgent = 0, gán rồi thì đếm đúng", async () => {
+    // `soAgent = 0` là thứ DUY NHẤT trên bảng phân biệt "đã cắt đoạn xong" với
+    // "bot dùng được" - trạng thái vẫn là "Sẵn sàng" ở cả hai ca.
+    const n = store.taoNguon({ ten: "Bảng giá", loai: "text", noiDungGoc: "x" });
+    agents.createAgent({ id: "ban-hang", name: "Bán hàng" });
+    agents.createAgent({ id: "ho-tro", name: "Hỗ trợ" });
+
+    const truoc = (await (await app.request("/api/kb/sources", { headers: { cookie } })).json()) as {
+      items: { id: string; soAgent: number }[];
+    };
+    assert.equal(truoc.items.find((i) => i.id === n.id)?.soAgent, 0);
+
+    binding.datAgentChoNguon(n.id, ["ban-hang", "ho-tro"]);
+    const sau = (await (await app.request("/api/kb/sources", { headers: { cookie } })).json()) as {
+      items: { id: string; soAgent: number }[];
+    };
+    assert.equal(sau.items.find((i) => i.id === n.id)?.soAgent, 2);
+  });
+
+  it("đếm ĐÚNG TỪNG nguồn, không dồn tổng cho mọi dòng", async () => {
+    // Một câu GROUP BY ghép vào danh sách: ghép nhầm (lấy tổng, hoặc lấy nhầm
+    // khóa) thì mọi dòng mang cùng một số và cảnh báo "Chưa gán" biến mất khỏi
+    // đúng nguồn cần cảnh báo.
+    const n1 = store.taoNguon({ ten: "Có gán", loai: "text", noiDungGoc: "x" });
+    const n2 = store.taoNguon({ ten: "Chưa gán", loai: "text", noiDungGoc: "y" });
+    agents.createAgent({ id: "ban-hang", name: "Bán hàng" });
+    binding.datAgentChoNguon(n1.id, ["ban-hang"]);
+
+    const d = (await (await app.request("/api/kb/sources", { headers: { cookie } })).json()) as {
+      items: { id: string; soAgent: number }[];
+    };
+    assert.equal(d.items.find((i) => i.id === n1.id)?.soAgent, 1);
+    assert.equal(d.items.find((i) => i.id === n2.id)?.soAgent, 0, "nguồn chưa gán ai phải là 0, không phải tổng");
+  });
+});
+
 describe("auth", () => {
   it("mọi route KB đều đòi đăng nhập, KỂ CẢ route ghi ra đĩa", async () => {
     const duong = [
@@ -595,6 +715,9 @@ describe("auth", () => {
       ["GET", "/api/kb/sources/x/agents"],
       ["GET", "/api/kb/agents/a/sources"],
       ["PUT", "/api/kb/agents/a/sources"],
+      // Chiều NGƯỢC (gán tại trang Kho tri thức) - route GHI, bỏ sót ở đây là
+      // để hở đúng thứ mà cả danh sách này sinh ra để canh.
+      ["PUT", "/api/kb/sources/x/agents"],
     ] as const;
     for (const [m, p] of duong) {
       assert.equal((await app.request(p, { method: m })).status, 401, `${m} ${p} không đòi đăng nhập`);

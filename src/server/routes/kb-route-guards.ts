@@ -104,3 +104,22 @@ export const putAgentSourcesSchema = z.object({
     // do. Số nguồn thật của một kho không bao giờ gần tới 500.
     .max(500),
 });
+
+/**
+ * Chiều NGƯỢC: `PUT /sources/:id/agents` - đặt lại danh sách agent đọc được MỘT
+ * nguồn, cho đường gán ngay tại trang Kho tri thức.
+ *
+ * Hai trần bám đúng lý do của `putAgentSourcesSchema` ở trên, chỉ đổi vai:
+ * - `.max(64)` mỗi phần tử: agent id là SLUG sinh từ tên (`slugify-vietnamese.ts`),
+ *   dài nhất cũng chỉ vài chục ký tự. Thiếu trần này thì `.max(200)` (số lượng)
+ *   không ngăn được MỘT phần tử khổng lồ một mình nuốt RAM.
+ * - `.max(200)`: số agent thật của một dashboard không bao giờ gần tới đó, và
+ *   route lặp `getAgent` cho từng id nên mảng không trần là một vòng lặp không
+ *   trần.
+ *
+ * Dùng lại `chanTranBodyGanNguon` (256 KB) làm trần tầng đọc: payload hợp lệ
+ * lớn nhất ở đây (200 x 64) còn NHỎ HƠN payload của route kia nên trần đó vẫn dư.
+ */
+export const putSourceAgentsSchema = z.object({
+  agentIds: z.array(z.string().max(64)).max(200),
+});

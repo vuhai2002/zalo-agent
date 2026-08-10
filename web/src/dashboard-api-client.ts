@@ -127,7 +127,15 @@ export type KbSourceItem = {
  * `noiDungGoc` từ kết quả `sources()`, nhưng typecheck sẽ không bắt được lần
  * đầu ai đó viết `source.noiDungGoc.length` dựa trên type sai đó.
  */
-export type KbSourceListItem = Omit<KbSourceItem, "noiDungGoc">;
+export type KbSourceListItem = Omit<KbSourceItem, "noiDungGoc"> & {
+  /**
+   * Số agent đang được gán nguồn này (route ghép từ một câu GROUP BY). `0` là
+   * ca cần cảnh báo: nguồn đã cắt đoạn xong, trạng thái "Sẵn sàng", nhưng
+   * KHÔNG agent nào đọc được - `kb_search` chỉ vào toolset khi agent có ít
+   * nhất một nguồn (`tool-catalog-read.ts`).
+   */
+  soAgent: number;
+};
 
 /** Một đoạn đã cắt của nguồn - `GET /api/kb/sources/:id/chunks` (I21, trang xem đoạn) */
 export type KbChunkItem = { thuTu: number; tieuDe: string; noiDung: string };
@@ -427,6 +435,15 @@ export const api = {
       ),
     agentsUsingSource: (sourceId: string) =>
       request<{ agentIds: string[] }>(`/api/kb/sources/${encodeURIComponent(sourceId)}/agents`),
+    // Chiều NGƯỢC của `setAgentSources`: gán MỘT nguồn cho nhiều agent, dùng ở
+    // trang Kho tri thức. Hai đường cùng ghi một bảng nên trang nào lưu sau ghi
+    // đè trang đó - chấp nhận được vì mỗi đường THAY THẾ trọn danh sách theo
+    // đúng chiều của nó, không cộng dồn nửa vời.
+    setSourceAgents: (sourceId: string, agentIds: string[]) =>
+      request<{ agentIds: string[] }>(`/api/kb/sources/${encodeURIComponent(sourceId)}/agents`, {
+        method: "PUT",
+        body: JSON.stringify({ agentIds }),
+      }),
   },
 
   provider: () => request<ProviderSettings>("/api/provider"),
