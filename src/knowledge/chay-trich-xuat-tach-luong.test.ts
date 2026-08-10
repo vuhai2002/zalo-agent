@@ -11,6 +11,15 @@ import { docxChiCoAnh, docxNhieuChu } from "./ooxml-zip-test-helper.js";
 const MAC_DINH: ThamSoCat = { coDoanToiDa: 1600, chongLan: 10 };
 
 /**
+ * Hạn RỘNG RÃI cho các ca KHÔNG đo hạn giờ (trích xuất thành công, giữ nguyên
+ * buffer, lỗi nội dung). 5000ms từng đủ trên máy rảnh nhưng ĐỎ khi chạy full
+ * suite kèm 12 tiến trình đốt CPU - worker mất hơn 5 giây chỉ để khởi động rồi
+ * đọc xong, thế là rơi nhầm vào nhánh quá hạn và ca test hỏng vì lý do chẳng
+ * liên quan gì tới thứ nó định đo. Chỉ ca ĐO hạn giờ mới đặt hạn ngắn.
+ */
+const HAN_ROI_RAI = 60_000;
+
+/**
  * Theo dõi "luồng chính có sống trong lúc worker chạy không" mà KHÔNG phụ
  * thuộc lịch của hệ điều hành.
  *
@@ -55,20 +64,36 @@ function theoDoiNhipLuongChinh(): { dung(): void; khangDinhKhongBiKhoa(batDau: n
 describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread", () => {
   it("trích xuất .txt thành công, trả đúng chữ và đoạn đã cắt qua worker", async () => {
     const buf = Buffer.from("# Bảo hành\n\n12 tháng kể từ ngày mua", "utf-8");
-    const ket = await trichXuatTachLuong({ buf, dinhDang: "txt", thamSoCat: MAC_DINH, hanMs: 5000 });
+    const ket = await trichXuatTachLuong({ buf, dinhDang: "txt", thamSoCat: MAC_DINH, hanMs: HAN_ROI_RAI });
     assert.match(ket.chu, /12 tháng kể từ ngày mua/);
     assert.ok(ket.doan.length > 0, "phải cắt ra ít nhất 1 đoạn");
     assert.equal(ket.doan[0]!.tieuDe, "Bảo hành");
   });
 
-  it("lỗi trích xuất THƯỜNG (docx chỉ có ảnh, không chữ) reject với đúng thông điệp, không đợi hết hanMs", async () => {
-    const bd = Date.now();
+  it("lỗi trích xuất THƯỜNG (docx chỉ có ảnh, không chữ) reject với đúng thông điệp, KHÔNG đi nhánh quá hạn", async () => {
+    // Đo bằng LOẠI LỖI, không bằng đồng hồ. Bản trước khẳng định
+    // `mat < 2000` với `hanMs: 5000` - suy ra "nhanh nghĩa là không phải nhánh
+    // quá hạn", đúng về logic nhưng là phép đo tốc độ máy: đo được 5024ms (tức
+    // ĐỎ) khi chạy full suite kèm 12 tiến trình đốt CPU. Hai nhánh này trả HAI
+    // LOẠI lỗi khác nhau nên phân biệt được trực tiếp, không cần đồng hồ:
+    // nhánh quá hạn cho `LoiTrichXuatBiNgatGiuaChung`, nhánh nội dung cho
+    // `Error` thường. Khẳng định theo cấu trúc vừa mạnh hơn vừa không nhấp nháy.
+    let loi: unknown;
     await assert.rejects(
-      () => trichXuatTachLuong({ buf: docxChiCoAnh(), dinhDang: "docx", thamSoCat: MAC_DINH, hanMs: 5000 }),
+      () =>
+        trichXuatTachLuong({ buf: docxChiCoAnh(), dinhDang: "docx", thamSoCat: MAC_DINH, hanMs: HAN_ROI_RAI }).catch(
+          (e: unknown) => {
+            loi = e;
+            throw e;
+          },
+        ),
       /không đọc được chữ nào/i,
     );
-    const mat = Date.now() - bd;
-    assert.ok(mat < 2000, `lỗi nội dung phải reject nhanh, không rơi vào nhánh quá hạn - mất ${mat}ms`);
+    assert.equal(
+      loi instanceof LoiTrichXuatBiNgatGiuaChung,
+      false,
+      "lỗi NỘI DUNG bị gán nhầm thành lỗi bị ngắt giữa chừng - kb-ingest-worker sẽ thử lại thay vì đánh hong",
+    );
   });
 
   it("buffer nhỏ dùng chung pool với buffer khác không bị hỏng khi transfer sang worker", async () => {
@@ -81,7 +106,7 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
     const buf = Buffer.from("noi dung nho, cung pool", "utf-8");
     assert.equal(buf.buffer, giuNguyen.buffer, "tiền đề test sai: 2 buffer này phải chung một pool ArrayBuffer");
 
-    const ket = await trichXuatTachLuong({ buf, dinhDang: "txt", thamSoCat: MAC_DINH, hanMs: 5000 });
+    const ket = await trichXuatTachLuong({ buf, dinhDang: "txt", thamSoCat: MAC_DINH, hanMs: HAN_ROI_RAI });
 
     assert.equal(ket.chu, "noi dung nho, cung pool");
     assert.equal(giuNguyen.toString("utf-8"), "BEN_CANH_1", "buffer khác dùng chung pool bị hỏng sau khi transfer");
@@ -103,6 +128,12 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
     // được đặt CHÍNH ĐỂ không tài liệu hợp lệ nào ăn nổi hàng trăm MB, nên
     // không có bom hợp lệ nào để dựng. Tài liệu 6 MB chữ dưới đây HỢP LỆ hoàn
     // toàn - chỉ vượt cái trần 16 MB cố tình hạ thấp của riêng test này.
+    // Dựng fixture TRƯỚC khi bật đồng hồ theo dõi: `docxNhieuChu(6)` sinh 6 MB
+    // chữ rồi deflate - việc ĐỒNG BỘ nặng trên chính luồng chính. Nằm trong
+    // quãng đo thì nó tự khoá event loop và làm khẳng định "không bị khoá" đỏ
+    // OAN (đo thật: đỏ 2/2 lần khi chạy full suite kèm 12 tiến trình đốt CPU).
+    // Quãng đo phải chỉ bao đúng lúc WORKER chạy.
+    const buf = docxNhieuChu(6);
     const nhip = theoDoiNhipLuongChinh();
     const batDau = Date.now();
     let loi: unknown;
@@ -110,10 +141,10 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
       await assert.rejects(
         () =>
           trichXuatTachLuong({
-            buf: docxNhieuChu(6),
+            buf,
             dinhDang: "docx",
             thamSoCat: MAC_DINH,
-            hanMs: 60_000, // rộng rãi: phải rơi vào nhánh RAM, không phải nhánh quá hạn
+            hanMs: HAN_ROI_RAI, // phải rơi vào nhánh RAM, không phải nhánh quá hạn
             tranRamMb: 16,
           }).catch((e: unknown) => {
             loi = e;
@@ -157,6 +188,10 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
   // treo VÔ HẠN thay vì thoát (đo thật: `timeout 25 node --test` trả rc=124,
   // xem báo cáo phase để đọc lại lần đo và phần chẩn đoán đã sửa).
   it("trích xuất quá hạn thì worker bị terminate và ném lỗi, luồng chính KHÔNG treo", async () => {
+    // Dựng fixture TRƯỚC khi bật đồng hồ theo dõi - cùng lý do đã ghi ở ca trần
+    // RAM: `bomQuayCpuDocx()` là việc ĐỒNG BỘ trên chính luồng chính, nằm trong
+    // quãng đo thì nó tự khoá event loop và làm khẳng định đỏ OAN.
+    const bom = bomQuayCpuDocx();
     const nhip = theoDoiNhipLuongChinh();
     const batDau = Date.now();
 
@@ -186,7 +221,7 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
     try {
       await assert.rejects(
         () =>
-          trichXuatTachLuong({ buf: bomQuayCpuDocx(), dinhDang: "docx", thamSoCat: MAC_DINH, hanMs: 300 }).catch(
+          trichXuatTachLuong({ buf: bom, dinhDang: "docx", thamSoCat: MAC_DINH, hanMs: 300 }).catch(
             (e: unknown) => {
               loi = e;
               throw e;
