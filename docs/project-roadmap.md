@@ -4123,6 +4123,22 @@ XÓA khỏi danh sách dưới đây - không lặp lại.
   `maxOldGenerationSizeMb: 16` vẫn cấp phát trọn 6.000 MB `Float64Array` rồi kết
   thúc BÌNH THƯỜNG (exit 0). Hướng phải làm: trần theo số trang và theo chữ
   trích ra ngay trong `extract-pdf-text.ts`, không trông vào cầu dao RAM.
+- **Ngân sách RAM của cả tiến trình chưa đo trên máy thật.** Hai con số then chốt
+  đều là SUY RA, không phải đo: `KB_EXTRACT_MAX_RAM_MB = 192` (trần heap của
+  worker trích xuất) và ~384 MB old space của luồng chính. Cộng cả `maxYoung`
+  thì mức xấu nhất người vận hành đặt được là 288 (worker) + ~384 = 672 trong
+  container 768 MB - còn đệm, nhưng đệm đó tính trên số suy ra. Cần `docker stats`
+  của bot đang chạy nhiều tài khoản Zalo để chốt: baseline RSS thật, và liệu 192
+  có đủ cho tài liệu lớn HỢP LỆ hay không (đặt quá thấp thì tài liệu tốt cũng
+  đọc không xong, nguồn quay về `cho_xu_ly` thử lại). Đo được rồi thì chỉnh lại
+  `.default()` trong `env.ts` và trần trên `.max(256)` cho khớp số thật.
+- **Cầu dao RAM của worker phụ thuộc việc KHÔNG có cờ V8 toàn tiến trình.** Cờ
+  `--max-old-space-size` (qua `NODE_OPTIONS` hoặc dòng lệnh) ĐÈ luôn
+  `resourceLimits` của worker. Đã kiểm: `Dockerfile`, `docker-compose*.yml` và
+  `package.json` đều không đặt cờ này, nên trần hiện có tác dụng thật. Ai thêm
+  cờ đó sau này PHẢI đo lại - dưới cờ đó, worker hết bộ nhớ có thể làm V8
+  `abort()` giết CẢ tiến trình thay vì phát `ERR_WORKER_OUT_OF_MEMORY` bắt được.
+  Đây cũng là lý do hai lần đo độc lập ra hai kết quả trái ngược nhau.
 - `trichTheDongThuc` (`wrap-untrusted-content.ts`) hiện KHÔNG ai gọi: nó được
   thêm cho hướng "cắt lại chuỗi đã bọc", mà I5 đã chọn hướng khác (rút ngắn
   chuỗi thay thế). Quyết định giữ hay xoá nên đi cùng lần dọn `kb-poll-*`.
