@@ -65,7 +65,7 @@ function taoBoDieuKhienTai() {
 
 const KHONG_LAM_GI = () => {};
 
-describe("taoVongPoll - 7 bất biến bắt buộc (rà soát phase 06)", () => {
+describe("taoVongPoll - 8 bất biến bắt buộc (rà soát phase 06)", () => {
   it("chiều 1: còn việc (cho_xu_ly) sau khi tải thành công -> hẹn lượt kế", async () => {
     const lich = taoLichGia();
     const vong = taoVongPoll<Nguon>({
@@ -294,6 +294,39 @@ describe("taoVongPoll - 7 bất biến bắt buộc (rà soát phase 06)", () =>
       apDungGoi[0]!.thanhCong && apDungGoi[0]!.items[0]!.trangThai,
       "san_sang",
       "kết quả áp dụng phải là của lượt 2 (mới), không phải lượt 1 (cũ, tuy về sau nhưng khởi tạo trước)",
+    );
+  });
+
+  // Chiều 8 (rà soát vòng 5) - bug hồi quy #5, do CHÍNH chốt tái nhập chiều 7
+  // sinh ra: chốt đó (trước khi vá chiều 8) chặn lượt cũ TRƯỚC dòng ghi
+  // `sourcesDaBiet`, nên lượt cũ về muộn không chỉ mất quyền áp UI (đúng ý
+  // đồ, chiều 7c) mà còn mất quyền GHI SỔ "server vừa nói còn việc". Lượt MỚI
+  // hơn nhưng THẤT BẠI thì `nenHenLuotKe` của nó rơi về ảnh chụp CŨ HƠN lượt
+  // vừa bị chặn ghi (ở đây là `null`, vì chưa từng tải thành công lần nào
+  // trước đó) -> không hẹn gì - biến "còn sống nhưng rò 1 timer" (đúng bug
+  // chiều 7 ở bản `427d28f`) thành "chết hẳn".
+  it("chiều 8 (bug hồi quy #5): lượt CŨ về muộn vẫn phải ghi sổ 'còn việc' dù lượt MỚI thất bại", async () => {
+    const lich = taoLichGia();
+    const dk = taoBoDieuKhienTai();
+    const vong = taoVongPoll<Nguon>({
+      tai: dk.tai,
+      apDung: KHONG_LAM_GI,
+      henGio: lich.henGio,
+      xoaGio: lich.xoaGio,
+    });
+    const p1 = vong.reload(); // lượt 1 (CŨ hơn) - sẽ về THÀNH CÔNG, còn dang_xu_ly
+    const p2 = vong.reload(); // lượt 2 (MỚI hơn) - sẽ về THẤT BẠI (mất mạng/502)
+
+    // Lượt 1 (CŨ) về TRƯỚC (thành công, còn việc), lượt 2 (MỚI) về SAU (thất bại)
+    dk.traVe(0, { thanhCong: true, items: [{ trangThai: "dang_xu_ly" }] }); // idx 0 = lượt 1
+    dk.traVe(0, { thanhCong: false }); // idx 0 (còn lại) = lượt 2
+    await Promise.all([p1, p2]);
+
+    assert.equal(
+      lich.soDangCho(),
+      1,
+      "lượt 1 (cũ) không còn là lượt hiện hành nhưng vẫn phải ghi được 'còn dang_xu_ly' - " +
+        "để lượt 2 (mới, thất bại) hẹn lại lượt kế thay vì để poll chết hẳn",
     );
   });
 });
