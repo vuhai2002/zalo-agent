@@ -15,6 +15,10 @@
     "src/shared/fake-agent-profile.ts",
     "src/agent/tools/tool-failure-result-test-helper.ts",
     "src/agent/streaming-model-test-helper.ts",
+    // Hai helper dựng fixture đối kháng (bom zip, docx quay CPU) - chỉ test
+    // dùng. Không loại thì bộ dựng bom zip đi thẳng vào `dist/` sản phẩm.
+    "src/knowledge/ooxml-zip-test-helper.ts",
+    "src/knowledge/kb-slow-docx-test-fixture.ts",
     // Bộ eval chạy TAY bằng tsx, không bao giờ chạy từ `dist`
     "evals/**"
   ]

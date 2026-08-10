@@ -70,8 +70,12 @@ export function KbChunksModal({ source, onClose }: { source: KbSourceListItem; o
           )}
           {items?.map((d) => (
             <div key={d.thuTu} className="gc-tile space-y-1">
+              {/* break-words như `noiDung`: tiêu đề là breadcrumb ghép nhiều
+                  cấp ("H1 > H2 > H3") nên dài hơn ô là chuyện thường */}
               {d.tieuDe && (
-                <div className="text-[12px] font-medium text-zalo-600 dark:text-zalo-400">{d.tieuDe}</div>
+                <div className="break-words text-[12px] font-medium text-zalo-600 dark:text-zalo-400">
+                  {d.tieuDe}
+                </div>
               )}
               <p className="whitespace-pre-wrap break-words text-[13px] leading-[1.6] text-ink">{d.noiDung}</p>
             </div>

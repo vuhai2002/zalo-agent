@@ -422,7 +422,15 @@ describe("gán nguồn cho agent", () => {
   // Hono không có `onError` riêng nên rơi về 500 trần (không lý do đọc được).
   it("sourceIds vượt xa SQLITE_LIMIT_VARIABLE_NUMBER vẫn bị chặn 400 nhờ .max(500) - không lọt xuống tới câu SQL", async () => {
     agents.createAgent({ id: "a1", name: "Agent A1" });
-    const qua = Array.from({ length: 33_000 }, (_, i) => `id-${i}`);
+    // Id NGẮN NHẤT có thể (1 ký tự, tốn 4 byte JSON: dấu nháy đôi + phẩy) -
+    // KHÔNG phải `id-${i}` như bản đầu. Route này giờ có trần body riêng 256KB
+    // (xem `chanTranBodyGanNguon`), mà 33.000 id dạng `id-12345` nặng ~330KB
+    // nên bị chặn 413 TRƯỚC khi schema kịp chạy - test sẽ đo nhầm tầng.
+    // 40.000 id một ký tự chỉ ~160KB: lọt trần body, vẫn vượt xa
+    // SQLITE_LIMIT_VARIABLE_NUMBER (32.766), nên vẫn đo đúng cái nó định đo.
+    const qua = Array.from({ length: 40_000 }, () => "a");
+    const than = JSON.stringify({ sourceIds: qua });
+    assert.ok(than.length < 256 * 1024, `thân phải lọt trần body riêng để chạm được schema: ${than.length} byte`);
     const res = await guiJson("/api/kb/agents/a1/sources", "PUT", { sourceIds: qua });
     assert.equal(res.status, 400, `phải chặn ở schema với 400 có lý do, không phải văng 500 trần - nhận ${res.status}`);
     assert.deepEqual(binding.nguonCuaAgent("a1"), []);
@@ -436,13 +444,12 @@ describe("gán nguồn cho agent", () => {
     assert.deepEqual(body.sourceIds, [n1.id]);
   });
 
-  // I10: `PUT` trước đây không có `chanTranDungLuong` - body khổng lồ bị
+  // I10: `PUT` trước đây không có trần body nào - body khổng lồ bị
   // `c.req.json()` gom trọn vào RAM TRƯỚC khi kịp kiểm gì cả (đã đo: body
   // 100MB -> RSS lên 1346MB trong container 768M). `.max(500)` (test phía
   // trên) chỉ giới hạn SỐ LƯỢNG phần tử, không giới hạn ĐỘ DÀI từng phần tử.
   it("PUT gán nguồn với body khổng lồ bị chặn ở TẦNG ĐỌC, không nuốt hết vào RAM", async () => {
     agents.createAgent({ id: "a1", name: "Agent A1" });
-    tuning.setTuning("KB_MAX_FILE_MB", 1);
     const than = JSON.stringify({ sourceIds: Array.from({ length: 400 }, () => "x".repeat(8000)) });
     const res = await app.request("/api/kb/agents/a1/sources", {
       method: "PUT",
@@ -450,6 +457,44 @@ describe("gán nguồn cho agent", () => {
       headers: { cookie, "content-type": "application/json" },
     });
     assert.equal(res.status, 413);
+  });
+
+  it("PUT gán nguồn dùng trần body RIÊNG (256KB), KHÔNG bám theo trần file 20-100MB", async () => {
+    // I10 chỉ đóng được MỘT NỬA: nó thêm trần vào route này nhưng dùng CHUNG
+    // `KB_MAX_FILE_MB` (mặc định 20MB, tối đa 100MB) với route upload file,
+    // trong khi payload HỢP LỆ tối đa ở đây chỉ là 500 id x 64 ký tự (~36KB) -
+    // hở gấp ~3000 lần. Một người ĐÃ ĐĂNG NHẬP vẫn ép được `c.req.json()` gom
+    // hàng chục MB vào RAM trước khi Zod kịp từ chối.
+    //
+    // Test này CỐ Ý KHÔNG hạ `KB_MAX_FILE_MB`: để mặc định (20MB) thì body 1MB
+    // dưới đây LỌT QUA trần cũ - đó chính là chỗ phân biệt code cũ với code mới.
+    agents.createAgent({ id: "a1", name: "Agent A1" });
+    const than = JSON.stringify({ sourceIds: [`x${"y".repeat(1024 * 1024)}`] });
+    assert.ok(than.length > 1024 * 1024, "thân phải trên 1MB");
+    assert.ok(
+      than.length < tuning.getTuning("KB_MAX_FILE_MB") * 1024 * 1024,
+      "thân phải DƯỚI trần file - nếu không thì test này không phân biệt được trần chung với trần riêng",
+    );
+    const res = await app.request("/api/kb/agents/a1/sources", {
+      method: "PUT",
+      body: than,
+      headers: { cookie, "content-type": "application/json" },
+    });
+    assert.equal(res.status, 413, `body 1MB phải bị trần riêng 256KB chặn - nhận ${res.status}`);
+    assert.deepEqual(binding.nguonCuaAgent("a1"), []);
+  });
+
+  it("PUT gán nguồn với payload HỢP LỆ lớn nhất (500 id) vẫn qua được trần riêng", async () => {
+    // Chiều ÂM: trần 256KB không được chặn oan payload hợp lệ lớn nhất mà
+    // `putAgentSourcesSchema` cho phép. Thiếu ca này thì hạ trần xuống 1KB
+    // cũng làm ca trên xanh.
+    agents.createAgent({ id: "a1", name: "Agent A1" });
+    const nguon = Array.from({ length: 500 }, (_, i) =>
+      store.taoNguon({ ten: `n${i}`, loai: "text", noiDungGoc: "x" }),
+    );
+    const res = await guiJson("/api/kb/agents/a1/sources", "PUT", { sourceIds: nguon.map((n) => n.id) });
+    assert.equal(res.status, 200, `payload hợp lệ lớn nhất phải qua được - nhận ${res.status}`);
+    assert.equal(binding.nguonCuaAgent("a1").length, 500);
   });
 
   it("từng phần tử sourceIds có trần độ dài - id thật chỉ dài 16 ký tự hex, 64 đã dư", async () => {

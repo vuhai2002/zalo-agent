@@ -101,6 +101,20 @@ const setTrangThaiStmt = db.prepare(`
 `);
 
 /**
+ * ĐÚNG ba cột `datTrangThai` cần đọc lại để giữ nguyên giá trị cũ - KHÔNG dùng
+ * `layNguon` (`SELECT *`, kéo theo cả `noi_dung_goc`).
+ *
+ * Đường này chạy dày: `goNguonKetDauTick()` gọi `datTrangThai` cho MỌI nguồn
+ * đang kẹt, MỖI TICK 5 giây. Với nguồn gõ tay dài (trần tới `KB_MAX_FILE_MB`,
+ * tức hàng chục MB) thì `SELECT *` nghĩa là kéo trọn toàn văn vào RAM chỉ để
+ * đọc ba con số rồi vứt - đúng lớp lỗi đã đóng ở đường LIỆT KÊ
+ * (`danhSachNguonGon`, `layNguonTheoTrangThai`), còn hở ở đường GHI TRẠNG THÁI.
+ */
+const getPhanTrangThaiStmt = db.prepare(`SELECT loi, so_doan, so_lan_thu FROM kb_sources WHERE id = ?`);
+
+type PhanTrangThaiRow = Pick<KbSourceRow, "loi" | "so_doan" | "so_lan_thu">;
+
+/**
  * `loi`/`soDoan`/`soLanThu` bỏ trống thì GIỮ NGUYÊN giá trị cũ (đọc lại rồi
  * ghi đè, không phải reset về mặc định) - đổi trạng thái 'dang_xu_ly' ->
  * 'san_sang' không kèm soDoan mới thì không có lý do gì để đè số đoạn hiện có
@@ -117,10 +131,13 @@ export function datTrangThai(
   trangThai: TrangThaiNguon,
   p?: { loi?: string; soDoan?: number; soLanThu?: number },
 ): void {
-  const hienTai = layNguon(id);
+  // Chỉ đọc lại DB khi THẬT SỰ còn thiếu giá trị - caller truyền đủ cả ba
+  // (nhánh "vừa xử lý xong") thì không cần chạm bảng lần nào.
+  const canDoc = p?.loi === undefined || p?.soDoan === undefined || p?.soLanThu === undefined;
+  const hienTai = canDoc ? (getPhanTrangThaiStmt.get(id) as PhanTrangThaiRow | undefined) : undefined;
   const loi = p?.loi ?? hienTai?.loi ?? "";
-  const soDoan = p?.soDoan ?? hienTai?.soDoan ?? 0;
-  const soLanThu = p?.soLanThu ?? hienTai?.soLanThu ?? 0;
+  const soDoan = p?.soDoan ?? hienTai?.so_doan ?? 0;
+  const soLanThu = p?.soLanThu ?? hienTai?.so_lan_thu ?? 0;
   setTrangThaiStmt.run(trangThai, loi, soDoan, soLanThu, id);
 }
 

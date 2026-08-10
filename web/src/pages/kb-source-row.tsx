@@ -56,7 +56,9 @@ export function KbSourceRow({
             {source.loi}
           </div>
         )}
-        {source.trangThai === "hong" && (
+        {/* Số lần đã thử cũng có nghĩa với nguồn đang KẸT ở "Chờ xử lý" (đã tiêu
+            hết lượt thử nên không nguồn nào giành nữa) - không riêng gì nguồn Hỏng */}
+        {(source.trangThai === "hong" || (source.trangThai === "cho_xu_ly" && source.soLanThu > 0)) && (
           <div className="mt-0.5 text-[11px] text-ink-soft">Đã thử {source.soLanThu} lần</div>
         )}
         {loiXuLyLai && <div className="mt-0.5 text-[12px] text-red-600 dark:text-red-400">{loiXuLyLai}</div>}
@@ -71,7 +73,13 @@ export function KbSourceRow({
       <td className="px-4 py-3 text-ink-soft">{formatTime(source.createdAt)}</td>
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-3">
-          {source.trangThai === "hong" && (
+          {/* Hiện cho CẢ "cho_xu_ly" lẫn "hong": nguồn có thể KẸT ở "Chờ xử lý"
+              mà không có đường thoát nào - xảy ra khi hạ "Số lần thử lại một
+              nguồn" trên trang Cấu hình lúc đang chạy, nguồn đã tiêu quá số lượt
+              mới thì `giaNguonChoXuLy` không giành nữa và nó nằm đó vĩnh viễn.
+              Route /reindex cấp lại lượt thử (soLanThu = 0) nên bấm là thoát;
+              nó chỉ từ chối 409 với "dang_xu_ly", không phải trạng thái này. */}
+          {(source.trangThai === "hong" || source.trangThai === "cho_xu_ly") && (
             <button
               onClick={() => void xuLyLai()}
               disabled={dangXuLyLai}

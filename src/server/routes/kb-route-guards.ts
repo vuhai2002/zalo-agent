@@ -45,6 +45,28 @@ export const chanTranDungLuong: MiddlewareHandler = (c, next) => {
   })(c, next);
 };
 
+/**
+ * Trần body RIÊNG cho `PUT /agents/:agentId/sources` - route này chỉ nhận một
+ * mảng id, KHÔNG nhận nội dung tài liệu, nên KHÔNG được dùng chung
+ * `chanTranDungLuong` (bám theo `KB_MAX_FILE_MB`, tức 20-100 MB).
+ *
+ * Payload HỢP LỆ lớn nhất là 500 id x 64 ký tự (hai trần của
+ * `putAgentSourcesSchema`) cộng dấu ngoặc kép/phẩy JSON - khoảng 36 KB. Dùng
+ * chung trần file là để hở gấp ~3000 lần: một người ĐÃ ĐĂNG NHẬP vẫn ép được
+ * `c.req.json()` gom trọn 100 MB vào RAM trước khi Zod kịp từ chối - đúng hình
+ * dạng lỗi mà trần file đã đóng cho hai route kia, chỉ nhỏ hơn một bậc.
+ *
+ * 256 KB = ~7 lần payload hợp lệ lớn nhất. Hằng số cứng, KHÔNG đưa lên
+ * dashboard: đây là hệ quả số học của hai trần trong schema, không phải thứ
+ * người vận hành có lý do gì để chỉnh - chỉnh nó chỉ nới được lỗ hổng.
+ */
+const TRAN_BODY_GAN_NGUON_KB = 256;
+
+export const chanTranBodyGanNguon: MiddlewareHandler = bodyLimit({
+  maxSize: TRAN_BODY_GAN_NGUON_KB * 1024,
+  onError: (c) => c.json({ error: `Danh sách nguồn vượt quá ${TRAN_BODY_GAN_NGUON_KB}KB` }, 413),
+});
+
 // Trần độ dài TÊN nguồn dùng CHUNG cho CẢ HAI route tạo nguồn (gõ tay lẫn
 // upload file) - "ten" đi vào MỌI kết quả kb_search nên đây là biên hệ thống
 // thật, không phải chỉ giao diện. 200 ký tự khớp `maxLength` của ô tên trên

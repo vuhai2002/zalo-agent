@@ -157,9 +157,16 @@ export type NguonChanTran = "khai-bao" | "do-that";
  * chính lớp lỗi thay vì `log.warn` ngay tại nơi ném: `zip-stream-entry.ts` là
  * module THUẦN, import tĩnh ở nhiều file test (`extract-docx-text.test.ts`...)
  * - kéo `shared/logger.ts` vào sẽ đọc `DATA_DIR` qua `env.ts` lúc nạp module,
- * đúng bẫy "Bẫy khi viết test" của CLAUDE.md. Đóng gói dữ liệu vào lỗi để
- * CALLER có logger (`kb-ingest-worker.ts`) tự đọc ra mà ghi log, không buộc
- * module thuần phải biết tới logger.
+ * đúng bẫy "Bẫy khi viết test" của CLAUDE.md.
+ *
+ * PHẠM VI DÙNG ĐƯỢC - đọc trước khi định dựa vào hai trường này: chúng chỉ
+ * sống trong TIẾN TRÌNH WORKER và trong test. Luồng chính KHÔNG BAO GIỜ đọc
+ * được, và đó là hệ quả cấu trúc chứ không phải thiếu sót tạm: cả đường trích
+ * xuất chạy trong `kb-extract-worker.ts`, mà nó làm PHẲNG lỗi thành `err.message`
+ * trước `postMessage` (object Error không đi qua ranh giới thread được).
+ * Hiện KHÔNG chỗ nào trong code chạy thật đọc hai trường này; test dùng chúng
+ * để phân biệt trần nào đã bắn và bắn theo số KHAI hay số ĐO. Muốn ghi log
+ * chúng thì phải log NGAY TRONG worker, không phải ở caller.
  */
 export class LoiVuotTran extends Error {
   readonly entryName?: string;

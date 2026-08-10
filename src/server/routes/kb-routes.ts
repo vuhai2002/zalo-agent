@@ -10,6 +10,7 @@ import { layNguon, taoNguon, datTrangThai, xoaNguon } from "../../knowledge/kb-s
 import { createLogger } from "../../shared/logger.js";
 import { kbInspectRoutes } from "./kb-inspect-routes.js";
 import {
+  chanTranBodyGanNguon,
   chanTranDungLuong,
   khopChuKyThat,
   putAgentSourcesSchema,
@@ -145,7 +146,10 @@ export const kbRoutes = new Hono()
 
   .get("/agents/:agentId/sources", (c) => c.json({ sourceIds: nguonCuaAgent(c.req.param("agentId")) }))
 
-  .put("/agents/:agentId/sources", chanTranDungLuong, async (c) => {
+  // Trần body RIÊNG (256 KB), KHÔNG dùng chung `chanTranDungLuong` của hai
+  // route trên: route này chỉ nhận mảng id, payload hợp lệ tối đa ~36 KB - xem
+  // `chanTranBodyGanNguon`.
+  .put("/agents/:agentId/sources", chanTranBodyGanNguon, async (c) => {
     const agentId = c.req.param("agentId");
 
     const parsed = putAgentSourcesSchema.safeParse(await c.req.json().catch(() => null));
