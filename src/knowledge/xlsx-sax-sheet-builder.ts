@@ -179,7 +179,7 @@ export function taoXlsxSheetSaxBuilder(
           nganSachO.tongKyTu += dong.length;
           if (nganSachO.tongKyTu > TRAN_TONG_KY_TU_TRICH) {
             throw new LoiVuotTran(
-              `Chữ trích ra từ file vượt quá giới hạn ${TRAN_TONG_KY_TU_TRICH / (1024 * 1024)} MB`,
+              `Chữ trích ra từ file vượt quá giới hạn ${TRAN_TONG_KY_TU_TRICH / (1024 * 1024)} MB (tính cho CẢ file, cộng mọi sheet). Hãy tách bảng tính thành nhiều file nhỏ hơn rồi nạp thành nhiều nguồn.`,
             );
           }
           cacDong.push(dong);

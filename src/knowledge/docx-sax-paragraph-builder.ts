@@ -66,7 +66,7 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
     tongKyTu += text.length;
     if (tongKyTu > TRAN_TONG_KY_TU_TRICH) {
       throw new LoiVuotTran(
-        `Chữ trích ra từ file vượt quá giới hạn ${TRAN_TONG_KY_TU_TRICH / (1024 * 1024)} MB`,
+        `Chữ trích ra từ file vượt quá giới hạn ${TRAN_TONG_KY_TU_TRICH / (1024 * 1024)} MB. Hãy tách tài liệu thành nhiều file nhỏ hơn rồi nạp thành nhiều nguồn.`,
       );
     }
     doan.push(text);

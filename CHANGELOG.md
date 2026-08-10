@@ -15,13 +15,17 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   (FTS5 + bm25, hợp nhất bằng RRF - chừa sẵn chỗ cho lớp vector đợt sau).
   REQUEST upload trả về ngay, không đợi xử lý xong. Đọc file + cắt đoạn chạy
   trong `worker_threads` riêng - không chặn bot khi trích xuất tài liệu nặng,
-  và worker có ĐỦ HAI cầu dao: tài liệu độc quay CPU vô hạn bị `terminate()`
-  cắt (luồng chính không bao giờ đứng chờ), tài liệu phình bộ nhớ bị
+  và worker có HAI cầu dao: tài liệu độc quay CPU vô hạn bị `terminate()` cắt
+  (luồng chính không bao giờ đứng chờ), tài liệu phình HEAP JS bị
   `resourceLimits` chặn ở trần RAM đặt trên dashboard ("Trần RAM cho một lượt
   trích xuất", mặc định 192 MB). Cần cả hai vì trần thời gian không chặn được
   thứ chết nhanh: `resourceLimits` mặc định của Node cho phép worker ăn tới 4
-  GB, quá xa ngân sách 768 MB của container - OOM-killer giết cả tiến trình
-  trước khi V8 kịp can thiệp. Việc còn giữ nhịp bot là bước GHI
+  GB, quá xa ngân sách 768 MB của container. Nói rõ PHẠM VI của cầu dao RAM để
+  không ai tin quá: nó chỉ đo heap JS, KHÔNG đo bộ nhớ ngoài heap
+  (`Buffer`/`TypedArray`) - đo được một worker trần 16 MB vẫn cấp phát trọn
+  6.000 MB `Float64Array` rồi kết thúc bình thường - nên đường đọc PDF gần như
+  nằm ngoài tầm nó; và vượt trần THƯỜNG cho một lỗi bắt được, nhưng có hình
+  dạng cấp phát khiến V8 dừng hẳn tiến trình. Việc còn giữ nhịp bot là bước GHI
   `kb_chunks`/FTS xuống SQLite (chỉ luồng chính được mở kết nối DB) - chi phí
   bám theo TỔNG LƯỢNG CHỮ ghi xuống, không phải số đoạn: đo 3 tài liệu, hai
   tài liệu CÙNG 20MB nhưng số đoạn lệch nhau gấp 3 lần (23.164 và 68.986) chỉ
@@ -192,6 +196,13 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 - Lưu trang Providers với ô Model để trống làm mất luôn API key vừa nhập.
 ### Đổi
 
+- **Trần 8 MB chữ trích ra từ một file Word/Excel nay tính cho CẢ FILE, trước
+  đó tính cho MỖI SHEET.** Một workbook nhiều sheet mà tổng chữ vượt 8 MB giờ bị
+  từ chối với câu "Chữ trích ra từ file vượt quá giới hạn 8 MB - hãy tách thành
+  nhiều file nhỏ hơn", dù trước đây nạp được. Đây là sửa lỗi an toàn, không phải
+  siết cho vui: đo được một file .xlsx chỉ 3,9 KB (12 sheet, 996 ô, lọt mọi trần
+  khác) trích ra 95 MB chữ vì mỗi sheet đều dưới trần khi tính riêng. Cách xử lý
+  cho file thật chạm trần: tách bớt sheet sang file khác rồi nạp thành nhiều nguồn.
 - `pnpm test` quét cả `web/src` - cây này trước đó không có test nào.
 - `.env.example` từ 68 biến còn 13. Gần như mọi tham số đã có trên dashboard và
   dashboard ĐÈ `.env`, nên danh sách dài kia vừa thừa vừa gây hiểu nhầm: giá trị
