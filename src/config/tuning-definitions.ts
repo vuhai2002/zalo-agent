@@ -635,6 +635,15 @@ const TUNING_BY_KEY = {
     max: 600_000,
     unit: "ms",
   },
+  KB_EXTRACT_MAX_RAM_MB: {
+    kind: "number",
+    group: "kb",
+    label: "Trần RAM cho một lượt trích xuất",
+    hint: "Tiến trình phụ đọc tài liệu bị chặn ở mức RAM này; vượt là nó bị dừng và tài liệu tính một lần thử hỏng. Đặt quá cao thì một tài liệu phình bộ nhớ kéo sập cả bot; quá thấp thì tài liệu lớn hợp lệ đọc không xong.",
+    min: 64,
+    max: 512,
+    unit: "MB",
+  },
   KB_MAX_INGEST_ATTEMPTS: {
     kind: "number",
     group: "kb",

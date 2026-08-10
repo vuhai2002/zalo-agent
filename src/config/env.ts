@@ -324,6 +324,14 @@ const envSchema = z.object({
   // chặn nguồn làm worker treo/chết lặp lại vô hạn qua các lần khởi động lại.
   // Đếm tăng NGAY LÚC GIÀNH (giaNguonChoXuLy), không phải lúc phát hiện hỏng.
   KB_MAX_INGEST_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(2),
+  // Trần RAM (old space của V8) cho worker trích xuất - cầu dao thứ HAI, song
+  // song với KB_EXTRACT_TIMEOUT_MS: trần thời gian bắt tài liệu quay CPU,
+  // trần này bắt tài liệu PHÌNH BỘ NHỚ. Đo được `resourceLimits` mặc định của
+  // Node là maxOldGenerationSizeMb = 4096, tức worker được phép ăn 4 GB trong
+  // một container 768 MB - V8 không bao giờ can thiệp, OOM-killer của
+  // container giết cả tiến trình trước (SIGKILL, không sự kiện JS nào).
+  // Xem chay-trich-xuat-tach-luong.ts để biết cách con số này được suy ra.
+  KB_EXTRACT_MAX_RAM_MB: z.coerce.number().int().min(64).max(512).default(192),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

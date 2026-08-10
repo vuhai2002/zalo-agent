@@ -15,8 +15,13 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   (FTS5 + bm25, hợp nhất bằng RRF - chừa sẵn chỗ cho lớp vector đợt sau).
   REQUEST upload trả về ngay, không đợi xử lý xong. Đọc file + cắt đoạn chạy
   trong `worker_threads` riêng - không chặn bot khi trích xuất tài liệu nặng,
-  và một tài liệu độc quay CPU vô hạn cũng bị `terminate()` cắt được (luồng
-  chính không bao giờ đứng chờ). Việc còn giữ nhịp bot là bước GHI
+  và worker có ĐỦ HAI cầu dao: tài liệu độc quay CPU vô hạn bị `terminate()`
+  cắt (luồng chính không bao giờ đứng chờ), tài liệu phình bộ nhớ bị
+  `resourceLimits` chặn ở trần RAM đặt trên dashboard ("Trần RAM cho một lượt
+  trích xuất", mặc định 192 MB). Cần cả hai vì trần thời gian không chặn được
+  thứ chết nhanh: `resourceLimits` mặc định của Node cho phép worker ăn tới 4
+  GB, quá xa ngân sách 768 MB của container - OOM-killer giết cả tiến trình
+  trước khi V8 kịp can thiệp. Việc còn giữ nhịp bot là bước GHI
   `kb_chunks`/FTS xuống SQLite (chỉ luồng chính được mở kết nối DB) - chi phí
   bám theo TỔNG LƯỢNG CHỮ ghi xuống, không phải số đoạn: đo 3 tài liệu, hai
   tài liệu CÙNG 20MB nhưng số đoạn lệch nhau gấp 3 lần (23.164 và 68.986) chỉ

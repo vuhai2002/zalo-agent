@@ -6,7 +6,7 @@ import { Worker } from "node:worker_threads";
 import { LoiTrichXuatBiNgatGiuaChung, trichXuatTachLuong } from "./chay-trich-xuat-tach-luong.js";
 import type { ThamSoCat } from "./chunk-text.js";
 import { bomQuayCpuDocx } from "./kb-slow-docx-test-fixture.js";
-import { docxChiCoAnh } from "./ooxml-zip-test-helper.js";
+import { docxChiCoAnh, docxNhieuChu } from "./ooxml-zip-test-helper.js";
 
 const MAC_DINH: ThamSoCat = { coDoanToiDa: 1600, chongLan: 10 };
 
@@ -43,6 +43,61 @@ describe("trichXuatTachLuong - trích xuất + cắt đoạn trong worker thread
 
     assert.equal(ket.chu, "noi dung nho, cung pool");
     assert.equal(giuNguyen.toString("utf-8"), "BEN_CANH_1", "buffer khác dùng chung pool bị hỏng sau khi transfer");
+  });
+
+  it("worker vượt trần RAM thì REJECT đúng loại lỗi, và TIẾN TRÌNH TEST VẪN SỐNG", async () => {
+    // Cầu dao THỨ HAI (song song với `hanMs`): tài liệu phình bộ nhớ chết
+    // trước khi trần thời gian kịp tới, nên `terminate()` không cứu được.
+    //
+    // Đo trên Node 24.11.1: `resourceLimits` MẶC ĐỊNH là
+    // `maxOldGenerationSizeMb: 4096` - worker cấp phát được 4092 MB rồi mới
+    // `ERR_WORKER_OUT_OF_MEMORY`. Container prod chỉ có 768 MB, nên OOM-killer
+    // giết CẢ tiến trình (SIGKILL, KHÔNG sự kiện JS nào) từ rất lâu trước mốc
+    // đó. Đặt trần rồi thì worker dừng đúng ở mốc xin (đo: xin 64 -> 56 MB,
+    // xin 256 -> 252 MB) và luồng chính nhận `'error'` bình thường.
+    //
+    // Hạ trần xuống 16 MB thay vì dựng "bom RAM": mọi trần ở `ooxml-limits.ts`
+    // được đặt CHÍNH ĐỂ không tài liệu hợp lệ nào ăn nổi hàng trăm MB, nên
+    // không có bom hợp lệ nào để dựng. Tài liệu 6 MB chữ dưới đây HỢP LỆ hoàn
+    // toàn - chỉ vượt cái trần 16 MB cố tình hạ thấp của riêng test này.
+    const nhipTruoc: number[] = [];
+    const dem = setInterval(() => nhipTruoc.push(Date.now()), 10);
+    dem.unref();
+    let loi: unknown;
+    try {
+      await assert.rejects(
+        () =>
+          trichXuatTachLuong({
+            buf: docxNhieuChu(6),
+            dinhDang: "docx",
+            thamSoCat: MAC_DINH,
+            hanMs: 60_000, // rộng rãi: phải rơi vào nhánh RAM, không phải nhánh quá hạn
+            tranRamMb: 16,
+          }).catch((e: unknown) => {
+            loi = e;
+            throw e;
+          }),
+        /dừng bất thường/i,
+      );
+      // Đúng LOẠI lỗi: `kb-ingest-worker.ts` dùng `instanceof` để quyết định
+      // "để nguyên dang_xu_ly" (thử lại) hay "đánh hong ngay". Hết RAM là ca
+      // KHÔNG BIẾT tài liệu hỏng thật hay máy đang chật - phải đi nhánh thử lại.
+      assert.ok(
+        loi instanceof LoiTrichXuatBiNgatGiuaChung,
+        `phải là LoiTrichXuatBiNgatGiuaChung, nhận được: ${String(loi)}`,
+      );
+      assert.match(
+        (loi as Error).message,
+        /out of memory/i,
+        `phải giữ nguyên mã lỗi gốc của Node để chẩn đoán được: ${(loi as Error).message}`,
+      );
+      // Phần ĐẮT GIÁ NHẤT của ca này: tiến trình test còn sống để chạy tiếp
+      // tới đây (OOM worker không kéo theo tiến trình cha), và luồng chính
+      // không hề bị khoá trong lúc worker ngốn RAM.
+      assert.ok(nhipTruoc.length >= 5, `luồng chính chỉ chạy được ${nhipTruoc.length} nhịp - bị khoá`);
+    } finally {
+      clearInterval(dem);
+    }
   });
 
   // Test QUAN TRỌNG NHẤT của phase - đo đúng thứ bị hỏng: luồng chính có sống

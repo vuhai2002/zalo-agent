@@ -133,6 +133,26 @@ export function docxChiCoAnh(): Buffer {
   return docxTuXml('<w:p><w:r><w:drawing/></w:r></w:p>');
 }
 
+/**
+ * docx chứa khoảng `soMbChu` MB chữ THẬT, chia thành nhiều đoạn - tài liệu
+ * HỢP LỆ (dưới mọi trần của `ooxml-limits.ts`), chỉ đơn giản là to. Dùng để đo
+ * cầu dao RAM của worker (`resourceLimits`) bằng cách hạ trần RAM xuống rất
+ * thấp, thay vì đi dựng một tài liệu độc: mọi trần hiện có được đặt CHÍNH ĐỂ
+ * không tài liệu nào ăn nổi hàng trăm MB, nên không có "bom RAM" hợp lệ nào
+ * để dựng - hạ trần là cách trung thực để chạm đúng nhánh code cần đo.
+ *
+ * Chữ KHÓ NÉN: chữ lặp nén hơn 1000:1 và sẽ bị chính chốt tỉ lệ nén bắt trước
+ * (cùng bẫy đã ghi ở `zipNhieuEntryVuaDu`).
+ */
+export function docxNhieuChu(soMbChu: number): Buffer {
+  const soDoan = 64;
+  const moiDoan = Math.floor((soMbChu * 1024 * 1024) / soDoan);
+  // Khoảng trắng rải đều để `catThanhDoan` cắt được ra nhiều đoạn thật, không
+  // ra một khối liền không chỗ ngắt.
+  const chu = chuKhoNen(moiDoan).replace(/(.{80})/g, "$1 ");
+  return docxTuXml(`<w:p><w:r><w:t>${chu}</w:t></w:r></w:p>`.repeat(soDoan));
+}
+
 /** Entry `word/document.xml` giải nén ra vượt trần MỘT entry (32 MB) */
 export function zipEntryQuaTran(): Buffer {
   const raw = Buffer.alloc(33 * 1024 * 1024, 0x41); // nén cực tốt (toàn 'A') - test nhanh

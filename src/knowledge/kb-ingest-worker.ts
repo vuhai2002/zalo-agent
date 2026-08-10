@@ -68,6 +68,7 @@ async function xuLyMotNguon(n: KbSourceTomTat): Promise<void> {
       dinhDang,
       thamSoCat: { coDoanToiDa: getTuning("KB_CHUNK_CHARS"), chongLan: getTuning("KB_CHUNK_OVERLAP_PERCENT") },
       hanMs: getTuning("KB_EXTRACT_TIMEOUT_MS"),
+      tranRamMb: getTuning("KB_EXTRACT_MAX_RAM_MB"),
     });
 
     // I4: DELETE có thể xen vào ĐÚNG lúc worker đang await trích xuất - nguồn
