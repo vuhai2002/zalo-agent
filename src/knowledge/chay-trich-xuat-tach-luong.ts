@@ -19,9 +19,9 @@ import type { DoanMoi } from "./kb-chunk-store.js";
  *    một vòng lặp CPU đồng bộ trong 2,2 ms (xem báo cáo nghiên cứu phase này,
  *    mục "Câu hỏi 2"). Đừng thử lại hướng timeout-trên-cùng-luồng.
  *
- * 2. RAM (`resourceLimits.maxOldGenerationSizeMb`): trần thời gian KHÔNG chặn
- *    được tài liệu phình bộ nhớ NHANH - nó chết trước khi `hanMs` kịp tới. Xem
- *    `TRAN_RAM_WORKER_MB` ngay dưới cho số đo và cách suy con số.
+ * 2. RAM (`resourceLimits`): trần thời gian KHÔNG chặn được tài liệu phình bộ
+ *    nhớ NHANH - nó chết trước khi `hanMs` kịp tới. Xem `TRAN_RAM_WORKER_MB`
+ *    ngay dưới cho số đo, cách suy con số, và HAI GIỚI HẠN của cầu dao này.
  */
 
 export type KetQuaTrichXuat = { chu: string; doan: DoanMoi[] };
@@ -31,27 +31,57 @@ export type KetQuaTrichXuat = { chu: string; doan: DoanMoi[] };
  * `tranRamMb` (mọi đường chạy thật đều truyền từ `getTuning`; hằng số này là
  * lưới an toàn cho test và cho lời gọi trực tiếp).
  *
- * Suy từ ngân sách container: `docker-compose.prod.yml` giới hạn 768 MB cho cả
- * tiến trình bot, `docs/system-architecture.md` chừa ~384 MB old space cho
- * luồng chính. 192 MB để worker và luồng chính cộng lại vẫn nằm trong ngân
- * sách container, và vẫn gấp ~2 lần đỉnh RAM thật của đường OOXML (chữ trích
- * ra trần 8 MB ký tự -> ~16 MB nếu là chuỗi hai byte, cộng đoạn đã cắt).
- *
  * Vì sao BẮT BUỘC phải đặt: đo trên Node 24.11.1, `resourceLimits` MẶC ĐỊNH
  * của worker là `maxOldGenerationSizeMb: 4096` - worker được phép phình tới
- * ~4 GB (đo thật: cấp phát được 4092 MB rồi mới `ERR_WORKER_OUT_OF_MEMORY`).
- * Trong container 768 MB, OOM-killer giết CẢ tiến trình từ lâu trước mốc đó,
- * bằng SIGKILL - không sự kiện `'error'`/`'exit'` nào bắn ra để mà xử lý.
- * Đặt trần rồi thì đo được worker dừng đúng ở mốc xin (xin 64 -> cấp phát
- * được 56 MB; xin 256 -> 252 MB) và luồng chính nhận `'error'` bình thường.
+ * ~4 GB (đo thật: cấp phát được 4092 MB rồi mới `ERR_WORKER_OUT_OF_MEMORY`)
+ * trong một container 768 MB. Đặt trần rồi thì worker dừng đúng ở mốc xin
+ * (xin 64 -> cấp phát được 56 MB; xin 256 -> 252 MB).
+ *
+ * TRẦN THẬT = `maxOld + maxYoung`, KHÔNG phải riêng `maxOld` - đo
+ * `v8.getHeapStatistics().heap_size_limit` ngay trong worker:
+ *
+ *   maxOld=192, young MẶC ĐỊNH (192) -> 384 MB
+ *   maxOld=192, young=32             -> 240 MB
+ *   maxOld=512, young MẶC ĐỊNH       -> 704 MB
+ *
+ * Vì vậy PHẢI đặt `maxYoungGenerationSizeMb` tường minh: để mặc định thì mỗi
+ * MB xin cho old space kéo theo 192 MB young space không ai xin, và
+ * 384 (worker) + ~384 (old space luồng chính, `docs/system-architecture.md`)
+ * = trọn 768 MB ngân sách container, không còn một byte đệm cho RSS overhead
+ * (đo: RSS 321 MB khi `heapUsed` mới 206 MB). 32 MB young là dư cho một worker
+ * chỉ đọc luồng rồi cắt đoạn; trần thật thành 192 + 32 = 240 MB.
+ *
+ * HAI GIỚI HẠN phải biết trước khi tin vào cầu dao này:
+ *
+ * 1. KHÔNG ĐẢM BẢO bắt được thành `'error'`. Thường thì vượt trần cho
+ *    `ERR_WORKER_OUT_OF_MEMORY` và luồng chính sống (đo ở đây: 8/8 mốc từ 16
+ *    tới 512 MB, hai hình dạng cấp phát). Nhưng vòng rà soát đo được hình dạng
+ *    cấp phát KHÁC làm V8 `abort()` CẢ TIẾN TRÌNH ("FATAL ERROR: Reached heap
+ *    limit", exit 134, không sự kiện JS nào) ở đúng mốc 128 và 192, trong khi
+ *    các mốc khác vẫn sạch - tức kết quả là hàm của (trần, HÌNH DẠNG cấp
+ *    phát), không phải của riêng con số. Đừng viết ở đâu rằng trần này biến
+ *    OOM thành lỗi bắt được.
+ * 2. CHỈ chặn HEAP JS, KHÔNG chặn bộ nhớ NGOÀI heap. `ArrayBuffer`/`Buffer`/
+ *    `TypedArray` là external memory: đo được worker trần `maxOld=16` cấp phát
+ *    trọn 6.000 MB `Float64Array` rồi kết thúc BÌNH THƯỜNG (exit 0). Đường PDF
+ *    (`extract-pdf-text.ts` -> `getDocumentProxy(new Uint8Array(buf))`, pdfjs
+ *    làm việc trên typed array) nằm gần như trọn ngoài tầm cầu dao này.
  *
  * CẢNH BÁO khi đo lại: nếu tiến trình cha chạy KÈM `--max-old-space-size`, cờ
  * đó (cờ V8 toàn tiến trình) ĐÈ luôn `resourceLimits` của worker - đo được
- * worker dừng ở cùng một mốc cho mọi giá trị `maxOldGenerationSizeMb` xin
- * vào. Bot không đặt cờ này (không có `NODE_OPTIONS` trong Dockerfile lẫn
- * compose) nên trần dưới đây có tác dụng thật; đừng thêm cờ đó mà không đo lại.
+ * worker dừng ở cùng một mốc cho mọi giá trị xin vào. Bot không đặt cờ này
+ * (không có `NODE_OPTIONS` trong Dockerfile lẫn compose) nên trần dưới đây có
+ * tác dụng thật; đừng thêm cờ đó mà không đo lại.
  */
 export const TRAN_RAM_WORKER_MB = 192;
+
+/**
+ * Young generation của worker. Đặt TƯỜNG MINH vì mặc định là 192 MB - cộng
+ * thẳng vào trần thật (xem bảng đo ở `TRAN_RAM_WORKER_MB`), biến "xin 192"
+ * thành 384 MB. Worker này chỉ đọc theo luồng rồi cắt đoạn: vòng đời phần lớn
+ * là chuỗi lớn đi thẳng vào old space, không phải rác trẻ ngắn hạn.
+ */
+const TRAN_RAM_YOUNG_WORKER_MB = 32;
 
 /**
  * Worker bị buộc dừng GIỮA CHỪNG (quá hạn `hanMs`, hoặc tự chết bất thường -
@@ -100,10 +130,17 @@ export function trichXuatTachLuong(p: {
     const worker = new Worker(URL_WORKER, {
       workerData: { buf: ab, dinhDang: p.dinhDang, thamSoCat: p.thamSoCat },
       transferList: [ab],
-      // Cầu dao RAM - vượt trần thì Node phát `'error'` với
-      // `ERR_WORKER_OUT_OF_MEMORY`, rơi đúng nhánh `worker.once("error")` bên
-      // dưới. Xem `TRAN_RAM_WORKER_MB` cho số đo và lý do bắt buộc phải đặt.
-      resourceLimits: { maxOldGenerationSizeMb: p.tranRamMb ?? TRAN_RAM_WORKER_MB },
+      // Cầu dao RAM. Vượt trần THƯỜNG cho `'error'` với
+      // `ERR_WORKER_OUT_OF_MEMORY` (rơi đúng nhánh `worker.once("error")` bên
+      // dưới) nhưng KHÔNG ĐẢM BẢO, và không chặn bộ nhớ ngoài heap - đọc kỹ
+      // "HAI GIỚI HẠN" ở `TRAN_RAM_WORKER_MB` trước khi dựa vào nó.
+      //
+      // `maxYoungGenerationSizeMb` PHẢI đặt cùng: trần thật là tổng hai số,
+      // để mặc định là cộng thêm 192 MB không ai xin.
+      resourceLimits: {
+        maxOldGenerationSizeMb: p.tranRamMb ?? TRAN_RAM_WORKER_MB,
+        maxYoungGenerationSizeMb: TRAN_RAM_YOUNG_WORKER_MB,
+      },
     });
 
     // Chặn settle (resolve/reject) hai lần: nhiều sự kiện (message/error/exit)

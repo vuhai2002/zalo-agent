@@ -326,12 +326,17 @@ const envSchema = z.object({
   KB_MAX_INGEST_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(2),
   // Trần RAM (old space của V8) cho worker trích xuất - cầu dao thứ HAI, song
   // song với KB_EXTRACT_TIMEOUT_MS: trần thời gian bắt tài liệu quay CPU,
-  // trần này bắt tài liệu PHÌNH BỘ NHỚ. Đo được `resourceLimits` mặc định của
+  // trần này bắt tài liệu PHÌNH HEAP JS. Đo được `resourceLimits` mặc định của
   // Node là maxOldGenerationSizeMb = 4096, tức worker được phép ăn 4 GB trong
-  // một container 768 MB - V8 không bao giờ can thiệp, OOM-killer của
-  // container giết cả tiến trình trước (SIGKILL, không sự kiện JS nào).
-  // Xem chay-trich-xuat-tach-luong.ts để biết cách con số này được suy ra.
-  KB_EXTRACT_MAX_RAM_MB: z.coerce.number().int().min(64).max(512).default(192),
+  // một container 768 MB.
+  //
+  // Trần TRÊN 256 (không phải 512): trần heap THẬT của worker là
+  // maxOld + maxYoung, mà maxYoung đặt cứng 32 MB - nên 256 nghĩa là 288 MB.
+  // Cộng ~384 MB old space của luồng chính là 672/768 MB, còn ~96 MB đệm cho
+  // RSS overhead (đo: RSS 321 MB khi heapUsed mới 206 MB). Để max 512 thì
+  // riêng worker đã 544 MB - kéo thanh trượt hết cỡ là tự cầm chắc OOM-kill.
+  // Xem chay-trich-xuat-tach-luong.ts cho bảng đo và HAI GIỚI HẠN của cầu dao.
+  KB_EXTRACT_MAX_RAM_MB: z.coerce.number().int().min(64).max(256).default(192),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

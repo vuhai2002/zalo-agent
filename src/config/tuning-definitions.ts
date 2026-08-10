@@ -639,9 +639,9 @@ const TUNING_BY_KEY = {
     kind: "number",
     group: "kb",
     label: "Trần RAM cho một lượt trích xuất",
-    hint: "Tiến trình phụ đọc tài liệu bị chặn ở mức RAM này; vượt là nó bị dừng và tài liệu tính một lần thử hỏng. Đặt quá cao thì một tài liệu phình bộ nhớ kéo sập cả bot; quá thấp thì tài liệu lớn hợp lệ đọc không xong.",
+    hint: "Tiến trình phụ đọc tài liệu bị chặn ở mức RAM này; vượt là nó bị dừng và tài liệu tính một lần thử hỏng. CHỈ NÂNG KHI CÓ TÀI LIỆU THẬT ĐỌC KHÔNG XONG: mức thật tốn hơn con số này khoảng 32MB, và cộng với phần bot dùng thì máy 768MB chỉ vừa đủ tới 256. Nâng bừa là đổi lỗi 'một tài liệu hỏng' thành lỗi 'cả bot bị giết'. Chỉ chặn được tài liệu phình bộ nhớ kiểu văn bản; file PDF gần như không bị chặn.",
     min: 64,
-    max: 512,
+    max: 256,
     unit: "MB",
   },
   KB_MAX_INGEST_ATTEMPTS: {
