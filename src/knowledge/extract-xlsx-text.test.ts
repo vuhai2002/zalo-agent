@@ -4,7 +4,13 @@ import { describe, it } from "node:test";
 // Module thuần (chỉ đụng zip/regex) - không chạm env/DB nên import tĩnh được
 import { docChuTuFile } from "./doc-text-extract.js";
 import { renderXlsx } from "../documents/render-xlsx.js";
-import { chuKhoNen, xlsxRong, xlsxTuSheetVaChuoi, zipNhieuEntryVuaDu } from "./ooxml-zip-test-helper.js";
+import {
+  chuKhoNen,
+  xlsxNhieuSheetVaChuoi,
+  xlsxRong,
+  xlsxTuSheetVaChuoi,
+  zipNhieuEntryVuaDu,
+} from "./ooxml-zip-test-helper.js";
 
 const excelORong = () =>
   fs.readFileSync(new URL("./fixtures/excel-o-rong-co-dinh-dang.xlsx", import.meta.url));
@@ -247,5 +253,37 @@ describe("extract-xlsx-text - bom và trần an toàn", () => {
       assert.doesNotMatch(err.message, /XML không hợp lệ/i, "không được dán nhãn sai là lỗi cú pháp XML");
       return true;
     });
+  });
+
+  it("chữ trích ra CỘNG DỒN qua NHIỀU SHEET vượt trần 8 MB bị từ chối - mỗi sheet đều dưới trần", async () => {
+    // Ca ĐÃ ĐO hỏng: `tongKyTu` nằm trong THÂN builder, mà `extract-xlsx-text.ts`
+    // tạo builder MỘT LẦN CHO MỖI SHEET - trần 8 MB hoá ra là trần MỖI SHEET.
+    // Khuếch đại bằng `sharedStrings`: một chuỗi dùng chung 100.000 ký tự, mỗi
+    // ô `<c t="s"><v>0</v></c>` chỉ ~25 byte XML nhưng trả về TRỌN chuỗi đó.
+    //
+    // 12 sheet x 83 ô = 8.300.000 ký tự MỖI SHEET (DƯỚI trần 8.388.608 - từng
+    // sheet một mình hoàn toàn hợp lệ), tổng 99.600.000 ký tự = 95,0 MB. Đo
+    // TRƯỚC khi sửa: .xlsx chỉ 3,9 KB, 13 entry, 996 ô - dưới MỌI trần khác
+    // (zip 64 MB, entry 32 MB, 256 entry, 2 triệu ô) - trích ra trọn 95,0 MB
+    // trong 71 ms, KHÔNG trần nào bắt. KB_EXTRACT_TIMEOUT_MS cũng không cứu
+    // được: nhân lên 250 sheet chỉ tốn ~2,5 giây nhưng đủ giết process bằng
+    // FATAL heap limit ở --max-old-space-size=384.
+    const chuoiDungChung = "A".repeat(100_000);
+    const thanSheet = '<row><c t="s"><v>0</v></c></row>'.repeat(83);
+    const buf = xlsxNhieuSheetVaChuoi(Array.from({ length: 12 }, () => thanSheet), [chuoiDungChung]);
+
+    await assert.rejects(() => docChuTuFile(buf, "xlsx"), /vượt quá giới hạn 8 MB/i);
+  });
+
+  it("MỘT sheet dưới trần vẫn đọc bình thường - trần cộng dồn không kẹp nhầm ca hợp lệ", async () => {
+    // Chiều ÂM của ca trên: cùng hình dạng (chuỗi dùng chung to, ô t="s") nhưng
+    // TỔNG dưới trần thì phải đọc ra chữ, không được ném. Thiếu ca này thì một
+    // bản vá "luôn ném" cũng làm ca trên xanh.
+    const buf = xlsxNhieuSheetVaChuoi(
+      Array.from({ length: 3 }, () => '<row><c t="s"><v>0</v></c></row>'.repeat(2)),
+      ["A".repeat(100_000)],
+    );
+    const chu = await docChuTuFile(buf, "xlsx");
+    assert.equal(chu.length, 3 * 2 * 100_000 + 3 * 1 + 2 * 2, `độ dài chữ trích ra: ${chu.length}`);
   });
 });

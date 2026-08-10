@@ -3,11 +3,27 @@ import type { XmlSaxHandlers } from "../shared/xml-sax-scan.js";
 import { thayTheEscapeExcel } from "./xlsx-sax-shared-strings.js";
 import { LoiVuotTran, TRAN_SO_COT_EXCEL, TRAN_TONG_KY_TU_TRICH, TRAN_TONG_SO_O } from "./ooxml-limits.js";
 
-/** Bộ đếm CÔNG CẤP PHÁT (ô thật + ô đệm) dùng CHUNG cho MỌI sheet của cùng 1
- * file xlsx - `extract-xlsx-text.ts` tạo MỘT lần, truyền vào từng
- * `taoXlsxSheetSaxBuilder()` (như `zip-stream-entry.ts` dùng 1 phiên cho
- * trần tổng). KHÔNG dùng biến module-level: mỗi `docChuTuFile` cần bộ riêng. */
-export type NganSachO = { tongO: number };
+/**
+ * Sổ ngân sách dùng CHUNG cho MỌI sheet của cùng 1 file xlsx -
+ * `extract-xlsx-text.ts` tạo MỘT lần, truyền vào từng `taoXlsxSheetSaxBuilder()`
+ * (như `zip-stream-entry.ts` dùng 1 phiên cho trần tổng). KHÔNG dùng biến
+ * module-level: mỗi `docChuTuFile` cần bộ riêng.
+ *
+ * HAI trục, cả hai đều phải dùng chung - chia nhỏ ra nhiều sheet, mỗi sheet
+ * dưới trần, KHÔNG được lách trần tổng:
+ * - `tongO`: CÔNG CẤP PHÁT (ô thật + ô đệm do cột nhảy cóc) - `TRAN_TONG_SO_O`.
+ * - `tongKyTu`: CHỮ THẬT đã gom vào kết quả - `TRAN_TONG_KY_TU_TRICH`.
+ *
+ * `tongKyTu` từng nằm TRONG thân builder (một biến cục bộ, khởi tạo lại mỗi
+ * sheet) nên trần 8 MB hoá ra là trần MỖI SHEET. `sharedStrings` khuếch đại ca
+ * này: một chuỗi dùng chung 100.000 ký tự, mỗi ô `<c t="s"><v>0</v></c>` chỉ
+ * ~25 byte XML nhưng trả về TRỌN chuỗi đó. Đo được: 12 sheet x 83 ô (file
+ * .xlsx 3,9 KB, 13 entry, 996 ô - dưới MỌI trần zip/entry/số ô) trích ra 95,0
+ * MB chữ trong 71 ms mà không trần nào bắt; 250 sheet thì `node
+ * --max-old-space-size=384` chết FATAL heap limit. `KB_EXTRACT_TIMEOUT_MS`
+ * cũng không cứu được: 250 sheet chỉ tốn ~2,5 giây.
+ */
+export type NganSachO = { tongO: number; tongKyTu: number };
 
 /** `xl/worksheets/sheetN.xml` -> chữ theo HÀNG (một hàng là một bản ghi có
  * nghĩa). Thay `ROW_RE`/`CELL_RE`/`V_RE` cũ - xem mục 1.3, 3.2 nghiên cứu. */
@@ -34,15 +50,16 @@ export type XlsxSheetSaxBuilder = XmlSaxHandlers & {
 
 /**
  * @param chuoiDungChung mảng `sharedStrings.xml` theo ĐÚNG thứ tự index
- * @param nganSachO bộ đếm công cấp phát DÙNG CHUNG với các sheet khác trong
- * cùng file - xem `NganSachO`.
+ * @param nganSachO sổ ngân sách (số ô + số ký tự trích ra) DÙNG CHUNG với các
+ * sheet khác trong cùng file - xem `NganSachO`. KHÔNG được thay bằng biến cục
+ * bộ trong thân hàm này: builder được tạo LẠI cho mỗi sheet nên biến cục bộ
+ * biến trần tổng thành trần mỗi sheet.
  */
 export function taoXlsxSheetSaxBuilder(
   chuoiDungChung: readonly string[],
   nganSachO: NganSachO,
 ): XlsxSheetSaxBuilder {
   const cacDong: string[] = [];
-  let tongKyTu = 0;
 
   let dongHienTai: string[] = [];
   let cotKyVong = 1; // chỉ số cột (1-based) mong đợi ô KẾ TIẾP sẽ nằm ở đó
@@ -76,7 +93,8 @@ export function taoXlsxSheetSaxBuilder(
    * Chèn ô rỗng cho cột bị nhảy cóc - không thì ô sau dính sát ô trước, lệch
    * cột. Đếm CÔNG CẤP PHÁT (ô đệm + chính ô này) TRƯỚC vòng lặp `push`, bất
    * kể hàng có chữ hay không: hàng toàn ô rỗng bị lọc bỏ ở `</row>` TRƯỚC khi
-   * cộng vào `tongKyTu`, nên `TRAN_TONG_KY_TU_TRICH` không bắt được ca này.
+   * cộng vào `nganSachO.tongKyTu`, nên `TRAN_TONG_KY_TU_TRICH` không bắt được
+   * ca này.
    */
   function themOVaoDong(giaTri: string, chiSoCot: number): void {
     // Math.max(1, ...) - KHÔNG BAO GIỜ hoàn quỹ. `dongHienTai` reset mỗi
@@ -158,8 +176,8 @@ export function taoXlsxSheetSaxBuilder(
       case "row":
         if (dongHienTai.some((o) => o.trim())) {
           const dong = dongHienTai.join(" | ");
-          tongKyTu += dong.length;
-          if (tongKyTu > TRAN_TONG_KY_TU_TRICH) {
+          nganSachO.tongKyTu += dong.length;
+          if (nganSachO.tongKyTu > TRAN_TONG_KY_TU_TRICH) {
             throw new LoiVuotTran(
               `Chữ trích ra từ file vượt quá giới hạn ${TRAN_TONG_KY_TU_TRICH / (1024 * 1024)} MB`,
             );

@@ -40,10 +40,12 @@ export async function extractXlsxText(buf: Buffer): Promise<string> {
     throw new Error("File xlsx không có sheet nào đọc được");
   }
 
-  // Dùng CHUNG một bộ đếm công cấp phát cho MỌI sheet - chia nhỏ ra nhiều
-  // sheet, mỗi sheet dưới trần, không được lách trần tổng (đúng nguyên tắc
-  // "trần tổng" đã áp cho zip-stream-entry.ts).
-  const nganSachO: NganSachO = { tongO: 0 };
+  // Dùng CHUNG một sổ ngân sách cho MỌI sheet, trên CẢ HAI trục (số ô cấp
+  // phát VÀ số ký tự trích ra) - chia nhỏ ra nhiều sheet, mỗi sheet dưới trần,
+  // không được lách trần tổng (đúng nguyên tắc "trần tổng" đã áp cho
+  // zip-stream-entry.ts). Trục `tongKyTu` từng bị bỏ sót: nó nằm trong thân
+  // builder, mà builder được tạo LẠI mỗi sheet - xem `NganSachO`.
+  const nganSachO: NganSachO = { tongO: 0, tongKyTu: 0 };
   const doanTheoSheet: string[] = [];
   for (const file of sheetFiles) {
     // moPhienDocZip/docEntryTheoLuong đã ném lỗi tiếng Việt đọc được khi vượt

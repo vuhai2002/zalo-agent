@@ -188,10 +188,24 @@ export function xlsxRong(): Buffer {
  * chỉ thử với ô tự đóng nằm GIỮA hàng như fixture Excel thật).
  */
 export function xlsxTuSheetVaChuoi(sheet1Body: string, sharedStrings: string[]): Buffer {
+  return xlsxNhieuSheetVaChuoi([sheet1Body], sharedStrings);
+}
+
+/**
+ * Như `xlsxTuSheetVaChuoi` nhưng NHIỀU sheet (`sheet1.xml`, `sheet2.xml`, ...)
+ * cùng chia sẻ MỘT `sharedStrings.xml` - cần cho các ca đo trần TỔNG của cả
+ * file: mỗi sheet nằm dưới trần nhưng cộng dồn thì vượt. Một bộ đếm khởi tạo
+ * lại theo từng sheet sẽ để lọt đúng hình dạng này (xem `NganSachO`).
+ */
+export function xlsxNhieuSheetVaChuoi(sheetBodies: string[], sharedStrings: string[]): Buffer {
   const sst = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="${SPREADSHEETML_NS}" count="${sharedStrings.length}" uniqueCount="${sharedStrings.length}">${sharedStrings.map((s) => `<si><t>${s}</t></si>`).join("")}</sst>`;
-  const sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="${SPREADSHEETML_NS}"><sheetData>${sheet1Body}</sheetData></worksheet>`;
+  const toSheet = (body: string) =>
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="${SPREADSHEETML_NS}"><sheetData>${body}</sheetData></worksheet>`;
   return buildZipBuffer([
     { name: "xl/sharedStrings.xml", data: Buffer.from(sst, "utf-8") },
-    { name: "xl/worksheets/sheet1.xml", data: Buffer.from(sheet1, "utf-8") },
+    ...sheetBodies.map((body, i) => ({
+      name: `xl/worksheets/sheet${i + 1}.xml`,
+      data: Buffer.from(toSheet(body), "utf-8"),
+    })),
   ]);
 }

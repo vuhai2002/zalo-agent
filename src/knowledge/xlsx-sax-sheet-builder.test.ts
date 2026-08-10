@@ -76,7 +76,7 @@ describe("xlsx-sax-sheet-builder - fuzz BẤT BIẾN (không chốt một chuỗ
     try {
       for (let luot = 0; luot < SO_LUOT; luot++) {
         soPushThat = 0;
-        const nganSachO: NganSachO = { tongO: 0 };
+        const nganSachO: NganSachO = { tongO: 0, tongKyTu: 0 };
         const b = taoXlsxSheetSaxBuilder([], nganSachO);
         const soHang = 1 + Math.floor(rand() * 5);
         for (let h = 0; h < soHang; h++) {
