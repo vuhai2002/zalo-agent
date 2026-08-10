@@ -4114,13 +4114,24 @@ XÓA khỏi danh sách dưới đây - không lặp lại.
   vào ba nhánh, chạy `chunk-text.test.ts` + `kb-search-quality.test.ts` +
   `kb-ingest-worker.test.ts`: `{goi: 19, xuongDong: 0, cauCham: 9, cung: 10}` -
   đúng lớp lỗi "đường sống không có test" vừa vá ở chỗ khác.
-- Đường PDF (`unpdf`/pdfjs) không có trần nào ngoài `KB_MAX_FILE_MB` và
-  `KB_EXTRACT_TIMEOUT_MS` - không có tương đương của `ooxml-limits.ts` (số
-  trang, chữ trích ra, tỉ lệ nén). Sau đợt này `KB_EXTRACT_MAX_RAM_MB` là hàng
-  rào RAM duy nhất cho đường đó.
+- **Đường PDF gần như KHÔNG có hàng rào RAM - lỗ hổng CÒN MỞ.** Nó không có
+  tương đương của `ooxml-limits.ts` (số trang, chữ trích ra, tỉ lệ nén), chỉ có
+  `KB_MAX_FILE_MB` và `KB_EXTRACT_TIMEOUT_MS`. Và `KB_EXTRACT_MAX_RAM_MB` KHÔNG
+  lấp được chỗ này dù nghe như vậy: `resourceLimits` chỉ chặn heap JS, trong khi
+  `extract-pdf-text.ts:15` chạy `getDocumentProxy(new Uint8Array(buf))` và pdfjs
+  làm việc trên typed array - tức bộ nhớ NGOÀI heap. Đo được: worker đặt trần
+  `maxOldGenerationSizeMb: 16` vẫn cấp phát trọn 6.000 MB `Float64Array` rồi kết
+  thúc BÌNH THƯỜNG (exit 0). Hướng phải làm: trần theo số trang và theo chữ
+  trích ra ngay trong `extract-pdf-text.ts`, không trông vào cầu dao RAM.
 - `trichTheDongThuc` (`wrap-untrusted-content.ts`) hiện KHÔNG ai gọi: nó được
   thêm cho hướng "cắt lại chuỗi đã bọc", mà I5 đã chọn hướng khác (rút ngắn
   chuỗi thay thế). Quyết định giữ hay xoá nên đi cùng lần dọn `kb-poll-*`.
+- Nút "Xử lý lại" nay hiện cho MỌI nguồn `cho_xu_ly`, kể cả nguồn đang xếp hàng
+  bình thường (không kẹt). Bấm là `so_lan_thu = 0`, nên bấm lặp lại có thể vô
+  hiệu hoá trần `KB_MAX_INGEST_ATTEMPTS` chống poison-pill. Chấp nhận vì đúng
+  bản chất với nút của nguồn `hong` (cũng cấp lại lượt thử) và vì đây là hành
+  động CHỦ ĐỘNG của người vận hành, không phải retry tự động - ghi lại để lần
+  sau ai siết trần thì nhớ cả đường này.
 - `memory-prompt-block.ts` dùng cùng khuôn `DANG_KHU = THE.replace(/_/g, "-")`
   mà `wrap-untrusted-content.ts` vừa phải bỏ vì làm chuỗi DÀI RA (`dieudanho` 9
   ký tự -> `dieu-da-nho` 11). Chưa gây lỗi vì khối trí nhớ không đi qua phép trừ
@@ -4148,15 +4159,11 @@ XÓA khỏi danh sách dưới đây - không lặp lại.
   qua nhánh short-circuit theo header của `hono/body-limit`, và nhánh đó CHƯA
   có test riêng. Giá trị cao nhất trong nhóm test hụt: code có thể đúng nhưng
   chưa ai khóa nó lại.
-- `PUT /agents/:id/sources` dùng CHUNG trần `KB_MAX_FILE_MB` (mặc định 20,
-  chỉnh 1-100MB) cho một payload hợp lệ tối đa chỉ ~32KB (500 id x 64 ký tự) -
-  trần đúng nhưng RẤT rộng so với dữ liệu thật, chưa có trần riêng.
-- Test trần body PUT chỉ khẳng định status `413`, không khẳng định `binding`
-  (agent_kb_sources) vẫn rỗng - thiếu vế "không ghi gì xuống DB".
+- Ca 413 CŨ ("body khổng lồ") vẫn chỉ khẳng định status, không khẳng định
+  `agent_kb_sources` còn rỗng - thiếu vế "không ghi gì xuống DB". Ca 413 MỚI
+  (trần riêng 256KB) đã có vế đó.
 - `assert.match(body.error, /Dữ liệu không hợp lệ/)` neo vào CHỮ - có bất biến
   CẤU TRÚC mạnh hơn (`Array.isArray(body.issues)`) không phụ thuộc câu chữ.
-- Nhánh `xuongDong` (ưu tiên CAO NHẤT theo docstring) của `viTriCatTotNhat`
-  chưa test nào chạm (đo 0/19 lần gọi trên toàn bộ đầu vào hiện có).
 - Ngưỡng `60*3` và `coDoanToiDa: 60` trong test là hai literal ĐỘC LẬP, không
   tham chiếu chung một biến - đổi một bên dễ quên đổi bên kia.
 
@@ -4190,6 +4197,30 @@ test frontend hiện tại đều test logic thuần (hook tách khỏi componen
 lại bằng runtime tối giản tự viết). Nửa DƯỚI của một số phép phá thủ công
 (thân effect BÊN TRONG component thật, không phải logic đã tách ra) không có
 compiler hay test nào canh được - phải tự chạy tay để xác nhận.
+
+### Test nhấp nháy dưới tải - nợ cũ NGOÀI phạm vi Kho tri thức
+
+Bốn ca dưới đây đỏ khi chạy full suite trên máy đang bị bỏ đói CPU (đo ở mức
+6-12 tiến trình đốt CPU chạy song song). Đã xác nhận là NỢ CŨ, không phải hồi
+quy của đợt sửa Kho tri thức: chúng đỏ y hệt trên commit gốc `702808c`, và diff
+của đợt đó không đụng file nào dưới `src/zalo/`, `src/scheduler/` hay
+`src/middleware/`. Tách thành mục RIÊNG vì chúng không thuộc Kho tri thức -
+đừng dọn lẫn vào đó.
+
+- `src/zalo/message-turn-per-sender.test.ts` - "ba người: BA lượt riêng, mỗi câu
+  trả lời trích đúng tin của người đó" (đo: đỏ 3/4 lần full suite ở `702808c`).
+- `runScheduledJobTrial` - "job đang quá hạn...".
+- "trần ngày chặn NGAY Ở TICK - job 'once'...".
+- `maybeNotifyBusyWait` - "thread rảnh trở lại...".
+
+Cùng LỚP lỗi với ba ca đã sửa trong đợt Kho tri thức: khẳng định neo vào ĐỒNG HỒ
+hoặc vào SỐ LẦN một timer kịp chạy, tức đo tốc độ máy chứ không đo bất biến. Cách
+chữa đã dùng và có tác dụng (xem `chay-trich-xuat-tach-luong.test.ts` và
+`khu-gia-mao-nhan-nguon.test.ts`): đo thứ không phụ thuộc lịch hệ điều hành (ví
+dụ "luồng chính có đáp ứng trong nửa đầu quãng không" thay vì "đếm đủ N nhịp"),
+hoặc trung bình trên một loạt rồi lấy min nhiều loạt. Hai ca nhấp nháy CŨ đã biết
+từ trước vẫn còn: `src/shared/html-to-text.test.ts:194`,
+`src/middleware/message-batcher.test.ts`.
 
 ### Dừng poll khi rảnh (trang Kho tri thức) - điều kiện nghiệm thu
 
