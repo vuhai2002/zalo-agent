@@ -59,6 +59,21 @@ export function taoZaloBotClient(p: ThamSoClient) {
   const fetchImpl = p.fetchImpl ?? fetch;
   const timeoutMs = p.timeoutMs ?? 15_000;
 
+  /**
+   * Che token trong MỌI chuỗi sắp đi vào thông điệp lỗi.
+   *
+   * Không thừa: token nằm trong ĐƯỜNG DẪN (`/bot{token}/{method}`), và nhánh
+   * "thân không phải JSON" bên dưới dán tối đa 200 ký tự thân trả về vào
+   * `err.message`. Thân đó là của CỔNG TRUNG GIAN chứ không phải của Zalo -
+   * nhiều cổng (Apache, WAF, CDN) echo lại đường dẫn trong trang lỗi. Đã dựng
+   * lại được: token đi từ đó vào `warning` của `PATCH /api/accounts/:id` (tức
+   * lên màn hình dashboard) và vào `data/logs/bot.*.log` qua log lúc khởi động.
+   *
+   * Tài liệu kiến trúc đã ghi số đo "poll dồn dập -> nginx trả HTML" nên nhánh
+   * này chắc chắn có người đi tới.
+   */
+  const che = (chu: string) => (p.token ? chu.split(p.token).join("<token>") : chu);
+
   async function goi<T>(method: string, body?: unknown, hanRiengMs?: number): Promise<T> {
     // Token nằm trong ĐƯỜNG DẪN chứ không phải header (Zalo bê nguyên kiểu
     // Telegram). Hệ quả phải nhớ: mọi chỗ log lỗi PHẢI log `method` chứ tuyệt
@@ -87,7 +102,7 @@ export function taoZaloBotClient(p: ThamSoClient) {
     } catch {
       // Cắt ngắn: thân lỗi có thể là trang HTML dài của gateway.
       throw new LoiZaloBotApi(
-        `${method} trả về thân không phải JSON (HTTP ${res.status}): ${chu.slice(0, 200)}`,
+        `${method} trả về thân không phải JSON (HTTP ${res.status}): ${che(chu.slice(0, 200))}`,
         method,
         res.status,
       );
@@ -105,7 +120,9 @@ export function taoZaloBotClient(p: ThamSoClient) {
           ? String((phongBi.error as { message: unknown }).message)
           : "") ||
         `HTTP ${res.status}`;
-      throw new LoiZaloBotApi(`${method} thất bại: ${loi}`, method, res.status, phongBi.error_code);
+      // Che cả nhánh này: Zalo hiện không echo đường dẫn, nhưng cổng trung gian
+      // có thể chen vào và trả một thân JSON có mang URL.
+      throw new LoiZaloBotApi(`${method} thất bại: ${che(loi)}`, method, res.status, phongBi.error_code);
     }
 
     return phongBi.result as T;

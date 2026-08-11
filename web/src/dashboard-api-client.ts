@@ -201,12 +201,29 @@ export const api = {
   accountsAdmin: {
     list: () => request<{ items: ManagedAccount[] }>("/api/accounts"),
     reactionIcons: () => request<{ items: ReactionIcon[] }>("/api/accounts/reaction-icons"),
-    create: (input: { id: string; label: string; agentId?: string }) =>
+    create: (input: { id: string; label: string; agentId?: string; loai?: "ca_nhan" | "bot" }) =>
       request<{ account: ManagedAccount }>("/api/accounts", {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    update: (id: string, patch: Partial<Omit<ManagedAccount, "id" | "running" | "hasCredentials">>) =>
+    /**
+     * Lưu token bot. Đường RIÊNG chứ không nhét vào `update`: token là bí mật,
+     * và server KIỂM với API Zalo trước khi lưu - token sai thì không lưu gì
+     * cả, vì lưu rồi thì tài khoản trông như đã xong mà không bao giờ chạy.
+     */
+    setBotToken: (id: string, token: string) =>
+      request<{ ok: true; botName: string }>(
+        `/api/accounts/${encodeURIComponent(id)}/bot-token`,
+        { method: "PUT", body: JSON.stringify({ token }) },
+      ),
+    // `loai`/`coBotToken` KHÔNG nằm trong patch: `updateAccount` phía server đã
+    // thu hẹp kiểu để chặn (câu UPDATE không có hai cột đó, nhận vào là nuốt
+    // lặng lẽ rồi trả giá trị cũ). Phía client phải soi gương, không thì
+    // `update(id, {loai:"bot"})` biên dịch trót lọt rồi im lặng không làm gì.
+    update: (
+      id: string,
+      patch: Partial<Omit<ManagedAccount, "id" | "running" | "hasCredentials" | "loai" | "coBotToken">>,
+    ) =>
       request<{ account: ManagedAccount; warning?: string }>(
         `/api/accounts/${encodeURIComponent(id)}`,
         { method: "PATCH", body: JSON.stringify(patch) },
@@ -485,6 +502,13 @@ export type ManagedAccount = {
   autoReactIcon: string;
   typingIndicatorEnabled: boolean;
   disabledTools: string[];
+  /** Loại kênh - chốt lúc tạo, không đổi được sau đó */
+  loai: "ca_nhan" | "bot";
+  /**
+   * Đã có token bot chưa. CỐ Ý không mang chính token: object này là response
+   * của `GET /api/accounts` nên để token ở đây là lộ cho mọi phiên dashboard.
+   */
+  coBotToken: boolean;
   running: boolean;
   hasCredentials: boolean;
 };

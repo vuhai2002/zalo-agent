@@ -379,6 +379,32 @@ thành `Style[]` ở tầng trên), nên xin server dựng chỉ có thể BỚT
 `ZALO_BOT_POLL_TIMEOUT_SECONDS` truyền vào vòng poll dạng HÀM, đọc lại mỗi vòng
 - sửa trên trang Cấu hình ăn ngay, không phải restart account.
 
+### Tạo tài khoản bot
+
+Trang Accounts, bốn quyết định đáng ghi:
+
+- **`loai` chốt LÚC TẠO**, không đổi được sau đó. Đổi loại của một tài khoản
+  đang chạy là đổi luôn ý nghĩa của credential đã lưu (cookie zca-js so với
+  token bot). Chặn ba lớp: `patchSchema` không khai `loai`, `updateAccount` thu
+  hẹp kiểu tham số, câu UPDATE không có cột đó.
+- **KIỂM token trước khi LƯU** (`PUT /api/accounts/:id/bot-token` gọi `getMe`).
+  Lưu một token sai là dựng sẵn một tài khoản trông như đã cấu hình xong mà
+  không bao giờ chạy - triệu chứng duy nhất là bot im lặng.
+- **Lưu xong khởi động lại ngay.** Account mới có `enabled = 1` sẵn nhưng chưa
+  chạy, mà nút gạt đã ở trạng thái BẬT - không tự khởi động thì người dùng phải
+  bấm tắt rồi bật lại, không ai đoán ra. Với account đang chạy thì vòng poll giữ
+  client cũ (token đóng gói lúc tạo client), nên đổi token vì lộ token cũ mà
+  không restart là vô nghĩa.
+- **Tài khoản bot mặc định ĐÓNG allowlist** (`mode: "list"`), khác tài khoản cá
+  nhân. Bán kính khác hẳn: nick cá nhân phải là bạn bè mới nhắn được, còn bot
+  thì ai có link cũng nhắn được - mở sẵn là mời người lạ đốt token và thử
+  prompt injection.
+
+Token nằm trong ĐƯỜNG DẪN (`/bot{token}/{method}`), nên `goi()` che token trong
+mọi chuỗi sắp vào thông điệp lỗi. Không thừa: đã dựng lại được đường token đi từ
+trang lỗi của cổng trung gian (echo đường dẫn) vào `warning` của PATCH account
+(lên màn hình dashboard) và vào `data/logs/bot.*.log`.
+
 ### Nhóm
 
 `getMe` trả `can_join_groups: true` (số đo thật), nhưng tài liệu Zalo ghi tính

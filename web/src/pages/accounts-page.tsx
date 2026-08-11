@@ -77,7 +77,7 @@ export function AccountsPage() {
       <div className="space-y-3">
         {accounts.length === 0 && (
           <div className="gc-card px-5 py-10 text-center text-ink-soft">
-            Chưa có account nào - bấm "Thêm account" rồi quét QR để bot lên sóng
+            Chưa có account nào - bấm "Thêm account", chọn tài khoản cá nhân (quét QR) hoặc tài khoản bot (nhập token)
           </div>
         )}
         {accounts.map((acc) => {
@@ -88,8 +88,17 @@ export function AccountsPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-ink">{acc.label}</span>
+                  {acc.loai === "bot" && <Badge tone="blue">Bot chính thức</Badge>}
+                  {/* Tài khoản bot không login QR mà nhập token, nên nhãn "chưa
+                      login QR" là chỉ sai đường ngay ở chỗ người ta nhìn đầu tiên */}
                   {acc.running ? (
                     <Badge tone="green">Đang chạy</Badge>
+                  ) : acc.loai === "bot" ? (
+                    acc.coBotToken ? (
+                      <Badge tone="gray">Đã có token, chưa chạy</Badge>
+                    ) : (
+                      <Badge tone="amber">Chưa nhập token</Badge>
+                    )
                   ) : acc.hasCredentials ? (
                     <Badge tone="gray">Đã login, chưa chạy</Badge>
                   ) : (
@@ -115,12 +124,16 @@ export function AccountsPage() {
                     }`}
                   />
                 </button>
-                <button
-                  onClick={() => setQrAccount(acc)}
-                  className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium text-zalo-600 hover:bg-zalo-50"
-                >
-                  Login QR
-                </button>
+                {/* Chỉ tài khoản cá nhân mới quét QR; tài khoản bot nhập token
+                    trong drawer Sửa. Hiện nút QR cho bot là dẫn vào ngõ cụt. */}
+                {acc.loai !== "bot" && (
+                  <button
+                    onClick={() => setQrAccount(acc)}
+                    className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium text-zalo-600 hover:bg-zalo-50"
+                  >
+                    Login QR
+                  </button>
+                )}
                 <button
                   onClick={() => setEditing(acc)}
                   className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-tile"

@@ -46,7 +46,21 @@ export function AccountEditDrawer({
     typingIndicatorEnabled: account?.typingIndicatorEnabled ?? true,
     allowlistMode: account?.allowlist.mode ?? "all",
     allowlistIds: (account?.allowlist.userIds ?? []).join("\n"),
+    /** Chốt LÚC TẠO, không đổi được sau đó - xem `createSchema` ở account-routes */
+    loai: account?.loai ?? ("ca_nhan" as "ca_nhan" | "bot"),
   });
+  /** Token bot nhập mới; rỗng = không đụng tới token đã lưu */
+  const [botToken, setBotToken] = useState("");
+  /**
+   * Id đã TẠO XONG trong chính lần mở drawer này.
+   *
+   * `save()` chạy ba bước (create -> update -> lưu token) và bước cuối có thể
+   * hỏng riêng (server kiểm token với Zalo). Hỏng thì drawer đứng nguyên với
+   * `account` vẫn null, nên bấm lại là gọi `create()` lần hai và ăn 409
+   * "Account id đã tồn tại" - đọc ngay sau khi tự tay tạo nó trong chính drawer
+   * này thì không ai hiểu chuyện gì.
+   */
+  const [daTao, setDaTao] = useState<string | null>(null);
   const [reactionIcons, setReactionIcons] = useState<ReactionIcon[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -58,6 +72,18 @@ export function AccountEditDrawer({
       .then((d) => setReactionIcons(d.items))
       .catch(() => setReactionIcons([]));
   }, []);
+
+  /**
+   * Đổi loại kênh thì đặt lại mặc định danh sách cho phép.
+   *
+   * Tài khoản bot ĐÓNG sẵn: bán kính khác hẳn tài khoản cá nhân - nick cá nhân
+   * phải là bạn bè mới nhắn được, còn bot thì ai có link cũng nhắn được. Server
+   * cũng đặt mặc định này lúc tạo, nhưng drawer gọi `update()` NGAY sau `create()`
+   * nên không đồng bộ ở đây là ghi đè mất mặc định an toàn vừa đặt.
+   */
+  function doiLoai(loai: "ca_nhan" | "bot") {
+    setForm((truoc) => ({ ...truoc, loai, allowlistMode: loai === "bot" ? "list" : "all" }));
+  }
 
   const agentOptions = agents.map((a) => ({
     value: a.id,
@@ -83,11 +109,22 @@ export function AccountEditDrawer({
       },
     };
     try {
-      if (account) {
-        await api.accountsAdmin.update(account.id, patch);
+      if (account || daTao) {
+        await api.accountsAdmin.update(account?.id ?? daTao!, patch);
       } else {
-        await api.accountsAdmin.create({ id: form.id, label: form.label, agentId: form.agentId });
+        await api.accountsAdmin.create({
+          id: form.id,
+          label: form.label,
+          agentId: form.agentId,
+          loai: form.loai,
+        });
+        setDaTao(form.id);
         await api.accountsAdmin.update(form.id, patch);
+      }
+      // Token lưu SAU cùng và qua đường riêng: server kiểm với API Zalo trước
+      // khi lưu, nên bước này có thể hỏng riêng mà phần cấu hình vẫn đã lưu xong.
+      if (form.loai === "bot" && botToken.trim()) {
+        await api.accountsAdmin.setBotToken(account?.id ?? form.id, botToken.trim());
       }
       onSaved();
     } catch (err) {
@@ -122,6 +159,26 @@ export function AccountEditDrawer({
             </div>
           )}
 
+          {!account && (
+            <div>
+              <label className="mb-1.5 block text-[13px] font-medium text-ink">Loại kênh</label>
+              <SelectMenu
+                value={form.loai}
+                options={[
+                  { value: "ca_nhan", label: "Tài khoản cá nhân", hint: "đăng nhập QR, đủ tính năng" },
+                  { value: "bot", label: "Tài khoản bot chính thức", hint: "nhập token, hẹp hơn nhưng không lo khóa nick" },
+                ]}
+                onChange={(v) => doiLoai(v as "ca_nhan" | "bot")}
+              />
+              <p className="mt-1.5 text-[12px] leading-[1.6] text-ink-soft">
+                {form.loai === "bot"
+                  ? "Không gửi được file, ảnh tự vẽ, thả cảm xúc, tag thành viên hay đặt lịch hẹn - đó là giới hạn của Zalo Bot API. Đổi lại không có rủi ro bị khóa tài khoản."
+                  : "Dùng nick Zalo thật qua giao thức không chính thức - đủ tính năng nhất nhưng CÓ rủi ro bị Zalo khóa. Chỉ dùng nick phụ."}
+              </p>
+              <p className="mt-1 text-[12px] text-ink-soft">Chốt lúc tạo, không đổi được sau đó.</p>
+            </div>
+          )}
+
           <div>
             <label className="mb-1.5 block text-[13px] font-medium text-ink">Tên hiển thị</label>
             <input
@@ -131,6 +188,27 @@ export function AccountEditDrawer({
               placeholder="vd: Nick chăm sóc khách hàng"
             />
           </div>
+
+          {form.loai === "bot" && (
+            <div>
+              <label className="mb-1.5 block text-[13px] font-medium text-ink">
+                Token bot{" "}
+                {account?.coBotToken && <span className="font-normal text-ink-soft">(đã có - nhập mới để thay)</span>}
+              </label>
+              <input
+                type="password"
+                autoComplete="off"
+                className="gc-input w-full font-mono"
+                value={botToken}
+                onChange={(e) => setBotToken(e.target.value)}
+                placeholder={account?.coBotToken ? "Để trống nếu không đổi" : "123456789:..."}
+              />
+              <p className="mt-1.5 text-[12px] leading-[1.6] text-ink-soft">
+                Lấy token: mở Zalo, tìm OA "Zalo Bot Manager", chọn "Tạo bot" (tên phải bắt đầu bằng "Bot").
+                Token được gửi vào tin nhắn Zalo cho bạn. Hệ thống sẽ kiểm token với Zalo trước khi lưu.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="mb-1.5 block text-[13px] font-medium text-ink">Agent (não)</label>
@@ -171,6 +249,17 @@ export function AccountEditDrawer({
               label='Hiện "đang nhập" khi bot xử lý'
               hint="Giống người thật đang gõ, tự tắt khi gửi xong"
             />
+            {/* Kênh bot KHÔNG thả được cảm xúc (`setMessageReaction` trả 404).
+                Để ô này hiện thì người vận hành bật xong tưởng có, mà chẳng
+                bao giờ thấy cảm xúc nào - cùng lớp lỗi với việc trang Tools
+                từng hiện "Gửi file" xanh cho tài khoản bot. */}
+            {form.loai === "bot" ? (
+              <p className="py-1 text-[13px] leading-[1.6] text-ink-soft">
+                <span className="font-medium text-ink">Thả cảm xúc khi nhận tin</span> - Zalo Bot API
+                không có method thả cảm xúc nên tài khoản bot không dùng được mục này.
+              </p>
+            ) : (
+              <>
             <Toggle
               value={form.autoReactEnabled}
               onChange={(v) => setForm({ ...form, autoReactEnabled: v })}
@@ -195,6 +284,8 @@ export function AccountEditDrawer({
                   </button>
                 ))}
               </div>
+            )}
+            </>
             )}
           </div>
 

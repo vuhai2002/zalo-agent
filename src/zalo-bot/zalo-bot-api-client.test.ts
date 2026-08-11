@@ -71,6 +71,35 @@ describe("zalo-bot-api-client", () => {
     assert.equal(err.maLoi, 404);
   });
 
+  it("cổng trung gian ECHO đường dẫn: token bị CHE, không lọt vào thông điệp lỗi", async () => {
+    // Đường rò thật, đã dựng lại: token nằm trong đường dẫn, cổng trung gian
+    // (Apache/WAF/CDN) echo đường dẫn vào trang lỗi, client dán 200 ký tự thân
+    // đó vào `err.message`, rồi nó đi tiếp vào `warning` của PATCH account (lên
+    // màn hình dashboard) và vào file log. Tài liệu kiến trúc đã ghi số đo
+    // "poll dồn dập -> nginx trả HTML" nên nhánh này chắc chắn có người tới.
+    const { f } = fetchGia({
+      status: 404,
+      body: `<!DOCTYPE HTML><html><body><p>The requested URL /bot${TOKEN}/getMe was not found on this server.</p></body></html>`,
+    });
+    const client = taoZaloBotClient({ token: TOKEN, fetchImpl: f, gocApi: "https://x.test" });
+    const err = await client.getMe().then(() => null, (e: unknown) => e);
+
+    assert.ok(err instanceof LoiZaloBotApi);
+    assert.ok(!err.message.includes(TOKEN), `token lọt vào thông điệp lỗi: ${err.message}`);
+    assert.match(err.message, /<token>/, "phải thấy dấu vết đã che, không phải cắt mất đoạn");
+  });
+
+  it("thân JSON của nhánh hỏng cũng bị che", async () => {
+    const { f } = fetchGia({
+      status: 200,
+      body: { ok: false, description: `Upstream /bot${TOKEN}/sendMessage refused`, error_code: 502 },
+    });
+    const client = taoZaloBotClient({ token: TOKEN, fetchImpl: f, gocApi: "https://x.test" });
+    const err = await client.getMe().then(() => null, (e: unknown) => e);
+    assert.ok(err instanceof LoiZaloBotApi);
+    assert.ok(!err.message.includes(TOKEN), `token lọt qua nhánh ok:false: ${err.message}`);
+  });
+
   it("thân không phải JSON thì báo rõ và CẮT NGẮN", async () => {
     // Gateway hỏng hay trả trang HTML dài - dán nguyên vào log là rác.
     const { f } = fetchGia({ status: 502, body: "<html>" + "x".repeat(5000) + "</html>" });

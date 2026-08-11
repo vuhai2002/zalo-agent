@@ -3965,12 +3965,10 @@ trừu tượng hóa NĂNG LỰC kênh (`KenhLuot` + `kenhCaNhan`/`kenhBot`), ro
 (`bot-message-router.ts`), runner (`bot-account-runner.ts`) nối vào
 `startAccount`, tham số `ZALO_BOT_POLL_TIMEOUT_SECONDS`.
 
-Còn thiếu MỘT mảnh để dùng được bằng đường thường: **trang Accounts** (chọn loại
-kênh, nhập token). `datLoaiKenh()`/`datBotToken()` đã có nhưng chưa route nào lộ
-ra, nên hiện chỉ tạo được tài khoản bot bằng script.
+Trang Accounts cũng xong: chọn loại kênh lúc tạo, nhập token (server KIỂM với
+API Zalo trước khi lưu, sai thì không lưu gì cả), khởi động lại account ngay sau
+khi lưu token. Kênh bot dùng được trọn vẹn bằng đường thường.
 
-- **Trang Accounts.** Chọn loại kênh và nhập token bot (`datBotToken` đã có,
-  mã hóa bằng cùng khóa với cookie Zalo).
 
 Còn treo sau vòng rà soát:
 
@@ -3988,12 +3986,10 @@ Còn treo sau vòng rà soát:
   `run-scheduled-job` chỉ biết gửi qua zca-js; không chặn thì job `once` bị
   dispatch lại mỗi tick mãi mãi kèm lý do sai sự thật. Mở lại khi scheduler
   biết kênh.
-- Tài khoản bot mặc định `allowlist.mode = "all"` như tài khoản cá nhân, nhưng
-  bán kính lớn hơn hẳn: ai có link cũng nhắn được bot, khác nick cá nhân phải
-  là bạn bè. Cân nhắc mặc định `list` cho loại bot.
-- `autoReactEnabled`/`autoReactIcon` vẫn hiện trên dashboard cho tài khoản bot
-  và im lặng không làm gì - trang Accounts nên ẩn theo loại kênh, như trang
-  Tools đã làm.
+- Mặc định `allowlist = list` cho tài khoản bot tồn tại ở HAI nơi: server lúc
+  tạo, và `doiLoai()` trong drawer. Drawer gọi `update()` ngay sau `create()`
+  nên bản ở server luôn bị ghi đè - tức bản ở client mới là thứ thực sự giữ giá
+  trị. Chưa có test nào chạy đúng chuỗi create -> update của drawer.
 - `send-reply-in-parts.ts` nay 322 dòng (luật dự án < 200). `ReplyTarget` vẫn
   mang `threadType`/`quote` của zca-js nên trừu tượng kênh mới xong một nửa.
 
