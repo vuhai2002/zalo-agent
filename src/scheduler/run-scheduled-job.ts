@@ -9,6 +9,7 @@
  */
 
 import type { API, ThreadType } from "zca-js";
+import { tatJobKhongCanPhamVi } from "./scheduled-job-store.js";
 import { runAgentTurn } from "../agent/agent-loop.js";
 import type { StepTrace } from "../agent/agent-step-trace.js";
 import { saveTurnTrace } from "../agent/agent-trace-store.js";
@@ -108,6 +109,13 @@ async function dispatch(job: ScheduledJob, options: RunScheduledJobOptions, runI
   // `POST /api/schedules`, hoặc nếu tài khoản đổi loại - nhưng để nó quay mãi
   // thì lịch sử chạy thật của chính job đó bị đẩy hết ra ngoài bởi prune.
   if (account?.loai === "bot") {
+    // TẮT TƯỜNG MINH chứ không dựa vào `conclude`: `markRun` chỉ đặt
+    // `enabled = 0` khi CHẠM TRẦN số lần chạy, mà trần đó chỉ tồn tại với job
+    // `once` (max_runs = 1). Job `every`/`cron` đi qua `conclude` vẫn giữ
+    // nguyên `enabled` lẫn `next_run_at` - tức quay lại mỗi tick vĩnh viễn,
+    // đúng cái mà nhánh này sinh ra để ngăn. Đã đo: job `every` sau một lượt
+    // vẫn `enabled: true, nextRunAt` y nguyên.
+    tatJobKhongCanPhamVi(job.id);
     conclude(job, runId, {
       status: "skipped",
       detail: "Tài khoản bot chưa gửi được tin theo lịch - Zalo Bot API chưa nối vào bộ hẹn lịch",

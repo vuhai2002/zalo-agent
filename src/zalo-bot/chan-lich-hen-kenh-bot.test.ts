@@ -130,4 +130,63 @@ describe("chặn lịch hẹn trên tài khoản bot", () => {
       "job của tài khoản bot vẫn còn hẹn giờ - sẽ bị dispatch lại mỗi tick, vĩnh viễn",
     );
   });
+
+  it("job EVERY của tài khoản bot cũng bị tắt - không chỉ job `once`", async () => {
+    // `conclude` -> `markRun` CHỈ đặt `enabled = 0` khi CHẠM TRẦN số lần chạy,
+    // mà trần đó chỉ tồn tại với `once` (max_runs = 1). Job `every`/`cron` đi
+    // qua `conclude` vẫn giữ nguyên `enabled` lẫn `next_run_at` - tức quay lại
+    // mỗi tick vĩnh viễn, đúng cái mà nhánh chặn sinh ra để ngăn. Đo được:
+    // job `every` sau một lượt vẫn `enabled: true`, `nextRunAt` y nguyên.
+    dungAccount("acc-bot", "bot");
+    const store = await import("../scheduler/scheduled-job-store.js");
+    const runner = await import("../scheduler/run-scheduled-job.js");
+
+    const job = store.createJob({
+      accountId: "acc-bot",
+      threadId: "t1",
+      threadType: 0,
+      name: "Nhắc định kỳ",
+      kind: "message",
+      payload: "uống nước",
+      schedule: { kind: "every", minutes: 30 },
+      createdBy: "test",
+    });
+    assert.ok(job.nextRunAt);
+
+    await runner.runScheduledJob(job, { scheduledFor: job.nextRunAt!, now: new Date(), late: false });
+
+    const sau = store.getJobUnscoped(job.id)!;
+    assert.equal(sau.enabled, false, "job `every` của tài khoản bot vẫn BẬT - sẽ quay lại mỗi tick");
+    assert.equal(sau.nextRunAt ?? null, null);
+  });
+
+  it("XÓA account thì dọn luôn lịch hẹn - job mồ côi không sống dậy được", async () => {
+    // Không có khóa ngoại cascade. Thiếu bước dọn thì xóa một account `ca_nhan`
+    // có job rồi tạo lại CÙNG ID thành `bot` là job cũ sống dậy dưới loại kênh
+    // mới - kẽ hở duy nhất còn lại của bất biến "`loai` chốt lúc tạo", vì ba
+    // lớp chặn đều canh tầng UPDATE chứ không tầng xóa-rồi-tạo-lại.
+    dungAccount("acc-xoa", "ca_nhan");
+    const store = await import("../scheduler/scheduled-job-store.js");
+    store.createJob({
+      accountId: "acc-xoa",
+      threadId: "t1",
+      threadType: 0,
+      name: "Job sẽ mồ côi",
+      kind: "message",
+      payload: "x",
+      schedule: { kind: "every", minutes: 30 },
+      createdBy: "test",
+    });
+    assert.equal(store.listJobsForThread("acc-xoa", "t1").length, 1);
+
+    accounts.deleteAccount("acc-xoa");
+    // Tạo lại CÙNG ID, lần này là tài khoản bot
+    dungAccount("acc-xoa", "bot");
+
+    assert.deepEqual(
+      store.listJobsForThread("acc-xoa", "t1"),
+      [],
+      "job cũ sống dậy dưới tài khoản bot - bất biến `loai` chốt lúc tạo bị lách",
+    );
+  });
 });

@@ -3972,6 +3972,22 @@ khi lưu token. Kênh bot dùng được trọn vẹn bằng đường thường
 
 Còn treo sau vòng rà soát:
 
+- **`pnpm zalo-login <id>` không kiểm `loai`** - `scripts/login-account.ts` cố ý
+  không mở DB nên không biết loại kênh. Chạy cho một tài khoản bot sẽ ghi
+  `credentials.enc` rác và đốt một lần quét QR. KHÔNG tạo ra tài khoản nửa nọ
+  nửa kia (script không `attachAccount`), nên chỉ là phiền chứ không nguy hiểm -
+  nhưng đây là đường vào duy nhất còn lại hoàn toàn không biết `loai`.
+- `PATCH /api/schedule/:id` không kiểm `loai`. Không tạo được job mới nên chưa
+  khai thác được, nhưng bật lại một job cũ thì không có chốt nào.
+- Ngân sách BYTE của kênh bot vẫn đếm cả `styles` mà nó sẽ vứt
+  (`sendReplyInParts` truyền `ZALO_RICH_TEXT_MAX_PAYLOAD_BYTES` cho cả hai
+  kênh). Ở mặc định 2000/2000 gần như không lệch, nhưng có thể chẻ thừa một tin.
+- `await res.text()` trong client nằm NGOÀI mọi `try`: thân đứt giữa chừng thì
+  lỗi thoát ra dạng `TypeError` thô, mất `method` và không đi qua `che()`.
+- Sơ đồ đầu `docs/system-architecture.md` vẫn ghi `generateText` trong khi
+  CLAUDE.md chốt "mọi lời gọi LLM đi qua `chayStream()`". Nợ cũ, không phải
+  của đợt bot.
+
 - `laLoiMayChuTuChoi` (`send-reply-in-parts.ts`) đọc `err.code` dạng số của
   `ZaloApiError`. `LoiZaloBotApi` mang `httpStatus`/`maLoi`, nên đường lui "gửi
   lại chữ trơn" hiện chỉ chạy cho kênh cá nhân. Ít hại hơn tưởng vì kênh bot đã
@@ -4002,8 +4018,8 @@ Còn treo sau vòng rà soát:
   tạo, và `doiLoai()` trong drawer. Drawer gọi `update()` ngay sau `create()`
   nên bản ở server luôn bị ghi đè - tức bản ở client mới là thứ thực sự giữ giá
   trị. Chưa có test nào chạy đúng chuỗi create -> update của drawer.
-- `send-reply-in-parts.ts` nay 331 dòng, `account-store.ts` 243, `account-routes.ts`
-  244 - cả ba vượt luật < 200. `ReplyTarget` vẫn
+- Vượt luật < 200 dòng: `send-reply-in-parts.ts` 331, `account-routes.ts` 244,
+  `account-store.ts` 243, `zalo-bot-api-client.ts` 231. `ReplyTarget` vẫn
   mang `threadType`/`quote` của zca-js nên trừu tượng kênh mới xong một nửa.
 
 Chưa trả lời được: **bot có nhắn CHỦ ĐỘNG cho người CHƯA từng nhắn nó không.**

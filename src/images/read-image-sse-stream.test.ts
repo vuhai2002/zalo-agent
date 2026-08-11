@@ -1,7 +1,27 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { after, before, describe, it } from "node:test";
+import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import { LoiVeHutAnh } from "./image-retry-policy.js";
-import { readImageFromSseStream } from "./read-image-sse-stream.js";
+
+/**
+ * `read-image-sse-stream.ts` dòng đầu là `import { getTuning }`, mà
+ * `runtime-tuning-settings.ts` dòng đầu là `import { db }` - tức chuỗi này
+ * chạm `database.ts`, nơi mở SQLite và chạy migration ở MODULE SCOPE. Import
+ * tĩnh ở đây là mở `data/zalo-agent.db` THẬT mỗi lần chạy `pnpm test`.
+ * Xem CLAUDE.md mục "Bẫy khi viết test".
+ */
+let dataDir: string;
+let mod: typeof import("./read-image-sse-stream.js");
+
+before(async () => {
+  dataDir = setupTestEnv();
+  mod = await import("./read-image-sse-stream.js");
+});
+
+after(async () => {
+  (await import("../conversation/database.js")).closeDatabase();
+  cleanupTestEnv(dataDir);
+});
 
 /**
  * Trọng tâm: phân biệt "vẽ lâu nhưng còn sống" với "kết nối đã chết".
@@ -50,7 +70,7 @@ describe("readImageFromSseStream - phân biệt chậm với chết", () => {
       200,
     );
 
-    const b64 = await readImageFromSseStream(response, 100);
+    const b64 = await mod.readImageFromSseStream(response, 100);
     assert.equal(Buffer.from(b64, "base64").toString("hex"), JPEG.toString("hex"));
   });
 
@@ -59,7 +79,7 @@ describe("readImageFromSseStream - phân biệt chậm với chết", () => {
 
     const started = Date.now();
     await assert.rejects(
-      () => readImageFromSseStream(response, 100),
+      () => mod.readImageFromSseStream(response, 100),
       /mất tín hiệu|im lặng/i,
       "phải nói rõ là mất tín hiệu, không phải lỗi chung chung",
     );
@@ -81,7 +101,7 @@ describe("readImageFromSseStream - phân biệt chậm với chết", () => {
       headers: { "Content-Type": "text/event-stream" },
     });
 
-    await assert.rejects(() => readImageFromSseStream(response, 80));
+    await assert.rejects(() => mod.readImageFromSseStream(response, 80));
     assert.equal(cancelled, true);
   });
 });
@@ -96,7 +116,7 @@ describe("readImageFromSseStream - phân lớp lỗi để quyết định vẽ 
   it("router báo không ra ảnh -> LoiVeHutAnh, để tầng trên biết là đáng vẽ lại", async () => {
     const err = 'event: error\ndata: {"message":"Codex did not return an image. Account may not be entitled (Plus/Pro required)."}\n\n';
     await assert.rejects(
-      () => readImageFromSseStream(scheduledStream([{ atMs: 0, text: err }], 20), 5000),
+      () => mod.readImageFromSseStream(scheduledStream([{ atMs: 0, text: err }], 20), 5000),
       (e) => e instanceof LoiVeHutAnh,
     );
   });
@@ -104,21 +124,21 @@ describe("readImageFromSseStream - phân lớp lỗi để quyết định vẽ 
   it("lỗi provider KIỂU KHÁC vẫn là Error thường - không được vẽ lại bừa", async () => {
     const err = 'event: error\ndata: {"message":"upstream rate limit exceeded"}\n\n';
     await assert.rejects(
-      () => readImageFromSseStream(scheduledStream([{ atMs: 0, text: err }], 20), 5000),
+      () => mod.readImageFromSseStream(scheduledStream([{ atMs: 0, text: err }], 20), 5000),
       (e) => e instanceof Error && !(e instanceof LoiVeHutAnh),
     );
   });
 
   it("stream đóng sạch mà thiếu done -> cùng lớp hụt ảnh, cũng đáng vẽ lại", async () => {
     await assert.rejects(
-      () => readImageFromSseStream(scheduledStream([{ atMs: 0, text: KEEPALIVE }], 20), 5000),
+      () => mod.readImageFromSseStream(scheduledStream([{ atMs: 0, text: KEEPALIVE }], 20), 5000),
       (e) => e instanceof LoiVeHutAnh,
     );
   });
 
   it("mất tín hiệu KHÔNG phải hụt ảnh - vẽ lại chỉ tốn thêm một trần im lặng nữa", async () => {
     await assert.rejects(
-      () => readImageFromSseStream(scheduledStream([{ atMs: 0, text: KEEPALIVE }]), 60),
+      () => mod.readImageFromSseStream(scheduledStream([{ atMs: 0, text: KEEPALIVE }]), 60),
       (e) => e instanceof Error && !(e instanceof LoiVeHutAnh),
     );
   });

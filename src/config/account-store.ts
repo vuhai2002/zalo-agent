@@ -1,5 +1,6 @@
 import { db } from "../conversation/database.js";
 import { createLogger } from "../shared/logger.js";
+import { trongGiaoDich } from "../shared/db-transaction.js";
 import { decryptSecret, encryptSecret } from "./secret-cipher.js";
 import { createAgent, ensureDefaultAgent, getAgent } from "./agent-store.js";
 import { readAccountsSeedFile } from "./accounts.js";
@@ -153,7 +154,15 @@ export function updateAccount(
 }
 
 export function deleteAccount(id: string): boolean {
-  return db.prepare("DELETE FROM accounts WHERE id = ?").run(id).changes > 0;
+  return trongGiaoDich(db, () => {
+    // Dọn luôn lịch hẹn của account. Không có khóa ngoại cascade, nên thiếu
+    // bước này thì job trở thành MỒ CÔI và sống dậy nếu ai đó tạo lại một
+    // account CÙNG ID - kể cả với loại kênh khác. Đó cũng là kẽ hở duy nhất
+    // của bất biến "`loai` chốt lúc tạo": ba lớp chặn đều canh tầng UPDATE,
+    // không tầng xóa-rồi-tạo-lại.
+    db.prepare("DELETE FROM scheduled_jobs WHERE account_id = ?").run(id);
+    return db.prepare("DELETE FROM accounts WHERE id = ?").run(id).changes > 0;
+  });
 }
 
 /**

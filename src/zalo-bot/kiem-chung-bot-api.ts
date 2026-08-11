@@ -61,7 +61,14 @@ async function main() {
   const chatId = u.message.chat!.id;
 
   console.log("\n=== 4. Gửi trả lời + markdown có được server dựng không ===");
-  await client.sendMessage(chatId, "**Đậm** _nghiêng_ - nếu bạn thấy dấu sao thì parse_mode KHÔNG chạy.");
+  // Truyền `"markdown"` TƯỜNG MINH: mặc định của client nay là `null` (gửi chữ
+  // trơn), nên không truyền thì bước này đo nhầm chính mặc định đó rồi kết luận
+  // sai là "parse_mode KHÔNG chạy".
+  await client.sendMessage(
+    chatId,
+    "**Đậm** _nghiêng_ - nếu bạn thấy dấu sao thì parse_mode KHÔNG chạy.",
+    "markdown",
+  );
   in_("sendMessage", "đã gửi - kiểm bằng MẮT trên Zalo");
 
   console.log("\n=== 5. Dấu 'đang nhập' ===");

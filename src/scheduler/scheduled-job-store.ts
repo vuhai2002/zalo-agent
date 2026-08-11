@@ -271,3 +271,17 @@ export function markRun(id: string, status: Exclude<JobRunStatus, "running">, er
 
   markRunStmt.run(runCount, status, error, hitMax ? 0 : job.enabled ? 1 : 0, hitMax ? null : job.nextRunAt, id);
 }
+
+const tatJobStmt = db.prepare(`UPDATE scheduled_jobs SET enabled = 0, next_run_at = NULL WHERE id = ?`);
+
+/**
+ * Tắt job KHÔNG kiểm phạm vi - chỉ dùng cho vòng tick, nơi id đến từ chính
+ * `listDueJobs` chứ không từ người dùng (cùng lý do với `getJobUnscoped`).
+ *
+ * Cần hàm riêng vì `markRun` chỉ tắt khi CHẠM TRẦN số lần chạy, mà trần đó chỉ
+ * tồn tại với job `once`. Job `every`/`cron` của một tài khoản không gửi được
+ * thì phải tắt tường minh, không thì nó quay lại mỗi tick vĩnh viễn.
+ */
+export function tatJobKhongCanPhamVi(id: string): void {
+  tatJobStmt.run(id);
+}

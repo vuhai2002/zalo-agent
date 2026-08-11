@@ -316,9 +316,6 @@ Found","error_code":404}`. Không có `sendDocument`/`sendFile`/`sendVideo`/
 `sendAudio`, cũng không có `editMessageText`/`deleteMessage`/
 `setMessageReaction`/`forwardMessage`/`getChat`/`getChatMember`.
 
-Bị chặn: `send_file`, `create_word_document`, `create_excel_file`,
-`create_image`, `add_reaction`, `tag_member`, `get_group_info`.
-
 Bị chặn (8): `send_file`, `create_word_document`, `create_excel_file`,
 `create_image`, `add_reaction`, `tag_member`, `get_group_info`, `schedule_task`.
 
@@ -328,7 +325,7 @@ Chạy được (6): `get_datetime`, `web_search`, `web_fetch`, `kb_search`,
 `schedule_task` bị chặn vì `run-scheduled-job.ts` chỉ biết gửi qua zca-js: job
 `once` được `concludeBlockedNotRun` phục hồi `next_run_at` nên bị dispatch lại
 MỖI TICK, mãi mãi, kèm lý do sai sự thật. Chặn ở BA chỗ vì có ba đường vào:
-tool (`nang-luc-kenh-bot.ts`), dashboard (`POST /api/schedules`), và job cũ đã
+tool (`nang-luc-kenh-bot.ts`), dashboard (`POST /api/schedule`), và job cũ đã
 tạo (`run-scheduled-job.ts` tắt hẳn thay vì phục hồi).
 
 `read_image` chạy được nhưng CHƯA ĐO đường tải: URL ảnh của Bot API có lấy được
@@ -344,7 +341,8 @@ nhận được tool.
 bot ở trang Tools vẫn thấy đủ 14 tool và "Gửi file" vẫn xanh - đúng cái hậu quả
 đoạn trên nói nó ngăn được.
 
-Điểm đáng ghi: **7 tool dùng `ctx.api` trùng KHÍT 7 tool bị chặn** - không phải
+Điểm đáng ghi: **mọi tool dùng `ctx.api` đều nằm trong bảng chặn** (7 tool zca-js;
+`schedule_task` bị chặn vì lý do khác - scheduler chưa biết kênh) - không phải
 trùng hợp, chúng bị chặn vì cần đúng năng lực gửi mà Bot API không có. Hệ quả:
 trên kênh bot không tool nào cần `api` của zca-js.
 

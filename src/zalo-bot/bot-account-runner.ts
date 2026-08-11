@@ -2,7 +2,7 @@ import { getTuning } from "../config/runtime-tuning-settings.js";
 import { createLogger } from "../shared/logger.js";
 import { routeBotUpdate } from "./bot-message-router.js";
 import { kenhBot } from "./kenh-bot.js";
-import { taoZaloBotClient } from "./zalo-bot-api-client.js";
+import { LoiZaloBotApi, taoZaloBotClient } from "./zalo-bot-api-client.js";
 import { batDauVongPoll } from "./zalo-bot-listener.js";
 
 const log = createLogger("bot-account-runner");
@@ -41,8 +41,27 @@ export async function chayTaiKhoanBot(p: {
   // Kiểm token TRƯỚC khi mở vòng poll: token sai mà cứ poll thì mỗi vòng là một
   // dòng log lỗi kèm backoff, và người vận hành chỉ thấy "bot không trả lời"
   // chứ không thấy nguyên nhân.
-  const me = await client.getMe();
-  log.info({ accountId: p.accountId, bot: me.display_name ?? me.id }, "Token bot hợp lệ");
+  // Cổng kiểm token: LỖI TOKEN thì dừng hẳn (chờ bao lâu cũng không tự hết,
+  // phải có người nhập lại), còn LỖI MẠNG thì cứ mở vòng poll - vòng đó đã có
+  // backoff và tự phục hồi được.
+  //
+  // Không phân biệt hai ca này thì một cú chớp mạng lúc boot (container lên
+  // trước khi DNS sẵn sàng) giết tài khoản bot VĨNH VIỄN: `startAllAccounts`
+  // chỉ log rồi bỏ qua, không ai hẹn thử lại, và dashboard chỉ hiện "Đã có
+  // token, chưa chạy". Fail-fast ở đây biến một trạng thái TỰ LÀNH thành một
+  // sự cố phải có người bấm tay.
+  try {
+    const me = await client.getMe();
+    log.info({ accountId: p.accountId, bot: me.display_name ?? me.id }, "Token bot hợp lệ");
+  } catch (err) {
+    const maHttp = err instanceof LoiZaloBotApi ? (err.httpStatus ?? Number(err.maLoi)) : undefined;
+    const laLoiToken = maHttp === 401 || maHttp === 403;
+    if (laLoiToken) throw err;
+    log.warn(
+      { accountId: p.accountId, err },
+      "Không kiểm được token lúc khởi động (nghi lỗi mạng) - vẫn mở vòng poll, backoff sẽ tự thử lại",
+    );
+  }
 
   // Webhook và getUpdates LOẠI TRỪ NHAU (tài liệu Zalo ghi rõ). Webhook còn bật
   // thì poll không bao giờ nhận được gì, và triệu chứng là IM LẶNG chứ không

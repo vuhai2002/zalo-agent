@@ -1,22 +1,43 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { forLog, taoQuanSatStep } from "./agent-step-observer.js";
-import { ToolLoopGuard } from "./tool-loop-guard.js";
+import { after, before, describe, it } from "node:test";
+import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import { ketQuaLoi } from "./tools/tool-failure-result.js";
 import type { StepTrace } from "./agent-step-trace.js";
 
 /**
- * `agent-step-observer` đọc `getTuning` nên KHÔNG thuần hoàn toàn - nhưng
- * `runtime-tuning-settings` chỉ đọc env/bộ nhớ, không chạm DB, nên import tĩnh ở
- * đây không rơi vào bẫy "database.ts chạy migration ở module scope".
+ * `agent-step-observer` đọc `getTuning`, mà `runtime-tuning-settings.ts` dòng
+ * ĐẦU TIÊN là `import { db } from "../conversation/database.js"` - tức nó CÓ
+ * chạm DB, và `database.ts` mở SQLite + chạy migration ở MODULE SCOPE.
+ *
+ * Chú thích cũ ở đây khẳng định ngược lại ("chỉ đọc env/bộ nhớ, không chạm
+ * DB") và vì thế file này import TĨNH, tức mở `data/zalo-agent.db` THẬT mỗi
+ * lần chạy `pnpm test`. Migration hiện idempotent nên chưa mất gì, nhưng một
+ * migration có backfill/ALTER sau này sẽ chạy lên dữ liệu thật.
+ *
+ * Nạp động sau `setupTestEnv()` - xem CLAUDE.md mục "Bẫy khi viết test".
  */
+
+let dataDir: string;
+let modQuanSat: typeof import("./agent-step-observer.js");
+let modGuard: typeof import("./tool-loop-guard.js");
+
+before(async () => {
+  dataDir = setupTestEnv();
+  modQuanSat = await import("./agent-step-observer.js");
+  modGuard = await import("./tool-loop-guard.js");
+});
+
+after(async () => {
+  (await import("../conversation/database.js")).closeDatabase();
+  cleanupTestEnv(dataDir);
+});
 
 const NGUONG = { chanLoiGiongHet: 5, chanCungToolLoi: 8, chanKhongTienTrien: 5 };
 const laToolChiDoc = (t: string) => t === "web_fetch";
 
 describe("forLog - nhánh hỏng hiện CÂU, không hiện vỏ JSON", () => {
   it("kết quả đánh dấu hỏng ra câu tiếng Việt đọc được", () => {
-    const ra = forLog(ketQuaLoi('Không có file "bao-gia.pdf" trong kho shared-files'), 300);
+    const ra = modQuanSat.forLog(ketQuaLoi('Không có file "bao-gia.pdf" trong kho shared-files'), 300);
     // Vỏ JSON escape ngoặc kép hai lần và ăn mất ~20 ký tự của trần - mà phần bị
     // cắt lại chính là phần nói vì sao hỏng
     assert.ok(!ra.includes('\\"'), `không được escape ngoặc kép: ${ra}`);
@@ -25,13 +46,13 @@ describe("forLog - nhánh hỏng hiện CÂU, không hiện vỏ JSON", () => {
   });
 
   it("chuỗi trần và object thường vẫn như cũ", () => {
-    assert.equal(forLog("nội dung trang", 300), "nội dung trang");
-    assert.equal(forLog({ url: "https://a.test" }, 300), '{"url":"https://a.test"}');
-    assert.equal(forLog(undefined, 300), "undefined");
+    assert.equal(modQuanSat.forLog("nội dung trang", 300), "nội dung trang");
+    assert.equal(modQuanSat.forLog({ url: "https://a.test" }, 300), '{"url":"https://a.test"}');
+    assert.equal(modQuanSat.forLog(undefined, 300), "undefined");
   });
 
   it("vẫn cắt theo trần", () => {
-    const ra = forLog(ketQuaLoi("x".repeat(500)), 50);
+    const ra = modQuanSat.forLog(ketQuaLoi("x".repeat(500)), 50);
     assert.ok(ra.length <= 53, `phải cắt: ${ra.length} ký tự`);
     assert.ok(ra.endsWith("..."));
   });
@@ -50,15 +71,15 @@ describe("taoQuanSatStep - lỗi bên trong KHÔNG được thoát ra", () => {
       ghiNhan() {
         throw new Error("guard vỡ");
       },
-    } as unknown as ToolLoopGuard;
+    } as unknown as import("./tool-loop-guard.js").ToolLoopGuard;
 
-    const quanSat = taoQuanSatStep({ guard: guardHong, trace: [], layLanChay: () => 1 });
+    const quanSat = modQuanSat.taoQuanSatStep({ guard: guardHong, trace: [], layLanChay: () => 1 });
     assert.doesNotThrow(() => quanSat({ toolResults: [], content: [] }));
   });
 
   it("step có hình dạng lạ cũng không ném", () => {
-    const guard = new ToolLoopGuard(NGUONG, laToolChiDoc);
-    const quanSat = taoQuanSatStep({ guard, trace: [], layLanChay: () => 1 });
+    const guard = new modGuard.ToolLoopGuard(NGUONG, laToolChiDoc);
+    const quanSat = modQuanSat.taoQuanSatStep({ guard, trace: [], layLanChay: () => 1 });
     for (const step of [{}, { toolResults: undefined }, { content: undefined }]) {
       assert.doesNotThrow(() => quanSat(step));
     }
@@ -66,9 +87,9 @@ describe("taoQuanSatStep - lỗi bên trong KHÔNG được thoát ra", () => {
 
   it("lượt chạy được thì vẫn đếm cho guard và đẩy trace ra mảng của caller", () => {
     // Đối chứng cho hai ca trên: bọc try/catch không được nuốt luôn phần việc thật
-    const guard = new ToolLoopGuard({ ...NGUONG, chanLoiGiongHet: 2 }, laToolChiDoc);
+    const guard = new modGuard.ToolLoopGuard({ ...NGUONG, chanLoiGiongHet: 2 }, laToolChiDoc);
     const trace: StepTrace[] = [];
-    const quanSat = taoQuanSatStep({ guard, trace, layLanChay: () => 1 });
+    const quanSat = modQuanSat.taoQuanSatStep({ guard, trace, layLanChay: () => 1 });
 
     const step = {
       toolResults: [{ toolName: "web_fetch", input: { url: "x" }, output: ketQuaLoi("hỏng") }],

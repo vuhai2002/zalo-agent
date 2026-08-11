@@ -95,6 +95,19 @@ describe("doiUpdateSangParsedMessage", () => {
     assert.equal(nhan("message.unsupported.received", {}), "[gửi một nội dung bot chưa đọc được]");
   });
 
+  it("ảnh KHÔNG moi được URL thì có NHÃN - không để tin biến mất im lặng", () => {
+    // Bản vá cho một lỗi mất tin: Zalo đổi tên trường ảnh -> `text` rỗng và
+    // `images` rỗng -> `shouldRespond` bỏ qua với `record: false` -> tin không
+    // vào history, chỉ một dòng debug. Kênh này không có `offset` nên đó là mất
+    // hẳn. Bản vá đó chưa có test nào canh: xóa nó đi thì cả suite vẫn xanh.
+    const m = doiUpdateSangParsedMessage("bot-1", {
+      event_name: "message.image.received",
+      message: { ...UPDATE_THAT.message!, text: undefined, photo: undefined, photo_url: undefined },
+    } as ZaloBotUpdate);
+    assert.match(m?.text ?? "", /ảnh/, `ảnh không moi được URL mà không có nhãn: ${JSON.stringify(m?.text)}`);
+    assert.deepEqual(m?.images, []);
+  });
+
   it("ảnh KHÔNG bị gắn nhãn - nó có đường riêng qua `images`", () => {
     const m = doiUpdateSangParsedMessage("bot-1", {
       event_name: "message.image.received",

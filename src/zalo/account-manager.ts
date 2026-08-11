@@ -112,6 +112,17 @@ async function startBotAccount(config: AccountConfig): Promise<void> {
   }
 
   const { dung } = await chayTaiKhoanBot({ accountId: config.id, token });
+
+  // Đọc LẠI `enabled` ngay trước khi cài vào `running`: `chayTaiKhoanBot` mất
+  // hai vòng mạng (hạn 15 giây mỗi cái), đủ rộng để người vận hành bấm TẮT
+  // trong lúc chờ. Lúc đó `stopAccount` của route là no-op (chưa có gì trong
+  // `running`), rồi dòng dưới cài vòng poll vào một account mà DB nói là tắt -
+  // công tắc an toàn hỏng CÂM, bot vẫn đọc tin người lạ và đốt token.
+  if (!getAccount(config.id)?.enabled) {
+    dung();
+    log.info({ accountId: config.id }, "Account bị tắt trong lúc đang khởi động - đã dừng vòng poll");
+    return;
+  }
   // `stopAccount` phải nằm SAU await, ngay trước `running.set` - đúng chỗ
   // `attachAccount` đặt nó cho kênh cá nhân. Đặt trước await thì hai lời gọi
   // `startAccount` chồng nhau (bấm hai lần trên dashboard, hoặc dashboard chen
