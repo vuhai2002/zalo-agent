@@ -51,7 +51,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "build": "tsc -p tsconfig.build.json",
     "build:web": "vite build web",
-    "eval": "tsx evals/run-eval.ts"
+    "eval": "tsx evals/run-eval.ts",
+    "zalo-bot-check": "tsx src/zalo-bot/kiem-chung-bot-api.ts"
   },
   "packageManager": "pnpm@11.17.0+sha512.cca3cea332ad254bb84145f966d19f4879615210346fc92c79a047f23a0d7b3cca3c3792f0076ba1f1831d277efbcf0a9119b31a9a60eca7fb3d6231f331ef72",
   "dependencies": {
