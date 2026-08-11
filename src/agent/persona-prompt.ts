@@ -1,4 +1,5 @@
 import type { AccountConfig } from "../config/account-store.js";
+import { LUAT_PERSONA_KENH_BOT } from "../zalo-bot/nang-luc-kenh-bot.js";
 import type { AgentProfile } from "../config/agent-store.js";
 import { botTimeZone } from "../config/runtime-tuning-settings.js";
 import type { MemoryContext } from "../conversation/memory-store.js";
@@ -101,7 +102,7 @@ export function buildSystemPrompt(
   agent: AgentProfile,
   msg: ParsedMessage,
   memory?: PromptMemory,
-  account?: Pick<AccountConfig, "disabledTools">,
+  account?: Pick<AccountConfig, "disabledTools" | "loai">,
   isolated?: boolean,
 ): string {
   // Chỉ ngày + thứ, không có giờ - giờ đổi mỗi phút sẽ vỡ prompt cache mỗi phút.
@@ -123,6 +124,12 @@ export function buildSystemPrompt(
     const available = listAvailableTools({ agent, account }, { isolated });
     sections.push(toolCapabilitySection(available));
     sections.push(...toolPersonaSections(available.map((t) => t.key)));
+
+    // Kênh bot: ẩn tool thôi là CHƯA ĐỦ. Model sẽ trả lời "tôi không làm được
+    // việc đó" mà không nói vì sao, và người nhắn tưởng agent bị lỗi trong khi
+    // đó là giới hạn của nền tảng Zalo. Dòng luật này để model nói đúng nguyên
+    // nhân và chỉ đường sang kênh dùng được.
+    if (account.loai === "bot") sections.push(LUAT_PERSONA_KENH_BOT);
   }
 
   if (agent.persona.trim()) {

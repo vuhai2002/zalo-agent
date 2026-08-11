@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { kiemTraKhaDung } from "../../agent/tools/tool-registry.js";
 import { z } from "zod";
 import { TOOL_DEFINITIONS, type ToolScope } from "../../agent/tools/index.js";
 import { getAgent } from "../../config/agent-store.js";
@@ -32,7 +33,14 @@ const fetchUpdateSchema = z.object({
  * `kb-agent-binding.test.ts` cho bất biến `nguonCuaAgent("")` luôn rỗng, canh
  * cho quy ước này không bao giờ lẫn với một agent id thật.
  */
-const SCOPE_KHONG_CO_AGENT_THAT: ToolScope = { agent: { id: "", disabledTools: [] }, account: { disabledTools: [] } };
+// `loai: "ca_nhan"` là mặc định CÓ CHỦ Ý, không phải giá trị bừa: trang Tools
+// xem theo phạm vi TÀI KHOẢN CÁ NHÂN (nó không truyền accountId nên không biết
+// kênh nào). Tool bị chặn riêng cho kênh bot vẫn hiện "dùng được" ở đây - đúng
+// với tài khoản cá nhân, và trang Accounts mới là nơi phân biệt loại kênh.
+const SCOPE_KHONG_CO_AGENT_THAT: ToolScope = {
+  agent: { id: "", disabledTools: [] },
+  account: { disabledTools: [], loai: "ca_nhan" },
+};
 
 /**
  * Dựng scope cho GET /api/tools. Có `agentId` hợp lệ (agent tồn tại) thì trả
@@ -49,7 +57,10 @@ function dungScope(agentId: string | undefined): ToolScope | null {
   if (!agentId) return SCOPE_KHONG_CO_AGENT_THAT;
   const agent = getAgent(agentId);
   if (!agent) return null;
-  return { agent: { id: agent.id, disabledTools: agent.disabledTools }, account: { disabledTools: [] } };
+  return {
+    agent: { id: agent.id, disabledTools: agent.disabledTools },
+    account: { disabledTools: [], loai: "ca_nhan" },
+  };
 }
 
 /**
@@ -71,7 +82,8 @@ export const toolRoutes = new Hono()
         // available = hạ tầng đã sẵn sàng chưa (khác với bật/tắt per account).
         // Thiếu cờ này thì UI hiện tool bật sẵn trong khi model không hề nhận
         // được nó - người dùng tưởng bot có khả năng đó mà không có.
-        const available = t.available ? t.available(scope) : true;
+        const kq = kiemTraKhaDung(t, scope);
+        const available = kq.khaDung;
         return {
           key: t.key,
           label: t.label,
@@ -79,7 +91,7 @@ export const toolRoutes = new Hono()
           group: t.group,
           hasSettings: Boolean(t.hasSettings),
           available,
-          unavailableHint: available ? undefined : t.unavailableHint,
+          unavailableHint: available ? undefined : kq.hint,
         };
       }),
       search: getSearchSettingsForApi(),

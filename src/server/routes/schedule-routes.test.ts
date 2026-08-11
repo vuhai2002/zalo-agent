@@ -76,6 +76,8 @@ function attachOnline(): { threadId: string; text: string }[] {
     id: ACC,
     label: "Test",
     enabled: true,
+    loai: "ca_nhan" as const,
+    coBotToken: false,
     agentId: "khong-quan-tam",
     allowlist: { mode: "all", userIds: [] },
     groupRequireMention: true,

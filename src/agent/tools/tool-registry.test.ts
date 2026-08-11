@@ -39,6 +39,8 @@ function makeContext(disabledTools: string[], agentDisabled: string[] = []) {
       id: "acc-test",
       label: "Test",
       enabled: true,
+      loai: "ca_nhan" as const,
+      coBotToken: false,
       agentId: "agent-test",
       allowlist: { mode: "all" as const, userIds: [] },
       groupRequireMention: true,

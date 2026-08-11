@@ -80,6 +80,8 @@ function makeCtx(): import("./tool-registry.js").ToolContext {
     account: {
       id: "acc-1",
       label: "Test",
+      loai: "ca_nhan" as const,
+      coBotToken: false,
       enabled: true,
       agentId: AGENT_ID,
       allowlist: { mode: "all" as const, userIds: [] },

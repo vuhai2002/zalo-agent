@@ -82,6 +82,8 @@ const account: AccountConfig = {
   id: "acc-test",
   label: "Test",
   enabled: true,
+  loai: "ca_nhan" as const,
+  coBotToken: false,
   agentId: "khong-co-agent-nay",
   allowlist: { mode: "all", userIds: [] },
   groupRequireMention: true,

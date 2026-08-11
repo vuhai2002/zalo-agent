@@ -73,7 +73,13 @@ export type ToolGroup = "read" | "action";
  */
 export type ToolScope = {
   agent: Pick<AgentProfile, "id" | "disabledTools">;
-  account: Pick<AccountConfig, "disabledTools">;
+  /**
+   * `loai` BẮT BUỘC (không optional): 7 trong 14 tool không chạy được trên kênh
+   * bot, và để optional thì quên truyền sẽ âm thầm cấp thừa tool - model hứa
+   * gửi file rồi thất bại, người nhắn tưởng agent hỏng. Cùng lý do với việc
+   * `agent` bắt buộc ở trên.
+   */
+  account: Pick<AccountConfig, "disabledTools" | "loai">;
 };
 
 export type ToolDefinition = {

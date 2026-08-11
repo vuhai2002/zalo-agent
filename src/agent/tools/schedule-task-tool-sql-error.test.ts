@@ -70,6 +70,8 @@ function makeCtx(): ToolContext {
       id: "acc-1",
       label: "Test",
       enabled: true,
+      loai: "ca_nhan" as const,
+      coBotToken: false,
       agentId: "agent-test",
       allowlist: { mode: "all" as const, userIds: [] },
       groupRequireMention: true,

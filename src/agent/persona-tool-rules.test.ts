@@ -86,9 +86,10 @@ describe("buildSystemPrompt ghép luật theo tool đang bật", () => {
   } as never;
 
   it("tắt tool trên dashboard thì luật của tool đó biến mất khỏi prompt", () => {
-    const day = persona.buildSystemPrompt(agent, msg, undefined, { disabledTools: [] });
+    const day = persona.buildSystemPrompt(agent, msg, undefined, { disabledTools: [], loai: "ca_nhan" as const });
     const tat = persona.buildSystemPrompt(agent, msg, undefined, {
       disabledTools: ["create_word_document", "create_excel_file", "web_search", "web_fetch"],
+      loai: "ca_nhan" as const,
     });
 
     assert.ok(day.includes("create_word_document"), "bật hết thì prompt có luật xuất file");
@@ -102,7 +103,7 @@ describe("buildSystemPrompt ghép luật theo tool đang bật", () => {
   it("tool chưa cấu hình hạ tầng cũng không được dạy luật", () => {
     // create_image có available() = isImageGenConfigured(), test env chưa cấu
     // hình endpoint vẽ -> model KHÔNG nhận được tool, prompt cũng đừng dạy nó
-    const day = persona.buildSystemPrompt(agent, msg, undefined, { disabledTools: [] });
+    const day = persona.buildSystemPrompt(agent, msg, undefined, { disabledTools: [], loai: "ca_nhan" as const });
     assert.ok(!day.includes("create_image"));
     assert.ok(!day.includes("Vẽ ảnh AI"));
   });
@@ -110,6 +111,7 @@ describe("buildSystemPrompt ghép luật theo tool đang bật", () => {
   it("account không còn tool nào: prompt không dạy luật tool nào nữa", () => {
     const khongTool = persona.buildSystemPrompt(agent, msg, undefined, {
       disabledTools: registry.TOOL_KEYS,
+      loai: "ca_nhan" as const,
     });
     assert.ok(khongTool.includes("KHÔNG có công cụ nào được bật"));
     assert.ok(!khongTool.includes("kể tiến trình"));

@@ -1,15 +1,33 @@
 import { db } from "../conversation/database.js";
 import { createLogger } from "../shared/logger.js";
+import { decryptSecret, encryptSecret } from "./secret-cipher.js";
 import { createAgent, ensureDefaultAgent, getAgent } from "./agent-store.js";
 import { readAccountsSeedFile } from "./accounts.js";
 import { parseDisabledTools } from "./parse-disabled-tools.js";
 
 const log = createLogger("account-store");
 
+/**
+ * Loại KÊNH của một tài khoản.
+ *
+ * - `ca_nhan`: đăng nhập nick Zalo thật qua zca-js (giao thức đảo ngược). Đủ
+ *   năng lực nhất nhưng CÓ rủi ro bị Zalo khóa tài khoản.
+ * - `bot`: tài khoản bot chính thức qua Zalo Bot API. Không có rủi ro khóa,
+ *   đổi lại 7 trong 14 tool không chạy được - xem `nang-luc-kenh-bot.ts`.
+ */
+export type LoaiKenh = "ca_nhan" | "bot";
+
 /** Tài khoản Zalo (kênh). Não nằm ở agent, trỏ qua agentId. */
 export type AccountConfig = {
   id: string;
   label: string;
+  loai: LoaiKenh;
+  /**
+   * Đã có token bot chưa. CỐ Ý không mang chính token: object này đi thẳng ra
+   * `GET /api/accounts` nên để token ở đây là lộ bí mật cho mọi phiên dashboard.
+   * Code cần token thật thì gọi `layBotTokenGiaiMa()` - một đường riêng, dễ soi.
+   */
+  coBotToken: boolean;
   enabled: boolean;
   agentId: string;
   allowlist: { mode: "all" | "list"; userIds: string[] };
@@ -44,11 +62,17 @@ type Row = {
   auto_react_icon: string;
   typing_indicator_enabled: number;
   disabled_tools: string;
+  loai: string;
+  bot_token_enc: string;
 };
 
 const toConfig = (r: Row): AccountConfig => ({
   id: r.id,
   label: r.label,
+  // Giá trị lạ trong cột (sửa tay DB, hoặc bản cũ hơn) rơi về "ca_nhan" thay vì
+  // ép kiểu bừa: đó là loại duy nhất tồn tại trước khi có cột này.
+  loai: r.loai === "bot" ? "bot" : "ca_nhan",
+  coBotToken: r.bot_token_enc !== "",
   enabled: r.enabled === 1,
   agentId: r.agent_id,
   allowlist: { mode: r.allowlist_mode, userIds: JSON.parse(r.allowlist_user_ids) as string[] },
@@ -64,7 +88,7 @@ const toConfig = (r: Row): AccountConfig => ({
 const SELECT = `SELECT id, label, enabled, agent_id, allowlist_mode, allowlist_user_ids,
                        group_require_mention, respond_to_groups, group_passive_listen,
                        auto_react_enabled, auto_react_icon, typing_indicator_enabled,
-                       disabled_tools
+                       disabled_tools, loai, bot_token_enc
                 FROM accounts`;
 
 export function listAccounts(): AccountConfig[] {
@@ -168,4 +192,37 @@ export function runAccountsSeedMigration(configPath?: string): void {
     );
   }
   log.info({ imported: seed.length }, "Đã import accounts.json vào DB (chỉ chạy 1 lần)");
+}
+
+/**
+ * Token bot ĐÃ GIẢI MÃ. Đường riêng, KHÔNG đi qua `AccountConfig` - object đó
+ * được trả nguyên vẹn ở `GET /api/accounts`, nên token nằm trong đó là lộ bí
+ * mật cho mọi phiên dashboard đang mở. Tách ra thành một hàm để chỗ nào đọc
+ * token thật đều grep ra được ngay.
+ *
+ * Trả `null` khi: không phải tài khoản bot, chưa nhập token, hoặc giải mã hỏng.
+ * Ba ca này caller đều xử lý như nhau (không chạy được kênh đó), nhưng ca giải
+ * mã hỏng có LOG riêng vì nó nghĩa là `CREDENTIALS_ENCRYPTION_KEY` đã đổi so
+ * với lúc lưu - im lặng rơi về null ở đây thì người vận hành đi tìm nhầm chỗ.
+ */
+export function layBotTokenGiaiMa(id: string): string | null {
+  const row = db.prepare("SELECT bot_token_enc FROM accounts WHERE id = ?").get(id) as
+    | { bot_token_enc: string }
+    | undefined;
+  if (!row?.bot_token_enc) return null;
+  try {
+    return decryptSecret(row.bot_token_enc);
+  } catch (err) {
+    log.error(
+      { err, accountId: id },
+      "Không giải mã được token bot - CREDENTIALS_ENCRYPTION_KEY có đúng khóa lúc lưu không?",
+    );
+    return null;
+  }
+}
+
+/** Lưu token bot (mã hóa). Chuỗi rỗng = xóa token. */
+export function datBotToken(id: string, token: string): void {
+  const enc = token.trim() ? encryptSecret(token.trim()) : "";
+  db.prepare("UPDATE accounts SET bot_token_enc = ? WHERE id = ?").run(enc, id);
 }

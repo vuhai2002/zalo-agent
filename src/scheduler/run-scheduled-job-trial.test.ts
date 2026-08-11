@@ -65,6 +65,8 @@ function attachOnlineWithGate(): { sent: { threadId: string; text: string }[]; r
     id: ACC,
     label: "Test",
     enabled: true,
+    loai: "ca_nhan" as const,
+    coBotToken: false,
     agentId: "khong-quan-tam",
     allowlist: { mode: "all", userIds: [] },
     groupRequireMention: true,

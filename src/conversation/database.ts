@@ -281,6 +281,14 @@ function runMigrations(): void {
   // Lưu danh sách TẮT thay vì BẬT để tool mới thêm vào code tự bật cho account cũ.
   addColumnIfMissing("accounts", "disabled_tools", "TEXT NOT NULL DEFAULT '[]'");
 
+  // Loại KÊNH của tài khoản: "ca_nhan" (zca-js, giao thức đảo ngược) hoặc
+  // "bot" (Zalo Bot API chính thức). Mặc định "ca_nhan" để mọi dòng đã có từ
+  // trước giữ nguyên hành vi - đây là loại duy nhất tồn tại trước cột này.
+  addColumnIfMissing("accounts", "loai", "TEXT NOT NULL DEFAULT 'ca_nhan'");
+  // Token bot, MÃ HÓA bằng cùng khóa với cookie Zalo (credential-encryption).
+  // Rỗng với tài khoản cá nhân.
+  addColumnIfMissing("accounts", "bot_token_enc", "TEXT NOT NULL DEFAULT ''");
+
   // Lớp tool THỨ HAI, theo agent - GIAO với lớp account ở trên, không thay thế.
   // Agent khai NĂNG LỰC (agent này biết làm gì), account áp CHÍNH SÁCH (nick này
   // được phép gì); tool dùng được là phần không bên nào tắt. Nhờ vậy thêm một

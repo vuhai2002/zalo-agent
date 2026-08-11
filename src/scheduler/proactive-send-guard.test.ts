@@ -35,6 +35,8 @@ const accountConfig = (id: string): AccountConfig => ({
   id,
   label: "Test",
   enabled: true,
+  loai: "ca_nhan" as const,
+  coBotToken: false,
   agentId: "agent-test",
   allowlist: { mode: "all", userIds: [] },
   groupRequireMention: true,

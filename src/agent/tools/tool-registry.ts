@@ -1,4 +1,5 @@
 import type { Tool } from "ai";
+import { TOOL_KHONG_CHAY_TREN_BOT } from "../../zalo-bot/nang-luc-kenh-bot.js";
 import { TOOL_DEFINITIONS, type ToolContext, type ToolDefinition } from "./tool-catalog.js";
 import type { ToolScope } from "./tool-catalog-types.js";
 
@@ -68,7 +69,33 @@ export function listAvailableTools(
   return TOOL_DEFINITIONS.filter((def) => {
     if (disabled.has(def.key)) return false;
     if (context.isolated && def.runsInScheduledTurn === false) return false;
-    // Kiểm mỗi lượt: cấu hình từ dashboard ăn ngay không cần restart
-    return !def.available || def.available(scope);
+    return kiemTraKhaDung(def, scope).khaDung;
   });
+}
+
+/**
+ * Tool này có DÙNG ĐƯỢC trong phạm vi đang xét không, và nếu không thì vì sao.
+ *
+ * MỘT nguồn duy nhất cho cả `listAvailableTools` (quyết định model có nhận được
+ * tool hay không) lẫn `GET /api/tools` (quyết định dashboard hiện gì). Hai nơi
+ * tự tính riêng là sớm muộn cũng lệch, mà lệch theo chiều xấu nghĩa là UI báo
+ * "dùng được" trong khi model không hề nhận được tool - đúng lớp lỗi mà cờ
+ * `available` sinh ra để chặn.
+ */
+export function kiemTraKhaDung(
+  def: ToolDefinition,
+  scope: ToolScope,
+): { khaDung: boolean; hint?: string } {
+  // Kênh BOT trước: giới hạn nền tảng thắng mọi cấu hình. Zalo Bot API không có
+  // method gửi file/thả cảm xúc/tag thành viên nên bật kiểu gì cũng hỏng, và
+  // hỏng theo cách người nhắn tưởng agent bị lỗi.
+  if (scope.account.loai === "bot") {
+    const ly = TOOL_KHONG_CHAY_TREN_BOT[def.key];
+    if (ly) return { khaDung: false, hint: ly.hint };
+  }
+  // Kiểm mỗi lượt: cấu hình từ dashboard ăn ngay không cần restart
+  if (def.available && !def.available(scope)) {
+    return { khaDung: false, hint: def.unavailableHint };
+  }
+  return { khaDung: true };
 }
