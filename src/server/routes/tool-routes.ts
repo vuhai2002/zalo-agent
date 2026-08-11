@@ -57,7 +57,13 @@ function dungScope(agentId: string | undefined, accountId: string | undefined): 
   // một tài khoản bot xong vẫn hiện đủ 14 tool và "Gửi file" vẫn xanh - trong
   // khi model chạy trên tài khoản đó không hề nhận được nó. Đúng lớp lỗi mà cờ
   // `available` sinh ra để chặn, chỉ là ở trục kênh.
-  const loai = (accountId ? getAccount(accountId)?.loai : undefined) ?? "ca_nhan";
+  // `accountId` trỏ tới account KHÔNG TỒN TẠI thì trả null để caller ra 400,
+  // đúng như nhánh `agentId` ngay dưới - im lặng rơi về "ca_nhan" là gài bẫy
+  // cho lần debug sau: trang Tools với một accountId cũ sẽ hiện đủ 14 tool
+  // "dùng được" cho một tài khoản bot.
+  const accCuThe = accountId ? getAccount(accountId) : undefined;
+  if (accountId && !accCuThe) return null;
+  const loai = accCuThe?.loai ?? "ca_nhan";
   if (!agentId) return { ...SCOPE_KHONG_CO_AGENT_THAT, account: { disabledTools: [], loai } };
   const agent = getAgent(agentId);
   if (!agent) return null;

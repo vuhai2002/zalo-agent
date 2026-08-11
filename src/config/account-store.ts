@@ -216,8 +216,10 @@ export function runAccountsSeedMigration(configPath?: string): void {
  * mật cho mọi phiên dashboard đang mở. Tách ra thành một hàm để chỗ nào đọc
  * token thật đều grep ra được ngay.
  *
- * Trả `null` khi: không phải tài khoản bot, chưa nhập token, hoặc giải mã hỏng.
- * Ba ca này caller đều xử lý như nhau (không chạy được kênh đó), nhưng ca giải
+ * Trả `null` khi: chưa nhập token, hoặc giải mã hỏng. (Câu SQL KHÔNG lọc `loai` -
+ * không cần, vì không đường nào đặt `bot_token_enc` cho tài khoản cá nhân:
+ * `PUT /bot-token` chặn ở route.)
+ * Hai ca này caller đều xử lý như nhau (không chạy được kênh đó), nhưng ca giải
  * mã hỏng có LOG riêng vì nó nghĩa là `CREDENTIALS_ENCRYPTION_KEY` đã đổi so
  * với lúc lưu - im lặng rơi về null ở đây thì người vận hành đi tìm nhầm chỗ.
  */

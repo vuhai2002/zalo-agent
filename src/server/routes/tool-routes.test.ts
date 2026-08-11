@@ -140,10 +140,13 @@ describe("GET /api/tools - loại kênh của account", () => {
     assert.equal(items?.find((t) => t.key === "send_file")?.available, true);
   });
 
-  it("accountId không tồn tại thì rơi về kênh cá nhân, KHÔNG 400", async () => {
-    // Khác `agentId`: agent sai là lỗi gọi API, còn account sai chỉ nên làm mất
-    // phần lọc theo kênh chứ không nên làm chết cả trang Tools.
+  it("accountId không tồn tại thì 400, KHÔNG im lặng rơi về kênh cá nhân", async () => {
+    // Bản đầu để rơi về "ca_nhan" với lý lẽ "account sai không nên làm chết cả
+    // trang Tools". Nhưng nhánh `agentId` ngay cạnh trả 400 vì ĐÚNG lý lẽ ngược
+    // lại, và lý lẽ đó thắng: im lặng đổi một id sai thành "kênh cá nhân" làm
+    // trang Tools hiện đủ 14 tool "dùng được" cho một tài khoản BOT vừa bị xóa.
+    // Đó là gài bẫy cho lần debug sau, đúng thứ cờ `available` sinh ra để chặn.
     const { status } = await layToolItems("?accountId=khong-ton-tai");
-    assert.equal(status, 200);
+    assert.equal(status, 400);
   });
 });

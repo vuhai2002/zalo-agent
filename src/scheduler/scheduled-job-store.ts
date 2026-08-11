@@ -272,7 +272,9 @@ export function markRun(id: string, status: Exclude<JobRunStatus, "running">, er
   markRunStmt.run(runCount, status, error, hitMax ? 0 : job.enabled ? 1 : 0, hitMax ? null : job.nextRunAt, id);
 }
 
-const tatJobStmt = db.prepare(`UPDATE scheduled_jobs SET enabled = 0, next_run_at = NULL WHERE id = ?`);
+const tatJobStmt = db.prepare(
+  `UPDATE scheduled_jobs SET enabled = 0, next_run_at = NULL, updated_at = datetime('now') WHERE id = ?`,
+);
 
 /**
  * Tắt job KHÔNG kiểm phạm vi - chỉ dùng cho vòng tick, nơi id đến từ chính

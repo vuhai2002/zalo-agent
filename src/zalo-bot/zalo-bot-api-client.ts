@@ -77,7 +77,13 @@ export function taoZaloBotClient(p: ThamSoClient) {
     // Lớp thứ hai theo HÌNH DẠNG: cổng trung gian có thể trả đường dẫn đã
     // URL-encode (`%3A` thay cho `:`) hoặc HTML-escape, khi đó phép thay nguyên
     // văn ở trên không khớp và token đi thẳng vào thông điệp lỗi.
-    return thay.replace(/\/bot\d+(?::|%3A|&#58;)[A-Za-z0-9_%\-.]+/gi, "/bot<token>");
+    const theoHinhDang = thay.replace(/\/bot\d+(?::|%3A|&#58;|&#x3a;)[A-Za-z0-9_%\-.]+/gi, "/bot<token>");
+    // Lớp CỘNG THÊM (không thay lớp nào ở trên - bài học "phá code chỉ đo chiều
+    // MỚI" ở CLAUDE.md): che riêng phần BÍ MẬT sau dấu hai chấm. Bắt được hai
+    // ca mà lớp trên lọt: cổng dùng entity hex cho dấu hai chấm, và cổng chỉ
+    // echo NỬA bí mật không kèm tiền tố `<id>:`.
+    const biMat = p.token.split(":")[1];
+    return biMat && biMat.length > 8 ? theoHinhDang.split(biMat).join("<token>") : theoHinhDang;
   };
 
   async function goi<T>(method: string, body?: unknown, hanRiengMs?: number): Promise<T> {

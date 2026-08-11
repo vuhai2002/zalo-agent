@@ -100,6 +100,23 @@ describe("zalo-bot-api-client", () => {
     assert.ok(!err.message.includes(TOKEN), `token lọt qua nhánh ok:false: ${err.message}`);
   });
 
+  it("che được cả khi cổng dùng entity HEX, hoặc chỉ echo NỬA bí mật", async () => {
+    // Hai hình dạng mà lớp che theo-đường-dẫn lọt: `&#x3a;` (entity hex cho dấu
+    // hai chấm) và thân chỉ có phần bí mật, không kèm tiền tố `<id>:`. Lớp che
+    // riêng phần bí mật là CỘNG THÊM, không thay lớp cũ.
+    const [id, biMat] = TOKEN.split(":");
+    for (const than of [
+      `<html>Upstream /bot${id}&#x3a;${biMat}/getMe failed</html>`,
+      `<html>Auth failure for secret ${biMat} on this gateway</html>`,
+    ]) {
+      const { f } = fetchGia({ status: 502, body: than });
+      const client = taoZaloBotClient({ token: TOKEN, fetchImpl: f, gocApi: "https://x.test" });
+      const err = await client.getMe().then(() => null, (e: unknown) => e);
+      assert.ok(err instanceof LoiZaloBotApi);
+      assert.ok(!err.message.includes(biMat!), `bí mật lọt: ${err.message}`);
+    }
+  });
+
   it("thân không phải JSON thì báo rõ và CẮT NGẮN", async () => {
     // Gateway hỏng hay trả trang HTML dài - dán nguyên vào log là rác.
     const { f } = fetchGia({ status: 502, body: "<html>" + "x".repeat(5000) + "</html>" });

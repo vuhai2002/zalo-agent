@@ -54,8 +54,15 @@ export async function chayTaiKhoanBot(p: {
     const me = await client.getMe();
     log.info({ accountId: p.accountId, bot: me.display_name ?? me.id }, "Token bot hợp lệ");
   } catch (err) {
-    const maHttp = err instanceof LoiZaloBotApi ? (err.httpStatus ?? Number(err.maLoi)) : undefined;
-    const laLoiToken = maHttp === 401 || maHttp === 403;
+    // Phải đọc CẢ HAI chiều. Bản đầu chỉ có `err.httpStatus ?? Number(err.maLoi)`
+    // và nhánh `??` là CODE CHẾT: `goi()` luôn gán `httpStatus = res.status`, mà
+    // Zalo trả lỗi trong THÂN kèm HTTP **200** (số đo ở `docs/system-architecture.md`).
+    // Nên `httpStatus` luôn là 200, `laLoiToken` luôn false, và cả cổng fail-fast
+    // này vô hiệu - đúng ca người vận hành thu hồi token (việc BẮT BUỘC nếu token
+    // lộ) thì dashboard vẫn báo xanh "Đang chạy" còn bot im lặng vĩnh viễn.
+    const maHttp = err instanceof LoiZaloBotApi ? err.httpStatus : undefined;
+    const maThan = Number(err instanceof LoiZaloBotApi ? err.maLoi : NaN);
+    const laLoiToken = maHttp === 401 || maHttp === 403 || maThan === 401 || maThan === 403;
     if (laLoiToken) throw err;
     log.warn(
       { accountId: p.accountId, err },
