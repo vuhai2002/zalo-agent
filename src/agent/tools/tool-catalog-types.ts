@@ -14,7 +14,19 @@ import type { ParsedMessage } from "../../zalo/zalo-message-parser.js";
 
 /** Bối cảnh 1 lượt xử lý - tools dùng để gọi zca-js đúng account + thread */
 export type ToolContext = {
-  api: API;
+  /**
+   * API của zca-js. `null` trên kênh BOT - Zalo Bot API không có method nào
+   * tương đương nên không tool nào dùng tới.
+   *
+   * Điều làm chuyện này an toàn: 7 tool dùng `api` TRÙNG KHÍT 7 tool bị chặn
+   * trên kênh bot (`nang-luc-kenh-bot.ts`). Không phải trùng hợp - chúng bị
+   * chặn vì cần đúng năng lực gửi mà Bot API không có. Nên khi `api` là null
+   * thì `build()` của 7 tool đó không bao giờ được gọi.
+   *
+   * Compiler không thấy được bất biến ấy, nên 7 tool đó gọi `apiCaNhan(ctx)`
+   * để nói ra tường minh thay vì rải `!` khắp nơi.
+   */
+  api: API | null;
   account: AccountConfig;
   /**
    * Agent đang chạy lượt này. BẮT BUỘC (không optional) vì nó là một trong hai
@@ -150,3 +162,22 @@ export type ToolDefinition = {
   runsInScheduledTurn?: boolean;
   build: (ctx: ToolContext) => Tool;
 };
+
+/**
+ * Lấy `api` của kênh tài khoản cá nhân, khẳng định nó có thật.
+ *
+ * Dùng ở 7 tool cần zca-js. Nhánh ném KHÔNG THỂ tới được trong lúc chạy bình
+ * thường: `listAvailableTools` đã loại đúng 7 tool này khỏi lượt của kênh bot
+ * nên `build()` của chúng không bao giờ chạy khi `api` null. Viết ra để trình
+ * biên dịch có chỗ bám, và để ai nối kênh mới sau này vấp phải một thông điệp
+ * nói rõ chuyện gì thay vì một `TypeError: cannot read property of null`.
+ */
+export function apiCaNhan(ctx: Pick<ToolContext, "api">): API {
+  if (!ctx.api) {
+    throw new Error(
+      "Tool này cần API tài khoản cá nhân (zca-js) nhưng lượt đang chạy trên kênh khác - " +
+        "lẽ ra nó đã bị listAvailableTools loại khỏi lượt này",
+    );
+  }
+  return ctx.api;
+}

@@ -110,3 +110,40 @@ describe("GET /api/tools - kb_search.available theo agentId", () => {
     assert.equal(status, 400);
   });
 });
+
+describe("GET /api/tools - loại kênh của account", () => {
+  it("account BOT: tool cần zca-js hiện KHÔNG dùng được, kèm lý do của Zalo", async () => {
+    // Thiếu đường này thì trang Tools chọn một tài khoản bot xong vẫn hiện đủ
+    // 14 tool và "Gửi file" vẫn xanh - trong khi model chạy trên tài khoản đó
+    // không hề nhận được nó. Dashboard nói một đằng, model nhận một nẻo.
+    const accStore = await import("../../config/account-store.js");
+    accStore.createAccount({ id: "acc-bot", label: "Bot" });
+    accStore.datLoaiKenh("acc-bot", "bot");
+
+    const { items } = await layToolItems("?accountId=acc-bot");
+    const sendFile = items?.find((t) => t.key === "send_file");
+    assert.equal(sendFile?.available, false, "send_file vẫn hiện dùng được trên tài khoản bot");
+    assert.match(sendFile?.unavailableHint ?? "", /Zalo Bot API/);
+  });
+
+  it("account CÁ NHÂN: đúng những tool đó vẫn dùng được", async () => {
+    const accStore = await import("../../config/account-store.js");
+    accStore.createAccount({ id: "acc-ca-nhan", label: "Cá nhân" });
+
+    const { items } = await layToolItems("?accountId=acc-ca-nhan");
+    assert.equal(items?.find((t) => t.key === "send_file")?.available, true);
+  });
+
+  it("KHÔNG truyền accountId thì rơi về kênh cá nhân, không vỡ", async () => {
+    const { status, items } = await layToolItems();
+    assert.equal(status, 200);
+    assert.equal(items?.find((t) => t.key === "send_file")?.available, true);
+  });
+
+  it("accountId không tồn tại thì rơi về kênh cá nhân, KHÔNG 400", async () => {
+    // Khác `agentId`: agent sai là lỗi gọi API, còn account sai chỉ nên làm mất
+    // phần lọc theo kênh chứ không nên làm chết cả trang Tools.
+    const { status } = await layToolItems("?accountId=khong-ton-tai");
+    assert.equal(status, 200);
+  });
+});

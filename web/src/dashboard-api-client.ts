@@ -275,10 +275,18 @@ export const api = {
    * (hiện chỉ `kb_search`) phản ánh ĐÚNG agent đang xem, thay vì câu hỏi tầm
    * rộng "kho đã có nguồn nào chưa" (xem `dungScope()` ở tool-routes.ts).
    */
-  tools: (agentId?: string) =>
-    request<{ items: ToolCatalogItem[]; search: SearchSettings; fetch: FetchSettings }>(
-      agentId ? `/api/tools?agentId=${encodeURIComponent(agentId)}` : "/api/tools",
-    ),
+  // `accountId` quyết định LOẠI KÊNH của scope: tool bị chặn trên tài khoản bot
+  // phải hiện "không dùng được" kèm lý do, không thì dashboard nói một đằng còn
+  // model nhận một nẻo.
+  tools: (agentId?: string, accountId?: string) => {
+    const q = new URLSearchParams();
+    if (agentId) q.set("agentId", agentId);
+    if (accountId) q.set("accountId", accountId);
+    const duoi = q.toString();
+    return request<{ items: ToolCatalogItem[]; search: SearchSettings; fetch: FetchSettings }>(
+      duoi ? `/api/tools?${duoi}` : "/api/tools",
+    );
+  },
   updateSearchSettings: (update: { provider?: "duckduckgo" | "brave"; braveApiKey?: string }) =>
     request<{ ok: true; search: SearchSettings }>("/api/tools/search", {
       method: "PATCH",

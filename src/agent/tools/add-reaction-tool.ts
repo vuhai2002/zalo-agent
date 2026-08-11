@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { Reactions } from "zca-js";
 import { z } from "zod";
 import type { ToolContext } from "./index.js";
+import { apiCaNhan } from "./tool-catalog-types.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 
 const REACTION_MAP: Record<string, Reactions> = {
@@ -15,7 +16,9 @@ const REACTION_MAP: Record<string, Reactions> = {
   rose: Reactions.ROSE,
 };
 
-export function createAddReactionTool({ api, message }: ToolContext) {
+export function createAddReactionTool(ctx: ToolContext) {
+  const { message } = ctx;
+  const api = apiCaNhan(ctx);
   return tool({
     description:
       "Thả reaction (biểu tượng cảm xúc) vào tin nhắn người dùng vừa gửi. Dùng khi muốn phản hồi cảm xúc nhẹ nhàng kèm/thay cho trả lời chữ.",

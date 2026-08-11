@@ -1,10 +1,13 @@
 import { tool } from "ai";
 import { z } from "zod";
 import type { ToolContext } from "./index.js";
+import { apiCaNhan } from "./tool-catalog-types.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export function createGetGroupInfoTool({ api, message }: ToolContext) {
+export function createGetGroupInfoTool(ctx: ToolContext) {
+  const { message } = ctx;
+  const api = apiCaNhan(ctx);
   return tool({
     description:
       "Lấy thông tin nhóm hiện tại: tên nhóm, số thành viên, danh sách thành viên (id + tên). Dùng trước khi tag ai đó nếu chưa biết userId.",

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { getAccount } from "../../config/account-store.js";
 import { kiemTraKhaDung } from "../../agent/tools/tool-registry.js";
 import { z } from "zod";
 import { TOOL_DEFINITIONS, type ToolScope } from "../../agent/tools/index.js";
@@ -33,10 +34,8 @@ const fetchUpdateSchema = z.object({
  * `kb-agent-binding.test.ts` cho bất biến `nguonCuaAgent("")` luôn rỗng, canh
  * cho quy ước này không bao giờ lẫn với một agent id thật.
  */
-// `loai: "ca_nhan"` là mặc định CÓ CHỦ Ý, không phải giá trị bừa: trang Tools
-// xem theo phạm vi TÀI KHOẢN CÁ NHÂN (nó không truyền accountId nên không biết
-// kênh nào). Tool bị chặn riêng cho kênh bot vẫn hiện "dùng được" ở đây - đúng
-// với tài khoản cá nhân, và trang Accounts mới là nơi phân biệt loại kênh.
+// Khung mặc định khi KHÔNG có agentId. `loai` thật do `dungScope` ghi đè theo
+// `accountId` - giá trị ở đây chỉ là chỗ dựa khi cũng không có accountId.
 const SCOPE_KHONG_CO_AGENT_THAT: ToolScope = {
   agent: { id: "", disabledTools: [] },
   account: { disabledTools: [], loai: "ca_nhan" },
@@ -53,13 +52,18 @@ const SCOPE_KHONG_CO_AGENT_THAT: ToolScope = {
  * agent": im lặng đổi nghĩa "id sai" thành "không biết agent nào" là gài bẫy
  * cho lần debug sau, con số hiện ra vẫn "hợp lý" nhưng sai ngữ cảnh.
  */
-function dungScope(agentId: string | undefined): ToolScope | null {
-  if (!agentId) return SCOPE_KHONG_CO_AGENT_THAT;
+function dungScope(agentId: string | undefined, accountId: string | undefined): ToolScope | null {
+  // Loại kênh của ĐÚNG account đang xem. Thiếu bước này thì trang Tools chọn
+  // một tài khoản bot xong vẫn hiện đủ 14 tool và "Gửi file" vẫn xanh - trong
+  // khi model chạy trên tài khoản đó không hề nhận được nó. Đúng lớp lỗi mà cờ
+  // `available` sinh ra để chặn, chỉ là ở trục kênh.
+  const loai = (accountId ? getAccount(accountId)?.loai : undefined) ?? "ca_nhan";
+  if (!agentId) return { ...SCOPE_KHONG_CO_AGENT_THAT, account: { disabledTools: [], loai } };
   const agent = getAgent(agentId);
   if (!agent) return null;
   return {
     agent: { id: agent.id, disabledTools: agent.disabledTools },
-    account: { disabledTools: [], loai: "ca_nhan" },
+    account: { disabledTools: [], loai },
   };
 }
 
@@ -74,7 +78,7 @@ function dungScope(agentId: string | undefined): ToolScope | null {
 export const toolRoutes = new Hono()
 
   .get("/", (c) => {
-    const scope = dungScope(c.req.query("agentId"));
+    const scope = dungScope(c.req.query("agentId"), c.req.query("accountId"));
     if (!scope) return c.json({ error: "Agent không tồn tại" }, 400);
 
     return c.json({

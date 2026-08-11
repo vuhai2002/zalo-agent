@@ -6,6 +6,7 @@ import { dataDir } from "../../config/env.js";
 import { downloadFromPublicUrl } from "../../shared/safe-remote-download.js";
 import { withTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
+import { apiCaNhan } from "./tool-catalog-types.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 import { guiFileKemCaption } from "./send-attachment-with-caption.js";
 import { ghiChuDaGuiFile } from "./sent-by-tool-note.js";
@@ -24,7 +25,9 @@ const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
 // Nguồn URL do LLM quyết mà LLM đọc tin của người lạ, nên đường tải phải đi qua
 // safe-remote-download: chặn IP nội bộ (SSRF - loopback, 169.254.169.254...) và
 // cắt theo stream khi vượt 25MB. File tạm bị xóa ngay sau khi gửi.
-export function createSendFileTool({ api, account, message, ghiNhanDaGui }: ToolContext) {
+export function createSendFileTool(ctx: ToolContext) {
+  const { account, message, ghiNhanDaGui } = ctx;
+  const api = apiCaNhan(ctx);
   // Ghi history NGAY TRONG hàm gửi để hai nhánh (URL và kho shared-files) không
   // thể quên: tin này không đi qua `deliverChatReply` nên không ai ghi hộ.
   const sendAttachment = async (filePath: string, caption: string | undefined, tenHienThi: string) => {

@@ -17,6 +17,7 @@ import { renderXlsx } from "../../documents/render-xlsx.js";
 import { createLogger } from "../../shared/logger.js";
 import { withNamedTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
+import { apiCaNhan } from "./tool-catalog-types.js";
 import { ketQuaLoi, type KetQuaLoiTool } from "./tool-failure-result.js";
 import { guiFileKemCaption } from "./send-attachment-with-caption.js";
 import { ghiChuDaGuiFile } from "./sent-by-tool-note.js";
@@ -51,7 +52,7 @@ async function deliverFile(
   const threadKey = `${ctx.account.id}:${ctx.message.threadId}`;
   await withNamedTempFile(fileName, data, (filePath) =>
     guiFileKemCaption(
-      ctx.api,
+      apiCaNhan(ctx),
       threadKey,
       ctx.message.threadId,
       ctx.message.threadType,

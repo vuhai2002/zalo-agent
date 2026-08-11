@@ -57,12 +57,16 @@ export function ToolsPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  /** Nạp lại catalog: cấu hình sidecar/vẽ ảnh đổi thì `available` của tool đổi theo */
-  const reloadTools = () => api.tools().then((res) => setTools(res.items));
+  /**
+   * Nạp lại catalog: cấu hình sidecar/vẽ ảnh đổi thì `available` của tool đổi
+   * theo, VÀ loại kênh của account đang chọn quyết định tool nào bị chặn cứng
+   * (tài khoản bot không gửi được file, không thả được cảm xúc...).
+   */
+  const reloadTools = () => api.tools(undefined, accountId).then((res) => setTools(res.items));
 
   useEffect(() => {
     Promise.all([
-      api.tools(),
+      api.tools(undefined, accountId),
       api.accountsAdmin.list(),
       api.vision(),
       api.imageGen(),
@@ -87,6 +91,22 @@ export function ToolsPage() {
       })
       .catch((e: Error) => setError(e.message));
   }, []);
+
+  // Đổi account là phải nạp lại catalog: tool bị chặn cứng theo LOẠI KÊNH
+  // (tài khoản bot không gửi được file, không thả cảm xúc...), mà `useEffect`
+  // ở trên chỉ chạy một lần lúc mở trang. Bỏ hiệu ứng này thì chọn tài khoản
+  // bot xong vẫn thấy đủ 14 tool, "Gửi file" vẫn xanh - trong khi model chạy
+  // trên tài khoản đó không hề nhận được nó.
+  //
+  // Bỏ qua lần đầu (`accountId` rỗng cho tới khi danh sách account về) để
+  // không gọi trùng với lượt nạp ở trên.
+  useEffect(() => {
+    if (!accountId) return;
+    api
+      .tools(undefined, accountId)
+      .then((res) => setTools(res.items))
+      .catch((e: Error) => setError(e.message));
+  }, [accountId]);
 
   const account = useMemo(() => accounts.find((a) => a.id === accountId), [accounts, accountId]);
 

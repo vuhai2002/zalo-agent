@@ -1,11 +1,26 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { TOOL_KEYS } from "../agent/tools/tool-catalog.js";
+import { after, before, describe, it } from "node:test";
+import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import {
   LUAT_PERSONA_KENH_BOT,
   TOOL_KHONG_CHAY_TREN_BOT,
   toolChayDuocTrenBot,
 } from "./nang-luc-kenh-bot.js";
+
+// `tool-catalog.js` bắc cầu tới `database.ts` (mở SQLite ở module scope) - nạp
+// ĐỘNG sau `setupTestEnv()`, xem CLAUDE.md mục "Bẫy khi viết test".
+let dataDir: string;
+let TOOL_KEYS: string[];
+
+before(async () => {
+  dataDir = setupTestEnv();
+  TOOL_KEYS = (await import("../agent/tools/tool-catalog.js")).TOOL_KEYS;
+});
+
+after(async () => {
+  (await import("../conversation/database.js")).closeDatabase();
+  cleanupTestEnv(dataDir);
+});
 
 describe("năng lực kênh bot", () => {
   it("mọi key trong danh sách chặn PHẢI là tool có thật", () => {

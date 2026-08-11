@@ -81,6 +81,29 @@ describe("doiUpdateSangParsedMessage", () => {
     assert.deepEqual(doiUpdateSangParsedMessage("bot-1", u2)?.images, [{ url: "https://a.test/2.jpg" }]);
   });
 
+  it("sticker / tin thoại / loại lạ ra NHÃN, không phải tin rỗng", () => {
+    // Tin rỗng dựng ra một lượt agent trắng trơn: model không biết người ta vừa
+    // gửi cái gì mà bot không đọc được, nên trả lời vu vơ.
+    const nhan = (eventName: string, them: Record<string, unknown>) =>
+      doiUpdateSangParsedMessage("bot-1", {
+        event_name: eventName,
+        message: { ...UPDATE_THAT.message!, text: undefined, ...them },
+      } as ZaloBotUpdate)?.text;
+
+    assert.equal(nhan("message.sticker.received", { sticker: "s1" }), "[gửi một sticker]");
+    assert.equal(nhan("message.voice.received", { voice_url: "https://v.test/a.m4a" }), "[gửi một tin thoại]");
+    assert.equal(nhan("message.unsupported.received", {}), "[gửi một nội dung bot chưa đọc được]");
+  });
+
+  it("ảnh KHÔNG bị gắn nhãn - nó có đường riêng qua `images`", () => {
+    const m = doiUpdateSangParsedMessage("bot-1", {
+      event_name: "message.image.received",
+      message: { ...UPDATE_THAT.message!, text: undefined, photo: "https://a.test/1.jpg" },
+    } as ZaloBotUpdate);
+    assert.equal(m?.text, "", "ảnh bị gắn nhãn thừa - nó đã nằm trong images rồi");
+    assert.equal(m?.images.length, 1);
+  });
+
   it("update không có message thì trả null, không ném", () => {
     assert.equal(doiUpdateSangParsedMessage("bot-1", { event_name: "gì đó lạ" }), null);
   });

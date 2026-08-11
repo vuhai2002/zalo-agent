@@ -136,7 +136,12 @@ export function taoZaloBotClient(p: ThamSoClient) {
         // HẾT HẠN CHỜ MÀ KHÔNG CÓ TIN là kết cục bình thường, KHÔNG phải lỗi.
         // Ném ra ngoài thì mọi phút im lặng đều thành một dòng log lỗi, và vòng
         // poll có backoff sẽ tự lùi mãi dù đường truyền hoàn toàn khỏe mạnh.
-        if (err instanceof LoiZaloBotApi && err.maLoi === MA_LOI_HET_HAN_CHO) return null;
+        // `Number(...)` chứ không so nghiêm ngặt: `error_code` khai là
+        // `number | string` vì tài liệu không cam kết. Đo hiện tại ra SỐ, nhưng
+        // nếu Zalo đổi sang chuỗi "408" thì phép so nghiêm ngặt trượt và MỌI
+        // phút im lặng thành một dòng log lỗi kèm lùi tới 60 giây - đúng hậu
+        // quả mà nhánh này sinh ra để tránh.
+        if (err instanceof LoiZaloBotApi && Number(err.maLoi) === MA_LOI_HET_HAN_CHO) return null;
         throw err;
       }
     },

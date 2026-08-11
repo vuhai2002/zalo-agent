@@ -116,7 +116,14 @@ export function createAccount(input: { id: string; label: string; agentId?: stri
 
 export function updateAccount(
   id: string,
-  patch: Partial<Omit<AccountConfig, "id">>,
+  /**
+   * KHÔNG nhận `loai` và `coBotToken`: câu UPDATE dưới đây không có hai cột đó,
+   * nên nhận vào là nuốt lặng lẽ rồi trả về giá trị CŨ như thể đã lưu. Thu hẹp
+   * kiểu để trình biên dịch chặn thay vì để người gọi phát hiện bằng cách thấy
+   * dashboard không đổi gì. Đổi loại kênh đi qua `datLoaiKenh()`, đổi token đi
+   * qua `datBotToken()`.
+   */
+  patch: Partial<Omit<AccountConfig, "id" | "loai" | "coBotToken">>,
 ): AccountConfig | null {
   const current = getAccount(id);
   if (!current) return null;
@@ -225,4 +232,12 @@ export function layBotTokenGiaiMa(id: string): string | null {
 export function datBotToken(id: string, token: string): void {
   const enc = token.trim() ? encryptSecret(token.trim()) : "";
   db.prepare("UPDATE accounts SET bot_token_enc = ? WHERE id = ?").run(enc, id);
+}
+
+/**
+ * Đổi loại kênh của tài khoản. Đường riêng vì `updateAccount` cố ý không nhận
+ * `loai` - xem docstring ở đó.
+ */
+export function datLoaiKenh(id: string, loai: LoaiKenh): void {
+  db.prepare("UPDATE accounts SET loai = ? WHERE id = ?").run(loai, id);
 }

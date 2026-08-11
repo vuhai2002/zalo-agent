@@ -3958,26 +3958,30 @@ nghĩa).
 
 ### Việc còn treo của kênh Zalo Bot
 
-Đã xong: client API, bộ chuyển update, bảng năng lực + chặn tool, vòng long
-polling, cột `loai`/`bot_token_enc` cho `accounts`. Bot CHƯA nhận được tin thật -
-còn thiếu bốn mảnh dưới đây.
+Đã xong: client API, bộ chuyển update, bảng năng lực + chặn tool (cả ở dashboard
+qua `?accountId=`), vòng long polling, cột `loai`/`bot_token_enc` cho `accounts`,
+trừu tượng hóa đường gửi (`ReplyTarget.guiMotDoan`), `ToolContext.api` nullable.
+Bot CHƯA nhận được tin thật - còn thiếu HAI mảnh dưới đây.
 
-- **Trừu tượng hóa đường GỬI.** `ReplyTarget.api` đang là kiểu `API` của zca-js
-  và `sendOne` (`send-reply-in-parts.ts:100`) gọi thẳng `api.sendMessage`. Chỉ
-  MỘT dòng gọi và BA chỗ dựng `ReplyTarget`, nên thay bằng một hàm `guiMotDoan`
-  là đủ. Đây là mảnh rủi ro nhất của cả đợt vì nó đụng đường gửi ĐANG PHỤC VỤ
-  kênh cá nhân. Kèm theo: `laLoiMayChuTuChoi` đọc `err.code` dạng số của
-  `ZaloApiError` để quyết có gửi lại hay không - kênh bot ném `LoiZaloBotApi`
-  mang `httpStatus`/`maLoi`, nên phép phân loại lỗi cũng phải theo kênh.
 - **Router nhận tin cho kênh bot.** Kênh cá nhân dùng
   `incoming-message-router.ts`, nhưng nó gọi `sendDeliveredReceipt`,
   `resolveGroupName`, `sendAutoReaction` - đều là thứ Bot API không có. Cần
   đường riêng dùng lại `shouldRespond`, `ghiTinDenVaoHistory`, `enqueueMessage`.
-- **`ToolContext.api`.** Đang là `API` bắt buộc. Trên kênh bot không tool nào
-  cần nó (7 tool dùng `api` trùng khít 7 tool bị chặn), nên cho phép null rồi
-  bắt 7 tool đó khẳng định lại là đủ - compiler canh, không quên được.
 - **Trang Accounts.** Chọn loại kênh và nhập token bot (`datBotToken` đã có,
   mã hóa bằng cùng khóa với cookie Zalo).
+
+Còn treo sau vòng rà soát:
+
+- `laLoiMayChuTuChoi` (`send-reply-in-parts.ts`) đọc `err.code` dạng số của
+  `ZaloApiError` để quyết có gửi lại hay không. `LoiZaloBotApi` mang
+  `httpStatus`/`maLoi`, nên phép phân loại lỗi phải theo kênh. Vô hại lúc này
+  vì kênh bot chưa có đường gửi.
+- `TRAN_KY_TU_MOT_TIN` (2000) khai rồi bỏ đó - chưa có đường cắt cho kênh bot.
+  Server ép trần thật, nên thiếu bước cắt là câu trả lời dài bị từ chối nguyên tin.
+- `AgentTurnParams.api` vẫn là `API` không nullable, nên chưa caller nào truyền
+  null được. Bất biến "api null trên kênh bot" đúng nhưng chưa từng bị đụng tới.
+- `send-reply-in-parts.ts` nay 322 dòng (luật dự án < 200). `ReplyTarget` vẫn
+  mang `threadType`/`quote` của zca-js nên trừu tượng kênh mới xong một nửa.
 
 Chưa trả lời được: **bot có nhắn CHỦ ĐỘNG cho người CHƯA từng nhắn nó không.**
 Không thử được vì `chat_id` chỉ xuất hiện sau khi họ nhắn - gần như chắc chắn

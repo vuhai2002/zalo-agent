@@ -106,6 +106,57 @@ describe("vòng poll Zalo Bot", () => {
     assert.deepEqual(quang, [], "nghỉ giữa các tin - sẽ tụt lại khi người ta nhắn liền mấy câu");
   });
 
+  it("dung() giữa lúc poll ĐANG BAY thì BỎ tin đó, không xử lý", async () => {
+    // Ca này bản đầu bỏ sót: nhánh `catch` có chốt `dungLai` còn nhánh THÀNH
+    // CÔNG thì không. Client giả dưới đây giữ promise cho tới khi test nhả -
+    // đúng hình dạng của một lời gọi đang bay lúc người vận hành tắt account.
+    // Cửa sổ thật rộng bằng `timeoutGiay` (mặc định 30 giây).
+    let nha!: (u: ZaloBotUpdate) => void;
+    const dangBay = new Promise<ZaloBotUpdate>((r) => {
+      nha = r;
+    });
+    let daGoi = 0;
+    const client = { getUpdates: () => dangBay } as unknown as ZaloBotClient;
+
+    const v = batDauVongPoll({
+      accountId: "b1", client, nguMs: async () => {},
+      onUpdate: () => void daGoi++,
+    });
+    await doiVongChay();
+    v.dung();
+    nha(TIN); // tin về SAU khi đã dừng
+    await doiVongChay();
+    assert.equal(daGoi, 0, "đã tắt account mà vẫn xử lý thêm một tin");
+  });
+
+  it("onUpdate ASYNC ném cũng bị bắt - không thành unhandled rejection", async () => {
+    // TypeScript cho gán hàm async vào `() => void`, nên kiểu khai lỏng là
+    // promise bị bỏ rơi: try/catch quanh lời gọi không thấy gì, lỗi thoát ra
+    // ngoài, mà vòng lặp thì quay tít vì không chờ ai.
+    const { client, daGoi } = clientTheoKichBan([TIN, TIN, TIN]);
+    const { quang, ngu } = nguGia();
+    const roiVai: unknown[] = [];
+    const batRoi = (e: unknown) => void roiVai.push(e);
+    process.on("unhandledRejection", batRoi);
+    try {
+      const v = batDauVongPoll({
+        accountId: "b1", client, nguMs: ngu,
+        onUpdate: async () => {
+          await Promise.resolve();
+          throw new Error("router async hỏng");
+        },
+      });
+      await doiVongChay();
+      v.dung();
+      await doiVongChay();
+      assert.deepEqual(roiVai, [], `${roiVai.length} promise hỏng lọt ra ngoài`);
+      assert.deepEqual(quang, [], "lỗi của onUpdate bị tính nhầm thành lỗi mạng");
+      assert.ok(daGoi() >= 2, "vòng dừng sau khi onUpdate async ném");
+    } finally {
+      process.off("unhandledRejection", batRoi);
+    }
+  });
+
   it("dung() thì vòng dừng, không poll thêm", async () => {
     const { client, daGoi } = clientTheoKichBan([TIN, TIN, TIN, TIN, TIN, TIN]);
     const { ngu } = nguGia();

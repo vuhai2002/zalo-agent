@@ -28,7 +28,15 @@ export type ThamSoVongPoll = {
   /** Lùi bao lâu sau lỗi ĐẦU TIÊN; các lỗi liên tiếp nhân đôi tới trần */
   luiBanDauMs?: number;
   luiToiDaMs?: number;
-  onUpdate: (accountId: string, update: ZaloBotUpdate) => void;
+  /**
+   * Kiểu cho phép trả `Promise` và vòng lặp AWAIT nó.
+   *
+   * Khai `=> void` thôi là KHÔNG đủ: TypeScript vẫn cho gán một hàm async vào
+   * `() => void`, và khi đó promise bị bỏ rơi - `try/catch` quanh lời gọi không
+   * thấy gì, lỗi thành unhandled rejection, mà vòng lặp thì quay tít vì không
+   * chờ ai. Router của kênh bot sắp tới rất có thể là async.
+   */
+  onUpdate: (accountId: string, update: ZaloBotUpdate) => void | Promise<void>;
   /** Tiêm để test không phải chờ thật */
   nguMs?: (ms: number) => Promise<void>;
 };
@@ -51,6 +59,12 @@ export function batDauVongPoll(p: ThamSoVongPoll): { dung: () => void } {
         // Poll thành công (kể cả rỗng) thì ĐẶT LẠI mức lùi. Không đặt lại thì
         // một sự cố mạng thoáng qua để bot lùi 60 giây mãi mãi về sau.
         luiHienTai = luiBanDau;
+        // Đã gọi `dung()` trong lúc lời gọi này còn đang bay thì BỎ tin, đừng
+        // xử lý. Nhánh catch bên dưới đã có chốt này, nhánh THÀNH CÔNG thì
+        // chưa - mà cửa sổ ấy rộng đúng bằng `timeoutGiay` (mặc định 30 giây)
+        // kể từ lúc người vận hành tắt account. Tắt rồi mà bot còn trả lời
+        // thêm một tin là hành vi không ai chờ đợi.
+        if (dungLai) break;
         if (!u) continue;
 
         // `onUpdate` do caller cung cấp và có thể ném (DB khoá, đĩa đầy...).
@@ -58,7 +72,9 @@ export function batDauVongPoll(p: ThamSoVongPoll): { dung: () => void } {
         // MẠNG - bot lùi 60 giây vì một lỗi hoàn toàn khác. Nuốt tại chỗ và
         // log, đúng cách router của kênh cá nhân đang làm.
         try {
-          p.onUpdate(p.accountId, u);
+          // AWAIT: `onUpdate` có thể async (xem kiểu ở trên). Không await thì
+          // promise hỏng lọt khỏi try/catch này thành unhandled rejection.
+          await p.onUpdate(p.accountId, u);
         } catch (err) {
           log.error({ accountId: p.accountId, err }, "Xử lý tin đến thất bại - vòng poll vẫn chạy tiếp");
         }

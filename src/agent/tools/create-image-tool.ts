@@ -14,6 +14,7 @@ import { ketQuaLoi } from "./tool-failure-result.js";
 import { guiFileKemCaption } from "./send-attachment-with-caption.js";
 import { ghiChuDaGuiAnh, ghiChuDaGuiChu } from "./sent-by-tool-note.js";
 import type { ToolContext } from "./index.js";
+import { apiCaNhan } from "./tool-catalog-types.js";
 
 /**
  * Tool vẽ ảnh mới hoặc SỬA ảnh người dùng vừa gửi, rồi gửi luôn vào hội thoại.
@@ -53,6 +54,7 @@ const TIN_THU_LAI = "Lần vẽ đầu chưa ra ảnh, mình vẽ lại lần n�
 const MAX_PROMPT_CHARS = 4000;
 
 export function createImageTool(ctx: ToolContext, generate = generateImage) {
+  const api = apiCaNhan(ctx);
   return tool({
     description: CREATE_IMAGE_DESCRIPTION,
     inputSchema: z.object({
@@ -133,7 +135,7 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
 
       // Chỉ báo sau khi chắc chắn sẽ vẽ thật
       await enqueueSend(threadKey, () =>
-        ctx.api.sendMessage(
+        api.sendMessage(
           {
             // "1-3 phút" chứ không phải "1 phút": đo thật 60 giây cho ảnh
             // thường, 135 giây cho trang nhiều chữ. Hứa 1 phút là hứa hụt.
@@ -163,7 +165,7 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
             // hụt vừa rồi đã tiêu mất một suất rồi. Bắt trả giá hai suất cho
             // một tấm ảnh là phạt người dùng vì lỗi của provider.
             await enqueueSend(threadKey, () =>
-              ctx.api.sendMessage({ msg: TIN_THU_LAI }, ctx.message.threadId, ctx.message.threadType),
+              api.sendMessage({ msg: TIN_THU_LAI }, ctx.message.threadId, ctx.message.threadType),
             );
             ctx.ghiNhanDaGui?.(ghiChuDaGuiChu(TIN_THU_LAI));
           },
@@ -171,7 +173,7 @@ export function createImageTool(ctx: ToolContext, generate = generateImage) {
         const fileName = `anh-${Date.now()}.${image.ext}`;
         await withNamedTempFile(fileName, image.data, (filePath) =>
           guiFileKemCaption(
-            ctx.api,
+            api,
             threadKey,
             ctx.message.threadId,
             ctx.message.threadType,

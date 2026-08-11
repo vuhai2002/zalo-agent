@@ -15,6 +15,20 @@ import type { ZaloBotUpdate } from "./zalo-bot-api-types.js";
  * tới khi đường bot chạy thật rồi mới gom một lần.
  */
 
+/**
+ * Nhãn cho loại tin không mang chữ. Bot API gửi sticker/voice/loại lạ mà không
+ * có `text` - trả chuỗi rỗng thì lượt agent chạy trên một tin trắng.
+ */
+function nhanLoaiTinKhongCoChu(
+  eventName: string,
+  m: NonNullable<ZaloBotUpdate["message"]>,
+): string {
+  if (eventName === "message.sticker.received" || m.sticker) return "[gửi một sticker]";
+  if (eventName === "message.voice.received" || m.voice_url) return "[gửi một tin thoại]";
+  if (eventName === "message.image.received" || m.photo || m.photo_url) return "";
+  return "[gửi một nội dung bot chưa đọc được]";
+}
+
 /** Ảnh của Bot API nằm ở `photo`, bản port của goclaw đọc thêm `photo_url` */
 function layAnh(msg: NonNullable<ZaloBotUpdate["message"]>): IncomingImage[] {
   const url = msg.photo || msg.photo_url;
@@ -41,7 +55,11 @@ export function doiUpdateSangParsedMessage(
     ? new Date(m.date).toISOString()
     : new Date().toISOString();
 
-  const chu = m.text ?? m.caption ?? "";
+  // Sticker, tin thoại và `message.unsupported.received` KHÔNG có `text` lẫn
+  // `caption`. Để trống là dựng ra một lượt agent trắng trơn: model nhận một
+  // tin rỗng, không hiểu chuyện gì vừa xảy ra, và trả lời vu vơ. Nhãn tường
+  // minh cho nó biết người ta vừa gửi cái gì mà bot không đọc được.
+  const chu = m.text ?? m.caption ?? nhanLoaiTinKhongCoChu(update.event_name, m);
 
   return {
     accountId,

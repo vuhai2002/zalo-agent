@@ -2,11 +2,14 @@ import { tool } from "ai";
 import { z } from "zod";
 import { enqueueSend } from "../../middleware/rate-limiter.js";
 import type { ToolContext } from "./index.js";
+import { apiCaNhan } from "./tool-catalog-types.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 import { lamSachTraLoi } from "../../zalo/sanitize-reply-text.js";
 import { ghiChuDaGuiChu } from "./sent-by-tool-note.js";
 
-export function createTagMemberTool({ api, account, message, ghiNhanDaGui }: ToolContext) {
+export function createTagMemberTool(ctx: ToolContext) {
+  const { account, message, ghiNhanDaGui } = ctx;
+  const api = apiCaNhan(ctx);
   return tool({
     description:
       "Gửi tin nhắn có tag (@mention) một thành viên trong nhóm. Chỉ dùng trong group chat, cần biết đúng userId (lấy từ get_group_info nếu chưa biết).",

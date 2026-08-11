@@ -318,13 +318,26 @@ Found","error_code":404}`. Không có `sendDocument`/`sendFile`/`sendVideo`/
 Bị chặn: `send_file`, `create_word_document`, `create_excel_file`,
 `create_image`, `add_reaction`, `tag_member`, `get_group_info`.
 
-Chạy được: `get_datetime`, `web_search`, `web_fetch`, `read_image`, `kb_search`,
-`save_memory`, `schedule_task`.
+Chạy được: `get_datetime`, `web_search`, `web_fetch`, `kb_search`, `save_memory`.
+
+Hai tool chạy được nhưng CÓ ĐIỀU KIỆN, chưa đo hết:
+
+- `schedule_task` **tạo được job nhưng chưa gửi được**. `run-scheduled-job.ts`
+  lấy `getRunningAccountApi()` (zca-js); account bot không có nên job dừng ở
+  `ACCOUNT_NOT_RUNNING_REASON` và chất đống. Phải mở đường gửi cho scheduler,
+  hoặc chặn `schedule_task` trên kênh bot cho tới lúc đó.
+- `read_image` phụ thuộc việc URL ảnh của Bot API có tải được bằng HTTP thường
+  không (có thể cần auth hoặc hết hạn) - CHƯA ĐO.
 
 Danh sách chặn nằm ở `nang-luc-kenh-bot.ts` và được `kiemTraKhaDung()` áp cho
 CẢ bộ lọc schema lẫn `GET /api/tools` - một nguồn duy nhất, vì hai nơi tự tính
 riêng thì lệch nhau nghĩa là dashboard báo "dùng được" trong khi model không hề
 nhận được tool.
+
+`GET /api/tools` phải nhận `?accountId=` mới biết loại kênh. Bản đầu đóng cứng
+`loai: "ca_nhan"` nên nhánh bot là code chết trên đường này: chọn một tài khoản
+bot ở trang Tools vẫn thấy đủ 14 tool và "Gửi file" vẫn xanh - đúng cái hậu quả
+đoạn trên nói nó ngăn được.
 
 Điểm đáng ghi: **7 tool dùng `ctx.api` trùng KHÍT 7 tool bị chặn** - không phải
 trùng hợp, chúng bị chặn vì cần đúng năng lực gửi mà Bot API không có. Hệ quả:
@@ -336,11 +349,13 @@ người nhắn tưởng agent hỏng. `LUAT_PERSONA_KENH_BOT` chỉ ghép khi
 
 ### Nhóm
 
-`getMe` trả `can_join_groups: true`, nhưng tài liệu Zalo ghi tính năng nhóm
-"đang trong giai đoạn thử nghiệm nội bộ". Trong nhóm, bot CHỈ nhận sự kiện khi
-bị @mention hoặc khi ai đó reply tin của chính nó - nên tin nhóm nào tới được
-`doiUpdateSangParsedMessage` thì ĐÃ nhắm vào bot, không cần lớp lọc mention
-riêng như kênh cá nhân.
+`getMe` trả `can_join_groups: true` (số đo thật), nhưng tài liệu Zalo ghi tính
+năng nhóm "đang trong giai đoạn thử nghiệm nội bộ".
+
+**Lấy từ TÀI LIỆU, chưa đo:** trong nhóm, bot chỉ nhận sự kiện khi bị @mention
+hoặc khi ai đó reply tin của chính nó. `doiUpdateSangParsedMessage` đặt cứng
+`mentionsMe: true` dựa trên khẳng định đó. Nếu tài liệu sai thì bot trả lời MỌI
+tin trong nhóm - phải đo lại trước khi mở nhóm cho tài khoản thật.
 
 ## Ràng buộc từ Zalo (qua zca-js)
 

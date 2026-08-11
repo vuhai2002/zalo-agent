@@ -101,6 +101,18 @@ describe("zalo-bot-api-client", () => {
     assert.equal(await client.getUpdates(1), null);
   });
 
+  it("408 dạng CHUỖI cũng là poll rỗng - `error_code` khai number|string", async () => {
+    // Tài liệu không cam kết kiểu của `error_code`. Đo hiện tại ra số, nhưng so
+    // nghiêm ngặt thì một ngày Zalo đổi sang chuỗi là mọi phút im lặng thành
+    // log lỗi kèm lùi 60 giây.
+    const { f } = fetchGia({
+      status: 200,
+      body: { ok: false, description: "Request timeout", error_code: "408" },
+    });
+    const client = taoZaloBotClient({ token: TOKEN, fetchImpl: f, gocApi: "https://x.test" });
+    assert.equal(await client.getUpdates(1), null);
+  });
+
   it("lỗi THẬT của getUpdates vẫn ném ra - không nuốt cùng 408", async () => {
     // Nuốt mọi lỗi cho tiện thì token sai hay bị 429 cũng thành "không có tin",
     // và bot im lặng vĩnh viễn mà không ai biết vì sao.
