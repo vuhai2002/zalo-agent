@@ -273,6 +273,75 @@ Clone shallow (chỉ đọc, không build, không sửa) tại `D:\source-code\z
 
 Bản `zca-js` trong `references/` chỉ là sách tra cứu - runtime dùng bản cài trong `node_modules` qua pnpm.
 
+## Kênh thứ hai: tài khoản Bot chính thức
+
+`src/zalo-bot/`. Kênh song song với tài khoản cá nhân, dùng **Zalo Bot API**
+(`bot-api.zaloplatforms.com`). Đổi lại năng lực hẹp hơn, kênh này KHÔNG có rủi
+ro bị khóa tài khoản.
+
+**Đây là sản phẩm KHÁC với Zalo OA API** (`openapi.zalo.me`) - hai thứ bị nhầm
+lẫn khắp nơi, kể cả trong tài liệu bên thứ ba. Chính sách "7 ngày kể từ tương
+tác cuối" và biểu phí gửi tin là của OA API, KHÔNG áp cho đường này.
+
+Tạo bot: mở Zalo, tìm OA "Zalo Bot Manager", chọn "Tạo bot" (mở mini app Zalo
+Bot Creator). Tên bắt buộc bắt đầu bằng "Bot". Token gửi vào tin nhắn Zalo.
+
+### Hình dạng API (đo thật, không suy từ tài liệu)
+
+Sao chép Telegram Bot API: `POST /bot{token}/{method}`, thân JSON, phong bì
+`{ok, result}`. Token nằm trong ĐƯỜNG DẪN, nên mọi chỗ log lỗi phải log tên
+method chứ tuyệt đối không log URL.
+
+| Điều | Đo được |
+|---|---|
+| Lỗi nằm ở trường | `description`, KHÔNG phải `message`/`error`, và luôn kèm **HTTP 200** |
+| Poll rỗng | `{"ok":false,"description":"Request timeout","error_code":408}` - kết cục BÌNH THƯỜNG |
+| Poll dồn dập | nginx chặn **429**, trả **HTML** không phải JSON |
+| `getUpdates` | trả MỘT update mỗi lần, KHÔNG có tham số `offset` |
+| Mất tin? | KHÔNG - gửi nhanh 3 tin nhận đủ cả 3, hàng chờ có đệm |
+| `date` | MILI giây (Telegram dùng giây) |
+| Trần tin | 2000 ký tự, server ép thật |
+| Nhịp gửi | 10 tin trong 416ms, không bị chặn |
+| `sendPhoto` | CHỈ nhận URL công khai - multipart, data URI, base64 đều bị từ chối |
+
+`sendPhoto` còn kén host: `picsum.photos` và `placehold.co` chạy, còn
+`upload.wikimedia.org` trả "The photo URL is invalid" dù vẫn là HTTPS mở được
+bằng trình duyệt - Zalo tự đi tải ảnh từ phía server.
+
+### 7 trong 14 tool không chạy được
+
+Dò 17 method trên API sống: 13 cái trả `{"ok":false,"description":"Not
+Found","error_code":404}`. Không có `sendDocument`/`sendFile`/`sendVideo`/
+`sendAudio`, cũng không có `editMessageText`/`deleteMessage`/
+`setMessageReaction`/`forwardMessage`/`getChat`/`getChatMember`.
+
+Bị chặn: `send_file`, `create_word_document`, `create_excel_file`,
+`create_image`, `add_reaction`, `tag_member`, `get_group_info`.
+
+Chạy được: `get_datetime`, `web_search`, `web_fetch`, `read_image`, `kb_search`,
+`save_memory`, `schedule_task`.
+
+Danh sách chặn nằm ở `nang-luc-kenh-bot.ts` và được `kiemTraKhaDung()` áp cho
+CẢ bộ lọc schema lẫn `GET /api/tools` - một nguồn duy nhất, vì hai nơi tự tính
+riêng thì lệch nhau nghĩa là dashboard báo "dùng được" trong khi model không hề
+nhận được tool.
+
+Điểm đáng ghi: **7 tool dùng `ctx.api` trùng KHÍT 7 tool bị chặn** - không phải
+trùng hợp, chúng bị chặn vì cần đúng năng lực gửi mà Bot API không có. Hệ quả:
+trên kênh bot không tool nào cần `api` của zca-js.
+
+Ẩn tool là CHƯA ĐỦ - model sẽ nói "tôi không làm được" mà không nói vì sao, và
+người nhắn tưởng agent hỏng. `LUAT_PERSONA_KENH_BOT` chỉ ghép khi
+`account.loai === "bot"`, nói rõ đây là giới hạn nền tảng và mời sang kênh cá nhân.
+
+### Nhóm
+
+`getMe` trả `can_join_groups: true`, nhưng tài liệu Zalo ghi tính năng nhóm
+"đang trong giai đoạn thử nghiệm nội bộ". Trong nhóm, bot CHỈ nhận sự kiện khi
+bị @mention hoặc khi ai đó reply tin của chính nó - nên tin nhóm nào tới được
+`doiUpdateSangParsedMessage` thì ĐÃ nhắm vào bot, không cần lớp lọc mention
+riêng như kênh cá nhân.
+
 ## Ràng buộc từ Zalo (qua zca-js)
 
 - 1 listener/account: mở Zalo Web trên trình duyệt sẽ đá listener bot (bot tự reconnect với backoff).

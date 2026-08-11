@@ -3956,6 +3956,38 @@ CHỐT để sau khi có tài liệu thật để nạp - không phải việc b
 đúng điều kiện tiên quyết (kho phải có dữ liệu thật trước khi bộ eval có ý
 nghĩa).
 
+### Việc còn treo của kênh Zalo Bot
+
+Đã xong: client API, bộ chuyển update, bảng năng lực + chặn tool, vòng long
+polling, cột `loai`/`bot_token_enc` cho `accounts`. Bot CHƯA nhận được tin thật -
+còn thiếu bốn mảnh dưới đây.
+
+- **Trừu tượng hóa đường GỬI.** `ReplyTarget.api` đang là kiểu `API` của zca-js
+  và `sendOne` (`send-reply-in-parts.ts:100`) gọi thẳng `api.sendMessage`. Chỉ
+  MỘT dòng gọi và BA chỗ dựng `ReplyTarget`, nên thay bằng một hàm `guiMotDoan`
+  là đủ. Đây là mảnh rủi ro nhất của cả đợt vì nó đụng đường gửi ĐANG PHỤC VỤ
+  kênh cá nhân. Kèm theo: `laLoiMayChuTuChoi` đọc `err.code` dạng số của
+  `ZaloApiError` để quyết có gửi lại hay không - kênh bot ném `LoiZaloBotApi`
+  mang `httpStatus`/`maLoi`, nên phép phân loại lỗi cũng phải theo kênh.
+- **Router nhận tin cho kênh bot.** Kênh cá nhân dùng
+  `incoming-message-router.ts`, nhưng nó gọi `sendDeliveredReceipt`,
+  `resolveGroupName`, `sendAutoReaction` - đều là thứ Bot API không có. Cần
+  đường riêng dùng lại `shouldRespond`, `ghiTinDenVaoHistory`, `enqueueMessage`.
+- **`ToolContext.api`.** Đang là `API` bắt buộc. Trên kênh bot không tool nào
+  cần nó (7 tool dùng `api` trùng khít 7 tool bị chặn), nên cho phép null rồi
+  bắt 7 tool đó khẳng định lại là đủ - compiler canh, không quên được.
+- **Trang Accounts.** Chọn loại kênh và nhập token bot (`datBotToken` đã có,
+  mã hóa bằng cùng khóa với cookie Zalo).
+
+Chưa trả lời được: **bot có nhắn CHỦ ĐỘNG cho người CHƯA từng nhắn nó không.**
+Không thử được vì `chat_id` chỉ xuất hiện sau khi họ nhắn - gần như chắc chắn
+là không. Với người ĐÃ nhắn thì gửi được (đo: 10 tin trong 416ms), nên lịch hẹn
+vẫn chạy trong phạm vi đó.
+
+Cân nhắc sau: `create_image` mở lại được nếu có đường phục vụ ảnh qua HTTPS công
+khai - `sendPhoto` vẫn hoạt động, chỉ thiếu chỗ đặt ảnh. Nhưng long polling vốn
+giúp tránh phải có domain, nên đây là đánh đổi cần cân nhắc chứ không hiển nhiên.
+
 ### Việc còn treo của Kho tri thức
 
 Gộp hai đợt rà soát: đợt xây tính năng gốc (31 mục, xem lịch sử ở trên) và đợt
