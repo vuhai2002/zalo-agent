@@ -83,9 +83,14 @@ export function kenhBot(client: ZaloBotClient): KenhLuot {
         dungLai = true;
         clearInterval(hen);
       };
-      banMot();
+      // Hẹn giờ TRƯỚC rồi mới bắn nhịp đầu: `banMot` có nhánh gọi `dung()`, mà
+      // `dung()` đọc `hen`. Gọi `banMot()` trước dòng `const hen` là mìn TDZ -
+      // bất khả đạt hôm nay (trần 10 phút không thể vượt ở nhịp đầu) nhưng
+      // `batDangNhap` được gọi NGOÀI `try` của `xuLyLuot`, nên ném ở đây là
+      // lượt chết mà người nhắn không nhận được câu báo lỗi nào.
       const hen = setInterval(banMot, getTuning("TYPING_REFRESH_MS"));
       hen.unref?.();
+      banMot();
       return dung;
     },
   };

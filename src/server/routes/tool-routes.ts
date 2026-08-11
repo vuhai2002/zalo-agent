@@ -85,7 +85,12 @@ export const toolRoutes = new Hono()
 
   .get("/", (c) => {
     const scope = dungScope(c.req.query("agentId"), c.req.query("accountId"));
-    if (!scope) return c.json({ error: "Agent không tồn tại" }, 400);
+    // Nói ĐÚNG cái nào không tồn tại: `dungScope` trả null cho cả hai ca, mà
+    // báo nhầm bảng là người debug đi tìm nhầm chỗ.
+    if (!scope) {
+      const thieuAccount = c.req.query("accountId") && !getAccount(c.req.query("accountId")!);
+      return c.json({ error: thieuAccount ? "Account không tồn tại" : "Agent không tồn tại" }, 400);
+    }
 
     return c.json({
       items: TOOL_DEFINITIONS.map((t) => {

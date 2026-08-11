@@ -3972,6 +3972,22 @@ khi lưu token. Kênh bot dùng được trọn vẹn bằng đường thường
 
 Còn treo sau vòng rà soát:
 
+- **Sticker và tin thoại trên kênh bot ĐỐT một lượt LLM, kênh cá nhân thì
+  không.** Parser bot trả nhãn `[gửi một sticker]` nên `shouldRespond` cho chạy;
+  parser cá nhân trả chuỗi rỗng nên bị `skip`. Chênh lệch này CÓ CHỦ ĐÍCH (chuỗi
+  rỗng + `images` rỗng làm tin biến mất vĩnh viễn trên kênh không có `offset`),
+  nhưng hệ quả "mỗi sticker = một lượt agent + một tin trả lời" thì chưa ai
+  chọn. Cân nhắc cho `shouldRespond` biết nhãn này là tin KHÔNG cần trả lời.
+- **Vòng poll không có sàn nhịp.** Poll rỗng thì `continue` ngay, toàn bộ nhịp
+  dựa vào việc server GIỮ kết nối đủ `timeout` giây (đo đúng: 5015/10029/30042
+  ms). Ngày nào Zalo trả rỗng tức thì thì vòng quay ở tốc độ mạng, không trần -
+  và đích đến là chính con nginx đã đo được trả 429. Một `await ngu(200)` khi
+  poll rỗng mà vòng chạy dưới 1 giây là đủ.
+- `tatJobKhongCanPhamVi` ghi `updated_at` bằng `datetime('now')` trong khi 8 câu
+  UPDATE khác cùng file dùng `strftime('%Y-%m-%dT%H:%M:%fZ','now')`. Vô hại hôm
+  nay vì không component nào render `updatedAt` của job; sẽ thành giờ lệch múi
+  khi ai đó hiện nó lên (V8 hiểu chuỗi không có `T`/`Z` là giờ ĐỊA PHƯƠNG).
+
 - **`pnpm zalo-login <id>` không kiểm `loai`** - `scripts/login-account.ts` cố ý
   không mở DB nên không biết loại kênh. Chạy cho một tài khoản bot sẽ ghi
   `credentials.enc` rác và đốt một lần quét QR. KHÔNG tạo ra tài khoản nửa nọ

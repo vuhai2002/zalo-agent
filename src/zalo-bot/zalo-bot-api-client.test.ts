@@ -117,6 +117,30 @@ describe("zalo-bot-api-client", () => {
     }
   });
 
+  it("che TRƯỚC khi cắt - mốc 200 rơi giữa bí mật không làm lọt tiền tố", async () => {
+    // `che(chu.slice(0,200))` làm hỏng cả ba lớp che, vì cả ba khớp theo chuỗi
+    // ĐẦY ĐỦ. Đo được 4-24 ký tự đầu của bí mật lọt ra tùy vị trí đệm. Quét
+    // nhiều mốc đệm để không phụ thuộc đúng một con số may rủi.
+    // Token RIÊNG cho ca này: bí mật không được bắt đầu bằng chữ nào của chuỗi
+    // thay thế `<token>`, nếu không phép khẳng định tự khớp chính nó và báo
+    // động giả (bí mật mặc định của file bắt đầu bằng "toke").
+    const TOKEN_RIENG = "987654321:ZZQuySieuBiMatKhongTrungChuoiChe";
+    const biMat = TOKEN_RIENG.split(":")[1]!;
+    for (const dem of [150, 170, 180, 190, 195]) {
+      const { f } = fetchGia({ status: 502, body: `${"x".repeat(dem)} secret ${biMat} end` });
+      const client = taoZaloBotClient({ token: TOKEN_RIENG, fetchImpl: f, gocApi: "https://x.test" });
+      const err = await client.getMe().then(() => null, (e: unknown) => e);
+      assert.ok(err instanceof LoiZaloBotApi);
+      // Không được lọt bất kỳ tiền tố nào dài từ 4 ký tự trở lên
+      for (let n = 4; n <= biMat.length; n++) {
+        assert.ok(
+          !err.message.includes(biMat.slice(0, n)),
+          `đệm ${dem}: lọt ${n} ký tự đầu của bí mật - ${err.message.slice(0, 120)}`,
+        );
+      }
+    }
+  });
+
   it("thân không phải JSON thì báo rõ và CẮT NGẮN", async () => {
     // Gateway hỏng hay trả trang HTML dài - dán nguyên vào log là rác.
     const { f } = fetchGia({ status: 502, body: "<html>" + "x".repeat(5000) + "</html>" });

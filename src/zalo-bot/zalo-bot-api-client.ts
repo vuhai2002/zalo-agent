@@ -114,7 +114,10 @@ export function taoZaloBotClient(p: ThamSoClient) {
     } catch {
       // Cắt ngắn: thân lỗi có thể là trang HTML dài của gateway.
       throw new LoiZaloBotApi(
-        `${method} trả về thân không phải JSON (HTTP ${res.status}): ${che(chu.slice(0, 200))}`,
+        // CHE TRƯỚC rồi mới CẮT. Cắt trước làm hỏng cả ba lớp che vì cả ba đều
+        // khớp theo chuỗi đầy đủ: mốc 200 rơi vào giữa bí mật thì phần đầu của
+        // bí mật lọt nguyên ra ngoài (đo được 4-24 ký tự tùy vị trí đệm).
+        `${method} trả về thân không phải JSON (HTTP ${res.status}): ${che(chu).slice(0, 200)}`,
         method,
         res.status,
       );

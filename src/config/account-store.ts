@@ -14,7 +14,7 @@ const log = createLogger("account-store");
  * - `ca_nhan`: đăng nhập nick Zalo thật qua zca-js (giao thức đảo ngược). Đủ
  *   năng lực nhất nhưng CÓ rủi ro bị Zalo khóa tài khoản.
  * - `bot`: tài khoản bot chính thức qua Zalo Bot API. Không có rủi ro khóa,
- *   đổi lại 7 trong 14 tool không chạy được - xem `nang-luc-kenh-bot.ts`.
+ *   đổi lại 8 trong 14 tool không chạy được - xem `nang-luc-kenh-bot.ts`.
  */
 export type LoaiKenh = "ca_nhan" | "bot";
 
