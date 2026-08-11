@@ -72,7 +72,13 @@ export function taoZaloBotClient(p: ThamSoClient) {
    * Tài liệu kiến trúc đã ghi số đo "poll dồn dập -> nginx trả HTML" nên nhánh
    * này chắc chắn có người đi tới.
    */
-  const che = (chu: string) => (p.token ? chu.split(p.token).join("<token>") : chu);
+  const che = (chu: string) => {
+    const thay = p.token ? chu.split(p.token).join("<token>") : chu;
+    // Lớp thứ hai theo HÌNH DẠNG: cổng trung gian có thể trả đường dẫn đã
+    // URL-encode (`%3A` thay cho `:`) hoặc HTML-escape, khi đó phép thay nguyên
+    // văn ở trên không khớp và token đi thẳng vào thông điệp lỗi.
+    return thay.replace(/\/bot\d+(?::|%3A|&#58;)[A-Za-z0-9_%\-.]+/gi, "/bot<token>");
+  };
 
   async function goi<T>(method: string, body?: unknown, hanRiengMs?: number): Promise<T> {
     // Token nằm trong ĐƯỜNG DẪN chứ không phải header (Zalo bê nguyên kiểu
@@ -164,11 +170,19 @@ export function taoZaloBotClient(p: ThamSoClient) {
     },
 
     /**
-     * Gửi tin chữ. `parse_mode: "markdown"` để SERVER dựng định dạng - kênh
-     * cá nhân phải tự chuyển markdown sang style của Zalo Web
-     * (`markdown-to-zalo-styles.ts`), đường này thì không cần.
+     * Gửi tin chữ. Mặc định `parse_mode: null` - GỬI CHỮ TRƠN.
+     *
+     * Bản đầu mặc định `"markdown"` kèm chú thích "để SERVER dựng định dạng".
+     * Chú thích đó mô tả một luồng KHÔNG TỒN TẠI: `deliverChatReply` chạy
+     * `dinhDangNeuBat` trước, và `markdownSangStyleZalo` bóc dấu ra thành
+     * `Style[]` (đo: "**Bảng giá**" ra "Bảng giá" + 1 style), nên tới đây
+     * không còn markdown nào để dựng - xin server dựng chỉ có thể BỚT ký tự.
+     *
+     * Không caller sản xuất nào dùng mặc định cũ (`kenh-bot.ts` luôn truyền
+     * `null` tường minh), nhưng để mặc định sai là dựng sẵn một cái bẫy cho
+     * caller tiếp theo. Muốn dò `parse_mode` thì truyền tường minh.
      */
-    sendMessage: (chatId: string, text: string, parseMode: "markdown" | "html" | null = "markdown") =>
+    sendMessage: (chatId: string, text: string, parseMode: "markdown" | "html" | null = null) =>
       goi<KetQuaGuiTin>("sendMessage", {
         chat_id: chatId,
         text,

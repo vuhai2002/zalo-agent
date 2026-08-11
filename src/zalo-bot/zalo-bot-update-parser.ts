@@ -25,7 +25,15 @@ function nhanLoaiTinKhongCoChu(
 ): string {
   if (eventName === "message.sticker.received" || m.sticker) return "[gửi một sticker]";
   if (eventName === "message.voice.received" || m.voice_url) return "[gửi một tin thoại]";
-  if (eventName === "message.image.received" || m.photo || m.photo_url) return "";
+  // Ảnh MOI ĐƯỢC url thì để trống - nó đã nằm trong `images`, gắn nhãn là thừa.
+  if (m.photo || m.photo_url) return "";
+  // Ảnh mà KHÔNG moi được url (Zalo đổi tên trường) thì PHẢI có nhãn: chuỗi
+  // rỗng + `images` rỗng làm `shouldRespond` trả `skip` với `record: false`,
+  // tức tin không vào history và chỉ để lại một dòng debug. Trên kênh không có
+  // `offset` thì đó là mất tin vĩnh viễn, im lặng tuyệt đối - mà lưới đỡ
+  // `reportPayloadAnomalies` cũng không bắt được vì nhánh ảnh của nó đọc
+  // `rawData.msgType`, trường của zca-js không tồn tại ở đây.
+  if (eventName === "message.image.received") return "[gửi một ảnh bot chưa đọc được]";
   return "[gửi một nội dung bot chưa đọc được]";
 }
 

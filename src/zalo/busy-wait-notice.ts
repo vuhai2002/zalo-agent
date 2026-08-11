@@ -42,7 +42,10 @@ const lanTranAnCuoi = new Map<string, number>();
  * lời tin nào cả). Rút từ `ReplyTarget` thay vì khai lại: khai lại là hai hình
  * dạng sẽ trôi khỏi nhau, mà `muc` được truyền THẲNG vào `sendReplyInParts`.
  */
-export type MucTieuTranAn = Pick<ReplyTarget, "guiMotDoan" | "threadKey" | "threadId" | "threadType">;
+export type MucTieuTranAn = Pick<
+  ReplyTarget,
+  "guiMotDoan" | "threadKey" | "threadId" | "threadType" | "tranKyTuMotTin"
+>;
 
 /**
  * Gửi câu trấn an nếu đáng gửi. Trả `true` nếu đã gửi.

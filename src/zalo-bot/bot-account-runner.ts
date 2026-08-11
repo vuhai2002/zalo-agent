@@ -12,11 +12,31 @@ const log = createLogger("bot-account-runner");
  *
  * Trả hàm dừng. Gọi được nhiều lần cho nhiều account; mỗi account một vòng.
  */
+/**
+ * Nhà máy dựng client, tiêm được để test không đi ra mạng.
+ *
+ * Cần điểm tiêm RIÊNG ở đây chứ không chỉ ở route: đường `PUT /bot-token` khởi
+ * động lại account sau khi lưu, tức đi qua `startAccount` -> `chayTaiKhoanBot`.
+ * Vòng trước chỉ tiêm ở route nên vẫn còn ĐÚNG MỘT lời gọi thật tới
+ * `bot-api.zaloplatforms.com` mỗi lần chạy `pnpm test` (đo bằng spy trên
+ * `globalThis.fetch`).
+ */
+let taoClient = taoZaloBotClient;
+
+/** Chỉ test dùng - đổi nhà máy client rồi trả hàm khôi phục */
+export function tiemClientRunnerChoTest(gia: typeof taoZaloBotClient): () => void {
+  const cu = taoClient;
+  taoClient = gia;
+  return () => {
+    taoClient = cu;
+  };
+}
+
 export async function chayTaiKhoanBot(p: {
   accountId: string;
   token: string;
 }): Promise<{ dung: () => void }> {
-  const client = taoZaloBotClient({ token: p.token });
+  const client = taoClient({ token: p.token });
 
   // Kiểm token TRƯỚC khi mở vòng poll: token sai mà cứ poll thì mỗi vòng là một
   // dòng log lỗi kèm backoff, và người vận hành chỉ thấy "bot không trả lời"
@@ -32,8 +52,14 @@ export async function chayTaiKhoanBot(p: {
     webhookDangBat = (await client.getWebhookInfo())?.url || undefined;
   } catch (err) {
     // Không đọc được thì cứ chạy tiếp: chặn boot ở đây là mất cả những account
-    // khác vì một lời gọi phụ.
-    log.debug({ accountId: p.accountId, err }, "Không đọc được trạng thái webhook");
+    // khác vì một lời gọi phụ. Nhưng WARN chứ không debug - `getWebhookInfo`
+    // có thể không tồn tại trên API sống (13/17 method đã trả 404 theo số đo),
+    // và khi đó cả cơ chế phát hiện webhook thành code chết, trong khi triệu
+    // chứng webhook-còn-bật đúng là "im lặng vĩnh viễn" mà nó sinh ra để bắt.
+    log.warn(
+      { accountId: p.accountId, err },
+      "Không xác minh được webhook - nếu bot im lặng thì kiểm thủ công (webhook và long polling loại trừ nhau)",
+    );
   }
   if (webhookDangBat) {
     // Tách khỏi nhánh catch ở trên: gỡ THẤT BẠI là đúng ca mà cả khối này sinh

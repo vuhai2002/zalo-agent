@@ -29,7 +29,12 @@ const log = createLogger("bot-message-router");
  */
 export function routeBotUpdate(accountId: string, kenh: KenhLuot, update: ZaloBotUpdate): void {
   const config = getAccount(accountId);
-  if (!config) return;
+  if (!config) {
+    // Kênh này không có `offset` nên mọi nhánh return sớm là mất tin vĩnh viễn -
+    // để lại ít nhất một dòng.
+    log.warn({ accountId }, "Nhận tin cho account không tồn tại - bỏ tin");
+    return;
+  }
 
   const msg = doiUpdateSangParsedMessage(config.id, update);
   if (!msg) {
@@ -100,6 +105,7 @@ export function routeBotUpdate(accountId: string, kenh: KenhLuot, update: ZaloBo
 
   void maybeNotifyBusyWait({
     guiMotDoan: kenh.duongGui(msg.threadId, msg.threadType),
+    tranKyTuMotTin: kenh.tranKyTuMotTin,
     threadKey,
     threadId: msg.threadId,
     threadType: msg.threadType,

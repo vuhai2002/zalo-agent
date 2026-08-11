@@ -3986,11 +3986,24 @@ Còn treo sau vòng rà soát:
   `run-scheduled-job` chỉ biết gửi qua zca-js; không chặn thì job `once` bị
   dispatch lại mỗi tick mãi mãi kèm lý do sai sự thật. Mở lại khi scheduler
   biết kênh.
+- `reportPayloadAnomalies` KHÔNG phủ được ảnh trên kênh bot: nhánh ảnh của nó
+  đọc `parsed.rawData.msgType`, trường của zca-js không tồn tại trong `rawData`
+  của Bot API. Đã bù bằng nhãn tường minh trong parser, nhưng lưới đỡ chung thì
+  vẫn thủng cho kênh này.
+- `create_image` mở lại được nếu có đường phục vụ ảnh qua HTTPS công khai:
+  `sendPhoto` CHẠY TỐT (đã đo với `picsum.photos`/`placehold.co`), chỉ thiếu chỗ
+  đặt ảnh vừa vẽ. Dashboard đã chạy HTTP và tài liệu triển khai đặt Caddy trước
+  nó, nên hạ tầng gần như có sẵn. Ba thứ phải cân trước: route ảnh phải CÔNG
+  KHAI (Zalo tải bằng máy chủ của họ, không mang cookie) nên id phải khó đoán và
+  ảnh phải tự hết hạn; chưa biết Zalo giữ ảnh hay chỉ trỏ link (chỉ trỏ link thì
+  xóa ảnh là tin cũ vỡ hình); và nó đánh đổi mất ưu thế "long polling không cần
+  domain" của kênh bot.
 - Mặc định `allowlist = list` cho tài khoản bot tồn tại ở HAI nơi: server lúc
   tạo, và `doiLoai()` trong drawer. Drawer gọi `update()` ngay sau `create()`
   nên bản ở server luôn bị ghi đè - tức bản ở client mới là thứ thực sự giữ giá
   trị. Chưa có test nào chạy đúng chuỗi create -> update của drawer.
-- `send-reply-in-parts.ts` nay 322 dòng (luật dự án < 200). `ReplyTarget` vẫn
+- `send-reply-in-parts.ts` nay 331 dòng, `account-store.ts` 243, `account-routes.ts`
+  244 - cả ba vượt luật < 200. `ReplyTarget` vẫn
   mang `threadType`/`quote` của zca-js nên trừu tượng kênh mới xong một nửa.
 
 Chưa trả lời được: **bot có nhắn CHỦ ĐỘNG cho người CHƯA từng nhắn nó không.**

@@ -16,7 +16,7 @@ import { runInTurnLogContext } from "../shared/turn-log-context.js";
 import { ganAnhVaoHistory } from "./record-incoming-message.js";
 import { trichDanTuTin } from "./reply-quote.js";
 import { deliverChatReply } from "./deliver-chat-reply.js";
-import { notifyTechnicalError, type ReplyTarget} from "./send-reply-in-parts.js";
+import { notifyTechnicalError, type ReplyTarget } from "./send-reply-in-parts.js";
 import type { ParsedMessage } from "./zalo-message-parser.js";
 
 const log = createLogger("message-turn");
@@ -35,6 +35,18 @@ type XuLyLuotOptions = {
   persistImages?: typeof persistBatchImages;
 };
 
+/**
+ * Xử lý 1 lượt: batch tin đã gộp -> agent -> trả lời xuống kênh -> ghi history.
+ * Được gọi từ message-batcher nên các lượt cùng thread luôn chạy tuần tự.
+ *
+ * Mở lượt TRƯỚC rồi mới chạy: có id ngay từ dòng log đầu tiên, và nhánh lỗi có
+ * chỗ mà gắn trace vào. Toàn bộ phần xử lý chạy trong ngữ cảnh lượt để mọi dòng
+ * log bên trong - kể cả log của các tool vốn tự tạo logger riêng - tự mang
+ * accountId/threadId/turnId.
+ *
+ * `kenh` mang năng lực của KÊNH (xem `kenh-luot.ts`): kênh cá nhân có đủ 5,
+ * kênh bot có 2. Năng lực thiếu thì bỏ qua chứ không ném.
+ */
 export async function processBatch(
   config: AccountConfig,
   kenh: KenhLuot,

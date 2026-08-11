@@ -171,20 +171,35 @@ describe("zalo-bot-api-client", () => {
     assert.equal(kq?.event_name, "message.text.received");
   });
 
-  it("sendMessage mặc định xin server dựng markdown", async () => {
-    // Kênh cá nhân phải tự chuyển markdown sang style Zalo Web; đường bot thì
-    // server làm hộ. Bỏ parse_mode là mọi dấu ** hiện thô trước mặt người dùng.
+  it("sendMessage mặc định KHÔNG xin server dựng markdown", async () => {
+    // Chữ tới đường gửi đã hết markdown (bị `markdownSangStyleZalo` bóc ra
+    // thành `Style[]` ở tầng trên), nên xin server dựng chỉ có thể BỚT ký tự.
+    // Mặc định sai là dựng sẵn bẫy cho caller tiếp theo.
     const { f, goi } = fetchGia({ body: { ok: true, result: { message_id: "m1", date: 1 } } });
     const client = taoZaloBotClient({ token: TOKEN, fetchImpl: f, gocApi: "https://x.test" });
     await client.sendMessage("c1", "**đậm**");
+    assert.deepEqual(goi[0]?.body, { chat_id: "c1", text: "**đậm**" });
+  });
+
+  it("vẫn xin được server dựng markdown khi truyền tường minh", async () => {
+    const { f, goi } = fetchGia({ body: { ok: true, result: { message_id: "m1", date: 1 } } });
+    const client = taoZaloBotClient({ token: TOKEN, fetchImpl: f, gocApi: "https://x.test" });
+    await client.sendMessage("c1", "**đậm**", "markdown");
     assert.deepEqual(goi[0]?.body, { chat_id: "c1", text: "**đậm**", parse_mode: "markdown" });
   });
 
-  it("tắt được parse_mode khi truyền null", async () => {
-    const { f, goi } = fetchGia({ body: { ok: true, result: { message_id: "m1", date: 1 } } });
+  it("token bị che kể cả khi cổng URL-ENCODE đường dẫn", async () => {
+    // Phép thay nguyên văn không khớp `%3A`, và chuỗi đó đi thẳng vào
+    // `err.message` rồi lên dashboard và file log.
+    const [id, biMat] = TOKEN.split(":");
+    const { f } = fetchGia({
+      status: 502,
+      body: `<html><body>Upstream /bot${id}%3A${biMat}/getMe timed out</body></html>`,
+    });
     const client = taoZaloBotClient({ token: TOKEN, fetchImpl: f, gocApi: "https://x.test" });
-    await client.sendMessage("c1", "thô", null);
-    assert.deepEqual(goi[0]?.body, { chat_id: "c1", text: "thô" });
+    const err = await client.getMe().then(() => null, (e: unknown) => e);
+    assert.ok(err instanceof LoiZaloBotApi);
+    assert.ok(!err.message.includes(biMat!), `bí mật lọt qua khi URL-encode: ${err.message}`);
   });
 
   it("sendPhoto bỏ hẳn caption khi rỗng, không gửi chuỗi rỗng", async () => {

@@ -113,8 +113,13 @@ describe("doiUpdateSangParsedMessage", () => {
       ...UPDATE_THAT,
       message: { ...UPDATE_THAT.message!, date: 0 },
     };
+    // Kẹp giữa hai mốc chụp QUANH lời gọi thay vì so với một năm cố định -
+    // khẳng định theo đồng hồ máy chạy là thứ repo vừa dọn ở đợt trước.
+    const truoc = Date.now();
     const m = doiUpdateSangParsedMessage("bot-1", u);
-    assert.ok(!Number.isNaN(new Date(m!.sentAt).getTime()), `sentAt hỏng: ${m?.sentAt}`);
-    assert.ok(new Date(m!.sentAt).getUTCFullYear() >= 2026);
+    const sau = Date.now();
+    const t = new Date(m!.sentAt).getTime();
+    assert.ok(!Number.isNaN(t), `sentAt hỏng: ${m?.sentAt}`);
+    assert.ok(t >= truoc && t <= sau, `sentAt ${m?.sentAt} nằm ngoài [${truoc}, ${sau}]`);
   });
 });

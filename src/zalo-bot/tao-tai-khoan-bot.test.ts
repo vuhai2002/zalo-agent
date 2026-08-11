@@ -17,6 +17,7 @@ let cookie: string;
 let accounts: typeof import("../config/account-store.js");
 let database: typeof import("../conversation/database.js");
 let routes: typeof import("../server/routes/account-routes.js");
+let runner: typeof import("./bot-account-runner.js");
 
 const PASSWORD = "mat-khau-tao-bot-123";
 const TOKEN_THAT_DANG = "123456789:abcDEF_ghi-JKL";
@@ -28,6 +29,7 @@ before(async () => {
   accounts = await import("../config/account-store.js");
   database = await import("../conversation/database.js");
   routes = await import("../server/routes/account-routes.js");
+  runner = await import("./bot-account-runner.js");
 
   const login = await app.request("/api/auth/login", {
     method: "POST",
@@ -147,21 +149,41 @@ describe("PUT /accounts/:id/bot-token", () => {
     }
   });
 
-  it("token ĐÚNG thì lưu, mã hóa được, giải mã lại KHỚP", async () => {
+  it("token ĐÚNG thì lưu, mã hóa được, giải mã lại KHỚP, VÀ khởi động được", async () => {
     // Nhánh THÀNH CÔNG chưa lần nào chạy trong test: bỏ hẳn `datBotToken(...)`
     // khỏi route mà 11/11 ca vẫn xanh. Ca này chốt cả vòng mã hóa/giải mã.
+    //
+    // Phải tiêm client ở CẢ HAI chỗ: route (để `getMe` kiểm token) và runner
+    // (vì lưu xong route khởi động lại account, đi qua `chayTaiKhoanBot`).
+    // Thiếu chỗ thứ hai thì `pnpm test` bắn một request THẬT tới
+    // `bot-api.zaloplatforms.com` - đã đo bằng spy trên `globalThis.fetch`.
     await goi("/api/accounts", "POST", { id: "b1", label: "Bot", loai: "bot" });
-    const khoiPhuc = routes.tiemClientBotChoTest(
-      () => ({ getMe: async () => ({ id: "999", display_name: "Bot Thử" }) }) as never,
-    );
+    const clientGia = () =>
+      ({
+        getMe: async () => ({ id: "999", display_name: "Bot Thử" }),
+        getWebhookInfo: async () => ({ url: "" }),
+        deleteWebhook: async () => ({}),
+        getUpdates: async () => null,
+      }) as never;
+    const khoiPhuc = routes.tiemClientBotChoTest(clientGia);
+    const khoiPhuc2 = runner.tiemClientRunnerChoTest(clientGia);
     try {
       const res = await goi("/api/accounts/b1/bot-token", "PUT", { token: TOKEN_THAT_DANG });
       assert.equal(res.status, 200);
-      assert.equal(((await res.json()) as { botName?: string }).botName, "Bot Thử");
+      const than = (await res.json()) as { botName?: string; warning?: string };
+      assert.equal(than.botName, "Bot Thử");
+      // Khởi động lại là MỘT trong bốn quyết định của trang Accounts. Không
+      // khẳng định thì nó hỏng vào trường `warning` mà không ai biết.
+      assert.equal(than.warning, undefined, `khởi động lại thất bại: ${than.warning}`);
       assert.equal(accounts.getAccount("b1")?.coBotToken, true);
       assert.equal(accounts.layBotTokenGiaiMa("b1"), TOKEN_THAT_DANG, "giải mã ra khác token đã lưu");
+
+      const dangChay = (await import("../zalo/account-manager.js")).isAccountRunning("b1");
+      assert.equal(dangChay, true, "lưu token xong mà account không lên sóng");
     } finally {
+      (await import("../zalo/account-manager.js")).stopAccount("b1");
       khoiPhuc();
+      khoiPhuc2();
     }
   });
 

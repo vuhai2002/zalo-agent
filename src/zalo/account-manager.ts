@@ -64,6 +64,14 @@ export function getRunningAccountApi(accountId: string): API | undefined {
  * vào đây để không phải login lần 2). Account đang chạy thì thay thế.
  */
 export function attachAccount(config: AccountConfig, api: API): void {
+  // Lá chắn cuối: `attachAccount` gắn api ZCA-JS, chỉ đúng với kênh cá nhân.
+  // Gắn cho tài khoản bot là giết vòng poll rồi để lại một tài khoản nửa nọ
+  // nửa kia (gửi được file, nhưng toolset và persona vẫn theo `loai: "bot"`).
+  // Route login đã chặn, nhưng `qr-login-manager` gọi thẳng vào đây nên phải
+  // có chốt ở chính hàm này.
+  if (config.loai === "bot") {
+    throw new Error(`Account "${config.id}" là tài khoản bot - không gắn được API zca-js`);
+  }
   stopAccount(config.id);
   const selfId = String(api.getOwnId());
   const stopListener = startListener(config.id, api, (raw) =>

@@ -160,7 +160,17 @@ export const accountRoutes = new Hono()
   // Bắt đầu phiên login QR (idempotent - đang có phiên sống thì trả phiên đó)
   .post("/:id/login", (c) => {
     const id = c.req.param("id");
-    if (!getAccount(id)) return c.json({ error: "Account không tồn tại" }, 404);
+    const acc = getAccount(id);
+    if (!acc) return c.json({ error: "Account không tồn tại" }, 404);
+    // Đăng nhập QR cho một tài khoản BOT tạo ra đúng thứ `createSchema` nói
+    // muốn tránh: `attachAccount` giết vòng poll rồi gắn api zca-js vào một
+    // account mà DB nói là bot. Kết quả là tài khoản nửa nọ nửa kia - gửi được
+    // file, nhưng `buildAgentTools` vẫn đọc `loai: "bot"` nên ẩn 8 tool và
+    // persona vẫn dạy model nói "tài khoản bot không gửi được file".
+    // Giao diện đã ẩn nút, nhưng đó là lớp client.
+    if (acc.loai === "bot") {
+      return c.json({ error: "Tài khoản bot không đăng nhập QR - nhập token ở phần Sửa" }, 400);
+    }
     startQrLogin(id);
     return c.json(getQrLoginStatus(id));
   })

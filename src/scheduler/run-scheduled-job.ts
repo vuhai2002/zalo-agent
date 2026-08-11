@@ -98,6 +98,23 @@ async function dispatch(job: ScheduledJob, options: RunScheduledJobOptions, runI
   // Chặn ở đây thì KHÔNG markRun - job chưa từng chạy thật sự.
   const account = getAccount(job.accountId);
   const api = getRunningAccountApi(job.accountId);
+
+  // Tài khoản BOT: `getRunningAccountApi` trả undefined vì Zalo Bot API không có
+  // gì tương đương zca-js. Phải TẮT HẲN job chứ không `concludeBlockedNotRun`:
+  // hàm đó phục hồi `next_run_at` cho job `once`, nên job quay lại MỖI TICK,
+  // vĩnh viễn, kèm lý do "Account hiện không chạy" trong khi account ĐANG chạy.
+  //
+  // Job kiểu này chỉ tồn tại nếu được tạo trước khi có phép chặn ở
+  // `POST /api/schedules`, hoặc nếu tài khoản đổi loại - nhưng để nó quay mãi
+  // thì lịch sử chạy thật của chính job đó bị đẩy hết ra ngoài bởi prune.
+  if (account?.loai === "bot") {
+    conclude(job, runId, {
+      status: "skipped",
+      detail: "Tài khoản bot chưa gửi được tin theo lịch - Zalo Bot API chưa nối vào bộ hẹn lịch",
+    });
+    return;
+  }
+
   if (!account || !api) {
     concludeBlockedNotRun(job, runId, ACCOUNT_NOT_RUNNING_REASON, options.scheduledFor);
     return;

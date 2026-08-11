@@ -3,11 +3,12 @@
 ## Tổng quan
 
 ```
-Zalo servers <--ws/https--> zca-js (npm lib, unofficial)
+Zalo servers <--ws/https--> zca-js (npm lib, unofficial)      [kênh CÁ NHÂN]
+Zalo Bot API <--long polling--> src/zalo-bot/                  [kênh BOT]
                                 |
-                    src/zalo/account-manager.ts   (N account, mỗi account 1 api + 1 listener)
-                                |
-              src/zalo/incoming-message-router.ts (ghi contact/thread, báo "đã nhận")
+                    src/zalo/account-manager.ts   (N account; `loai` quyết định
+                                |                  đi nhánh nào - xem "Kênh thứ hai")
+              incoming-message-router.ts (cá nhân) | bot-message-router.ts (bot)
                                 |
               middleware: allowlist-filter -> (lọc xong mới tốn token)
                                 |
@@ -15,7 +16,7 @@ Zalo servers <--ws/https--> zca-js (npm lib, unofficial)
                                 |
                     src/agent/agent-loop.ts       (Vercel AI SDK generateText + tools)
                                 |                  provider theo env: 9Router / Anthropic
-              tools: add_reaction | send_file | tag_member | get_group_info
+              tools: 14 cái; kênh bot chặn 8 (xem "Kênh thứ hai")
                                 |
               middleware: rate-limiter (queue per thread + delay ngẫu nhiên) -> sendMessage
                                 |
@@ -308,7 +309,7 @@ method chứ tuyệt đối không log URL.
 `upload.wikimedia.org` trả "The photo URL is invalid" dù vẫn là HTTPS mở được
 bằng trình duyệt - Zalo tự đi tải ảnh từ phía server.
 
-### 7 trong 14 tool không chạy được
+### 8 trong 14 tool không chạy được
 
 Dò 17 method trên API sống: 13 cái trả `{"ok":false,"description":"Not
 Found","error_code":404}`. Không có `sendDocument`/`sendFile`/`sendVideo`/
@@ -318,11 +319,17 @@ Found","error_code":404}`. Không có `sendDocument`/`sendFile`/`sendVideo`/
 Bị chặn: `send_file`, `create_word_document`, `create_excel_file`,
 `create_image`, `add_reaction`, `tag_member`, `get_group_info`.
 
-Chạy được: `get_datetime`, `web_search`, `web_fetch`, `kb_search`, `save_memory`.
+Bị chặn (8): `send_file`, `create_word_document`, `create_excel_file`,
+`create_image`, `add_reaction`, `tag_member`, `get_group_info`, `schedule_task`.
 
-`schedule_task` cũng bị CHẶN (thành 8 tool): nó tạo được job nhưng
-`run-scheduled-job.ts` chỉ biết gửi qua zca-js, nên job `once` bị dispatch lại
-mỗi tick mãi mãi kèm lý do sai sự thật. Mở lại khi scheduler biết kênh.
+Chạy được (6): `get_datetime`, `web_search`, `web_fetch`, `kb_search`,
+`save_memory`, `read_image`.
+
+`schedule_task` bị chặn vì `run-scheduled-job.ts` chỉ biết gửi qua zca-js: job
+`once` được `concludeBlockedNotRun` phục hồi `next_run_at` nên bị dispatch lại
+MỖI TICK, mãi mãi, kèm lý do sai sự thật. Chặn ở BA chỗ vì có ba đường vào:
+tool (`nang-luc-kenh-bot.ts`), dashboard (`POST /api/schedules`), và job cũ đã
+tạo (`run-scheduled-job.ts` tắt hẳn thay vì phục hồi).
 
 `read_image` chạy được nhưng CHƯA ĐO đường tải: URL ảnh của Bot API có lấy được
 bằng HTTP thường không (có thể cần auth hoặc hết hạn) thì chưa ai thử.

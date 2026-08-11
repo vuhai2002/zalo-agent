@@ -20,6 +20,7 @@ let registry: typeof import("../agent/tools/tool-registry.js");
 let types: typeof import("../agent/tools/tool-catalog-types.js");
 let accounts: typeof import("../config/account-store.js");
 let agents: typeof import("../config/agent-store.js");
+let nangLuc: typeof import("./nang-luc-kenh-bot.js");
 
 before(async () => {
   dataDir = setupTestEnv();
@@ -27,6 +28,7 @@ before(async () => {
   types = await import("../agent/tools/tool-catalog-types.js");
   accounts = await import("../config/account-store.js");
   agents = await import("../config/agent-store.js");
+  nangLuc = await import("./nang-luc-kenh-bot.js");
 });
 
 after(async () => {
@@ -77,6 +79,45 @@ describe("apiCaNhan - khẳng định api của kênh cá nhân", () => {
     // Và đúng những tool cần zca-js phải VẮNG MẶT
     for (const k of ["send_file", "create_image", "add_reaction", "tag_member", "get_group_info"]) {
       assert.ok(!(k in tools), `"${k}" được cấp trên kênh bot dù cần zca-js`);
+    }
+  });
+
+  it("MỌI tool gọi `apiCaNhan` đều nằm trong bảng chặn - đo theo NGUỒN", async () => {
+    // Ca "dựng thật" ở trên chỉ phủ nhánh BUILD-TIME. Hai tool tài liệu
+    // (`create_word_document`, `create_excel_file`) gọi `apiCaNhan` lúc CHẠY
+    // chứ không lúc dựng, nên chúng lọt qua phép đo đó. Ca này đọc thẳng mã
+    // nguồn nên phủ cả hai nhánh, và KHÔNG phải bản chép tay của thứ cần kiểm.
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const thuMuc = path.join(process.cwd(), "src", "agent", "tools");
+
+    const fileDungApi = fs
+      .readdirSync(thuMuc)
+      .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
+      .filter((f) => fs.readFileSync(path.join(thuMuc, f), "utf8").includes("apiCaNhan("))
+      // `tool-catalog-types.ts` là nơi ĐỊNH NGHĨA hàm, không phải nơi dùng
+      .filter((f) => f !== "tool-catalog-types.ts");
+
+    assert.ok(fileDungApi.length > 0, "không tìm thấy file nào gọi apiCaNhan - phép đo hỏng");
+
+    // Ánh xạ file -> key tool qua chính catalog: mỗi định nghĩa tool có `build`
+    // trỏ tới hàm khởi tạo, mà hàm đó nằm trong đúng những file trên.
+    const catalog = await import("../agent/tools/tool-catalog.js");
+    const chan = new Set(Object.keys(nangLuc.TOOL_KHONG_CHAY_TREN_BOT));
+    const nguon = new Map(
+      fileDungApi.map((f) => [f, fs.readFileSync(path.join(thuMuc, f), "utf8")] as const),
+    );
+
+    for (const def of catalog.TOOL_DEFINITIONS) {
+      // Tool này có được dựng từ một file dùng `apiCaNhan` không?
+      const ten = def.build.toString();
+      const dungApi = [...nguon].some(([, noiDung]) => {
+        const ham = ten.match(/(create[A-Za-z]+)\(/)?.[1];
+        return Boolean(ham && noiDung.includes(`export function ${ham}`));
+      });
+      if (dungApi) {
+        assert.ok(chan.has(def.key), `"${def.key}" cần zca-js nhưng KHÔNG nằm trong bảng chặn kênh bot`);
+      }
     }
   });
 
