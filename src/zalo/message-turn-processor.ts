@@ -18,7 +18,7 @@ import { toZaloReaction } from "./reaction-icons.js";
 import { ganAnhVaoHistory } from "./record-incoming-message.js";
 import { trichDanTuTin } from "./reply-quote.js";
 import { deliverChatReply } from "./deliver-chat-reply.js";
-import { notifyTechnicalError, type ReplyTarget } from "./send-reply-in-parts.js";
+import { notifyTechnicalError, type ReplyTarget, duongGuiZcaJs } from "./send-reply-in-parts.js";
 import { startTypingIndicator } from "./typing-indicator.js";
 import type { ParsedMessage } from "./zalo-message-parser.js";
 
@@ -92,7 +92,7 @@ async function xuLyLuot(
   const latest = batch[batch.length - 1]!;
   const threadKey = `${config.id}:${latest.threadId}`;
   const replyTarget: ReplyTarget = {
-    api,
+    guiMotDoan: duongGuiZcaJs(api, latest.threadId, latest.threadType),
     threadKey,
     threadId: latest.threadId,
     threadType: latest.threadType,

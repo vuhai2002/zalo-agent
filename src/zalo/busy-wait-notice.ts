@@ -1,10 +1,8 @@
-import type { API } from "zca-js";
-import type { ThreadType } from "zca-js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { dangGuiTren } from "../middleware/rate-limiter.js";
 import { daBanBaoLau } from "../middleware/thread-run-chain.js";
 import { createLogger } from "../shared/logger.js";
-import { sendReplyInParts } from "./send-reply-in-parts.js";
+import { sendReplyInParts, type ReplyTarget } from "./send-reply-in-parts.js";
 
 /**
  * Nói một câu trấn an khi người ta nhắn vào lúc bot đã bận RẤT lâu.
@@ -39,12 +37,12 @@ export const CAU_TRAN_AN =
  */
 const lanTranAnCuoi = new Map<string, number>();
 
-export type MucTieuTranAn = {
-  api: API;
-  threadKey: string;
-  threadId: string;
-  threadType: ThreadType;
-};
+/**
+ * Đúng phần `ReplyTarget` mà câu trấn an cần (không có `quote` - nó không trả
+ * lời tin nào cả). Rút từ `ReplyTarget` thay vì khai lại: khai lại là hai hình
+ * dạng sẽ trôi khỏi nhau, mà `muc` được truyền THẲNG vào `sendReplyInParts`.
+ */
+export type MucTieuTranAn = Pick<ReplyTarget, "guiMotDoan" | "threadKey" | "threadId" | "threadType">;
 
 /**
  * Gửi câu trấn an nếu đáng gửi. Trả `true` nếu đã gửi.

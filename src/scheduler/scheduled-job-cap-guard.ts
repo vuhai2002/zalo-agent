@@ -21,7 +21,7 @@ import { appendMessage } from "../conversation/history-store.js";
 import { createLogger } from "../shared/logger.js";
 import { deferredRunAtUtc } from "../shared/zone-time.js";
 import { getRunningAccountApi } from "../zalo/account-manager.js";
-import { sendReplyInParts, type ReplyTarget } from "../zalo/send-reply-in-parts.js";
+import { sendReplyInParts, type ReplyTarget, duongGuiZcaJs } from "../zalo/send-reply-in-parts.js";
 import { resetDeliveryAttempts } from "./delivery-attempt-store.js";
 import { finishRun, openRun } from "./job-run-log-store.js";
 import { recordProactiveSend, reserveCapNotice, revertCapNotice } from "./proactive-send-guard.js";
@@ -83,7 +83,7 @@ export async function concludeCapBlockedAtTick(
 function toTarget(job: ScheduledJob, api: API | undefined): ReplyTarget | undefined {
   if (!api) return undefined;
   return {
-    api,
+    guiMotDoan: duongGuiZcaJs(api, job.threadId, job.threadType as ThreadType),
     threadKey: `${job.accountId}:${job.threadId}`,
     threadId: job.threadId,
     threadType: job.threadType as ThreadType,

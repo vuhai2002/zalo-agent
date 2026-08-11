@@ -50,8 +50,24 @@ export function cauLoiTheoLoai(loai: string | undefined): string {
   return (loai && LOI_THEO_LOAI[loai]) || TECHNICAL_ERROR_REPLY;
 }
 
+/** Một đoạn đã cắt sẵn, chuẩn bị gửi xuống kênh */
+export type DoanCanGui = {
+  text: string;
+  styles?: Style[];
+  quote?: SendMessageQuote;
+};
+
 export type ReplyTarget = {
-  api: API;
+  /**
+   * Gửi MỘT đoạn. Mỗi kênh tự cung cấp cách gửi của mình - đây là ranh giới
+   * DUY NHẤT giữa logic cắt/chữa lỗi ở file này và API thật của kênh.
+   *
+   * Trước đây trường này là `api: API` của zca-js, tức cả đường gửi khóa cứng
+   * vào một kênh. Kênh bot (Zalo Bot API) có hình dạng khác hẳn: `sendMessage`
+   * nhận `(chat_id, text)` và server tự dựng markdown, không có `styles` lẫn
+   * `quote`. Dựng đường gửi bằng `duongGuiZcaJs()` cho kênh cá nhân.
+   */
+  guiMotDoan: (doan: DoanCanGui) => Promise<unknown>;
   /** Khóa hàng đợi gửi của rate-limiter: `${accountId}:${threadId}` */
   threadKey: string;
   threadId: string;
@@ -91,14 +107,35 @@ function sendOne(
   styles?: Style[],
   quote?: SendMessageQuote,
 ): Promise<unknown> {
-  const msg = {
-    msg: text,
-    ...(styles && styles.length > 0 ? { styles } : {}),
-    ...(quote ? { quote } : {}),
-  };
-  return enqueueSend(target.threadKey, () =>
-    target.api.sendMessage(msg, target.threadId, target.threadType),
-  );
+  return enqueueSend(target.threadKey, () => target.guiMotDoan({ text, styles, quote }));
+}
+
+/**
+ * Đường gửi cho kênh TÀI KHOẢN CÁ NHÂN (zca-js).
+ *
+ * Chỉ đính `styles` khi thật sự có - `sendMessage` của zca-js chỉ dựng
+ * `textProperties` khi trường này khác rỗng, gửi mảng rỗng là thêm việc thừa.
+ * Cùng lý do với `quote`: có trích dẫn thì zca-js đổi hẳn sang endpoint
+ * `.../quote`, nên đính một giá trị rỗng là đổi đường gọi API mà không được gì.
+ *
+ * Gom vào một nhà máy thay vì để mỗi chỗ dựng `ReplyTarget` tự viết: ba chỗ tự
+ * viết là ba cơ hội quên một trong hai luật trên, mà quên thì hỏng câm.
+ */
+export function duongGuiZcaJs(
+  api: API,
+  threadId: string,
+  threadType: ThreadType,
+): (doan: DoanCanGui) => Promise<unknown> {
+  return ({ text, styles, quote }) =>
+    api.sendMessage(
+      {
+        msg: text,
+        ...(styles && styles.length > 0 ? { styles } : {}),
+        ...(quote ? { quote } : {}),
+      },
+      threadId,
+      threadType,
+    );
 }
 
 /**

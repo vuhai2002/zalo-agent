@@ -1,4 +1,5 @@
 import type { API } from "zca-js";
+import { duongGuiZcaJs } from "./send-reply-in-parts.js";
 import { getAccount } from "../config/account-store.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { recordContactActivity } from "../conversation/contact-store.js";
@@ -112,7 +113,7 @@ export function routeIncomingMessage(
   // gửi sau khi dấu "đang nhập..." đã tắt). Fire-and-forget và tự nuốt lỗi:
   // đây là việc phụ, không được làm chậm đường nhận tin.
   void maybeNotifyBusyWait({
-    api,
+    guiMotDoan: duongGuiZcaJs(api, msg.threadId, msg.threadType),
     threadKey,
     threadId: msg.threadId,
     threadType: msg.threadType,

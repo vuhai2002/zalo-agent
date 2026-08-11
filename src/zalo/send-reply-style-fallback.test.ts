@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
-import { TextStyle, type API, type Style } from "zca-js";
+import { TextStyle, type API, type Style, type ThreadType } from "zca-js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
+import type { ReplyTarget } from "./send-reply-in-parts.js";
 
 /**
  * Đường lui khi Zalo từ chối tin CÓ ĐỊNH DẠNG.
@@ -47,7 +48,15 @@ function taoMuc(tuChoi: (lan: number, co: LanGui) => void) {
       return { msgId: `m-${daGui.length}` };
     },
   } as unknown as API;
-  return { api, threadKey: "acc:thread", threadId: "thread", threadType: 0 } as never;
+  // Dựng bằng chính `duongGuiZcaJs`, KHÔNG ép `as never` - xem lý do ở
+  // send-reply-quote.test.ts.
+  const target: ReplyTarget = {
+    guiMotDoan: sender.duongGuiZcaJs(api, "thread", 0 as ThreadType),
+    threadKey: "acc:thread",
+    threadId: "thread",
+    threadType: 0 as ThreadType,
+  };
+  return target;
 }
 
 const STYLE_MAU: Style[] = [{ start: 0, len: 3, st: TextStyle.Bold }];

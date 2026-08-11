@@ -13,12 +13,14 @@ import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 
 let dataDir: string;
 let notice: typeof import("./busy-wait-notice.js");
+let sender: typeof import("./send-reply-in-parts.js");
 let chain: typeof import("../middleware/thread-run-chain.js");
 let tuning: typeof import("../config/runtime-tuning-settings.js");
 
 before(async () => {
   dataDir = setupTestEnv();
   notice = await import("./busy-wait-notice.js");
+  sender = await import("./send-reply-in-parts.js");
   chain = await import("../middleware/thread-run-chain.js");
   tuning = await import("../config/runtime-tuning-settings.js");
 });
@@ -42,8 +44,11 @@ const api = {
   },
 } as unknown as API;
 
+// Dựng đường gửi bằng chính `duongGuiZcaJs` chứ không tự chế: nhờ vậy test này
+// đo luôn cả hình dạng payload thật của zca-js (bỏ `styles`/`quote` khi rỗng),
+// thay vì chỉ đo phần logic ở tầng trên.
 const muc = (threadKey: string) => ({
-  api,
+  guiMotDoan: sender.duongGuiZcaJs(api, threadKey, ThreadType.User),
   threadKey,
   threadId: threadKey,
   threadType: ThreadType.User,

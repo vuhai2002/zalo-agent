@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
-import { TextStyle, type API, type SendMessageQuote, type Style } from "zca-js";
+import { TextStyle, type API, type SendMessageQuote, type Style, type ThreadType } from "zca-js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
+import type { ReplyTarget } from "./send-reply-in-parts.js";
 
 /**
  * Trích dẫn đi qua đường gửi thật: đính vào đâu, và bỏ lúc nào.
@@ -66,7 +67,17 @@ function taoMuc(quote: SendMessageQuote | undefined, tuChoi: (lan: number, co: L
       return { msgId: `m-${daGui.length}` };
     },
   } as unknown as API;
-  return { api, threadKey: "acc:thread", threadId: "thread", threadType: 1, quote } as never;
+  // Dựng đường gửi bằng chính `duongGuiZcaJs`, KHÔNG ép kiểu `as never`. Bản
+  // trước dùng `as never` nên khi `ReplyTarget` đổi hình dạng, typecheck vẫn
+  // xanh còn test thì đỏ lúc chạy - lối thoát kiểu che mất đúng thứ nó cần canh.
+  const target: ReplyTarget = {
+    guiMotDoan: sender.duongGuiZcaJs(api, "thread", 1 as ThreadType),
+    threadKey: "acc:thread",
+    threadId: "thread",
+    threadType: 1 as ThreadType,
+    quote,
+  };
+  return target;
 }
 
 const STYLE_MAU: Style[] = [{ start: 0, len: 3, st: TextStyle.Bold }];

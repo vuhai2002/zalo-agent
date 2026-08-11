@@ -40,8 +40,11 @@ const api = {
   },
 } as unknown as API;
 
+// Dựng đường gửi bằng chính `duongGuiZcaJs` chứ không tự chế: nhờ vậy test này
+// đo luôn cả hình dạng payload thật của zca-js (bỏ `styles`/`quote` khi rỗng),
+// thay vì chỉ đo phần logic ở tầng trên.
 const muc = (threadKey: string) => ({
-  api,
+  guiMotDoan: sender.duongGuiZcaJs(api, threadKey, ThreadType.User),
   threadKey,
   threadId: threadKey,
   threadType: ThreadType.User,
@@ -87,7 +90,12 @@ describe("notifyTechnicalError - khử trùng", () => {
     } as unknown as API;
 
     await sender.notifyTechnicalError(
-      { api: apiHong, threadKey: "k-gui-hong", threadId: "k-gui-hong", threadType: ThreadType.User },
+      {
+        guiMotDoan: sender.duongGuiZcaJs(apiHong, "k-gui-hong", ThreadType.User),
+        threadKey: "k-gui-hong",
+        threadId: "k-gui-hong",
+        threadType: ThreadType.User,
+      },
       "transient",
     );
     // Không ném ra ngoài là đủ - `xuLyLuot` gọi hàm này ở cuối nhánh catch,

@@ -20,6 +20,7 @@ import { createLogger } from "../shared/logger.js";
 import { runInTurnLogContext } from "../shared/turn-log-context.js";
 import { getRunningAccountApi } from "../zalo/account-manager.js";
 import type { ReplyTarget } from "../zalo/send-reply-in-parts.js";
+import { duongGuiZcaJs } from "../zalo/send-reply-in-parts.js";
 import { openRun } from "./job-run-log-store.js";
 import { ACCOUNT_NOT_RUNNING_REASON } from "./proactive-send-guard.js";
 import { concludeBlockedNotRun, concludeDeliveryFailed, conclude } from "./scheduled-job-conclude.js";
@@ -103,7 +104,7 @@ async function dispatch(job: ScheduledJob, options: RunScheduledJobOptions, runI
   }
 
   const target: ReplyTarget = {
-    api,
+    guiMotDoan: duongGuiZcaJs(api, job.threadId, job.threadType as ThreadType),
     threadKey: `${job.accountId}:${job.threadId}`,
     threadId: job.threadId,
     threadType: job.threadType as ThreadType,
