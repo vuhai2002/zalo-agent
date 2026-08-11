@@ -24,6 +24,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 
 let dataDir: string;
 let processor: typeof import("./message-turn-processor.js");
+let kenhMod: typeof import("./kenh-ca-nhan.js");
 let ghiTin: typeof import("./record-incoming-message.js");
 let accountStore: typeof import("../config/account-store.js");
 let historyStore: typeof import("../conversation/history-store.js");
@@ -36,6 +37,7 @@ const TEN_FILE = "bang-gia-test.txt";
 before(async () => {
   dataDir = setupTestEnv();
   processor = await import("./message-turn-processor.js");
+  kenhMod = await import("./kenh-ca-nhan.js");
   ghiTin = await import("./record-incoming-message.js");
   accountStore = await import("../config/account-store.js");
   historyStore = await import("../conversation/history-store.js");
@@ -154,7 +156,7 @@ const noiDungHistory = (): { role: string; content: string }[] =>
 
 describe("processBatch - tin do tool gửi vào history", () => {
   it("file bot gửi có mặt trong history, kèm tên file và caption", async () => {
-    await processor.processBatch(config, api, [tinNhan("gửi mình bảng giá")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan("gửi mình bảng giá")], {
       resolveModel: () => modelGoiSendFile("Bảng giá đây anh nhé", "Em gửi rồi ạ"),
     });
 
@@ -175,7 +177,7 @@ describe("processBatch - tin do tool gửi vào history", () => {
   it("thứ tự history đúng: tin người dùng -> tin tool gửi -> câu chốt của agent", async () => {
     // Tin người dùng vào lịch sử từ lúc NHẬN, tin do tool gửi ghi ngay lúc
     // gửi, câu chốt ghi sau cùng - ba mốc theo đúng thứ tự thời gian thật.
-    await processor.processBatch(config, api, [tinNhan("gửi mình bảng giá")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan("gửi mình bảng giá")], {
       resolveModel: () => modelGoiSendFile("Bảng giá đây", "Em gửi rồi ạ"),
     });
 

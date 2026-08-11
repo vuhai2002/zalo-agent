@@ -22,6 +22,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 
 let dataDir: string;
 let processor: typeof import("./message-turn-processor.js");
+let kenhMod: typeof import("./kenh-ca-nhan.js");
 let ghiTin: typeof import("./record-incoming-message.js");
 let accountStore: typeof import("../config/account-store.js");
 let historyStore: typeof import("../conversation/history-store.js");
@@ -34,6 +35,7 @@ const THREAD = "t-sanitize";
 before(async () => {
   dataDir = setupTestEnv();
   processor = await import("./message-turn-processor.js");
+  kenhMod = await import("./kenh-ca-nhan.js");
   ghiTin = await import("./record-incoming-message.js");
   accountStore = await import("../config/account-store.js");
   historyStore = await import("../conversation/history-store.js");
@@ -121,7 +123,7 @@ async function chayLuot(textCuaModel: string): Promise<void> {
   const model = new MockLanguageModelV4({
     doStream: async () => thanhKetQuaStream(traLoi(textCuaModel) as unknown as KetQuaGenerate),
   });
-  await processor.processBatch(config, api, [tinNhan()], { resolveModel: () => model });
+  await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan()], { resolveModel: () => model });
 }
 
 describe("processBatch - làm sạch đầu ra trước khi gửi", () => {

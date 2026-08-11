@@ -28,6 +28,7 @@ let batcher: typeof import("../middleware/message-batcher.js");
 let accountStore: typeof import("../config/account-store.js");
 let database: typeof import("../conversation/database.js");
 let processor: typeof import("./message-turn-processor.js");
+let kenhMod: typeof import("./kenh-ca-nhan.js");
 let ghiTin: typeof import("./record-incoming-message.js");
 
 const ACC = "acc-nhieu-nguoi";
@@ -40,6 +41,7 @@ before(async () => {
   accountStore = await import("../config/account-store.js");
   database = await import("../conversation/database.js");
   processor = await import("./message-turn-processor.js");
+  kenhMod = await import("./kenh-ca-nhan.js");
   ghiTin = await import("./record-incoming-message.js");
   accountStore.createAccount({ id: ACC, label: "Test" });
 });
@@ -151,7 +153,7 @@ function modelVongLai() {
 
 /** Handler thật của router, chỉ thay model */
 const chayLuot = (batch: ParsedMessage[]) =>
-  processor.processBatch(config, api, batch, { resolveModel: () => modelVongLai() });
+  processor.processBatch(config, kenhMod.kenhCaNhan(api), batch, { resolveModel: () => modelVongLai() });
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -202,7 +204,7 @@ describe("nhiều người nhắn trong một nhóm", () => {
 
     // Nam đang chờ (debounce dài), Hải chạy lượt ngay
     batcher.enqueueMessage(THREAD_KEY, tinNhom("m-nam-cho", "Nam hỏi tỉ giá", "Nam"), chayLuot, 60_000);
-    await processor.processBatch(config, api, [tinNhom("m-hai-chay", "Hải hỏi giá vàng", "Hải")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhom("m-hai-chay", "Hải hỏi giá vàng", "Hải")], {
       resolveModel: () => modelGhi,
     });
     batcher.clearPendingBatches();

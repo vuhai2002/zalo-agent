@@ -23,8 +23,12 @@ const log = createLogger("zalo-bot-listener");
 export type ThamSoVongPoll = {
   accountId: string;
   client: ZaloBotClient;
-  /** Số giây xin server giữ kết nối mỗi lần poll */
-  timeoutGiay?: number;
+  /**
+   * Số giây xin server giữ kết nối mỗi lần poll. Nhận HÀM chứ không nhận số:
+   * đọc một lần rồi đóng băng thì sửa trên trang Cấu hình không có tác dụng
+   * cho tới khi restart account, trong khi hint của tham số hứa ngược lại.
+   */
+  timeoutGiay?: () => number;
   /** Lùi bao lâu sau lỗi ĐẦU TIÊN; các lỗi liên tiếp nhân đôi tới trần */
   luiBanDauMs?: number;
   luiToiDaMs?: number;
@@ -44,7 +48,7 @@ export type ThamSoVongPoll = {
 const nguThat = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref?.());
 
 export function batDauVongPoll(p: ThamSoVongPoll): { dung: () => void } {
-  const timeoutGiay = p.timeoutGiay ?? 30;
+  const layTimeoutGiay = p.timeoutGiay ?? (() => 30);
   const luiBanDau = p.luiBanDauMs ?? 2_000;
   const luiToiDa = p.luiToiDaMs ?? 60_000;
   const ngu = p.nguMs ?? nguThat;
@@ -55,6 +59,7 @@ export function batDauVongPoll(p: ThamSoVongPoll): { dung: () => void } {
   async function vong() {
     while (!dungLai) {
       try {
+        const timeoutGiay = layTimeoutGiay();
         const u = await p.client.getUpdates(timeoutGiay);
         // Poll thành công (kể cả rỗng) thì ĐẶT LẠI mức lùi. Không đặt lại thì
         // một sự cố mạng thoáng qua để bot lùi 60 giây mãi mãi về sau.
@@ -62,9 +67,20 @@ export function batDauVongPoll(p: ThamSoVongPoll): { dung: () => void } {
         // Đã gọi `dung()` trong lúc lời gọi này còn đang bay thì BỎ tin, đừng
         // xử lý. Nhánh catch bên dưới đã có chốt này, nhánh THÀNH CÔNG thì
         // chưa - mà cửa sổ ấy rộng đúng bằng `timeoutGiay` (mặc định 30 giây)
-        // kể từ lúc người vận hành tắt account. Tắt rồi mà bot còn trả lời
-        // thêm một tin là hành vi không ai chờ đợi.
-        if (dungLai) break;
+        // kể từ lúc người vận hành tắt account.
+        //
+        // Phải LOG: `getUpdates` không có `offset` nên tin này đã bị Zalo bóc
+        // khỏi hàng chờ rồi - vứt im lặng là mất hẳn, không lấy lại được và
+        // không ai biết. Dính mọi lần tắt/bật account và mọi lần shutdown.
+        if (dungLai) {
+          if (u?.message) {
+            log.warn(
+              { accountId: p.accountId, messageId: u.message.message_id },
+              "Đã dừng vòng poll giữa lúc một tin đang về - tin này MẤT (getUpdates không có offset để lấy lại)",
+            );
+          }
+          break;
+        }
         if (!u) continue;
 
         // `onUpdate` do caller cung cấp và có thể ném (DB khoá, đĩa đầy...).

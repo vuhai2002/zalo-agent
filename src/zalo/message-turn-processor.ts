@@ -1,5 +1,5 @@
-import type { API } from "zca-js";
 import { runAgentTurn, type AgentTurnParams } from "../agent/agent-loop.js";
+import type { KenhLuot } from "./kenh-luot.js";
 import { phanLoaiLoiProvider } from "../agent/provider-error-classifier.js";
 import type { StepTrace } from "../agent/agent-step-trace.js";
 import type { AccountConfig } from "../config/account-store.js";
@@ -13,13 +13,10 @@ import { forLog } from "../agent/agent-step-observer.js";
 import { finishAgentTurn, openAgentTurn } from "../conversation/usage-store.js";
 import { createLogger } from "../shared/logger.js";
 import { runInTurnLogContext } from "../shared/turn-log-context.js";
-import { sendSeenReceipt } from "./message-receipts.js";
-import { toZaloReaction } from "./reaction-icons.js";
 import { ganAnhVaoHistory } from "./record-incoming-message.js";
 import { trichDanTuTin } from "./reply-quote.js";
 import { deliverChatReply } from "./deliver-chat-reply.js";
-import { notifyTechnicalError, type ReplyTarget, duongGuiZcaJs } from "./send-reply-in-parts.js";
-import { startTypingIndicator } from "./typing-indicator.js";
+import { notifyTechnicalError, type ReplyTarget} from "./send-reply-in-parts.js";
 import type { ParsedMessage } from "./zalo-message-parser.js";
 
 const log = createLogger("message-turn");
@@ -38,36 +35,9 @@ type XuLyLuotOptions = {
   persistImages?: typeof persistBatchImages;
 };
 
-/**
- * Báo cho người nhắn biết bot đã nhận: thả reaction vào tin vừa gửi.
- * Không await ở luồng chính và tự nuốt lỗi - reaction hỏng không được làm
- * chậm hay chết đường trả lời.
- */
-function sendAutoReaction(config: AccountConfig, api: API, msg: ParsedMessage): void {
-  if (!config.autoReactEnabled || !msg.msgId) return;
-  void api
-    .addReaction(toZaloReaction(config.autoReactIcon), {
-      data: { msgId: msg.msgId, cliMsgId: msg.cliMsgId },
-      threadId: msg.threadId,
-      type: msg.threadType,
-    })
-    .catch((err) =>
-      log.debug({ err }, "Auto-react thất bại"),
-    );
-}
-
-/**
- * Xử lý 1 lượt: batch tin đã gộp -> agent -> trả lời xuống Zalo -> ghi history.
- * Được gọi từ message-batcher nên các lượt cùng thread luôn chạy tuần tự.
- *
- * Mở lượt TRƯỚC rồi mới chạy: có id ngay từ dòng log đầu tiên, và nhánh lỗi có
- * chỗ mà gắn trace vào. Toàn bộ phần xử lý chạy trong ngữ cảnh lượt để mọi dòng
- * log bên trong - kể cả log của các tool vốn tự tạo logger riêng - tự mang
- * accountId/threadId/turnId.
- */
 export async function processBatch(
   config: AccountConfig,
-  api: API,
+  kenh: KenhLuot,
   batch: ParsedMessage[],
   /**
    * Chỉ để TEST tiêm model giả - đúng seam `run-scheduled-job.ts` đang dùng.
@@ -78,13 +48,13 @@ export async function processBatch(
   const latest = batch[batch.length - 1]!;
   const turnId = openAgentTurn(config.id, latest.threadId);
   return runInTurnLogContext({ accountId: config.id, threadId: latest.threadId, turnId }, () =>
-    xuLyLuot(config, api, batch, turnId, options),
+    xuLyLuot(config, kenh, batch, turnId, options),
   );
 }
 
 async function xuLyLuot(
   config: AccountConfig,
-  api: API,
+  kenh: KenhLuot,
   batch: ParsedMessage[],
   turnId: number,
   options: XuLyLuotOptions,
@@ -92,7 +62,8 @@ async function xuLyLuot(
   const latest = batch[batch.length - 1]!;
   const threadKey = `${config.id}:${latest.threadId}`;
   const replyTarget: ReplyTarget = {
-    guiMotDoan: duongGuiZcaJs(api, latest.threadId, latest.threadType),
+    guiMotDoan: kenh.duongGui(latest.threadId, latest.threadType),
+    tranKyTuMotTin: kenh.tranKyTuMotTin,
     threadKey,
     threadId: latest.threadId,
     threadType: latest.threadType,
@@ -121,18 +92,17 @@ async function xuLyLuot(
   // "Đã xem" cho cả lượt: bot bắt đầu xử lý = giống người mở hội thoại ra đọc.
   // Tin bị lọc (passive listen) không có bước này - báo đã xem rồi im lặng sẽ
   // khiến người nhắn tưởng bot đang soạn trả lời.
-  sendSeenReceipt(api, batch);
-  sendAutoReaction(config, api, latest);
+  // Hai việc PHỤ: kênh nào không có thì bỏ qua, không dựng stub ném lỗi. Kênh
+  // bot không có method nào tương đương (đo: `setMessageReaction` trả 404).
+  kenh.baoDaXem?.(batch);
+  kenh.tuThaCamXuc?.(config, latest);
 
   // Giữ "đang nhập" xuyên suốt: qua cả lượt LLM lẫn delay của rate-limiter,
   // dừng trong finally kể cả khi agent ném lỗi
-  const stopTyping = config.typingIndicatorEnabled
-    ? startTypingIndicator({
-        send: (threadId, threadType) => api.sendTypingEvent(threadId, threadType),
-        threadId: latest.threadId,
-        threadType: latest.threadType,
-      })
-    : () => {};
+  const stopTyping =
+    config.typingIndicatorEnabled && kenh.batDangNhap
+      ? kenh.batDangNhap(latest.threadId, latest.threadType)
+      : () => {};
 
   // Lượt đã chốt sổ (usage + trace) chưa. Nhánh catch dùng cờ này để không chốt
   // lần hai - xem giải thích ở đó.
@@ -158,8 +128,8 @@ async function xuLyLuot(
     tinChen.push(...moi);
     // Đối xử y hệt tin mở đầu lượt: người gửi phải thấy bot đã nhận, không thì
     // họ tưởng tin rơi vào khoảng không và gửi lại.
-    sendSeenReceipt(api, moi);
-    sendAutoReaction(config, api, moi[moi.length - 1]!);
+    kenh.baoDaXem?.(moi);
+    kenh.tuThaCamXuc?.(config, moi[moi.length - 1]!);
     // AWAIT chứ không fire-and-forget: `localPath` phải có TRƯỚC khi dựng nội
     // dung cho model, và trước khi ghi history. Thiếu nó thì history chỉ còn
     // dòng chữ "[gửi kèm N ảnh]" mà không đường dẫn nào - lượt sau bot không
@@ -192,7 +162,7 @@ async function xuLyLuot(
     ganAnhVaoHistory(batch);
 
     const result = await runAgentTurn({
-      api,
+      api: kenh.api,
       account: config,
       batch,
       trace,

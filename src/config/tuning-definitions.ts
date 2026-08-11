@@ -457,6 +457,18 @@ const TUNING_BY_KEY = {
     unit: "ms",
   },
 
+  ZALO_BOT_POLL_TIMEOUT_SECONDS: {
+    kind: "number",
+    group: "sending",
+    label: "Thời gian giữ kết nối khi chờ tin (tài khoản bot)",
+    hint:
+      "Số giây xin server Zalo giữ kết nối mỗi lần hỏi tin mới. Hết hạn mà không có tin thì hỏi lại - " +
+      "đó là chuyện bình thường, không phải lỗi. Đặt thấp thì hỏi dồn dập và dễ bị Zalo chặn 429.",
+    min: 5,
+    max: 60,
+    unit: "giây",
+  },
+
   // --- Trace và dọn dẹp ---
   AGENT_TRACE_ENABLED: {
     kind: "boolean",

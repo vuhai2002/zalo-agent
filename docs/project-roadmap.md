@@ -3960,26 +3960,40 @@ nghĩa).
 
 Đã xong: client API, bộ chuyển update, bảng năng lực + chặn tool (cả ở dashboard
 qua `?accountId=`), vòng long polling, cột `loai`/`bot_token_enc` cho `accounts`,
-trừu tượng hóa đường gửi (`ReplyTarget.guiMotDoan`), `ToolContext.api` nullable.
-Bot CHƯA nhận được tin thật - còn thiếu HAI mảnh dưới đây.
+trừu tượng hóa đường gửi (`ReplyTarget.guiMotDoan`), `ToolContext.api` nullable,
+trừu tượng hóa NĂNG LỰC kênh (`KenhLuot` + `kenhCaNhan`/`kenhBot`), router riêng
+(`bot-message-router.ts`), runner (`bot-account-runner.ts`) nối vào
+`startAccount`, tham số `ZALO_BOT_POLL_TIMEOUT_SECONDS`.
 
-- **Router nhận tin cho kênh bot.** Kênh cá nhân dùng
-  `incoming-message-router.ts`, nhưng nó gọi `sendDeliveredReceipt`,
-  `resolveGroupName`, `sendAutoReaction` - đều là thứ Bot API không có. Cần
-  đường riêng dùng lại `shouldRespond`, `ghiTinDenVaoHistory`, `enqueueMessage`.
+Còn thiếu MỘT mảnh để dùng được bằng đường thường: **trang Accounts** (chọn loại
+kênh, nhập token). `datLoaiKenh()`/`datBotToken()` đã có nhưng chưa route nào lộ
+ra, nên hiện chỉ tạo được tài khoản bot bằng script.
+
 - **Trang Accounts.** Chọn loại kênh và nhập token bot (`datBotToken` đã có,
   mã hóa bằng cùng khóa với cookie Zalo).
 
 Còn treo sau vòng rà soát:
 
 - `laLoiMayChuTuChoi` (`send-reply-in-parts.ts`) đọc `err.code` dạng số của
-  `ZaloApiError` để quyết có gửi lại hay không. `LoiZaloBotApi` mang
-  `httpStatus`/`maLoi`, nên phép phân loại lỗi phải theo kênh. Vô hại lúc này
-  vì kênh bot chưa có đường gửi.
-- `TRAN_KY_TU_MOT_TIN` (2000) khai rồi bỏ đó - chưa có đường cắt cho kênh bot.
-  Server ép trần thật, nên thiếu bước cắt là câu trả lời dài bị từ chối nguyên tin.
-- `AgentTurnParams.api` vẫn là `API` không nullable, nên chưa caller nào truyền
-  null được. Bất biến "api null trên kênh bot" đúng nhưng chưa từng bị đụng tới.
+  `ZaloApiError`. `LoiZaloBotApi` mang `httpStatus`/`maLoi`, nên đường lui "gửi
+  lại chữ trơn" hiện chỉ chạy cho kênh cá nhân. Ít hại hơn tưởng vì kênh bot đã
+  gửi chữ trơn không styles không quote sẵn - không có gì để mà bỏ bớt.
+- **Kênh bot KHÔNG có chữ đậm/nghiêng.** `deliverChatReply` chạy
+  `dinhDangNeuBat` trước, `markdownSangStyleZalo` bóc dấu ra thành `Style[]`, mà
+  `kenhBot.duongGui` vứt styles. Muốn có định dạng thì phải bỏ qua bước chuyển
+  cho kênh này và gửi markdown thô - cần đo phương ngữ markdown của Zalo trước.
+  (Đã đo: cả `parse_mode: "markdown"` lẫn `null` đều KHÔNG bị API từ chối với
+  chuỗi có `_` và `[` lẻ, nên đây là chuyện chất lượng chứ không phải lỗi.)
+- **Nhắn chủ động / lịch hẹn**: `schedule_task` đã bị CHẶN trên kênh bot vì
+  `run-scheduled-job` chỉ biết gửi qua zca-js; không chặn thì job `once` bị
+  dispatch lại mỗi tick mãi mãi kèm lý do sai sự thật. Mở lại khi scheduler
+  biết kênh.
+- Tài khoản bot mặc định `allowlist.mode = "all"` như tài khoản cá nhân, nhưng
+  bán kính lớn hơn hẳn: ai có link cũng nhắn được bot, khác nick cá nhân phải
+  là bạn bè. Cân nhắc mặc định `list` cho loại bot.
+- `autoReactEnabled`/`autoReactIcon` vẫn hiện trên dashboard cho tài khoản bot
+  và im lặng không làm gì - trang Accounts nên ẩn theo loại kênh, như trang
+  Tools đã làm.
 - `send-reply-in-parts.ts` nay 322 dòng (luật dự án < 200). `ReplyTarget` vẫn
   mang `threadType`/`quote` của zca-js nên trừu tượng kênh mới xong một nửa.
 

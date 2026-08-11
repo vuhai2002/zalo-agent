@@ -1,0 +1,67 @@
+import { getTuning } from "../config/runtime-tuning-settings.js";
+import { createLogger } from "../shared/logger.js";
+import { routeBotUpdate } from "./bot-message-router.js";
+import { kenhBot } from "./kenh-bot.js";
+import { taoZaloBotClient } from "./zalo-bot-api-client.js";
+import { batDauVongPoll } from "./zalo-bot-listener.js";
+
+const log = createLogger("bot-account-runner");
+
+/**
+ * Khởi động MỘT tài khoản bot: client -> vòng poll -> router -> lượt agent.
+ *
+ * Trả hàm dừng. Gọi được nhiều lần cho nhiều account; mỗi account một vòng.
+ */
+export async function chayTaiKhoanBot(p: {
+  accountId: string;
+  token: string;
+}): Promise<{ dung: () => void }> {
+  const client = taoZaloBotClient({ token: p.token });
+
+  // Kiểm token TRƯỚC khi mở vòng poll: token sai mà cứ poll thì mỗi vòng là một
+  // dòng log lỗi kèm backoff, và người vận hành chỉ thấy "bot không trả lời"
+  // chứ không thấy nguyên nhân.
+  const me = await client.getMe();
+  log.info({ accountId: p.accountId, bot: me.display_name ?? me.id }, "Token bot hợp lệ");
+
+  // Webhook và getUpdates LOẠI TRỪ NHAU (tài liệu Zalo ghi rõ). Webhook còn bật
+  // thì poll không bao giờ nhận được gì, và triệu chứng là IM LẶNG chứ không
+  // phải lỗi - gần như không thể đoán ra nếu không kiểm ở đây.
+  let webhookDangBat: string | undefined;
+  try {
+    webhookDangBat = (await client.getWebhookInfo())?.url || undefined;
+  } catch (err) {
+    // Không đọc được thì cứ chạy tiếp: chặn boot ở đây là mất cả những account
+    // khác vì một lời gọi phụ.
+    log.debug({ accountId: p.accountId, err }, "Không đọc được trạng thái webhook");
+  }
+  if (webhookDangBat) {
+    // Tách khỏi nhánh catch ở trên: gỡ THẤT BẠI là đúng ca mà cả khối này sinh
+    // ra để tránh (webhook còn bật = poll im lặng vĩnh viễn), nên phải WARN chứ
+    // không được lẫn vào một dòng debug "không đọc được".
+    log.warn(
+      { accountId: p.accountId, url: webhookDangBat },
+      "Tài khoản bot đang bật webhook - long polling sẽ KHÔNG nhận được tin. Đang gỡ",
+    );
+    try {
+      await client.deleteWebhook();
+    } catch (err) {
+      log.warn(
+        { accountId: p.accountId, err },
+        "GỠ WEBHOOK THẤT BẠI - vòng poll sẽ im lặng, không nhận được tin nào",
+      );
+    }
+  }
+
+  const kenh = kenhBot(client);
+  const vong = batDauVongPoll({
+    accountId: p.accountId,
+    client,
+    // HÀM chứ không phải số: sửa trên trang Cấu hình ăn ngay ở vòng kế tiếp
+    timeoutGiay: () => getTuning("ZALO_BOT_POLL_TIMEOUT_SECONDS"),
+    onUpdate: (accountId, update) => routeBotUpdate(accountId, kenh, update),
+  });
+
+  log.info({ accountId: p.accountId }, "Đã khởi động tài khoản bot");
+  return vong;
+}

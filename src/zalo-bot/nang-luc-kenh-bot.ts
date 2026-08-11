@@ -47,6 +47,17 @@ export const TOOL_KHONG_CHAY_TREN_BOT: Record<string, LyDoKhongHoTro> = {
   tag_member: {
     hint: "Zalo Bot API không có method tag thành viên trong nhóm",
   },
+  schedule_task: {
+    // Tool TẠO được job, nhưng job không bao giờ GỬI được: `run-scheduled-job`
+    // lấy `getRunningAccountApi()` (zca-js) và account bot không có, nên rơi
+    // vào `concludeBlockedNotRun`. Với job `once` thì `next_run_at` được phục
+    // hồi nên nó bị dispatch LẠI mỗi tick, mãi mãi, mỗi lần một dòng 'skipped'
+    // kèm lý do sai sự thật ("Account hiện không chạy" - account ĐANG chạy).
+    //
+    // Không chặn thì model hứa nhắc rồi im - đúng hành vi mà luật persona của
+    // chính kênh này cấm. Mở lại khi scheduler biết gửi qua kênh bot.
+    hint: "Zalo Bot API chưa nối vào bộ hẹn lịch - job tạo được nhưng không gửi được",
+  },
   get_group_info: {
     hint: "Zalo Bot API không có method đọc thông tin nhóm (getChat/getChatMember trả 404)",
   },

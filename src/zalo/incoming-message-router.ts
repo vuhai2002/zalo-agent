@@ -1,4 +1,5 @@
 import type { API } from "zca-js";
+import { kenhCaNhan } from "./kenh-ca-nhan.js";
 import { duongGuiZcaJs } from "./send-reply-in-parts.js";
 import { getAccount } from "../config/account-store.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
@@ -92,7 +93,7 @@ export function routeIncomingMessage(
   }
 
   const threadKey = `${config.id}:${msg.threadId}`;
-  const daNhan = enqueueMessage(threadKey, msg, (batch) => processBatch(config, api, batch));
+  const daNhan = enqueueMessage(threadKey, msg, (batch) => processBatch(config, kenhCaNhan(api), batch));
 
   if (!daNhan) {
     // Tin đã nằm trong lịch sử rồi, nhưng KHÔNG lượt nào tải ảnh cho nó nữa -

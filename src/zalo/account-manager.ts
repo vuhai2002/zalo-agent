@@ -1,6 +1,8 @@
 import type { API } from "zca-js";
+import { chayTaiKhoanBot } from "../zalo-bot/bot-account-runner.js";
 import {
   getAccount,
+  layBotTokenGiaiMa,
   listEnabledAccounts,
   runAccountsSeedMigration,
   type AccountConfig,
@@ -20,7 +22,13 @@ import { startListener } from "./zalo-listener.js";
 
 type RunningAccount = {
   config: AccountConfig;
-  api: API;
+  /**
+   * `null` với tài khoản BOT: Zalo Bot API không có gì tương đương. Scheduler
+   * đọc trường này qua `getRunningAccountApi` và tự bỏ lượt khi không có -
+   * xem mục "Việc còn treo của kênh Zalo Bot" trong roadmap.
+   */
+  api: API | null;
+  /** Rỗng với tài khoản bot - Bot API không có khái niệm "id của chính mình" trong tin */
   selfId: string;
   stopListener: () => void;
 };
@@ -48,7 +56,7 @@ export function isAccountRunning(accountId: string): boolean {
  * lúc gửi) tự quyết định bỏ lượt.
  */
 export function getRunningAccountApi(accountId: string): API | undefined {
-  return running.get(accountId)?.api;
+  return running.get(accountId)?.api ?? undefined;
 }
 
 /**
@@ -71,8 +79,41 @@ export async function startAccount(accountId: string): Promise<void> {
   if (!config) throw new Error(`Account "${accountId}" không tồn tại`);
   if (!config.enabled) throw new Error(`Account "${accountId}" đang tắt`);
 
+  if (config.loai === "bot") {
+    await startBotAccount(config);
+    return;
+  }
+
   const api = await loginWithStoredCredentials(accountId);
   attachAccount(config, api);
+}
+
+/**
+ * Tài khoản BOT: không login QR, không credential mã hóa - chỉ một token.
+ *
+ * Tách hẳn khỏi đường cá nhân thay vì thêm nhánh `if` vào `attachAccount`: hai
+ * đường không dùng chung bước nào (không QR, không `getOwnId`, listener khác
+ * hẳn), nên gộp chỉ tạo một hàm hai mặt.
+ */
+async function startBotAccount(config: AccountConfig): Promise<void> {
+  const token = layBotTokenGiaiMa(config.id);
+  if (!token) {
+    throw new Error(
+      `Tài khoản bot "${config.id}" chưa có token (hoặc giải mã hỏng) - nhập token ở trang Accounts`,
+    );
+  }
+
+  const { dung } = await chayTaiKhoanBot({ accountId: config.id, token });
+  // `stopAccount` phải nằm SAU await, ngay trước `running.set` - đúng chỗ
+  // `attachAccount` đặt nó cho kênh cá nhân. Đặt trước await thì hai lời gọi
+  // `startAccount` chồng nhau (bấm hai lần trên dashboard, hoặc dashboard chen
+  // vào lúc boot) đều thấy `isAccountRunning === false`, cùng mở vòng poll, rồi
+  // `running.set` thứ hai đè lên `dung` thứ nhất mà không gọi nó. Vòng mồ côi
+  // đó sống tới lúc restart, và vì `getUpdates` không có `offset` nên nó CƯỚP
+  // tin của vòng chính rồi trả lời bằng config cũ.
+  stopAccount(config.id);
+  running.set(config.id, { config, api: null, selfId: "", stopListener: dung });
+  log.info({ accountId: config.id, label: config.label }, "Tài khoản bot sẵn sàng");
 }
 
 export function stopAccount(accountId: string): void {

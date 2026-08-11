@@ -21,6 +21,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 
 let dataDir: string;
 let processor: typeof import("./message-turn-processor.js");
+let kenhMod: typeof import("./kenh-ca-nhan.js");
 let ghiTin: typeof import("./record-incoming-message.js");
 let batcher: typeof import("../middleware/message-batcher.js");
 let accountStore: typeof import("../config/account-store.js");
@@ -34,6 +35,7 @@ const THREAD_KEY = `${ACC}:${THREAD}`;
 before(async () => {
   dataDir = setupTestEnv();
   processor = await import("./message-turn-processor.js");
+  kenhMod = await import("./kenh-ca-nhan.js");
   ghiTin = await import("./record-incoming-message.js");
   batcher = await import("../middleware/message-batcher.js");
   accountStore = await import("../config/account-store.js");
@@ -169,7 +171,7 @@ describe("processBatch - tin nhắn thêm giữa lượt", () => {
     const tinMoDau = tinNhan("soạn giúp mình bài giảng", "m1");
     const nhaKhoa = await doTinVaoHangCho("đổi thành file word nhé", "m2");
 
-    await processor.processBatch(config, api, [tinMoDau], { resolveModel: () => model });
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinMoDau], { resolveModel: () => model });
     nhaKhoa();
 
     const history = noiDungHistory();
@@ -200,7 +202,7 @@ describe("processBatch - tin nhắn thêm giữa lượt", () => {
     const tinMoDau = tinNhan("soạn giúp mình bài giảng", "m1");
     const nhaKhoa = await doTinVaoHangCho("à mà xuất ra Word nhé", "m2");
 
-    await processor.processBatch(config, api, [tinMoDau], { resolveModel: () => model });
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinMoDau], { resolveModel: () => model });
     nhaKhoa();
 
     const soLan = (prompts[0] as { role: string; content: unknown }[])
@@ -225,7 +227,7 @@ describe("processBatch - tin nhắn thêm giữa lượt", () => {
 
     const nhaKhoa = await doTinVaoHangCho("thêm ý này nữa", "m2");
 
-    await processor.processBatch(config, api, [tinNhan("câu hỏi đầu", "m1")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan("câu hỏi đầu", "m1")], {
       resolveModel: () => model,
     });
     nhaKhoa();
@@ -246,7 +248,7 @@ describe("processBatch - tin nhắn thêm giữa lượt", () => {
     const daLuu: string[][] = [];
     const nhaKhoa = await doTinVaoHangCho("xem ảnh này giúp mình", "m2");
 
-    await processor.processBatch(config, api, [tinNhan("câu hỏi đầu", "m1")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan("câu hỏi đầu", "m1")], {
       resolveModel: () => model,
       persistImages: async (_acc, messages) => {
         daLuu.push(messages.map((m) => m.msgId ?? ""));
@@ -271,7 +273,7 @@ describe("processBatch - tin nhắn thêm giữa lượt", () => {
     const tinMoDau = tinNhan("câu hỏi đầu", "m1");
     const nhaKhoa = await doTinVaoHangCho("xem ảnh này giúp mình", "m2", [{ url: "http://x/0.jpg" }]);
 
-    await processor.processBatch(config, api, [tinMoDau], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinMoDau], {
       resolveModel: () => model,
       persistImages: async (_acc, messages) => {
         for (const m of messages) for (const a of m.images) a.localPath = duong;
@@ -290,7 +292,7 @@ describe("processBatch - tin nhắn thêm giữa lượt", () => {
       doStream: async () => thanhKetQuaStream(traLoi("chào anh") as unknown as KetQuaGenerate),
     });
 
-    await processor.processBatch(config, api, [tinNhan("chào bot", "m1")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan("chào bot", "m1")], {
       resolveModel: () => model,
     });
 

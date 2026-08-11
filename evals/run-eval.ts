@@ -1,4 +1,5 @@
 import { canTraCuuWeb, kiemTraTienDeTraCuu } from "./preflight-web-search.js";
+import { kenhCaNhan } from "../src/zalo/kenh-ca-nhan.js";
 import { dungEvalEnv } from "./eval-env.js";
 import { EVAL_CASES } from "./eval-cases.js";
 import { taoFakeZaloApi } from "./fake-zalo-api.js";
@@ -190,7 +191,7 @@ async function main(): Promise<void> {
       let loiChay: string | null = null;
       try {
         // KHÔNG truyền `resolveModel` -> dùng model THẬT
-        await processor.processBatch(config, fake.api, batch as never);
+        await processor.processBatch(config, kenhCaNhan(fake.api), batch as never);
       } catch (err) {
         loiChay = err instanceof Error ? err.message : String(err);
       }

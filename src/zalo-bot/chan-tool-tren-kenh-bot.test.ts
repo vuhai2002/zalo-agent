@@ -70,7 +70,7 @@ describe("chặn tool trên kênh bot", () => {
 
   it("tool thuần vẫn chạy trên kênh bot", () => {
     const tren = keys(KENH_BOT);
-    for (const k of ["get_datetime", "web_search", "web_fetch", "save_memory", "schedule_task"]) {
+    for (const k of ["get_datetime", "web_search", "web_fetch", "save_memory"]) {
       assert.ok(tren.includes(k), `"${k}" bị chặn nhầm trên kênh bot`);
     }
   });

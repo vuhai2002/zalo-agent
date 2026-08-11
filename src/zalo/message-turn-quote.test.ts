@@ -19,6 +19,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 
 let dataDir: string;
 let processor: typeof import("./message-turn-processor.js");
+let kenhMod: typeof import("./kenh-ca-nhan.js");
 let ghiTin: typeof import("./record-incoming-message.js");
 let batcher: typeof import("../middleware/message-batcher.js");
 let accountStore: typeof import("../config/account-store.js");
@@ -31,6 +32,7 @@ const RIENG = "t-quote";
 before(async () => {
   dataDir = setupTestEnv();
   processor = await import("./message-turn-processor.js");
+  kenhMod = await import("./kenh-ca-nhan.js");
   ghiTin = await import("./record-incoming-message.js");
   batcher = await import("../middleware/message-batcher.js");
   accountStore = await import("../config/account-store.js");
@@ -139,7 +141,7 @@ describe("processBatch - trích dẫn tin người dùng", () => {
   it("trong NHÓM: câu trả lời trích đúng tin của người hỏi", async () => {
     await processor.processBatch(
       config,
-      api,
+      kenhMod.kenhCaNhan(api),
       [tin({ threadId: NHOM, isGroup: true, msgId: "m-hoi", text: "bot ơi giá vàng?" })],
       { resolveModel: () => modelTraLoi() },
     );
@@ -153,7 +155,7 @@ describe("processBatch - trích dẫn tin người dùng", () => {
   it("chat RIÊNG: KHÔNG trích - chỉ có hai người, trích là nhiễu", async () => {
     await processor.processBatch(
       config,
-      api,
+      kenhMod.kenhCaNhan(api),
       [tin({ threadId: RIENG, isGroup: false, msgId: "m-rieng", text: "chào bot" })],
       { resolveModel: () => modelTraLoi() },
     );
@@ -165,7 +167,7 @@ describe("processBatch - trích dẫn tin người dùng", () => {
   it("batch NHIỀU tin: trích tin ĐẦU (tin mở lượt), không phải tin cuối", async () => {
     await processor.processBatch(
       config,
-      api,
+      kenhMod.kenhCaNhan(api),
       [
         tin({ threadId: NHOM, isGroup: true, msgId: "m-dau", text: "bot ơi tra giúp giá vàng", senderName: "Hải" }),
         tin({ threadId: NHOM, isGroup: true, msgId: "m-cuoi", text: "và cả tỉ giá nữa", senderName: "Nam" }),

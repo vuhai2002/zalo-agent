@@ -68,6 +68,11 @@ export type ReplyTarget = {
    * `quote`. Dựng đường gửi bằng `duongGuiZcaJs()` cho kênh cá nhân.
    */
   guiMotDoan: (doan: DoanCanGui) => Promise<unknown>;
+  /**
+   * Trần độ dài MỘT tin của kênh này; thiếu thì dùng `ZALO_MAX_MESSAGE_CHARS`.
+   * Xem `KenhLuot.tranKyTuMotTin` cho lý do phải tách theo kênh.
+   */
+  tranKyTuMotTin?: number;
   /** Khóa hàng đợi gửi của rate-limiter: `${accountId}:${threadId}` */
   threadKey: string;
   threadId: string;
@@ -221,7 +226,11 @@ export async function sendReplyInParts(
   const parts = chiaTheoNganSachByte(
     { text, styles },
     {
-      maxChars: getTuning("ZALO_MAX_MESSAGE_CHARS"),
+      // Trần của KÊNH thắng trần chung khi kênh có khai. Bot API ép cứng 2000
+      // ký tự phía server (đo thật), còn ZALO_MAX_MESSAGE_CHARS chỉnh được tới
+      // 4000 - dùng chung một con số thì ai nới cho kênh cá nhân là kênh bot
+      // mất trọn câu trả lời vì server chối nguyên tin.
+      maxChars: target.tranKyTuMotTin ?? getTuning("ZALO_MAX_MESSAGE_CHARS"),
       maxParts: getTuning("ZALO_MAX_MESSAGE_PARTS"),
       maxPayloadBytes: trichDan.tranConLai,
     },

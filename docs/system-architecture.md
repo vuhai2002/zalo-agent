@@ -320,14 +320,12 @@ Bị chặn: `send_file`, `create_word_document`, `create_excel_file`,
 
 Chạy được: `get_datetime`, `web_search`, `web_fetch`, `kb_search`, `save_memory`.
 
-Hai tool chạy được nhưng CÓ ĐIỀU KIỆN, chưa đo hết:
+`schedule_task` cũng bị CHẶN (thành 8 tool): nó tạo được job nhưng
+`run-scheduled-job.ts` chỉ biết gửi qua zca-js, nên job `once` bị dispatch lại
+mỗi tick mãi mãi kèm lý do sai sự thật. Mở lại khi scheduler biết kênh.
 
-- `schedule_task` **tạo được job nhưng chưa gửi được**. `run-scheduled-job.ts`
-  lấy `getRunningAccountApi()` (zca-js); account bot không có nên job dừng ở
-  `ACCOUNT_NOT_RUNNING_REASON` và chất đống. Phải mở đường gửi cho scheduler,
-  hoặc chặn `schedule_task` trên kênh bot cho tới lúc đó.
-- `read_image` phụ thuộc việc URL ảnh của Bot API có tải được bằng HTTP thường
-  không (có thể cần auth hoặc hết hạn) - CHƯA ĐO.
+`read_image` chạy được nhưng CHƯA ĐO đường tải: URL ảnh của Bot API có lấy được
+bằng HTTP thường không (có thể cần auth hoặc hết hạn) thì chưa ai thử.
 
 Danh sách chặn nằm ở `nang-luc-kenh-bot.ts` và được `kiemTraKhaDung()` áp cho
 CẢ bộ lọc schema lẫn `GET /api/tools` - một nguồn duy nhất, vì hai nơi tự tính
@@ -346,6 +344,40 @@ trên kênh bot không tool nào cần `api` của zca-js.
 Ẩn tool là CHƯA ĐỦ - model sẽ nói "tôi không làm được" mà không nói vì sao, và
 người nhắn tưởng agent hỏng. `LUAT_PERSONA_KENH_BOT` chỉ ghép khi
 `account.loai === "bot"`, nói rõ đây là giới hạn nền tảng và mời sang kênh cá nhân.
+
+### Trừu tượng hóa kênh
+
+`KenhLuot` (`src/zalo/kenh-luot.ts`) mô tả NĂNG LỰC của một kênh trong phạm vi
+một lượt. Kênh nào thiếu năng lực nào thì để `undefined` và `processBatch` bỏ
+qua - KHÔNG dựng stub ném lỗi, vì mấy việc đó đều là việc phụ.
+
+| Năng lực | Cá nhân | Bot |
+|---|---|---|
+| `duongGui` (gửi chữ) | có | có |
+| `batDangNhap` | có | có (`sendChatAction`) |
+| `baoDaXem` | có | KHÔNG có method |
+| `tuThaCamXuc` | có | `setMessageReaction` trả 404 |
+| `api` (cho tool) | có | `null` |
+| `tranKyTuMotTin` | theo `ZALO_MAX_MESSAGE_CHARS` | 2000 (server ép cứng) |
+
+Hai nhà máy: `kenhCaNhan(api)` (`src/zalo/kenh-ca-nhan.ts`) và `kenhBot(client)`
+(`src/zalo-bot/kenh-bot.ts`). Đường đi của kênh bot:
+`bot-account-runner.ts` -> `batDauVongPoll` -> `bot-message-router.ts` ->
+`enqueueMessage` -> `processBatch(config, kenhBot(...), batch)`.
+
+`bot-message-router.ts` là bản RIÊNG chứ không dùng chung
+`incoming-message-router.ts`: router kia gọi ba thứ Bot API không có (biên nhận
+"đã nhận", thả cảm xúc, `getGroupInfo` tra tên nhóm). Phần dùng chung thì dùng
+chung thật: `shouldRespond`, `ghiTinDenVaoHistory`, `enqueueMessage`,
+`processBatch`, `maybeNotifyBusyWait`, `reportPayloadAnomalies`.
+
+**Kênh bot gửi CHỮ TRƠN** (`parse_mode: null`). Không phải vì sợ lỗi - đo được
+cả `markdown` lẫn `null` đều được API chấp nhận với chuỗi có `_`/`[` lẻ - mà vì
+chữ tới `duongGui` đã hết markdown rồi (`markdownSangStyleZalo` bóc dấu ra
+thành `Style[]` ở tầng trên), nên xin server dựng chỉ có thể BỚT ký tự.
+
+`ZALO_BOT_POLL_TIMEOUT_SECONDS` truyền vào vòng poll dạng HÀM, đọc lại mỗi vòng
+- sửa trên trang Cấu hình ăn ngay, không phải restart account.
 
 ### Nhóm
 

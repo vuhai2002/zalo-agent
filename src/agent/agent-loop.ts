@@ -77,7 +77,12 @@ export const STEP_LIMIT_REPLY =
   "Mình tra hơi nhiều bước mà vẫn chưa gom đủ để trả lời cho chắc. Anh/chị hỏi lại gọn hơn một chút giúp mình nhé, ví dụ chỉ một mục hoặc một nguồn thôi.";
 
 export type AgentTurnParams = {
-  api: API;
+  /**
+   * API zca-js, đi thẳng vào `ToolContext.api`. `null` trên kênh BOT - xem
+   * docstring của `ToolContext.api`. An toàn vì 7 tool cần nó đều đã bị
+   * `listAvailableTools` loại khỏi lượt của kênh bot.
+   */
+  api: API | null;
   account: AccountConfig;
   /** Các tin nhắn đã gộp của lượt này (ảnh và caption Zalo gửi tách nhau) */
   batch: ParsedMessage[];

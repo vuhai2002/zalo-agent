@@ -25,6 +25,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 
 let dataDir: string;
 let processor: typeof import("./message-turn-processor.js");
+let kenhMod: typeof import("./kenh-ca-nhan.js");
 let ghiTin: typeof import("./record-incoming-message.js");
 let batcher: typeof import("../middleware/message-batcher.js");
 let accountStore: typeof import("../config/account-store.js");
@@ -41,6 +42,7 @@ const NHAN_MONG_DOI = "[08/08 00:12]";
 before(async () => {
   dataDir = setupTestEnv();
   processor = await import("./message-turn-processor.js");
+  kenhMod = await import("./kenh-ca-nhan.js");
   ghiTin = await import("./record-incoming-message.js");
   batcher = await import("../middleware/message-batcher.js");
   accountStore = await import("../config/account-store.js");
@@ -149,10 +151,10 @@ describe("mốc giờ tin nhắn đi trọn hai lượt", () => {
     const prompts: unknown[][] = [];
     const model = modelGhiPrompt(prompts);
 
-    await processor.processBatch(config, api, [tinNhan("giá vàng hôm nay", "m1", GUI_LUC)], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan("giá vàng hôm nay", "m1", GUI_LUC)], {
       resolveModel: () => model,
     });
-    await processor.processBatch(config, api, [tinNhan("còn tỉ giá USD", "m2", "2026-08-07T17:20:00.000Z")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan("còn tỉ giá USD", "m2", "2026-08-07T17:20:00.000Z")], {
       resolveModel: () => model,
     });
 
@@ -174,7 +176,7 @@ describe("mốc giờ tin nhắn đi trọn hai lượt", () => {
 
   it("nhãn giờ lấy từ lúc GỬI, không phải lúc lượt kết thúc", async () => {
     const prompts: unknown[][] = [];
-    await processor.processBatch(config, api, [tinNhan("câu hỏi", "m1", GUI_LUC)], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan("câu hỏi", "m1", GUI_LUC)], {
       resolveModel: () => modelGhiPrompt(prompts),
     });
 
@@ -184,7 +186,7 @@ describe("mốc giờ tin nhắn đi trọn hai lượt", () => {
 
   it("created_at ghi xuống DB đúng bằng giờ gửi - lượt dài không làm lệch", async () => {
     const prompts: unknown[][] = [];
-    await processor.processBatch(config, api, [tinNhan("câu hỏi", "m1", GUI_LUC)], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan("câu hỏi", "m1", GUI_LUC)], {
       resolveModel: () => modelGhiPrompt(prompts),
     });
 
@@ -198,14 +200,14 @@ describe("mốc giờ tin nhắn đi trọn hai lượt", () => {
 
     await processor.processBatch(
       config,
-      api,
+      kenhMod.kenhCaNhan(api),
       [
         tinNhan("mình hỏi giá vàng", "m1", GUI_LUC, "Hải"),
         tinNhan("mình hỏi tỉ giá", "m2", "2026-08-07T17:12:30.000Z", "Nam"),
       ],
       { resolveModel: () => model },
     );
-    await processor.processBatch(config, api, [tinNhan("cảm ơn nhé", "m3", "2026-08-07T17:20:00.000Z")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinNhan("cảm ơn nhé", "m3", "2026-08-07T17:20:00.000Z")], {
       resolveModel: () => model,
     });
 

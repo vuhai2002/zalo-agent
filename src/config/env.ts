@@ -236,6 +236,7 @@ const envSchema = z.object({
   // Zalo không có API tắt "đang nhập", chỉ báo tự hết sau vài giây -> phải bắn
   // lặp lại theo chu kỳ này cho tới khi gửi xong câu trả lời
   TYPING_REFRESH_MS: z.coerce.number().int().min(1000).max(10000).default(3000),
+  ZALO_BOT_POLL_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(60).default(30),
 
   // ===== Lịch hẹn (scheduler): bot tự nhắn theo lịch =====
   // Tắt thì vòng tick không chạy - job vẫn nằm nguyên trong DB, chỉ đơn giản

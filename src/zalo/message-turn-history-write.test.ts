@@ -23,6 +23,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 
 let dataDir: string;
 let processor: typeof import("./message-turn-processor.js");
+let kenhMod: typeof import("./kenh-ca-nhan.js");
 let ghiTin: typeof import("./record-incoming-message.js");
 let batcher: typeof import("../middleware/message-batcher.js");
 let accountStore: typeof import("../config/account-store.js");
@@ -42,6 +43,7 @@ const TRAN_LICH_SU = 6;
 before(async () => {
   dataDir = setupTestEnv({ HISTORY_CONTEXT_LIMIT: String(TRAN_LICH_SU) });
   processor = await import("./message-turn-processor.js");
+  kenhMod = await import("./kenh-ca-nhan.js");
   ghiTin = await import("./record-incoming-message.js");
   batcher = await import("../middleware/message-batcher.js");
   accountStore = await import("../config/account-store.js");
@@ -156,7 +158,7 @@ describe("ghi lịch sử ngay lúc nhận - model không thấy tin lặp", () 
     const prompts: unknown[][] = [];
     const cauHoi = "cho mình bảng giá tháng 8";
 
-    await processor.processBatch(config, api, [tinDaNhan(cauHoi, "m1")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinDaNhan(cauHoi, "m1")], {
       resolveModel: () => modelGhiPrompt(prompts),
     });
 
@@ -173,10 +175,10 @@ describe("ghi lịch sử ngay lúc nhận - model không thấy tin lặp", () 
     const prompts: unknown[][] = [];
     const cauHoi = "giá vàng hôm nay";
 
-    await processor.processBatch(config, api, [tinDaNhan(cauHoi, "m1")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinDaNhan(cauHoi, "m1")], {
       resolveModel: () => modelGhiPrompt(prompts),
     });
-    await processor.processBatch(config, api, [tinDaNhan(cauHoi, "m2")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinDaNhan(cauHoi, "m2")], {
       resolveModel: () => modelGhiPrompt(prompts),
     });
 
@@ -202,7 +204,7 @@ describe("cửa sổ lịch sử không teo theo cỡ batch", () => {
 
     const prompts: unknown[][] = [];
     const batch = [tinDaNhan("câu một", "b1"), tinDaNhan("câu hai", "b2"), tinDaNhan("câu ba", "b3")];
-    await processor.processBatch(config, api, batch, { resolveModel: () => modelGhiPrompt(prompts) });
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), batch, { resolveModel: () => modelGhiPrompt(prompts) });
 
     assert.equal(
       soTinLichSu(prompts[0]!),
@@ -222,7 +224,7 @@ describe("cửa sổ lịch sử không teo theo cỡ batch", () => {
     batcher.enqueueMessage(`${ACC}:${THREAD}`, dangCho, async () => {}, 60_000);
 
     const prompts: unknown[][] = [];
-    await processor.processBatch(config, api, [tinDaNhan("câu đang hỏi", "b1")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinDaNhan("câu đang hỏi", "b1")], {
       resolveModel: () => modelGhiPrompt(prompts),
     });
     batcher.clearPendingBatches();
@@ -234,7 +236,7 @@ describe("cửa sổ lịch sử không teo theo cỡ batch", () => {
 describe("ghi lịch sử ngay lúc nhận - đúng một dòng, không mất khi lượt chết", () => {
   it("lượt trọn vẹn: tin người dùng có ĐÚNG một dòng", async () => {
     const prompts: unknown[][] = [];
-    await processor.processBatch(config, api, [tinDaNhan("chào bot", "m1")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinDaNhan("chào bot", "m1")], {
       resolveModel: () => modelGhiPrompt(prompts),
     });
 
@@ -249,7 +251,7 @@ describe("ghi lịch sử ngay lúc nhận - đúng một dòng, không mất kh
       },
     });
 
-    await processor.processBatch(config, api, [tinDaNhan("câu hỏi lúc bot hỏng", "m1")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinDaNhan("câu hỏi lúc bot hỏng", "m1")], {
       resolveModel: () => modelHong,
     });
 
@@ -263,7 +265,7 @@ describe("ghi lịch sử ngay lúc nhận - đúng một dòng, không mất kh
 
   it("thứ tự: tin người dùng -> câu chốt của agent", async () => {
     const prompts: unknown[][] = [];
-    await processor.processBatch(config, api, [tinDaNhan("hỏi gì đó", "m1")], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinDaNhan("hỏi gì đó", "m1")], {
       resolveModel: () => modelGhiPrompt(prompts),
     });
 
@@ -277,7 +279,7 @@ describe("ganAnhVaoHistory", () => {
     const prompts: unknown[][] = [];
     const tin = tinDaNhan("xem ảnh này", "m-anh", [{ url: "http://x/0.jpg" }]);
 
-    await processor.processBatch(config, api, [tin], {
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tin], {
       resolveModel: () => modelGhiPrompt(prompts),
       // Giả bước tải: chỉ đóng dấu localPath, không chạm mạng
       persistImages: async (_acc, msgs) => {

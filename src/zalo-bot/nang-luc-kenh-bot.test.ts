@@ -45,13 +45,12 @@ describe("năng lực kênh bot", () => {
       "read_image",
       "kb_search",
       "save_memory",
-      "schedule_task",
     ]);
     const chuaXet = TOOL_KEYS.filter((k) => !daXet.has(k));
     assert.deepEqual(chuaXet, [], `tool chưa xét cho kênh bot: ${chuaXet.join(", ")}`);
   });
 
-  it("7 tool đụng kênh bị chặn, tool thuần thì không", () => {
+  it("8 tool đụng kênh bị chặn, tool thuần thì không", () => {
     assert.equal(toolChayDuocTrenBot("send_file"), false);
     assert.equal(toolChayDuocTrenBot("create_word_document"), false);
     assert.equal(toolChayDuocTrenBot("create_excel_file"), false);
@@ -60,9 +59,10 @@ describe("năng lực kênh bot", () => {
     assert.equal(toolChayDuocTrenBot("tag_member"), false);
     assert.equal(toolChayDuocTrenBot("get_group_info"), false);
 
+    assert.equal(toolChayDuocTrenBot("schedule_task"), false);
+
     assert.equal(toolChayDuocTrenBot("kb_search"), true);
     assert.equal(toolChayDuocTrenBot("web_search"), true);
-    assert.equal(toolChayDuocTrenBot("schedule_task"), true);
   });
 
   it("mỗi lý do phải nói ĐƯỢC GÌ và MẤT GÌ, không chỉ 'không hỗ trợ'", () => {
