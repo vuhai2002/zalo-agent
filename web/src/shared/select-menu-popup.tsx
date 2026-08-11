@@ -104,7 +104,13 @@ export function SelectMenuPopup({
       ref={khungRef}
       tabIndex={-1}
       onKeyDown={phimXuong}
-      className={`absolute left-0 right-0 z-30 min-w-max overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-lg shadow-ink/10 outline-none ${
+      /*
+       * `min-w-max` cho popup RỘNG BẰNG nội dung dài nhất - tiện khi hint ngắn,
+       * nhưng trong khung hẹp (drawer `max-w-md`) nó nở quá khung, tràn ra
+       * ngoài và đẻ thanh cuộn ngang cho cả drawer. `max-w-full` chặn trần đó
+       * lại; phần thừa do `truncate` của từng dòng lo.
+       */
+      className={`absolute left-0 right-0 z-30 min-w-max max-w-full overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-lg shadow-ink/10 outline-none ${
         moLen ? "bottom-[calc(100%+4px)]" : "top-[calc(100%+4px)]"
       }`}
     >
@@ -183,7 +189,14 @@ function DongOption({
     >
       {opt.dotClass && <span className={`h-2 w-2 shrink-0 rounded-full ${opt.dotClass}`} />}
       <span className="min-w-0 flex-1 truncate font-medium">{opt.label}</span>
-      {opt.hint && <span className="shrink-0 text-[11px] text-ink-soft">{opt.hint}</span>}
+      {/* `truncate` + `min-w-0`: hint dài trong khung hẹp phải CO LẠI chứ không
+          được đẩy cả popup rộng ra. `shrink` (mặc định) thay cho `shrink-0`,
+          và nhãn vẫn giữ ưu tiên vì nó có `flex-1`. */}
+      {opt.hint && (
+        <span className="min-w-0 truncate text-[11px] text-ink-soft" title={opt.hint}>
+          {opt.hint}
+        </span>
+      )}
       {daChon && <IconCheck size={14} className="shrink-0 text-zalo-600 dark:text-zalo-300" />}
     </div>
   );

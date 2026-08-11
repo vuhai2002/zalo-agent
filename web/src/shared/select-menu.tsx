@@ -134,7 +134,14 @@ export function SelectMenu({
         >
           {current?.label ?? placeholder}
         </span>
-        {current?.hint && <span className="shrink-0 text-[11px] text-ink-soft">{current.hint}</span>}
+        {/* Co lại thay vì đẩy nhãn chính teo đi: nhãn là thứ người ta đọc,
+            hint chỉ là chú thích. Trước đây `shrink-0` làm nhãn "Tài khoản bot
+            chính thức" bị cắt thành "Tài khoản bot ..." trong drawer hẹp. */}
+        {current?.hint && (
+          <span className="min-w-0 shrink truncate text-[11px] text-ink-soft" title={current.hint}>
+            {current.hint}
+          </span>
+        )}
         <IconChevronDown
           size={md ? 17 : 15}
           className={`shrink-0 text-ink-soft transition-transform ${open ? "rotate-180" : ""}`}

@@ -164,9 +164,13 @@ export function AccountEditDrawer({
               <label className="mb-1.5 block text-[13px] font-medium text-ink">Loại kênh</label>
               <SelectMenu
                 value={form.loai}
+                /*
+                 * Hint NGẮN: đoạn giải thích đầy đủ đã nằm ngay dưới ô chọn, nên
+                 * hint dài chỉ lặp lại và đẩy popup rộng quá drawer.
+                 */
                 options={[
-                  { value: "ca_nhan", label: "Tài khoản cá nhân", hint: "đăng nhập QR, đủ tính năng" },
-                  { value: "bot", label: "Tài khoản bot chính thức", hint: "nhập token, hẹp hơn nhưng không lo khóa nick" },
+                  { value: "ca_nhan", label: "Tài khoản cá nhân", hint: "quét QR" },
+                  { value: "bot", label: "Tài khoản bot chính thức", hint: "nhập token" },
                 ]}
                 onChange={(v) => doiLoai(v as "ca_nhan" | "bot")}
               />
