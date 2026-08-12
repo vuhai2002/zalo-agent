@@ -4617,3 +4617,90 @@ Các chỗ nhấp nháy quan sát được: `startScheduler - nhịp tick`, `sto
 `typing-indicator`, `runScheduledJobTrial - giành job trước khi dispatch`,
 `nhiều người nhắn trong một nhóm`, `maybeNotifyBusyWait`. Toàn bộ là test nhạy
 thời gian. CHƯA SỬA - ghi lại đây để không ai đổ nhầm cho đợt sau.
+
+## V3.18 - Test nhấp nháy: đổi phép đo, và một lần tự làm test mất răng (2026-08-12)
+
+Chạy cả bộ test dưới 6 tiến trình đốt CPU, **trên HEAD sạch**: 4/5 lượt đỏ ở
+một lần đo, 1/10 lượt ở lần đo sau (khác tải máy). Máy rảnh thì luôn xanh. Đây
+là test nhấp nháy, và nguy hiểm không nằm ở chỗ nó đỏ oan mà ở chỗ nó **dạy
+người ta bỏ qua màu đỏ**: chạy lại thấy xanh vài lần là hình thành phản xạ
+"chắc lại nhấp nháy", rồi một ngày nó đỏ vì lỗi thật và bị chạy lại cho qua.
+
+### Ba lớp nhấp nháy, không phải một
+
+Rà 101 chỗ `await sleep(N)` trong test, phân ra ba khuôn:
+
+| Khuôn | Ví dụ | Dưới tải |
+|---|---|---|
+| Ngủ N rồi đòi một số **PHẢI ĐẠT** | `sleep(40); assert.equal(sent.length, 1)` | **đỏ oan** - việc chưa xong nên số hụt |
+| Ngủ N rồi đòi một số **KHÔNG ĐƯỢC TĂNG** | `sleep(80); assert.equal(calls.length, afterStop)` | an toàn - tải chỉ cho thêm cơ hội bắt lỗi |
+| Đo **hiệu năng** rồi so tỉ lệ | `assert.ok(tiLe < 20)` | đỏ oan - bộ ước lượng nhiễm nhiễu |
+
+Chỉ khuôn thứ nhất và thứ ba cần sửa. Khuôn thứ hai giữ nguyên - đổi nó sang
+chờ-đến-khi là làm test YẾU đi, vì điều kiện đúng ngay lần thử đầu rồi trả về,
+chưa chứng minh được gì về tương lai.
+
+### Cách sửa: đổi phép đo, KHÔNG nới biên
+
+Nới `sleep(20)` thành `sleep(200)` chỉ đẩy ngưỡng đỏ ra xa hơn và làm chậm bộ
+test trên MỌI máy. Thay bằng `doiChoDenKhi`/`doiChoSoLuong`
+(`src/shared/doi-cho-den-khi.ts`): thử điều kiện tới khi đúng, hết trần rộng
+thì ném kèm mô tả. Được ba thứ cùng lúc - máy bận vẫn xanh, code sai vẫn đỏ,
+và máy rảnh CHẠY NHANH HƠN sleep cố định vì về ngay lúc điều kiện đúng.
+
+Một chỗ đáng ghi là `runScheduledJobTrial`: bản cũ là `sleep(20)` kèm lập luận
+"toàn bộ guard/preflight giữa 2 điểm đó là SQLite đồng bộ nên 20ms thừa sức".
+Lập luận đúng về THỨ TỰ nhưng sai về NGÂN SÁCH - nó ngầm giả định tiến trình
+được cấp CPU liên tục. Bản mới chờ đúng mốc "trial đã chạm sendMessage", và
+như vậy còn CHẶT HƠN: việc giành job xảy ra trước lời gọi đó, nên thấy tin
+thứ nhất là chắc chắn khâu giành đã xong.
+
+### Lỗi tự gây: viết lại cho "chắc chắn" hơn và làm test mất răng
+
+Ca `busy-wait-notice` "không nhắc lại trong cùng quãng chờ" bị viết lại thành
+ba lời gọi bắn cùng một nhịp đồng bộ, với lý do "khoảng cách bằng 0 nên không
+tải nào chen vào được". Nghe hợp lý, và test vẫn xanh.
+
+Phép phá bóc ra: **bỏ hẳn cửa khoảng lặng trong code thật thì test vẫn XANH.**
+Vì ba lời gọi cùng nhịp làm lời gọi 2 và 3 bị chặn ở cửa `dangGuiTren` (thread
+đang có tin đi ra) - chúng không bao giờ chạm tới cửa khoảng lặng. Bản CŨ (await
+tuần tự) chạy cùng phép phá đó thì ĐỎ đúng.
+
+Đo lại mới thấy chẩn đoán ban đầu cũng sai luôn: ba lời gọi tuần tự tốn tối đa
+**17ms** (30 lượt, cả khi rảnh lẫn dưới 8 burner), trong khi khoảng lặng là
+200ms - thừa hơn 10 lần, không phải chỗ nhấp nháy. Con số 200ms đó chính là
+lần "nới biên" trước (từ 20ms lên) và lần đó nới ĐÚNG.
+
+Đã trả lại hình dạng cũ, chỉ giữ phần cải thiện an toàn (chờ đúng điều kiện
+`daBanBaoLau >= ngưỡng` thay vì đoán 250ms), và ghi lý do vào comment ngay tại
+chỗ để không ai "sửa" ngược lần nữa.
+
+Bài học lặp lại đúng câu CLAUDE.md đã ghi từ đợt chống injection: phép phá chỉ
+chứng minh code mới CẦN cho test mới, KHÔNG BAO GIỜ chứng minh nó BAO TRÙM code
+cũ. Mỗi lần viết lại một test đã có: chạy phép phá trên CẢ HAI bản.
+
+### Test hiệu năng: sửa bộ ước lượng, giữ nguyên ngưỡng
+
+`khu-gia-mao-nhan-nguon.test.ts` so tỉ lệ thời gian giữa n và 8n để bắt bậc
+hai. Dưới tải nó đo ra **21,6** so với trần 20 - đỏ dù hàm vẫn tuyến tính.
+
+Không đụng vào trần 20. Sửa bộ đo: mỗi loạt nhắm ~6ms thay vì 15ms, và lấy MIN
+của 21 loạt thay vì 5. Lý do: lượng tử lập lịch của Windows cỡ 15-30ms, nên
+loạt dài 15ms thì dưới tải gần như loạt nào cũng bị cướp CPU giữa chừng, `min`
+của 5 loạt vẫn là số đã nhiễm nhiễu - mà hai phép đo nhiễm khác nhau nên TỈ LỆ
+trôi. Loạt ngắn hơn thì xác suất một loạt lọt trọn vào một lượng tử sạch cao
+hơn, và lấy min của nhiều loạt thì chỉ cần MỘT loạt sạch.
+
+Đây là làm bộ ước lượng CHÍNH XÁC hơn, không phải nới ngưỡng: `min` sát hơn với
+chi phí thật nên tỉ lệ tiến về ~8 của tuyến tính. Kiểm bằng phép phá (chèn một
+vòng lặp bậc hai vào chính hàm đó): đo ra 41,7 - vẫn đỏ đúng.
+
+### Vẫn còn treo
+
+Loại nhấp nháy thứ tư chưa đụng: test debounce kiểu "ngủ 40ms rồi khẳng định
+lượt CHƯA chạy, vì cửa sổ gộp là 60ms". Nó đua đồng hồ theo chiều ngược lại -
+máy đứng hình quá 60ms là cửa sổ đã chốt và ca đó đỏ. Chờ-đến-khi không chữa
+được (không chờ được "chưa tới hạn"). Cách đúng là đồng hồ giả
+(`node:test` có `mock.timers`), nhưng đó là viết lại cả
+`message-batcher.test.ts` nên tách thành việc riêng. Chưa quan sát thấy nó đỏ
+lần nào trong các lượt đo.
