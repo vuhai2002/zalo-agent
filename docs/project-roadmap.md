@@ -3956,97 +3956,6 @@ CHỐT để sau khi có tài liệu thật để nạp - không phải việc b
 đúng điều kiện tiên quyết (kho phải có dữ liệu thật trước khi bộ eval có ý
 nghĩa).
 
-### Việc còn treo của kênh Zalo Bot
-
-Đã xong: client API, bộ chuyển update, bảng năng lực + chặn tool (cả ở dashboard
-qua `?accountId=`), vòng long polling, cột `loai`/`bot_token_enc` cho `accounts`,
-trừu tượng hóa đường gửi (`ReplyTarget.guiMotDoan`), `ToolContext.api` nullable,
-trừu tượng hóa NĂNG LỰC kênh (`KenhLuot` + `kenhCaNhan`/`kenhBot`), router riêng
-(`bot-message-router.ts`), runner (`bot-account-runner.ts`) nối vào
-`startAccount`, tham số `ZALO_BOT_POLL_TIMEOUT_SECONDS`.
-
-Trang Accounts cũng xong: chọn loại kênh lúc tạo, nhập token (server KIỂM với
-API Zalo trước khi lưu, sai thì không lưu gì cả), khởi động lại account ngay sau
-khi lưu token. Kênh bot dùng được trọn vẹn bằng đường thường.
-
-
-Còn treo sau vòng rà soát:
-
-- **Sticker và tin thoại trên kênh bot ĐỐT một lượt LLM, kênh cá nhân thì
-  không.** Parser bot trả nhãn `[gửi một sticker]` nên `shouldRespond` cho chạy;
-  parser cá nhân trả chuỗi rỗng nên bị `skip`. Chênh lệch này CÓ CHỦ ĐÍCH (chuỗi
-  rỗng + `images` rỗng làm tin biến mất vĩnh viễn trên kênh không có `offset`),
-  nhưng hệ quả "mỗi sticker = một lượt agent + một tin trả lời" thì chưa ai
-  chọn. Cân nhắc cho `shouldRespond` biết nhãn này là tin KHÔNG cần trả lời.
-- **Vòng poll không có sàn nhịp.** Poll rỗng thì `continue` ngay, toàn bộ nhịp
-  dựa vào việc server GIỮ kết nối đủ `timeout` giây (đo đúng: 5015/10029/30042
-  ms). Ngày nào Zalo trả rỗng tức thì thì vòng quay ở tốc độ mạng, không trần -
-  và đích đến là chính con nginx đã đo được trả 429. Một `await ngu(200)` khi
-  poll rỗng mà vòng chạy dưới 1 giây là đủ.
-- `tatJobKhongCanPhamVi` ghi `updated_at` bằng `datetime('now')` trong khi 8 câu
-  UPDATE khác cùng file dùng `strftime('%Y-%m-%dT%H:%M:%fZ','now')`. Vô hại hôm
-  nay vì không component nào render `updatedAt` của job; sẽ thành giờ lệch múi
-  khi ai đó hiện nó lên (V8 hiểu chuỗi không có `T`/`Z` là giờ ĐỊA PHƯƠNG).
-
-- **`pnpm zalo-login <id>` không kiểm `loai`** - `scripts/login-account.ts` cố ý
-  không mở DB nên không biết loại kênh. Chạy cho một tài khoản bot sẽ ghi
-  `credentials.enc` rác và đốt một lần quét QR. KHÔNG tạo ra tài khoản nửa nọ
-  nửa kia (script không `attachAccount`), nên chỉ là phiền chứ không nguy hiểm -
-  nhưng đây là đường vào duy nhất còn lại hoàn toàn không biết `loai`.
-- `PATCH /api/schedule/:id` không kiểm `loai`. Không tạo được job mới nên chưa
-  khai thác được, nhưng bật lại một job cũ thì không có chốt nào.
-- Ngân sách BYTE của kênh bot vẫn đếm cả `styles` mà nó sẽ vứt
-  (`sendReplyInParts` truyền `ZALO_RICH_TEXT_MAX_PAYLOAD_BYTES` cho cả hai
-  kênh). Ở mặc định 2000/2000 gần như không lệch, nhưng có thể chẻ thừa một tin.
-- `await res.text()` trong client nằm NGOÀI mọi `try`: thân đứt giữa chừng thì
-  lỗi thoát ra dạng `TypeError` thô, mất `method` và không đi qua `che()`.
-- Sơ đồ đầu `docs/system-architecture.md` vẫn ghi `generateText` trong khi
-  CLAUDE.md chốt "mọi lời gọi LLM đi qua `chayStream()`". Nợ cũ, không phải
-  của đợt bot.
-
-- `laLoiMayChuTuChoi` (`send-reply-in-parts.ts`) đọc `err.code` dạng số của
-  `ZaloApiError`. `LoiZaloBotApi` mang `httpStatus`/`maLoi`, nên đường lui "gửi
-  lại chữ trơn" hiện chỉ chạy cho kênh cá nhân. Ít hại hơn tưởng vì kênh bot đã
-  gửi chữ trơn không styles không quote sẵn - không có gì để mà bỏ bớt.
-- **Kênh bot KHÔNG có chữ đậm/nghiêng.** `deliverChatReply` chạy
-  `dinhDangNeuBat` trước, `markdownSangStyleZalo` bóc dấu ra thành `Style[]`, mà
-  `kenhBot.duongGui` vứt styles. Muốn có định dạng thì phải bỏ qua bước chuyển
-  cho kênh này và gửi markdown thô - cần đo phương ngữ markdown của Zalo trước.
-  (Đã đo: cả `parse_mode: "markdown"` lẫn `null` đều KHÔNG bị API từ chối với
-  chuỗi có `_` và `[` lẻ, nên đây là chuyện chất lượng chứ không phải lỗi.)
-- **Nhắn chủ động / lịch hẹn**: `schedule_task` đã bị CHẶN trên kênh bot vì
-  `run-scheduled-job` chỉ biết gửi qua zca-js; không chặn thì job `once` bị
-  dispatch lại mỗi tick mãi mãi kèm lý do sai sự thật. Mở lại khi scheduler
-  biết kênh.
-- `reportPayloadAnomalies` KHÔNG phủ được ảnh trên kênh bot: nhánh ảnh của nó
-  đọc `parsed.rawData.msgType`, trường của zca-js không tồn tại trong `rawData`
-  của Bot API. Đã bù bằng nhãn tường minh trong parser, nhưng lưới đỡ chung thì
-  vẫn thủng cho kênh này.
-- `create_image` mở lại được nếu có đường phục vụ ảnh qua HTTPS công khai:
-  `sendPhoto` CHẠY TỐT (đã đo với `picsum.photos`/`placehold.co`), chỉ thiếu chỗ
-  đặt ảnh vừa vẽ. Dashboard đã chạy HTTP và tài liệu triển khai đặt Caddy trước
-  nó, nên hạ tầng gần như có sẵn. Ba thứ phải cân trước: route ảnh phải CÔNG
-  KHAI (Zalo tải bằng máy chủ của họ, không mang cookie) nên id phải khó đoán và
-  ảnh phải tự hết hạn; chưa biết Zalo giữ ảnh hay chỉ trỏ link (chỉ trỏ link thì
-  xóa ảnh là tin cũ vỡ hình); và nó đánh đổi mất ưu thế "long polling không cần
-  domain" của kênh bot.
-- Mặc định `allowlist = list` cho tài khoản bot tồn tại ở HAI nơi: server lúc
-  tạo, và `doiLoai()` trong drawer. Drawer gọi `update()` ngay sau `create()`
-  nên bản ở server luôn bị ghi đè - tức bản ở client mới là thứ thực sự giữ giá
-  trị. Chưa có test nào chạy đúng chuỗi create -> update của drawer.
-- Vượt luật < 200 dòng: `send-reply-in-parts.ts` 331, `account-routes.ts` 244,
-  `account-store.ts` 243, `zalo-bot-api-client.ts` 231. `ReplyTarget` vẫn
-  mang `threadType`/`quote` của zca-js nên trừu tượng kênh mới xong một nửa.
-
-Chưa trả lời được: **bot có nhắn CHỦ ĐỘNG cho người CHƯA từng nhắn nó không.**
-Không thử được vì `chat_id` chỉ xuất hiện sau khi họ nhắn - gần như chắc chắn
-là không. Với người ĐÃ nhắn thì gửi được (đo: 10 tin trong 416ms), nên lịch hẹn
-vẫn chạy trong phạm vi đó.
-
-Cân nhắc sau: `create_image` mở lại được nếu có đường phục vụ ảnh qua HTTPS công
-khai - `sendPhoto` vẫn hoạt động, chỉ thiếu chỗ đặt ảnh. Nhưng long polling vốn
-giúp tránh phải có domain, nên đây là đánh đổi cần cân nhắc chứ không hiển nhiên.
-
 ### Việc còn treo của Kho tri thức
 
 Gộp hai đợt rà soát: đợt xây tính năng gốc (31 mục, xem lịch sử ở trên) và đợt
@@ -4369,3 +4278,342 @@ vào sổ tri thức nội bộ) để tránh UI hiển thị dữ liệu của 
 ĐẦU TIÊN hỏng (`sourcesDaBiet === null` ngay từ đầu, vd mở trang đúng lúc API
 vừa restart) làm poll chết luôn từ lúc khởi tạo - phải F5 tay. Chưa chiều nào
 trong 9 chiều ở trên phủ ca này.
+
+## V3.16 - Kênh thứ hai: tài khoản Zalo Bot chính thức (2026-08-10)
+
+Đến đây agent chỉ chạy trên tài khoản CÁ NHÂN qua `zca-js` - một API không
+chính thức, đổi lại bằng rủi ro Zalo khóa nick. Zalo có một đường chính thức
+khác: **Zalo Bot API** (`bot-api.zaloplatforms.com`). Mục tiêu của đợt này là
+chạy được CẢ HAI loại tài khoản trong cùng một tiến trình, trộn lẫn tùy ý.
+
+### Thứ đầu tiên phải làm rõ: Bot API KHÔNG phải OA API
+
+Hai sản phẩm này bị nhầm lẫn khắp nơi, kể cả trong tài liệu bên thứ ba. Chính
+sách "chỉ được nhắn trong 7 ngày kể từ tương tác cuối" và biểu phí gửi tin là
+của **Zalo OA API** (`openapi.zalo.me`), KHÔNG áp cho đường này. Không tách
+được hai thứ đó thì cả đợt này đã bị bỏ ngay từ bước khảo sát vì tưởng phải
+trả tiền theo từng tin.
+
+### Đo API sống thay vì đọc tài liệu
+
+Bot API sao chép hình dạng của Telegram Bot API (`POST /bot{token}/{method}`,
+thân JSON, phong bì `{ok, result}`) nên rất dễ suy diễn sai theo thói quen
+Telegram. Mọi khẳng định dưới đây lấy từ việc gọi API thật bằng token thật:
+
+| Điều | Đo được | Vì sao quan trọng |
+|---|---|---|
+| Lỗi nằm ở trường nào | `description`, KHÔNG phải `message`/`error`, và luôn kèm **HTTP 200** | Bản client đầu đọc `message` nên mọi lỗi hiện ra là `undefined` |
+| Poll rỗng | `{"ok":false,"description":"Request timeout","error_code":408}` | Đây là kết cục BÌNH THƯỜNG. Coi là lỗi thì mỗi phút im lặng là một dòng ERROR và backoff leo thang vĩnh viễn |
+| Poll dồn dập | nginx chặn **429**, trả **HTML** không phải JSON | Chỗ đọc thân trả về phải chịu được thứ không phải JSON |
+| `getUpdates` | trả MỘT update mỗi lần, KHÔNG có tham số `offset` | Đọc là POP khỏi hàng chờ server: tin bị đánh rơi là mất VĨNH VIỄN |
+| Mất tin? | KHÔNG - gửi nhanh 3 tin nhận đủ cả 3 | Hàng chờ có đệm, không cần tự dựng lớp chống mất tin |
+| `date` | MILI giây | Telegram dùng GIÂY - chép nhầm là lệch 1000 lần |
+| Trần một tin | 2000 ký tự, server ép thật | Trần của NỀN TẢNG, không phải cấu hình - nên nó thuộc `KenhLuot` chứ không phải `.env` |
+| Nhịp gửi | 10 tin trong 416ms, không bị chặn | Không cần rate-limit riêng cho kênh này |
+| `sendPhoto` | CHỈ nhận URL công khai - multipart, data URI, base64 đều bị từ chối | Chính là lý do `create_image` không chạy được |
+
+Dò 17 method: **13 cái trả 404**. Không tồn tại `sendDocument`/`sendFile`/
+`sendVideo`/`sendAudio`/`editMessageText`/`deleteMessage`/`setMessageReaction`/
+`forwardMessage`/`getChat`/`getChatMember`. Script dò nằm lại trong repo
+(`pnpm zalo-bot-check`) để lần sau Zalo mở thêm method thì đo lại bằng một
+lệnh, không phải dựng lại từ đầu.
+
+### 8 trong 14 tool bị chặn, và vì sao ẩn tool thôi là chưa đủ
+
+Bị chặn: `send_file`, `create_word_document`, `create_excel_file`,
+`create_image`, `add_reaction`, `tag_member`, `get_group_info`,
+`schedule_task`. Chạy được: `get_datetime`, `web_search`, `web_fetch`,
+`kb_search`, `save_memory`, `read_image`.
+
+Điểm đáng ghi: **mọi tool dùng `ctx.api` của zca-js đều nằm trong bảng chặn** -
+không phải trùng hợp, chúng bị chặn vì cần đúng năng lực gửi mà Bot API không
+có. Hệ quả: trên kênh bot không tool nào cần `api`, nên `ToolContext.api` để
+`null` được mà không phải dựng stub ném lỗi.
+
+Tool bị chặn được gỡ khỏi SCHEMA gửi model chứ không phải chặn lúc gọi: model
+không biết tool tồn tại, không tốn token mô tả, và prompt injection không dụ
+gọi được thứ không có trong schema.
+
+Nhưng ẩn tool là CHƯA ĐỦ - model sẽ nói "tôi không làm được" mà không nói vì
+sao, và người nhắn tưởng agent hỏng. `LUAT_PERSONA_KENH_BOT` chỉ ghép khi
+`account.loai === "bot"`, nói rõ đây là giới hạn nền tảng Zalo và mời sang kênh
+cá nhân nếu cần.
+
+`schedule_task` bị chặn ở BA chỗ vì có ba đường vào: tool
+(`nang-luc-kenh-bot.ts`), dashboard (`POST /api/schedule`), và job CŨ đã tạo từ
+trước (`run-scheduled-job.ts` tắt hẳn job thay vì `concludeBlockedNotRun`).
+Chỉ chặn đường tool thì job `once` cũ được phục hồi `next_run_at` nên bị
+dispatch lại MỖI TICK, mãi mãi, kèm lý do sai sự thật.
+
+### Trừu tượng hóa NĂNG LỰC, không phải trừu tượng hóa API
+
+Hướng đầu tiên nghĩ tới là bọc một facade chung quanh hai thư viện. Bác: hai
+API không cùng tập năng lực, facade chung sẽ đầy hàm ném "không hỗ trợ".
+
+Cách chốt: `KenhLuot` (`src/zalo/kenh-luot.ts`) mô tả năng lực của một kênh
+trong phạm vi MỘT LƯỢT. Kênh nào thiếu năng lực nào thì để `undefined` và
+`processBatch` bỏ qua - không stub, không ném lỗi.
+
+| Năng lực | Cá nhân | Bot |
+|---|---|---|
+| `duongGui` (gửi chữ) | có | có |
+| `batDangNhap` | có | có (`sendChatAction`) |
+| `baoDaXem` | có | KHÔNG có method |
+| `tuThaCamXuc` | có | `setMessageReaction` trả 404 |
+| `api` (cho tool) | có | `null` |
+| `tranKyTuMotTin` | theo `ZALO_MAX_MESSAGE_CHARS` | 2000 (server ép cứng) |
+
+`bot-message-router.ts` là bản RIÊNG chứ không dùng chung
+`incoming-message-router.ts`: router kia gọi ba thứ Bot API không có (biên nhận
+"đã nhận", thả cảm xúc, `getGroupInfo` tra tên nhóm). Phần dùng chung thì dùng
+chung thật: `shouldRespond`, `ghiTinDenVaoHistory`, `enqueueMessage`,
+`processBatch`, `maybeNotifyBusyWait`, `reportPayloadAnomalies`.
+
+### Bốn quyết định của trang Accounts
+
+- **`loai` chốt LÚC TẠO**, không đổi được sau đó. Đổi loại của một tài khoản
+  đang chạy là đổi luôn ý nghĩa của credential đã lưu (cookie zca-js so với
+  token bot). Chặn ba lớp: `patchSchema` không khai `loai`, `updateAccount`
+  thu hẹp kiểu tham số, câu UPDATE không có cột đó.
+- **KIỂM token trước khi LƯU** (`PUT /api/accounts/:id/bot-token` gọi `getMe`).
+  Lưu một token sai là dựng sẵn một tài khoản trông như đã cấu hình xong mà
+  không bao giờ chạy - triệu chứng duy nhất là agent im lặng.
+- **Lưu xong khởi động lại ngay.** Account mới có `enabled = 1` sẵn nhưng chưa
+  chạy, mà nút gạt đã ở trạng thái BẬT - không tự khởi động thì người dùng phải
+  bấm tắt rồi bật lại, không ai đoán ra.
+- **Tài khoản bot mặc định ĐÓNG allowlist** (`mode: "list"`), khác tài khoản cá
+  nhân. Bán kính khác hẳn: nick cá nhân phải là bạn bè mới nhắn được, còn bot
+  thì ai có link cũng nhắn được - mở sẵn là mời người lạ đốt token và thử prompt
+  injection.
+
+### Token nằm trong ĐƯỜNG DẪN, nên phải che ba lớp
+
+`/bot{token}/{method}` nghĩa là token đi vào mọi chuỗi URL. Không phải lo xa:
+đã dựng lại được đường token đi từ trang lỗi của cổng trung gian (nó echo lại
+đường dẫn) vào trường `warning` của PATCH account - tức là lên màn hình
+dashboard - và vào `data/logs/bot.*.log`.
+
+Ba lớp trong `che()`: thay chuỗi token nguyên vẹn, thay theo HÌNH DẠNG
+`/bot<số>:<chuỗi>` (bắt cả bản đã mã hóa URL và HTML entity), và thay riêng
+phần bí mật sau dấu hai chấm. Một lỗi đã trả giá: bản đầu viết
+`che(chu.slice(0, 200))` - CẮT trước rồi mới che, nên 4-24 ký tự đầu của token
+lọt ra nguyên vẹn. Đúng thứ tự là `che(chu).slice(0, 200)`.
+
+Kèm một bài học về test: phép thử cho chính bản vá đó lúc đầu BÁO XANH GIẢ, vì
+token trong fixture bắt đầu bằng `toke` mà chuỗi thay thế là `<token>` - phép
+khẳng định khớp chính nó. Đổi sang token không trùng tiền tố thì nó đỏ đúng.
+
+### Nhóm - chỗ duy nhất còn dựa vào tài liệu
+
+`getMe` trả `can_join_groups: true` (số đo thật), nhưng tài liệu Zalo ghi tính
+năng nhóm "đang trong giai đoạn thử nghiệm nội bộ".
+
+**Lấy từ TÀI LIỆU, chưa đo:** trong nhóm, bot chỉ nhận sự kiện khi bị @mention
+hoặc khi ai đó reply tin của chính nó. `doiUpdateSangParsedMessage` đặt cứng
+`mentionsMe: true` dựa trên khẳng định đó. Nếu tài liệu sai thì agent trả lời
+MỌI tin trong nhóm - phải đo lại trước khi mở nhóm cho tài khoản thật.
+
+### Việc còn treo của kênh Zalo Bot
+
+Đã xong: client API, bộ chuyển update, bảng năng lực + chặn tool (cả ở dashboard
+qua `?accountId=`), vòng long polling, cột `loai`/`bot_token_enc` cho `accounts`,
+trừu tượng hóa đường gửi (`ReplyTarget.guiMotDoan`), `ToolContext.api` nullable,
+trừu tượng hóa NĂNG LỰC kênh (`KenhLuot` + `kenhCaNhan`/`kenhBot`), router riêng
+(`bot-message-router.ts`), runner (`bot-account-runner.ts`) nối vào
+`startAccount`, tham số `ZALO_BOT_POLL_TIMEOUT_SECONDS`.
+
+Trang Accounts cũng xong: chọn loại kênh lúc tạo, nhập token (server KIỂM với
+API Zalo trước khi lưu, sai thì không lưu gì cả), khởi động lại account ngay sau
+khi lưu token. Kênh bot dùng được trọn vẹn bằng đường thường.
+
+
+Còn treo sau vòng rà soát:
+
+- **Sticker và tin thoại trên kênh bot ĐỐT một lượt LLM, kênh cá nhân thì
+  không.** Parser bot trả nhãn `[gửi một sticker]` nên `shouldRespond` cho chạy;
+  parser cá nhân trả chuỗi rỗng nên bị `skip`. Chênh lệch này CÓ CHỦ ĐÍCH (chuỗi
+  rỗng + `images` rỗng làm tin biến mất vĩnh viễn trên kênh không có `offset`),
+  nhưng hệ quả "mỗi sticker = một lượt agent + một tin trả lời" thì chưa ai
+  chọn. Cân nhắc cho `shouldRespond` biết nhãn này là tin KHÔNG cần trả lời.
+- **Vòng poll không có sàn nhịp.** Poll rỗng thì `continue` ngay, toàn bộ nhịp
+  dựa vào việc server GIỮ kết nối đủ `timeout` giây (đo đúng: 5015/10029/30042
+  ms). Ngày nào Zalo trả rỗng tức thì thì vòng quay ở tốc độ mạng, không trần -
+  và đích đến là chính con nginx đã đo được trả 429. Một `await ngu(200)` khi
+  poll rỗng mà vòng chạy dưới 1 giây là đủ.
+- `tatJobKhongCanPhamVi` ghi `updated_at` bằng `datetime('now')` trong khi 8 câu
+  UPDATE khác cùng file dùng `strftime('%Y-%m-%dT%H:%M:%fZ','now')`. Vô hại hôm
+  nay vì không component nào render `updatedAt` của job; sẽ thành giờ lệch múi
+  khi ai đó hiện nó lên (V8 hiểu chuỗi không có `T`/`Z` là giờ ĐỊA PHƯƠNG).
+
+- **`pnpm zalo-login <id>` không kiểm `loai`** - `scripts/login-account.ts` cố ý
+  không mở DB nên không biết loại kênh. Chạy cho một tài khoản bot sẽ ghi
+  `credentials.enc` rác và đốt một lần quét QR. KHÔNG tạo ra tài khoản nửa nọ
+  nửa kia (script không `attachAccount`), nên chỉ là phiền chứ không nguy hiểm -
+  nhưng đây là đường vào duy nhất còn lại hoàn toàn không biết `loai`.
+- `PATCH /api/schedule/:id` không kiểm `loai`. Không tạo được job mới nên chưa
+  khai thác được, nhưng bật lại một job cũ thì không có chốt nào.
+- Ngân sách BYTE của kênh bot vẫn đếm cả `styles` mà nó sẽ vứt
+  (`sendReplyInParts` truyền `ZALO_RICH_TEXT_MAX_PAYLOAD_BYTES` cho cả hai
+  kênh). Ở mặc định 2000/2000 gần như không lệch, nhưng có thể chẻ thừa một tin.
+- `await res.text()` trong client nằm NGOÀI mọi `try`: thân đứt giữa chừng thì
+  lỗi thoát ra dạng `TypeError` thô, mất `method` và không đi qua `che()`.
+- Sơ đồ đầu `docs/system-architecture.md` vẫn ghi `generateText` trong khi
+  CLAUDE.md chốt "mọi lời gọi LLM đi qua `chayStream()`". Nợ cũ, không phải
+  của đợt bot.
+
+- `laLoiMayChuTuChoi` (`send-reply-in-parts.ts`) đọc `err.code` dạng số của
+  `ZaloApiError`. `LoiZaloBotApi` mang `httpStatus`/`maLoi`, nên đường lui "gửi
+  lại chữ trơn" hiện chỉ chạy cho kênh cá nhân. Ít hại hơn tưởng vì kênh bot đã
+  gửi chữ trơn không styles không quote sẵn - không có gì để mà bỏ bớt.
+- **Kênh bot KHÔNG có chữ đậm/nghiêng.** `deliverChatReply` chạy
+  `dinhDangNeuBat` trước, `markdownSangStyleZalo` bóc dấu ra thành `Style[]`, mà
+  `kenhBot.duongGui` vứt styles. Muốn có định dạng thì phải bỏ qua bước chuyển
+  cho kênh này và gửi markdown thô - cần đo phương ngữ markdown của Zalo trước.
+  (Đã đo: cả `parse_mode: "markdown"` lẫn `null` đều KHÔNG bị API từ chối với
+  chuỗi có `_` và `[` lẻ, nên đây là chuyện chất lượng chứ không phải lỗi.)
+- **Nhắn chủ động / lịch hẹn**: `schedule_task` đã bị CHẶN trên kênh bot vì
+  `run-scheduled-job` chỉ biết gửi qua zca-js; không chặn thì job `once` bị
+  dispatch lại mỗi tick mãi mãi kèm lý do sai sự thật. Mở lại khi scheduler
+  biết kênh.
+- `reportPayloadAnomalies` KHÔNG phủ được ảnh trên kênh bot: nhánh ảnh của nó
+  đọc `parsed.rawData.msgType`, trường của zca-js không tồn tại trong `rawData`
+  của Bot API. Đã bù bằng nhãn tường minh trong parser, nhưng lưới đỡ chung thì
+  vẫn thủng cho kênh này.
+- `create_image` mở lại được nếu có đường phục vụ ảnh qua HTTPS công khai:
+  `sendPhoto` CHẠY TỐT (đã đo với `picsum.photos`/`placehold.co`), chỉ thiếu chỗ
+  đặt ảnh vừa vẽ. Dashboard đã chạy HTTP và tài liệu triển khai đặt Caddy trước
+  nó, nên hạ tầng gần như có sẵn. Ba thứ phải cân trước: route ảnh phải CÔNG
+  KHAI (Zalo tải bằng máy chủ của họ, không mang cookie) nên id phải khó đoán và
+  ảnh phải tự hết hạn; chưa biết Zalo giữ ảnh hay chỉ trỏ link (chỉ trỏ link thì
+  xóa ảnh là tin cũ vỡ hình); và nó đánh đổi mất ưu thế "long polling không cần
+  domain" của kênh bot.
+- Mặc định `allowlist = list` cho tài khoản bot tồn tại ở HAI nơi: server lúc
+  tạo, và `doiLoai()` trong drawer. Drawer gọi `update()` ngay sau `create()`
+  nên bản ở server luôn bị ghi đè - tức bản ở client mới là thứ thực sự giữ giá
+  trị. Chưa có test nào chạy đúng chuỗi create -> update của drawer.
+- Vượt luật < 200 dòng: `send-reply-in-parts.ts` 331, `account-routes.ts` 244,
+  `account-store.ts` 243, `zalo-bot-api-client.ts` 231. `ReplyTarget` vẫn
+  mang `threadType`/`quote` của zca-js nên trừu tượng kênh mới xong một nửa.
+
+Chưa trả lời được: **bot có nhắn CHỦ ĐỘNG cho người CHƯA từng nhắn nó không.**
+Không thử được vì `chat_id` chỉ xuất hiện sau khi họ nhắn - gần như chắc chắn
+là không. Với người ĐÃ nhắn thì gửi được (đo: 10 tin trong 416ms), nên lịch hẹn
+vẫn chạy trong phạm vi đó.
+
+Cân nhắc sau: `create_image` mở lại được nếu có đường phục vụ ảnh qua HTTPS công
+khai - `sendPhoto` vẫn hoạt động, chỉ thiếu chỗ đặt ảnh. Nhưng long polling vốn
+giúp tránh phải có domain, nên đây là đánh đổi cần cân nhắc chứ không hiển nhiên.
+
+## V3.17 - Dashboard trên màn hình thấp: ba lớp lỗi cùng một họ (2026-08-12)
+
+Ba lỗi giao diện do người dùng báo, hóa ra cùng một họ: **một phần tử không có
+trần chiều cao thì nó đẩy khung chứa cao lên, và thứ bị hy sinh nằm ở chỗ
+khác**. Đều chỉ lộ ra khi cửa sổ THẤP (đo trên 1280x702, tức laptop 1080p ở
+zoom 125%) - màn cao thì cả ba vô hình.
+
+### Sidebar không có trần, cả trang cuộn theo
+
+Khung ngoài (`app.tsx`) là `min-h-[100dvh]` - chỉ đặt SÀN, không đặt trần. Cột
+nội dung bên phải có `lg:h-screen lg:overflow-hidden` nên đúng một màn hình,
+nhưng `<aside>` ở `lg:static` thì cao bằng nội dung tự nhiên của nó: đo được
+**72 (logo) + 630 (nav) + 53 (chân) = 755px**, cố định vì danh sách mục cố
+định. Cửa sổ 702px < 755px nên hàng flex nở ra 759px và **document tự cuộn
+58px**.
+
+Hệ quả người dùng thấy: cuộn xuống là sidebar trôi lên theo, mất logo; và có
+HAI thanh cuộn dọc chồng nhau (một của `<main>`, một của trang).
+
+`overflow-y-auto` sẵn có trên `<nav>` là code CHẾT ở desktop: `min-height: auto`
+chỉ triệt tiêu khi cha có chiều cao xác định, mà không ai cấp. Mobile không dính
+vì `fixed inset-y-0` đã là chiều cao xác định sẵn - đo được nav co còn 473px và
+cuộn nội bộ 157px, chân trang vẫn thấy.
+
+Sửa bằng đúng một class: `lg:h-screen` cho `<aside>`. Sau đó: document cuộn
+58 -> **0**, sidebar 701px, nav cuộn nội bộ 57px, logo và chân trang luôn thấy.
+
+### Bốn hộp thoại tràn khỏi màn mà không cuộn được
+
+Rà cả 13 overlay `fixed inset-0`: 9 cái đã có trần (`h-full` cho drawer,
+`max-h-[85vh]`/`[90dvh]` cho modal), **4 cái không có gì**. Lớp phủ là `fixed`
+nên cuộn trang cũng không kéo chúng vào - đo `cuonCuuDuoc: false`.
+
+Ở 844x390 (điện thoại nằm ngang, hoặc cửa sổ thấp):
+
+| Overlay | Cao | Hậu quả |
+|---|---|---|
+| `kb-add-source-modal` | 490 | tiêu đề mất 50px trên, nút "Thêm nguồn" ở 424 tức ngoài màn -> **không thêm được nguồn tri thức** |
+| `agent-create-modal` | 468 | nút "Tiếp tục" ngoài màn -> **không tạo được agent** |
+| `qr-login-modal` | 439 | tràn khi màn thấp hơn ~440px |
+| `confirm-dialog` | 148 | chỉ tràn ở màn rất thấp, nhưng nội dung dài ngắn tùy lời nhắn |
+
+Thêm `max-h-[85dvh]` + vùng cuộn nội bộ, theo đúng mẫu 3 modal Kho tri thức đã
+có. Dùng `dvh` chứ không `vh`: trên điện thoại `vh` tính theo màn KHÔNG có
+thanh địa chỉ, nên trần vẫn có thể vượt vùng nhìn thấy.
+
+Ghi lại để không sửa nhầm: 3 modal Kho tri thức vẫn đang dùng `85vh`. Theo lý
+thì cùng chịu vấn đề đó trên điện thoại thật, nhưng CHƯA ĐO ĐƯỢC - Chrome giả
+lập không có thanh địa chỉ động - nên để nguyên chứ không đổi theo suy luận.
+
+### Cột danh mục trang Cấu hình: ghim thế nào cho đúng
+
+Cột danh mục cuộn đi mất cùng nội dung: thẻ cao 738px còn khối cấu hình bên
+phải cao 1190px, nên cuộn tới đáy là bên trái để lại **521px trống trơn**.
+
+Ba phương án đã thử, hai bị bác **sau khi người dùng nhìn thấy kết quả thật**:
+
+1. `sticky top-0` + `max-h` + `overflow-y-auto` - **BỊ BÁC**: sinh thêm một
+   thanh cuộn thứ hai ngay cạnh thanh cuộn nội dung, rối mắt. Đây là cách sách
+   vở hay dạy, nên khả năng bị "sửa" ngược lại là cao - đừng.
+2. `sticky top-0` trần trụi - **BỊ BÁC**: ghim CỨNG ngay khi chạm đỉnh nên thẻ
+   đứng im suốt, chỉ nhúc nhích ở cú cuộn cuối cùng khi hàng hết chỗ. Người
+   dùng phải kéo hết trang mới thấy mục cuối.
+3. `sticky bottom-0` - **KHÔNG DÙNG ĐƯỢC**. Đo cô lập trên Chrome: phần tử CAO
+   HƠN khung cuộn thì `bottom` không ghim gì cả, trôi hệt `static` (thẻ 500px
+   trong khung 400px, đáy chạy 520 -> 320 -> 20 -> -380). Đúng ca cần ghim nhất
+   thì `bottom` vô dụng.
+
+Cách chốt - tính mốc ghim theo chiều cao THẬT của thẻ:
+
+```
+top: min(0px, 100dvh - 3.5rem - <chiều cao thẻ>)
+```
+
+- Thẻ VỪA khung (màn cao): vế phải dương nên `min` chọn 0 -> ghim ở đỉnh.
+- Thẻ CAO HƠN khung (màn thấp): vế phải âm -> thẻ trôi lên tiếp cùng nội dung
+  cho tới khi ĐÁY thẻ chạm đáy khung mới đứng lại.
+
+Chiều cao thẻ đo bằng `ResizeObserver` đẩy vào biến CSS, KHÔNG gõ hằng số: số
+nhóm do API trả về nên hằng số sẽ lệch âm thầm ngay lần thêm nhóm. Phần `100dvh`
+để CSS tự lo nên đổi cỡ cửa sổ không cần listener nào.
+
+`lg:self-start` phải đi kèm: mặc định flex item bị kéo cao bằng cả hàng (1190px),
+mà đã cao bằng khung thì `sticky` không còn chỗ nào để ghim.
+
+Đo ở 1280x702 (`top` tính ra `-92px`): thẻ trôi lên 171px rồi dừng ở 674 (=
+702 - 28 lề), mục cuối thấy từ 40% hành trình cuộn. Ở 1280x1000 `top` tự thành
+`0px`; ở 1280x600 là `-194px`, dừng ở 572. Công thức tự chuyển, không cần điều
+kiện nào trong code.
+
+Bỏ luôn `pb-10` của hàng 2 cột - đây là trang DUY NHẤT trong repo có nó, cộng
+với `lg:py-7` của `<main>` thành 68px đáy trong khi mọi trang khác chỉ 28px.
+
+### Bài học quy trình: đo đúng thứ người dùng đang chạy
+
+Sau khi sửa xong lớp 1 và báo hoàn thành, người dùng chụp màn hình vẫn y nguyên
+lỗi. Nguyên nhân: đo trên **vite dev server**, còn dashboard của họ phục vụ
+`web/dist` - bản build từ đêm trước. Bundle đang chạy vẫn mang className cũ
+(`lg:static lg:z-auto lg:w-60`, không có `lg:h-screen`).
+
+Sửa nguồn xong mà chưa `pnpm build:web` thì với người dùng là CHƯA SỬA GÌ. Từ
+lần này, nghiệm thu giao diện đo trên chính bản build, không đo trên dev server.
+
+### Nhân tiện đo được: 5 chỗ test nhấp nháy có sẵn
+
+Chạy cả bộ dưới 6 tiến trình đốt CPU, **trên HEAD sạch** (đã `git stash` mọi
+thay đổi): **4/5 lượt đỏ**. Cùng tải đó với thay đổi giao diện: 3/5 lượt đỏ,
+cùng những tên test đó. Máy rảnh thì 2136/2136 xanh.
+
+Các chỗ nhấp nháy quan sát được: `startScheduler - nhịp tick`, `stopScheduler`,
+`typing-indicator`, `runScheduledJobTrial - giành job trước khi dispatch`,
+`nhiều người nhắn trong một nhóm`, `maybeNotifyBusyWait`. Toàn bộ là test nhạy
+thời gian. CHƯA SỬA - ghi lại đây để không ai đổ nhầm cho đợt sau.

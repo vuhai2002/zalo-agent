@@ -26,9 +26,13 @@ Máy chủ mới tinh thì làm [vps-setup-checklist.md](vps-setup-checklist.md)
 lần trước (user deploy, thư mục, tường lửa, cron dọn Docker, backup).
 
 > [!WARNING]
-> `zca-js` là API **không chính thức**, Zalo có thể khóa tài khoản.
-> **Chỉ dùng nick phụ.** Ngoài ra Zalo chỉ cho **một listener mỗi tài khoản**:
-> mở Zalo Web trong trình duyệt sẽ đá listener của bot. Đừng chạy hai bản.
+> Với tài khoản **cá nhân**: `zca-js` là API **không chính thức**, Zalo có thể
+> khóa tài khoản. **Chỉ dùng nick phụ.** Ngoài ra Zalo chỉ cho **một listener
+> mỗi tài khoản**: mở Zalo Web trong trình duyệt sẽ đá listener của agent.
+> Đừng chạy hai bản.
+>
+> Tài khoản **Zalo Bot chính thức** không dính hai điều trên - đó là API công
+> khai của Zalo, không có rủi ro khóa nick và không có ràng buộc một listener.
 
 ## 1. Lấy code và cấu hình
 
@@ -114,9 +118,17 @@ Mở dashboard bằng tên miền vừa cấu hình, đăng nhập bằng `DASHB
 rồi:
 
 1. **Cấu hình > Nhà cung cấp LLM**: nhập base URL, model, API key. Bấm Test kết nối.
-2. **Tài khoản > Thêm tài khoản**: quét mã QR **ngay trong trình duyệt**.
+2. **Accounts > Thêm account**: chọn **loại kênh** rồi làm theo đường tương ứng.
+   - **Tài khoản cá nhân**: quét mã QR **ngay trong trình duyệt**.
+   - **Tài khoản Zalo Bot chính thức**: dán **Bot Token**. Lấy token bằng cách
+     mở Zalo, tìm OA "Zalo Bot Manager", chọn "Tạo bot" (tên phải bắt đầu bằng
+     "Bot"); token được gửi vào tin nhắn Zalo. Máy chủ kiểm token với Zalo
+     trước khi lưu, sai thì không lưu gì cả.
 
-Không cần vào terminal của container: luồng QR chạy hoàn toàn qua web.
+Không cần vào terminal của container: cả hai luồng chạy hoàn toàn qua web.
+
+Loại kênh **chốt lúc tạo, không đổi được sau đó** - credential đã lưu của hai
+loại là hai thứ khác hẳn nhau (cookie zca-js so với Bot Token).
 
 ## Vận hành
 

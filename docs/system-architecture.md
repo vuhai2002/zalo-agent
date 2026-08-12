@@ -14,8 +14,10 @@ Zalo Bot API <--long polling--> src/zalo-bot/                  [kênh BOT]
                                 |
               src/zalo/message-turn-processor.ts  (1 lượt: agent -> trả lời -> history)
                                 |
-                    src/agent/agent-loop.ts       (Vercel AI SDK generateText + tools)
-                                |                  provider theo env: 9Router / Anthropic
+                    src/agent/agent-loop.ts       (Vercel AI SDK streamText + tools - MỌI
+                                |                  lời gọi LLM đi qua chayStream, KHÔNG còn
+                                |                  generateText ở đâu cả; provider theo cấu
+                                |                  hình: openai-compatible / Anthropic / Google)
               tools: 14 cái; kênh bot chặn 8 (xem "Kênh thứ hai")
                                 |
               middleware: rate-limiter (queue per thread + delay ngẫu nhiên) -> sendMessage
