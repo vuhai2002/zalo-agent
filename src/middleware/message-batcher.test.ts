@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { ThreadType } from "zca-js";
+import { doiChoSoLuong } from "../shared/doi-cho-den-khi.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 
@@ -53,7 +54,9 @@ describe("message-batcher", () => {
     batcher.enqueueMessage("k-gop", makeMessage("a"), handler, 30);
     batcher.enqueueMessage("k-gop", makeMessage("b"), handler, 30);
     batcher.enqueueMessage("k-gop", makeMessage("c"), handler, 30);
-    await sleep(90);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => batches.length, 1, { moTa: "số lượt đã chạy" });
 
     assert.equal(batches.length, 1);
     assert.deepEqual(batches[0]!.map((m) => m.text), ["a", "b", "c"]);
@@ -67,7 +70,9 @@ describe("message-batcher", () => {
 
     batcher.enqueueMessage("k-t1", makeMessage("x"), handler, 30);
     batcher.enqueueMessage("k-t2", makeMessage("y"), handler, 30);
-    await sleep(90);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => batches.length, 2, { moTa: "số lượt đã chạy" });
 
     assert.equal(batches.length, 2);
     assert.deepEqual(batches.map((b) => b.length), [1, 1]);
@@ -87,7 +92,9 @@ describe("message-batcher", () => {
     await sleep(30);
     assert.equal(batches.length, 0);
 
-    await sleep(60);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => batches.length, 1, { moTa: "lượt gộp sau khi reset debounce" });
     assert.equal(batches.length, 1);
     assert.equal(batches[0]!.length, 2);
   });
@@ -191,7 +198,9 @@ describe("message-batcher - tin đến trong lúc thread đang bận", () => {
     assert.equal(batches.length, 0, "không lượt nào được chạy khi thread còn bận");
 
     nha();
-    await sleep(120);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => batches.length, 1, { moTa: "lượt chạy sau khi thread rảnh" });
 
     assert.equal(batches.length, 1, `mong ĐÚNG 1 lượt, nhận ${batches.length}`);
     assert.deepEqual(batches[0], ["a", "b", "c"]);
@@ -219,7 +228,9 @@ describe("message-batcher - tin đến trong lúc thread đang bận", () => {
     await sleep(30);
     assert.equal(batches.length, 0, "còn trong cửa sổ gộp thì chưa được chạy");
 
-    await sleep(90);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => batches.length, 1, { moTa: "lượt gộp sau khi thread rảnh" });
     assert.equal(batches.length, 1);
     assert.deepEqual(batches[0], ["a", "b"], "tin b phải kịp vào cùng lượt với a");
   });
@@ -240,7 +251,9 @@ describe("message-batcher - tin đến trong lúc thread đang bận", () => {
     }
     await sleep(60);
     nha();
-    await sleep(120);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => batches.length, 1, { moTa: "lượt chạy sau khi thread rảnh" });
 
     assert.equal(batches.length, 1);
     assert.equal(
@@ -564,7 +577,9 @@ describe("gộp theo từng người gửi", () => {
     assert.equal(batches.length, 0, "thread bận thì chưa lượt nào được chạy");
 
     nha();
-    await sleep(150);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => batches.length, 3, { moTa: "số lượt của ba người" });
 
     assert.equal(batches.length, 3, `mong 3 lượt, nhận ${batches.length}`);
     assert.deepEqual(

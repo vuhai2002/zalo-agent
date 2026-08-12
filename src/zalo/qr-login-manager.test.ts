@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import type { API } from "zca-js";
+import { doiChoDenKhi } from "../shared/doi-cho-den-khi.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import type { QrLoginEvent } from "./zalo-client.js";
 
@@ -62,7 +63,9 @@ describe("qr-login-manager", () => {
     assert.equal(manager.getQrLoginStatus("acc-qr-1").status, "scanned");
 
     fake.finish();
-    await sleep(10);
+    await doiChoDenKhi(() => manager.getQrLoginStatus("acc-qr-1").status === "success", {
+      moTa: "trạng thái chuyển sang success",
+    });
     const done = manager.getQrLoginStatus("acc-qr-1");
     assert.equal(done.status, "success");
     assert.equal(done.qrDataUri, undefined, "QR phải bị xóa sau khi login xong");
@@ -90,7 +93,9 @@ describe("qr-login-manager", () => {
     const fake2 = fakeLogin();
     manager.startQrLogin("acc-qr-4", fake2.deps);
     fake2.fail("mạng rớt");
-    await sleep(10);
+    await doiChoDenKhi(() => manager.getQrLoginStatus("acc-qr-4").status === "error", {
+      moTa: "trạng thái chuyển sang error",
+    });
     const state = manager.getQrLoginStatus("acc-qr-4");
     assert.equal(state.status, "error");
     assert.equal(state.error, "mạng rớt");

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { ThreadType, type API } from "zca-js";
+import { doiChoDenKhi } from "../shared/doi-cho-den-khi.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 
 /**
@@ -89,7 +90,11 @@ describe("maybeNotifyBusyWait", () => {
   it("gửi khi đã bận QUÁ ngưỡng", async () => {
     tuning.setTuning("BUSY_ACK_AFTER_MS", 20);
     const nha = chiemThread("k-lau");
-    await sleep(60);
+    // Chờ ĐÚNG điều kiện mà hàm đang xét (`daBanBaoLau >= ngưỡng`) thay vì đoán
+    // một con số ms. Vừa không thể ngắn hụt, vừa không phải ngồi chờ dư.
+    await doiChoDenKhi(() => (chain.daBanBaoLau("k-lau") ?? 0) >= 20, {
+      moTa: "thread k-lau bận đủ 20ms",
+    });
 
     assert.equal(await notice.maybeNotifyBusyWait(muc("k-lau")), true);
     assert.deepEqual(daGui, [notice.CAU_TRAN_AN]);
@@ -105,7 +110,16 @@ describe("maybeNotifyBusyWait", () => {
     // 2 lần trên 4 lượt chạy cả bộ. Đây là lỗi của phép đo, không phải của luật.
     tuning.setTuning("BUSY_ACK_AFTER_MS", 200);
     const nha = chiemThread("k-nhac-lai");
-    await sleep(250);
+    // Chờ ĐÚNG điều kiện hàm đang xét thay vì đoán 250ms. Ngưỡng 200ms giữ
+    // NGUYÊN: đo thật (30 lượt, cả khi rảnh lẫn dưới 8 burner) thì ba lời gọi
+    // dưới đây tốn tối đa 17ms - cửa sổ 200ms thừa hơn 10 lần, không phải chỗ
+    // nhấp nháy. Đã thử viết lại thành ba lời gọi cùng nhịp cho "chắc chắn"
+    // hơn và ĐÃ BỊ BÁC: lúc đó lời gọi 2, 3 bị chặn ở cửa `dangGuiTren` nên
+    // không bao giờ chạm tới cửa khoảng lặng - phép phá (bỏ hẳn cửa khoảng
+    // lặng) cho XANH, tức là ca này mất răng.
+    await doiChoDenKhi(() => (chain.daBanBaoLau("k-nhac-lai") ?? 0) >= 200, {
+      moTa: "thread k-nhac-lai bận đủ 200ms",
+    });
 
     await notice.maybeNotifyBusyWait(muc("k-nhac-lai"));
     await notice.maybeNotifyBusyWait(muc("k-nhac-lai"));

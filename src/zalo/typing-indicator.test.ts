@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { ThreadType } from "zca-js";
+import { doiChoSoLuong } from "../shared/doi-cho-den-khi.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 
 let dataDir: string;
@@ -57,7 +58,10 @@ describe("typing-indicator", () => {
       intervalMs: 25,
     });
 
-    await sleep(90); // đủ cho lần bắn đầu + ~3 lần lặp
+    // `sleep(90)` với nhịp 25ms chỉ chừa biên 0,6 nhịp - trượt hai nhịp là còn 2
+    // lần gọi và ca này đỏ dù chỉ báo vẫn lặp đúng. Chờ tới khi đủ 3 lần thì
+    // không còn biên nào để trượt, mà máy rảnh lại về sớm hơn 90ms.
+    await doiChoSoLuong(() => rec.calls.length, 3, { moTa: "số lần bắn chỉ báo" });
     stop();
     assert.ok(rec.calls.length >= 3, `phải lặp nhiều lần, thực tế ${rec.calls.length}`);
     assert.ok(rec.calls.every((c) => c.threadType === ThreadType.Group));
@@ -72,7 +76,9 @@ describe("typing-indicator", () => {
       intervalMs: 20,
     });
 
-    await sleep(50);
+    // Chờ nó bắn được ít nhất 2 lần rồi mới dừng: khẳng định "sau stop không
+    // bắn thêm" chỉ có nghĩa khi TRƯỚC stop nó thật sự đang lặp.
+    await doiChoSoLuong(() => rec.calls.length, 2, { moTa: "số lần bắn trước khi dừng" });
     stop();
     const afterStop = rec.calls.length;
 
@@ -109,7 +115,9 @@ describe("typing-indicator", () => {
       threadType: ThreadType.User,
       intervalMs: 20,
     });
-    await sleep(70);
+    await doiChoSoLuong(() => rec.calls.length, 2, {
+      moTa: "số lần bắn (mỗi lần đều ném lỗi)",
+    });
     stop();
     process.off("unhandledRejection", onUnhandled);
 

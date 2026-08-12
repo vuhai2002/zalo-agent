@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, afterEach, before, describe, it } from "node:test";
 import type { API } from "zca-js";
 import type { AccountConfig } from "../config/account-store.js";
+import { doiChoDenKhi, doiChoSoLuong } from "../shared/doi-cho-den-khi.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 // import type bị xóa lúc chạy nên không kéo module lên trước setupTestEnv
 import type { CreateScheduledJobInput } from "./scheduled-job-store.js";
@@ -235,7 +236,14 @@ describe("startScheduler - nhịp tick", () => {
     makeJob({ threadId }); // mặc định due 5s trước - đã quá hạn ngay từ đầu
 
     schedulerLoop.startScheduler();
-    await sleep(40); // ngắn hơn NHIỀU so với SCHEDULER_TICK_MS=5000 - chỉ tick "lúc boot" mới kịp chạy
+    // Trần 2000ms vẫn NGẮN HƠN NHIỀU so với SCHEDULER_TICK_MS=5000, nên gửi
+    // được trong khoảng này chỉ có thể là do tick "lúc boot" - đúng điều cần
+    // đo. Đổi khỏi `sleep(40)` vì 40ms là ngân sách của MÁY RẢNH: máy bận
+    // thì tick boot chưa kịp chạm sendMessage và test đỏ oan.
+    await doiChoSoLuong(() => sent.length, 1, {
+      tranMs: 2000,
+      moTa: "tin gửi bởi tick lúc boot",
+    });
 
     assert.equal(sent.length, 1, "phải gửi ngay, không chờ chu kỳ tick đầu tiên");
   });
@@ -255,7 +263,11 @@ describe("stopScheduler", () => {
     // sẽ bị chặn ngay ở guard "if (timer) return" -> tick "lúc boot" không
     // chạy lại -> sent.length vẫn là 0. Chạy được nghĩa là state đã sạch.
     schedulerLoop.startScheduler();
-    await sleep(40);
+    // Vẫn dưới SCHEDULER_TICK_MS=5000 nên "chạy được" chỉ có thể là tick lúc boot
+    await doiChoSoLuong(() => sent.length, 1, {
+      tranMs: 2000,
+      moTa: "tin gửi bởi tick lúc boot của lần start thứ hai",
+    });
 
     assert.equal(sent.length, 1, "start lại sau khi stop phải chạy tick ngay như một lần boot mới");
   });
@@ -290,7 +302,11 @@ describe("runSchedulerTick - không bị chặn bởi job chạy lâu", () => {
     assert.notEqual(lastRunOf(jobCham.id)?.status, "ok", "job chậm phải CHƯA xong ngay sau 2 lần gọi tick liên tiếp");
 
     // Cuối cùng job chậm vẫn phải hoàn thành, không bị rơi mất
-    await sleep(350);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoDenKhi(() => lastRunOf(jobCham.id)?.status === "ok", {
+      moTa: "job chậm chạy xong",
+    });
     assert.equal(lastRunOf(jobCham.id)?.status, "ok");
   });
 });
@@ -309,7 +325,9 @@ describe("clear-before-dispatch", () => {
 
     // Gọi tick() thêm 1 lần liền tay: KHÔNG được nhặt lại job này lần 2
     await schedulerLoop.runSchedulerTick(new Date());
-    await sleep(300);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => runLogStore.listRuns(job.id).length, 1, { moTa: "số lần chạy đã ghi sổ" });
 
     assert.equal(runLogStore.listRuns(job.id).length, 1, "chỉ đúng 1 lần chạy dù gọi tick() 2 lần liên tiếp");
   });
@@ -342,7 +360,9 @@ describe("preflight - account/thread chưa sẵn sàng (Finding 1)", () => {
     // Account online lại - tick SAU đó phải nhặt lại và gửi được bình thường
     const sent = attachOnline();
     await schedulerLoop.runSchedulerTick(new Date());
-    await sleep(40);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => sent.length, 1, { moTa: "tin gửi ở tick sau khi account online lại" });
 
     assert.equal(sent.length, 1, "job phải gửi được ở tick kế tiếp sau khi account online lại");
     assert.equal(lastRunOf(job.id)?.status, "ok");
@@ -408,7 +428,9 @@ describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi a
     const job = makeJob({ threadId, schedule: { kind: "once", runAtUtc: now.toISOString() } });
 
     await schedulerLoop.runSchedulerTick(now);
-    await sleep(40);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => sent.length, 1, { moTa: "tin thông báo chạm trần" });
 
     assert.equal(sent.length, 1, "chỉ có ĐÚNG 1 tin - câu thông báo chạm trần, không phải payload gốc");
     assert.notEqual(sent[0]!.text, job.payload);
@@ -537,7 +559,9 @@ describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi a
 
     // Tick lúc job đến hạn (23:50 VN) - bị trần chặn, đẩy sang 8h sáng VN ngày mai
     await schedulerLoop.runSchedulerTick(runAt);
-    await sleep(40);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => sent.length, 1, { moTa: "tin thông báo chạm trần" });
     assert.equal(sent.length, 1, "chỉ có tin thông báo chạm trần ở lượt này");
 
     const deferred = jobStore.getJobUnscoped(job.id)!;
@@ -559,7 +583,11 @@ describe("trần ngày chặn NGAY Ở TICK - trước dispatch, không đợi a
     // file (DB dùng chung) - lọc đúng `threadId` của CHÍNH job đang test thay
     // vì tin vào tổng độ dài `sent`.
     await schedulerLoop.runSchedulerTick(new Date(deferred.nextRunAt!));
-    await sleep(40);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => sent.filter((s) => s.threadId === threadId).length, 2, {
+      moTa: "tin trên thread đang xét",
+    });
 
     const sentThisThread = sent.filter((s) => s.threadId === threadId);
     assert.equal(sentThisThread.length, 2, "phải có đúng 2 tin trên thread này: thông báo chạm trần + tin nhắc trễ vừa gửi lại");
@@ -646,7 +674,9 @@ describe("run-late", () => {
     const now = new Date("2026-08-01T08:05:00.000Z");
 
     await schedulerLoop.runSchedulerTick(now);
-    await sleep(40);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => sent.length, 1, { moTa: "tin nhắc trễ" });
 
     assert.equal(sent.length, 1);
     assert.equal(sent[0]!.text, "(nhắc trễ, lịch gốc 15:00) Nhớ họp");

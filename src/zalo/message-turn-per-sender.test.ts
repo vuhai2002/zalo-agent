@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { MockLanguageModelV4 } from "ai/test";
 import { ThreadType, type API, type SendMessageQuote } from "zca-js";
+import { doiChoSoLuong } from "../shared/doi-cho-den-khi.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import { thanhKetQuaStream, type KetQuaGenerate } from "../agent/streaming-model-test-helper.js";
 import type { AccountConfig } from "../config/account-store.js";
@@ -167,7 +168,12 @@ describe("nhiều người nhắn trong một nhóm", () => {
       batcher.enqueueMessage(THREAD_KEY, tinNhom(msgId, chu, ten), chayLuot, 20);
     }
 
-    await sleep(400);
+    // 400ms cũ phải phủ BA lượt agent chạy NỐI TIẾP nhau - ngân sách của máy
+    // rảnh. Máy bận thì lượt thứ ba chưa xong, nhận 2 và đỏ oan.
+    //
+    // Chờ >= 3 rồi vẫn khẳng định == 3 ngay dưới: gửi THỪA (4 câu) vẫn bị bắt,
+    // không nới lỏng điều đang đo.
+    await doiChoSoLuong(() => daGui.length, 3, { moTa: "số câu trả lời riêng" });
 
     assert.equal(daGui.length, 3, `mong 3 câu trả lời riêng, nhận ${daGui.length}`);
 
@@ -232,7 +238,9 @@ describe("nhiều người nhắn trong một nhóm", () => {
     await sleep(10);
     batcher.enqueueMessage(THREAD_KEY, tinNhom("m-2", "và cả tỉ giá nữa", "Hải"), chayLuot, 30);
 
-    await sleep(300);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => daGui.length, 1, { moTa: "câu trả lời của một người" });
 
     assert.equal(daGui.length, 1, `một người phải ra đúng 1 câu trả lời, nhận ${daGui.length}`);
     assert.equal(daGui[0]!.quote?.msgId, "m-1", "trích tin mở lượt của chính người đó");
@@ -262,7 +270,9 @@ describe("nhiều người nhắn trong một nhóm", () => {
     assert.equal(daGui.length, 0, "thread còn bận thì chưa ai được trả lời");
 
     nha();
-    await sleep(500);
+    // Chờ tới khi việc XẢY RA thay vì đoán bao nhiêu ms là đủ - máy bận thì
+    // ngân sách cũ hụt và ca này đỏ oan (xem shared/doi-cho-den-khi.ts).
+    await doiChoSoLuong(() => daGui.length, 3, { moTa: "câu trả lời sau khi thread rảnh" });
 
     assert.equal(daGui.length, 3, `mong 3 câu trả lời, nhận ${daGui.length}`);
     assert.deepEqual(

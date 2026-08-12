@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import type { API } from "zca-js";
 import type { AccountConfig } from "../config/account-store.js";
+import { doiChoSoLuong } from "../shared/doi-cho-den-khi.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 // import type bị xóa lúc chạy nên không kéo module lên trước setupTestEnv
 import type { CreateScheduledJobInput } from "./scheduled-job-store.js";
@@ -110,7 +111,6 @@ function makeJob(overrides: Partial<CreateScheduledJobInput> & { threadId: strin
   });
 }
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 describe("runScheduledJobTrial - giành job trước khi dispatch (chống gửi trùng)", () => {
   it("job đang quá hạn: tick thật KHÔNG nhặt được job trong lúc trial còn treo, và trạng thái phục hồi đúng sau khi thử xong", async () => {
@@ -122,10 +122,19 @@ describe("runScheduledJobTrial - giành job trước khi dispatch (chống gửi
 
     const trialPromise = trialModule.runScheduledJobTrial(job);
 
-    // Đợi vài microtask/macrotask để trial chắc chắn đã claim (next_run_at=NULL)
-    // VÀ đã gọi tới sendMessage (đang treo ở gate) - toàn bộ guard/preflight
-    // giữa 2 điểm đó là SQLite đồng bộ, không có macrotask nào chặn giữa đường.
-    await sleep(20);
+    // Chờ ĐÚNG cái mốc cần: trial đã đi tới sendMessage (giờ đang treo ở gate).
+    //
+    // Bản cũ là `sleep(20)` kèm lập luận "toàn bộ guard/preflight giữa 2 điểm
+    // đó là SQLite đồng bộ nên 20ms thừa sức". Lập luận đúng về THỨ TỰ nhưng
+    // sai về NGÂN SÁCH: nó ngầm giả định tiến trình được cấp CPU liên tục. Chạy
+    // cả bộ dưới tải thì trial chưa kịp chạm sendMessage, `sent.length` là 0 và
+    // ca này đỏ dù code hoàn toàn đúng - đã bắt được thật.
+    //
+    // Chờ theo mốc còn CHẶT HƠN sleep: việc giành job xảy ra TRƯỚC lời gọi
+    // sendMessage, nên thấy được tin thứ nhất là chắc chắn khâu giành đã xong.
+    await doiChoSoLuong(() => sent.length, 1, {
+      moTa: "trial đi tới sendMessage",
+    });
 
     const duringTrial = jobStore.getJobUnscoped(job.id)!;
     assert.equal(duringTrial.nextRunAt, null, "job phải bị GIÀNH (next_run_at=NULL) trong lúc trial còn chạy");
