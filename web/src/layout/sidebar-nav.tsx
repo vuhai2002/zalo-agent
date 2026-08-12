@@ -24,6 +24,16 @@ import { useTheme } from "../shared/use-theme";
 /**
  * Sidebar theo mẫu GoClaw. Từ lg trở lên: cột cố định trong layout.
  * Dưới lg: drawer trượt từ trái, mở bằng nút hamburger ở topbar mobile.
+ *
+ * `lg:h-screen` là BẮT BUỘC, không phải trang trí. Khung ngoài (`app.tsx`) là
+ * `min-h-[100dvh]` - chỉ đặt SÀN, không đặt trần - nên ở `lg:static` sidebar
+ * cao bằng nội dung tự nhiên của nó (đo: 72 logo + 630 nav + 53 chân = 755px,
+ * cố định vì danh sách mục cố định). Cửa sổ thấp hơn ngần đó là cả document
+ * cuộn theo: sidebar trôi lên mất logo, và có HAI thanh cuộn dọc chồng nhau
+ * (một của `<main>`, một của trang). `overflow-y-auto` của `<nav>` dưới đây
+ * KHÔNG tự cứu được: `min-height: auto` chỉ triệt tiêu khi cha có chiều cao
+ * xác định, mà ở desktop không ai cấp. Mobile không dính vì `fixed inset-y-0`
+ * đã là chiều cao xác định sẵn.
  */
 
 type IconFn = (p: SVGProps<SVGSVGElement> & { size?: number }) => ReactNode;
@@ -111,7 +121,7 @@ export function SidebarNav({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-surface transition-transform duration-200 lg:static lg:z-auto lg:w-60 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-surface transition-transform duration-200 lg:static lg:z-auto lg:h-screen lg:w-60 lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
