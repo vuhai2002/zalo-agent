@@ -116,13 +116,26 @@ describe("khuGiaMaoTrongDoan - hiệu năng TUYẾN TÍNH (vòng rà soát lần
         return performance.now() - t0;
       }),
     );
-    const soLap = Math.max(1, Math.min(200, Math.ceil(15 / Math.max(motLan, 0.001))));
+    // Mỗi loạt nhắm ~6ms chứ không 15ms, và lấy MIN của 21 loạt chứ không 5.
+    //
+    // Vì sao: lượng tử lập lịch của Windows cỡ 15-30ms. Loạt dài 15ms thì dưới
+    // tải gần như loạt NÀO cũng bị cướp CPU giữa chừng, nên `min` của 5 loạt
+    // vẫn là số đã nhiễm nhiễu - và hai phép đo (n nhỏ, n lớn) nhiễm khác nhau
+    // nên TỈ LỆ trôi. Đã bắt được thật: tỉ lệ đo ra 21,6 so với trần 20 trong
+    // một lượt chạy cả bộ dưới 6 tiến trình đốt CPU, dù hàm vẫn tuyến tính.
+    //
+    // Loạt ngắn hơn thì xác suất một loạt lọt trọn vào một lượng tử sạch cao
+    // hơn, và lấy min của NHIỀU loạt thì chỉ cần MỘT loạt sạch là đủ. Đây là
+    // sửa BỘ ƯỚC LƯỢNG, không phải nới ngưỡng: `min` sát hơn với chi phí thật
+    // nên tỉ lệ tiến về ~8 của tuyến tính và vẫn ~64 nếu ai đó làm nó bậc hai,
+    // tức là khả năng BẮT LỖI tăng lên chứ không giảm.
+    const soLap = Math.max(1, Math.min(200, Math.ceil(6 / Math.max(motLan, 0.001))));
     const motLoat = (): number => {
       const t = performance.now();
       for (let i = 0; i < soLap; i++) chay();
       return (performance.now() - t) / soLap;
     };
-    return Math.min(...Array.from({ length: 5 }, motLoat));
+    return Math.min(...Array.from({ length: 21 }, motLoat));
   }
 
   it("khử dải phân cách: thời gian TĂNG TUYẾN TÍNH theo độ dài, KHÔNG phải bậc hai (Important 1)", () => {
