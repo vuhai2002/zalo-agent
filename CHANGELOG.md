@@ -10,6 +10,46 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Thêm
 
+- **Kênh thứ hai: tài khoản Zalo Bot chính thức.** Ngoài tài khoản Zalo cá
+  nhân (qua `zca-js`), agent chạy được trên tài khoản bot chính thức của Zalo
+  qua **Zalo Bot API** (`bot-api.zaloplatforms.com`) - **không có rủi ro bị
+  khóa tài khoản**. Hai loại chạy chung một tiến trình, trộn lẫn tùy ý; chọn
+  loại lúc tạo account trên trang Accounts, dán Bot Token thay vì quét QR.
+  Server KIỂM token với Zalo trước khi lưu (gọi `getMe`), token sai thì không
+  lưu gì cả - tránh dựng ra một account trông như đã xong mà không bao giờ
+  chạy; lưu xong account tự khởi động lại ngay.
+
+  Lấy token: mở Zalo, tìm OA "Zalo Bot Manager", chọn "Tạo bot" (tên bắt buộc
+  bắt đầu bằng "Bot"), token được gửi vào tin nhắn Zalo.
+
+  **Đây là sản phẩm KHÁC với Zalo OA API** - chính sách "7 ngày kể từ tương
+  tác cuối" và biểu phí gửi tin là của OA API, không áp cho đường này.
+
+  Kênh bot hẹp hơn về năng lực, và đó là giới hạn của NỀN TẢNG chứ không phải
+  agent bị lỗi: dò 17 method trên API sống thì 13 cái trả 404 (không có
+  `sendDocument`/`sendFile`/`setMessageReaction`/`getChat`...). Nên **8 trong
+  14 công cụ bị chặn** trên kênh này (`send_file`, `create_word_document`,
+  `create_excel_file`, `create_image`, `add_reaction`, `tag_member`,
+  `get_group_info`, `schedule_task`), còn lại 6 công cụ chạy bình thường.
+  Công cụ bị chặn được gỡ khỏi schema gửi model - model không biết chúng tồn
+  tại nên không hứa hão, không tốn token mô tả, và prompt injection không dụ
+  gọi được. Kèm theo đó persona được ghép một luật nói thẳng lý do và mời
+  người nhắn chuyển qua tài khoản cá nhân, vì ẩn công cụ mà im lặng thì người
+  ta tưởng agent hỏng. Trang Tools cũng hiện rõ lý do khi chọn một account bot.
+
+  Tài khoản bot mặc định **đóng allowlist**, khác tài khoản cá nhân: nick cá
+  nhân phải là bạn bè mới nhắn được, còn bot thì ai có link cũng nhắn được -
+  mở sẵn là mời người lạ đốt token và thử prompt injection.
+
+  Bot Token mã hóa AES-256-GCM như cookie Zalo. Token nằm trong ĐƯỜNG DẪN của
+  API (`/bot{token}/{method}`) nên client che token ba lớp trong mọi chuỗi sắp
+  vào thông điệp lỗi - không thừa: đã dựng lại được đường token đi từ trang lỗi
+  của cổng trung gian vào dashboard và vào file log.
+
+  Thêm lệnh `pnpm zalo-bot-check` để dò Bot API bằng token thật, in ra method
+  nào sống method nào 404 - lần sau Zalo mở thêm method thì đo lại bằng một
+  lệnh.
+
 - **Kho tri thức**: nạp tài liệu (txt/md/docx/xlsx/pdf hoặc gõ tay) ở trang
   "Kho tri thức" trên dashboard, bot tra được nội dung qua tool `kb_search`
   (FTS5 + bm25, hợp nhất bằng RRF - chừa sẵn chỗ cho lớp vector đợt sau).
@@ -91,8 +131,6 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   form kèm cách sửa. Base URL sót lại của hãng khác bị bỏ qua thay vì gửi khóa
   Google sang bên thứ ba.
 
-### Thêm
-
 - **Nhiều người trong nhóm nhắn cùng lúc thì mỗi người nhận một câu trả lời
   riêng**, trích đúng tin của mình - thay vì gộp cả nhóm vào một câu như trước.
   Một người nhắn nhiều tin liên tiếp (ảnh rồi chú thích) vẫn gộp làm một lượt,
@@ -107,6 +145,21 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- **Dashboard trên màn hình thấp**: ba lỗi cùng một họ, chỉ lộ ra khi cửa sổ
+  thấp hơn ~770px (laptop 1080p ở zoom 125% là chạm ngưỡng này).
+  - Sidebar không có trần chiều cao nên đẩy cả trang cuộn theo: cuộn xuống là
+    sidebar trôi lên mất logo, và có hai thanh cuộn dọc chồng nhau. Sau khi
+    sửa: trang không tự cuộn nữa, sidebar đứng yên, danh sách mục cuộn riêng.
+  - Bốn hộp thoại (Thêm nguồn tri thức, Tạo agent, Login QR, hộp xác nhận)
+    tràn khỏi màn mà KHÔNG cuộn được - lớp phủ là `fixed` nên cuộn trang cũng
+    không kéo vào. Ở cửa sổ thấp thì không thêm được nguồn tri thức và không
+    tạo được agent vì nút bấm nằm ngoài màn hình. Nay cả bốn có trần chiều cao
+    và vùng cuộn nội bộ.
+  - Cột danh mục trang Cấu hình nay GHIM lại khi cuộn nội dung bên phải, thay
+    vì cuộn đi mất để lại một khoảng trống lớn. Mốc ghim tính theo chiều cao
+    thật của danh mục nên màn cao thì ghim ở đỉnh, màn thấp thì danh mục trôi
+    lên tiếp cùng nội dung cho tới khi hết danh sách mới dừng - không sinh
+    thêm thanh cuộn nào.
 - Tin nhắn của người dùng vào lịch sử **ngay lúc nhận** thay vì cuối lượt. Nhờ
   vậy thứ tự trong dữ liệu luôn là thứ tự tin tới, và lượt hỏng giữa chừng
   không còn đánh rơi câu người ta vừa nói. Tin do bot gửi kèm file/ảnh cũng ghi
