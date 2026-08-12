@@ -165,7 +165,7 @@ export function TuningPage() {
         </div>
       )}
 
-      <div className="flex flex-col gap-5 pb-10 lg:flex-row">
+      <div className="flex flex-col gap-5 lg:flex-row">
         <TuningNav groups={groups} dangChon={dangChon} onChon={(id) => navigate(`/tuning/${id}`)} />
 
         {nhomDangXem && (

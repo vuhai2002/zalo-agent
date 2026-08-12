@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { TuningGroup } from "../dashboard-api-client";
 import { IconChevronRight } from "../shared/dashboard-icons";
 import { GroupIconBox } from "./tuning-group-icon";
@@ -20,9 +21,55 @@ export function TuningNav({
   dangChon: string;
   onChon: (groupId: string) => void;
 }) {
+  // Chiều cao THẬT của thẻ danh mục, nuôi cho mốc ghim bên dưới. Đo bằng
+  // ResizeObserver chứ không tính tay: số nhóm do API trả về nên chiều cao đổi
+  // khi danh sách đổi, và hằng số gõ cứng sẽ lệch âm thầm ngay lần thêm nhóm.
+  const theRef = useRef<HTMLDivElement>(null);
+  const [caoThe, setCaoThe] = useState(0);
+  useLayoutEffect(() => {
+    const el = theRef.current;
+    if (!el) return;
+    const theoDoi = new ResizeObserver(() => setCaoThe(el.offsetHeight));
+    theoDoi.observe(el);
+    return () => theoDoi.disconnect();
+  }, []);
+
   return (
-    <nav aria-label="Danh mục cấu hình" className="w-full shrink-0 lg:w-[20rem]">
-      <div className="rounded-2xl border border-line bg-surface/95 p-2">
+    /*
+     * Cột danh mục GHIM lại khi cuộn nội dung bên phải. Trước đây nó cuộn đi
+     * mất cùng nội dung: thẻ danh mục cao 738px còn khối cấu hình bên phải cao
+     * tới 1190px, nên cuộn tới đáy là bên trái để lại 521px trống trơn.
+     *
+     * `lg:self-start` phải đi kèm `lg:sticky`: mặc định flex item bị kéo cao
+     * bằng cả hàng (1190px), mà đã cao bằng khung thì `sticky` không còn chỗ
+     * nào để ghim.
+     *
+     * MỐC GHIM tính theo chiều cao thẻ, không phải `top-0` cố định:
+     *   min(0px, 100dvh - 3.5rem - chiều cao thẻ)
+     * - Thẻ VỪA khung (màn cao): vế phải dương nên `min` chọn 0 -> ghim ở đỉnh,
+     *   tức 28px dưới mép trên (mốc `top` cộng thêm `lg:py-7` của `<main>`).
+     * - Thẻ CAO HƠN khung (màn thấp): vế phải âm -> thẻ trôi lên tiếp cùng nội
+     *   dung cho tới khi ĐÁY thẻ chạm đáy khung rồi mới đứng lại, nên mục cuối
+     *   luôn tới được mà không phải kéo hết trang.
+     * 3.5rem = 28px lề trên + 28px lề dưới của `<main>`.
+     *
+     * Vì sao không dùng thẳng `bottom-0` cho gọn: đo cô lập trên Chrome, phần
+     * tử CAO HƠN khung cuộn thì `bottom` không ghim gì cả - nó trôi đi hệt như
+     * `static` (thẻ 500px trong khung 400px: đáy chạy 520 -> 320 -> 20 -> -380).
+     * Đúng ca cần ghim nhất thì `bottom` vô dụng.
+     *
+     * CỐ Ý KHÔNG đặt `max-h` + `overflow-y-auto`: sinh thêm một thanh cuộn thứ
+     * hai ngay cạnh thanh cuộn nội dung, đã thử và bị bác vì rối mắt.
+     *
+     * Chỉ từ `lg`: dưới đó hàng là `flex-col`, danh mục nằm TRÊN nội dung nên
+     * ghim nó là chiếm mất màn hình điện thoại.
+     */
+    <nav
+      aria-label="Danh mục cấu hình"
+      style={{ "--cao-danh-muc": `${caoThe}px` } as CSSProperties}
+      className="w-full shrink-0 lg:sticky lg:top-[min(0px,calc(100dvh-3.5rem-var(--cao-danh-muc,0px)))] lg:w-[20rem] lg:self-start"
+    >
+      <div ref={theRef} className="rounded-2xl border border-line bg-surface/95 p-2">
         {groups.map((g, i) => {
           const active = dangChon === g.id;
           // Đường kẻ ngăn cách vẽ ở mục TRÊN, và bỏ đi khi mục này hoặc mục
