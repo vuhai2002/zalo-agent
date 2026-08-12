@@ -78,7 +78,12 @@ function ConfirmDialog({
       role="dialog"
       aria-modal="true"
     >
-      <div className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-xl">
+      {/* Trần chiều cao + cuộn nội bộ: cửa sổ thấp (điện thoại nằm ngang,
+          laptop zoom cao) làm hộp này tràn khỏi màn mà KHÔNG cuộn được - lớp
+          phủ là `fixed inset-0` nên trang cuộn cũng không kéo nó vào. `dvh`
+          chứ không `vh` để trên điện thoại còn trừ đúng phần thanh địa chỉ
+          đang chiếm chỗ. */}
+      <div className="max-h-[85dvh] w-full max-w-sm overflow-y-auto rounded-2xl bg-surface p-5 shadow-xl">
         <div className="flex gap-3.5">
           {danger && (
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400">

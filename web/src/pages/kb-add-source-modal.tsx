@@ -99,8 +99,14 @@ export function KbAddSourceModal({
   }
 
   return (
+    /* `max-h-[85dvh]` + thân cuộn riêng: modal này cao 490px (ô tên + vùng thả
+       file, hoặc textarea `resize-y` người dùng kéo cao được tùy ý). Không có
+       trần thì ở cửa sổ thấp nó tràn khỏi màn theo CẢ HAI đầu mà không cuộn
+       được - đo ở 844x390: tiêu đề mất 50px trên, nút "Thêm nguồn" nằm ở 424
+       tức là ngoài màn, cuộn kiểu gì cũng không tới. `dvh` chứ không `vh` để
+       trên điện thoại còn trừ đúng phần thanh địa chỉ đang chiếm chỗ. */
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-[2px]" {...nen}>
-      <div className="flex w-full max-w-lg flex-col rounded-2xl bg-surface shadow-xl">
+      <div className="flex max-h-[85dvh] w-full max-w-lg flex-col rounded-2xl bg-surface shadow-xl">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div className="font-semibold text-ink">Thêm nguồn</div>
           <button
@@ -133,7 +139,7 @@ export function KbAddSourceModal({
           ))}
         </div>
 
-        <div className="space-y-4 px-5 py-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div>
             <label htmlFor="kb-ten" className="mb-1.5 block text-[13px] font-medium text-ink">
               Tên nguồn

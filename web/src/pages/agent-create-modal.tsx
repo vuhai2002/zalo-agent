@@ -52,7 +52,12 @@ export function AgentCreateModal({
       role="dialog"
       aria-modal="true"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-xl">
+      {/* Trần chiều cao + cuộn nội bộ: cửa sổ thấp (điện thoại nằm ngang,
+          laptop zoom cao) làm hộp này tràn khỏi màn mà KHÔNG cuộn được - lớp
+          phủ là `fixed inset-0` nên trang cuộn cũng không kéo nó vào. `dvh`
+          chứ không `vh` để trên điện thoại còn trừ đúng phần thanh địa chỉ
+          đang chiếm chỗ. */}
+      <div className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-6 shadow-xl">
         <h2 className="text-[17px] font-semibold text-ink">Tạo agent mới</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
           Đặt tên trước đã. Bước sau còn model, số bước và công cụ - agent chỉ được tạo khi bạn bấm

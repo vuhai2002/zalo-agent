@@ -66,7 +66,12 @@ export function QrLoginModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/25 p-4 backdrop-blur-[2px]" {...nen}>
-      <div className="gc-card w-full max-w-sm p-6 text-center">
+      {/* Trần chiều cao + cuộn nội bộ: cửa sổ thấp (điện thoại nằm ngang,
+          laptop zoom cao) làm hộp này tràn khỏi màn mà KHÔNG cuộn được - lớp
+          phủ là `fixed inset-0` nên trang cuộn cũng không kéo nó vào. `dvh`
+          chứ không `vh` để trên điện thoại còn trừ đúng phần thanh địa chỉ
+          đang chiếm chỗ. */}
+      <div className="gc-card max-h-[85dvh] w-full max-w-sm overflow-y-auto p-6 text-center">
         <div className="mb-1 font-semibold text-ink">Login QR - {account.label}</div>
         <p className="mb-4 text-[13px] text-ink-soft">{STATUS_TEXT[state.status]}</p>
 
