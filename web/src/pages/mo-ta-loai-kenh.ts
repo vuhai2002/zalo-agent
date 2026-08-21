@@ -14,8 +14,9 @@
  */
 
 export const MO_TA_KENH_BOT =
-  "Không gửi được file, ảnh tự vẽ, thả cảm xúc hay tag thành viên - đó là giới hạn của " +
-  "Zalo Bot API. Đổi lại không có rủi ro bị khóa tài khoản.";
+  "Không gửi được file, ảnh tự vẽ, thả cảm xúc, tag thành viên, và không đọc được " +
+  "danh sách thành viên nhóm - đó là giới hạn của Zalo Bot API. Đổi lại không có rủi ro " +
+  "bị khóa tài khoản.";
 
 export const MO_TA_KENH_CA_NHAN =
   "Dùng nick Zalo thật qua giao thức không chính thức - đủ tính năng nhất nhưng CÓ rủi ro " +

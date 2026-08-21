@@ -4318,11 +4318,10 @@ Dò 17 method: **13 cái trả 404**. Không tồn tại `sendDocument`/`sendFil
 (`pnpm zalo-bot-check`) để lần sau Zalo mở thêm method thì đo lại bằng một
 lệnh, không phải dựng lại từ đầu.
 
-### 8 trong 14 tool bị chặn
+### 8 trong 14 tool bị chặn, và vì sao ẩn tool thôi là chưa đủ
 
 > Số liệu của ĐỢT NÀY (10/08/2026). Từ V3.19 còn **7** - `schedule_task`
 > đã được nối vào bộ hẹn lịch. Giữ nguyên phần dưới làm bản ghi lịch sử.
-, và vì sao ẩn tool thôi là chưa đủ
 
 Bị chặn: `send_file`, `create_word_document`, `create_excel_file`,
 `create_image`, `add_reaction`, `tag_member`, `get_group_info`,
@@ -4930,6 +4929,22 @@ lưới chắn TÌNH CỜ (parser bot không đặt `msgType` vào `rawData`). �
 test biến lưới tình cờ thành lưới có canh; không thêm cờ `mangTrichDan` vì
 YAGNI cho tới khi có kênh thứ ba.
 
+**Vòng 2 bắt được một lỗi do chính BẢN SỬA của vòng 1 đẻ ra**, và nó thuộc
+loại tệ hơn cả lỗi gốc: ca test "account bị TẮT giữa lượt agent" dựng một cổng
+promise chờ `doStream`. Cổng đó THỪA ở đường xanh (`runScheduledJob` đã await
+trọn lượt nên nó luôn mở sẵn trước lúc đọc tới), nhưng ở đường ĐỎ - bất kỳ hồi
+quy nào làm lượt agent chết TRƯỚC khi chạm model - thì `await` nó treo vĩnh
+viễn. `package.json` không truyền `--test-timeout`, mà mặc định của Node là
+`Infinity`. Đo được: chèn một `throw` vào đầu `runAgentJob` rồi chạy với
+`timeout 60` thì trả về mã 124, ca đó không bao giờ in ra dòng nào.
+
+Bài học: **một test TREO tệ hơn một test ĐỎ** - đỏ thì có tên ca, có stack, có
+tín hiệu; treo thì CI ăn hết ngân sách rồi chết không dấu vết, và người đọc log
+không có gì để bám. Đã bỏ cổng đó (ca vẫn đỏ đúng khi phá
+`checkAccountAndThreadReady`, tức không mất khả năng bắt lỗi nào), và xác nhận
+hai chiều: phá cửa kiểm lại account -> ĐỎ; phá cho lượt agent chết sớm -> ĐỎ,
+không còn treo.
+
 Một chuyện về QUY TRÌNH: một reviewer để sót phép phá trong cây làm việc
 (`reply.sentParts - 1` thành `reply.sentParts`, tức đếm dư suất trần ngày mỗi
 khi câu trả lời bị chẻ nhiều tin). Nó tự khôi phục trước khi kết thúc, nhưng
@@ -4939,7 +4954,7 @@ subagent chạy phép phá thì cây làm việc là trạng thái chia sẻ.
 
 ### Việc còn treo
 
-- `run-scheduled-job.ts` còn 275 dòng (từ 298), vẫn vượt luật 200.
+- `run-scheduled-job.ts` còn 283 dòng (từ 298), vẫn vượt luật 200.
 - `ReplyTarget.threadType` vẫn mang kiểu `ThreadType` của zca-js - trừu tượng
   kênh mới xong một nửa.
 - `laLoiMayChuTuChoi` vẫn không hiểu `LoiZaloBotApi`. Sau đợt này thì vô hại
@@ -4947,6 +4962,29 @@ subagent chạy phép phá thì cây làm việc là trạng thái chia sẻ.
   đường lui khác cho kênh bot.
 - Hai ca nhấp nháy ở trên chưa sửa - cần `mock.timers` và viết lại
   `message-batcher.test.ts`, tách thành việc riêng đúng như V3.18 đã chốt.
+- **Job `agent` luôn trả `[SILENT]` đốt token mà trần ngày KHÔNG chặn được.**
+  Nhánh `[SILENT]` (`run-scheduled-job.ts`) `return` TRƯỚC `blockedByGuard`,
+  nên `reserveProactiveSlot` không bao giờ chạy cho lượt im lặng - và bộ lọc
+  sớm `checkProactiveDailyCap` ở tick (vốn sinh ra để "không đốt lại nguyên 1
+  lượt LLM mỗi 30 giây") không bao giờ bật cho job kiểu đó. Số: với
+  `SCHEDULER_MIN_INTERVAL_MINUTES=5` và `SCHEDULER_MAX_JOBS_PER_THREAD=20` thì
+  tối đa 5760 lượt LLM/ngày/thread, không giới hạn về thời gian.
+
+  Đây là tính chất CÓ SẴN, đúng thiết kế đã chốt: trần ngày đếm theo TIN ZALO
+  THẬT, mà lượt `[SILENT]` thì không gửi tin nào. Không phải lỗi của đợt nối
+  kênh bot. Nhưng đợt này đưa nó tới kênh mà NGƯỜI LẠ chạm được - kênh cá nhân
+  đòi phải là bạn bè, kênh bot thì ai có link cũng nhắn được.
+
+  Lưới đỡ hiện tại: tài khoản bot mặc định `allowlist = "list"` rỗng (ĐÓNG),
+  đã kiểm chứng bằng test - người ngoài danh sách và `senderId` rỗng đều bị
+  `schedule_task` chặn ở tầng store. Nên khai thác được CHỈ KHI chủ bot chủ
+  động mở allowlist sang `all`. Nếu sau này mở thật thì cần một trần LƯỢT (chứ
+  không phải trần TIN) cho job `kind='agent'`, hoặc ít nhất một cảnh báo ngay
+  tại chỗ đổi allowlist của tài khoản bot.
+
+- `runScheduledJobTrial` ("Chạy thử ngay") chưa có ca test nào trên kênh bot.
+  Đã kiểm tay ở vòng rà soát 2 và chạy đúng (snapshot/giành/phục hồi không
+  phụ thuộc kênh), nhưng đó là lỗ PHỦ chứ không phải đã chứng minh.
 - Kênh bot vẫn không có chữ đậm/nghiêng; `create_image` vẫn cần đường phục vụ
   ảnh qua HTTPS công khai; `pnpm zalo-login <id>` vẫn không kiểm `loai`; vòng
   poll vẫn không có sàn nhịp.

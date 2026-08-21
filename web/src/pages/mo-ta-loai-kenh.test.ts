@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { TOOL_KHONG_CHAY_TREN_BOT } from "../../../src/zalo-bot/nang-luc-kenh-bot.js";
 import { MO_TA_KENH_BOT, MO_TA_KENH_CA_NHAN } from "./mo-ta-loai-kenh.js";
 
 /**
@@ -20,12 +21,34 @@ describe("mô tả loại kênh trên trang Accounts", () => {
     assert.doesNotMatch(MO_TA_KENH_BOT, /lịch|hẹn|schedule/i);
   });
 
-  it("mô tả kênh bot vẫn nêu ĐÚNG những gì Bot API thật sự không làm được", () => {
-    // Bỏ chữ "lịch hẹn" mà bỏ luôn cả phần đúng thì thành nói thiếu - người
-    // vận hành chọn kênh bot rồi mới phát hiện không gửi được file.
-    for (const phai of ["file", "ảnh tự vẽ", "thả cảm xúc", "tag thành viên"]) {
-      assert.match(MO_TA_KENH_BOT, new RegExp(phai, "i"), `mô tả thiếu giới hạn "${phai}"`);
+  it("mô tả kênh bot nêu ĐỦ CẢ BẢY tool bị chặn, không sót cái nào", () => {
+    // Bỏ chữ "lịch hẹn" mà bỏ luôn phần đúng thì thành nói THIẾU theo chiều
+    // ngược lại - người vận hành chọn kênh bot rồi mới phát hiện không gửi
+    // được file. Vòng rà soát 2 bắt được đúng ca đó: bản đầu sót
+    // `get_group_info`, mà ca test thì tự nhận là "nêu ĐÚNG những gì Bot API
+    // không làm được" trong khi chỉ đo 4 trong 7.
+    //
+    // Đối chiếu thẳng với BẢNG CHẶN thay vì gõ tay danh sách: gõ tay là danh
+    // sách này và bảng kia trôi khỏi nhau ngay lần thêm/bớt tool tiếp theo.
+    const chuCanCo: Record<string, RegExp> = {
+      send_file: /file/i,
+      create_word_document: /file/i,
+      create_excel_file: /file/i,
+      create_image: /ảnh tự vẽ/i,
+      add_reaction: /thả cảm xúc/i,
+      tag_member: /tag thành viên/i,
+      get_group_info: /thành viên nhóm/i,
+    };
+
+    assert.deepEqual(
+      Object.keys(chuCanCo).sort(),
+      Object.keys(TOOL_KHONG_CHAY_TREN_BOT).sort(),
+      "bảng chặn đã đổi mà câu mô tả trên dashboard chưa theo - người vận hành đọc phải thông tin cũ",
+    );
+    for (const [key, mau] of Object.entries(chuCanCo)) {
+      assert.match(MO_TA_KENH_BOT, mau, `mô tả không nhắc tới giới hạn của "${key}"`);
     }
+
     assert.match(MO_TA_KENH_BOT, /Zalo Bot API/, "không nói rõ đây là giới hạn của nền tảng");
     assert.match(MO_TA_KENH_BOT, /không có rủi ro bị khóa/i, "không nêu cái ĐƯỢC, người đọc chỉ thấy cái mất");
   });

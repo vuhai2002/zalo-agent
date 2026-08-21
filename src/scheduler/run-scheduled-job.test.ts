@@ -671,15 +671,18 @@ describe("runScheduledJob - hai cửa chặn từng không ai canh", () => {
     const sent = attachOnline();
     const job = makeJob({ kind: "agent", payload: "Tra cứu rồi báo cáo" });
 
-    let nhaModel!: () => void;
-    const dangCho = new Promise<void>((r) => {
-      nhaModel = r;
-    });
+    // KHÔNG dựng cổng promise chờ `doStream`. Bản đầu của ca này có, và nó là
+    // một cái bẫy: `runScheduledJob` đã await trọn lượt nên cổng luôn mở sẵn
+    // trước lúc đọc tới - tức cổng THỪA ở đường xanh, nhưng ở đường ĐỎ (hồi
+    // quy nào làm lượt agent chết trước khi chạm model) thì `await` nó TREO
+    // VĨNH VIỄN. `package.json` không truyền `--test-timeout` mà mặc định của
+    // Node là `Infinity`, nên hậu quả là cả bộ test treo tới hết ngân sách CI,
+    // không một tín hiệu nào - tệ hơn hẳn một ca đỏ. Đo được: chèn một `throw`
+    // vào đầu `runAgentJob` thì `timeout 60` trả về mã 124.
     const model = new MockLanguageModelV4({
       doStream: async () => {
         // Account bị tắt ĐÚNG lúc lượt agent đang chạy dở
         accountManager.stopAllAccounts();
-        nhaModel();
         return thanhKetQuaStream({
           finishReason: "stop",
           usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
@@ -695,7 +698,6 @@ describe("runScheduledJob - hai cửa chặn từng không ai canh", () => {
       now: new Date(),
       resolveModel: () => model,
     });
-    await dangCho;
 
     assert.equal(sent.length, 0, "gửi qua client của account đã tắt");
     const run = lastRunOf(job.id);
