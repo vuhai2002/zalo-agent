@@ -18,10 +18,24 @@
  * lệ chừng nào hai điều còn đúng: (a) chỉ file `.test.ts` được import như vậy -
  * mã app import là kéo mã server vào bundle trình duyệt; (b)
  * `nang-luc-kenh-bot.ts` phải giữ THUẦN (không `node:*`, không DB, không
- * logger, không `process.env`). Lý do (b) không hiển nhiên: `tsc --noEmit -p web`
- * giờ kéo file đó vào một program có `lib: DOM` và KHÔNG tự nạp `@types/node`,
- * nên thêm một dòng bình thường phía server vào đó sẽ làm `pnpm typecheck` gãy ở
- * PROJECT WEB với thông điệp không liên quan gì tới thứ vừa sửa.
+ * logger, không `process.env`).
+ *
+ * CẢ HAI ĐIỀU TRÊN LÀ QUY ƯỚC MIỆNG - KHÔNG CÓ GÌ CANH. Bản đầu của khối này
+ * viết rằng `tsc --noEmit -p web` sẽ bắt được (b) vì program web không nạp
+ * `@types/node`. SAI, và đã đo hai lần: thêm `import "node:fs"` vào
+ * `nang-luc-kenh-bot.ts`, rồi thêm `process.env` vào chính file này - typecheck
+ * XANH cả hai lần. Lý do: `web/tsconfig.json` include cả cây `src` theo mẫu
+ * đệ quy nên nuốt
+ * luôn các file `.test.ts` của web, mà chúng `import "node:test"` - thế là
+ * `@types/node` vào program qua đường import tường minh; `types:
+ * ["vite/client"]` chỉ chặn NẠP TỰ ĐỘNG, không chặn đường đó.
+ *
+ * Hệ quả rộng hơn (CÓ TỪ TRƯỚC đợt này, từ lúc có file test web đầu tiên): mọi
+ * file dashboard đều dùng được `process` / `Buffer` / `__dirname` mà typecheck
+ * vẫn xanh, rồi nổ `ReferenceError` trong trình duyệt. Cách đóng đã có công
+ * thức - tách test ra khỏi program app bằng `exclude` + một
+ * `web/tsconfig.test.json` riêng - nhưng đó là việc của cả dashboard, không
+ * phải của đợt lịch hẹn này. Xem mục còn treo ở roadmap V3.19.
  */
 
 export const MO_TA_KENH_BOT =

@@ -15,7 +15,7 @@ import type { ZaloBotClient } from "../zalo-bot/zalo-bot-api-client.js";
  * kênh bot, không phải giới hạn của Bot API (đo thật: 10 tin trong 416ms).
  *
  * Mỗi ca ở đây khoá một mắt xích của đường đó: kênh cá nhân vào sổ, kênh bot
- * vào sổ, hợp đồng cũ của `getRunningAccountApi` không đổi, dừng thì sạch, và
+ * vào sổ, `api` chỉ lấy được QUA KÊNH (lối tắt cũ đã xóa), dừng thì sạch, và
  * account bị tắt giữa lúc khởi động không để lại kênh mồ côi.
  */
 let dataDir: string;

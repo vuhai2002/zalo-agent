@@ -47,6 +47,16 @@ export type MucTieuTranAn = Pick<
   "guiMotDoan" | "threadKey" | "threadId" | "threadType" | "tranKyTuMotTin" | "mangDinhDang"
 >;
 
+/*
+ * Lưu ý về `mangDinhDang` ở trên: hôm nay nó là trường CHẾT trên đường này.
+ * `maybeNotifyBusyWait` gọi `sendReplyInParts(muc, CAU_TRAN_AN)` không kèm
+ * `styles`, mà cửa vứt styles là `if (target.mangDinhDang === false)` - không
+ * có gì để vứt thì nó là no-op tuyệt đối. Giữ trong `Pick` vì hình dạng phải
+ * khớp `ReplyTarget` (docstring ngay trên đã nêu lý do), NHƯNG đừng đọc sự có
+ * mặt của nó như bằng chứng rằng đường trấn an có canh cờ này: không có ca
+ * test nào, và không thể có, vì không có gì để đo.
+ */
+
 /**
  * Gửi câu trấn an nếu đáng gửi. Trả `true` nếu đã gửi.
  *

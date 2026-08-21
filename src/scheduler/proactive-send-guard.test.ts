@@ -57,7 +57,7 @@ before(async () => {
   database = await import("../conversation/database.js");
 
   // ACC_RUNNING "online" qua đúng đường attachAccount thật (không seam riêng) -
-  // isAccountRunning/getRunningAccountApi phản ánh y hệt hệ thống thật lúc chạy.
+  // isAccountRunning/getRunningAccountKenh phản ánh y hệt hệ thống thật lúc chạy.
   accountManager.attachAccount(accountConfig(ACC_RUNNING), fakeApi());
 });
 

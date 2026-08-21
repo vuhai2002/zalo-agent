@@ -160,7 +160,7 @@ describe("lịch hẹn trên tài khoản bot - ba đường vào", () => {
   });
 
   it("persona kênh bot KHÔNG nói bot không đặt được lịch", async () => {
-    // Câu persona hiện chỉ liệt kê file/tài liệu/ảnh/cảm xúc/tag - không nhắc
+    // Câu persona hiện chỉ liệt kê file/tài liệu/ảnh/cảm xúc/tag/nhóm - không nhắc
     // lịch, nên phase gỡ chặn không phải sửa gì. Ca này canh nợ TƯƠNG LAI: ai
     // thêm chữ "không đặt được lịch" vào đó sẽ làm persona nói dối, mà nói dối
     // kiểu này không test nào khác bắt được.

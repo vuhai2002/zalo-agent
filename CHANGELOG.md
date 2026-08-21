@@ -158,6 +158,11 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   Job của tài khoản bot lúc tạm dừng giờ GIỮ NGUYÊN suất chạy và thử lại ở tick
   sau, thay vì bị tắt hẳn như trước.
 
+  **Nếu bạn đã chạy bản trước và có job lịch hẹn của tài khoản bot bị tắt hẳn:**
+  bật lại bằng công tắc sẽ KHÔNG chạy (bản cũ xóa luôn mốc hẹn giờ, mà công tắc
+  không tính lại mốc). Vào **SỬA LỊCH** của job đó và lưu - mốc được tính lại và
+  job sống lại. Chỉ ảnh hưởng job tạo trong ngày 2026-08-11.
+
 
 ### Sửa
 

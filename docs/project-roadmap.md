@@ -4990,8 +4990,57 @@ hạn: bảng chặn chỉ CO LẠI theo thời gian (Zalo mở thêm method là
 Ca canh persona vừa thêm bắt lỗi ngay lần chạy đầu - mẫu `/thả cảm xúc/i` của
 tôi không khớp vì persona ghi "thả ĐƯỢC cảm xúc". Đúng thứ nó sinh ra để bắt.
 
+### Vòng rà soát 5: một khẳng định về "lưới compiler" hoàn toàn không tồn tại
+
+Vòng này không tìm thấy lỗi logic sản xuất nào. Thứ nó tìm ra là một khẳng
+định SAI do chính vòng 3 viết ra, và vòng 4 đã ghi là "đã kiểm chứng" mà không
+kiểm.
+
+Docstring của `web/src/pages/mo-ta-loai-kenh.ts` nói rằng `tsc --noEmit -p web`
+sẽ bắt được nếu ai thêm mã phía server (`node:*`, `process.env`) vào
+`nang-luc-kenh-bot.ts`, vì program web không nạp `@types/node`. Reviewer phá
+hai lần, cả hai đều XANH; tôi đo lại độc lập cũng xanh. Cơ chế thật:
+`web/tsconfig.json` include cả cây `src` theo mẫu đệ quy nên nuốt luôn các file
+`.test.ts` của web, mà chúng `import "node:test"` - `@types/node` vào program
+qua đường import TƯỜNG MINH, còn `types: ["vite/client"]` chỉ chặn nạp TỰ ĐỘNG.
+
+**Bài học: một chú thích hứa có lưới tự động còn tệ hơn không có chú thích
+nào.** Không có nó, người sau tự cẩn thận; có nó, người sau tin máy đã canh rồi
+mới thêm một dòng, typecheck xanh, và lỗi dời sang lúc chạy trong trình duyệt.
+Đây là lần thứ ba trong đợt này một chú thích/commit message hứa nhiều hơn thứ
+mã thật sự làm (trước đó: "hai lớp chồng nhau" ở vòng 1, "mẫu PHÂN BIỆT" ở vòng
+3). Cùng một họ, và cả ba chỉ lộ ra khi có người PHÁ chứ không phải đọc.
+
+Đã hạ giọng docstring xuống đúng sự thật ("quy ước miệng, không có máy canh")
+và ghi kèm công thức đóng thật vào mục còn treo.
+
+Kèm theo, cùng vòng: bốn chú thích lạc hậu do chính dải này đẻ ra (một chỗ trích
+nguyên văn câu persona mà vòng 4 vừa đổi; docstring đầu
+`account-manager-kenh.test.ts` nói ngược với chính ca test trong đó); và hai khe
+của phép đo span - mẫu mang cờ `g` làm `.index` thành `undefined` nên assert bắn
+với thông điệp SAI NGUYÊN NHÂN, mẫu khớp chuỗi RỖNG thì rời nhau với mọi span
+khác nên qua cửa mà không đo gì. Cả hai giờ có khẳng định riêng, đã phá thử và
+bắn đúng nguyên nhân.
+
 ### Việc còn treo
 
+- **Program TypeScript của dashboard nuốt cả file test, nên `@types/node` lọt
+  vào và MỌI file web dùng được `process` / `Buffer` / `__dirname` mà typecheck
+  vẫn xanh - rồi nổ `ReferenceError` trong trình duyệt.** Có từ lúc có file
+  test web đầu tiên (2026-08-02), không phải của đợt lịch hẹn. Công thức đóng:
+  `web/tsconfig.json` thêm `exclude` cho các file `.test.ts`, dựng
+  `web/tsconfig.test.json` kế thừa nó và khai `types: ["node"]`, rồi
+  `pnpm typecheck` chạy cả hai. Chi phí: phải kiểm lại 16 file test web. Tách
+  riêng vì đây là chuyện type-safety của CẢ dashboard.
+- **Job lịch hẹn của tài khoản bot bị bản CŨ tắt hẳn thì không bật lại được
+  bằng công tắc.** `tatJobKhongCanPhamVi` (đã xóa) ghi `enabled = 0` kèm
+  `next_run_at = NULL`, mà `setEnabled` chỉ lật cờ chứ không tính lại mốc, và
+  `listDueJobs` lọc `next_run_at IS NOT NULL`. Giao diện đã chặn công tắc
+  (`schedule-job-row.tsx`) nên không sinh ra job ma im lặng - nhưng job hiện
+  "Đã tắt" với công tắc xám vĩnh viễn và không câu nào nói phải làm gì. Đường
+  thoát có sẵn: SỬA LỊCH thì `updateJob` tính lại `next_run_at`. Không viết
+  migration vì dân số chỉ nằm trong 8 commit cùng ngày 2026-08-11 và repo
+  không có tag phát hành.
 - `run-scheduled-job.ts` còn 283 dòng (từ 298), vẫn vượt luật 200.
 - `ReplyTarget.threadType` vẫn mang kiểu `ThreadType` của zca-js - trừu tượng
   kênh mới xong một nửa.

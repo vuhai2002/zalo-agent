@@ -58,8 +58,14 @@ describe("mô tả loại kênh trên trang Accounts", () => {
     // key sau đi ké khẳng định của key trước, bất kể mẫu viết thế nào.
     const doanKhop: { key: string; dau: number; cuoi: number }[] = [];
     for (const [key, m] of Object.entries(chuCanCo)) {
+      // Cờ `g` làm `.index` thành `undefined` - không có nó thì assert dưới
+      // bắn với thông điệp "không nhắc tới", tức chỉ SAI nguyên nhân và người
+      // debug đi tìm nhầm chỗ. Mẫu khớp RỖNG thì rời nhau với mọi span khác
+      // nên qua cửa chồng lấn dù chuỗi không hề nhắc tới tool đó.
+      assert.ok(!m.global, `mẫu của "${key}" có cờ g - phép đo span không đọc được vị trí`);
       const kq = MO_TA_KENH_BOT.match(m);
       assert.ok(kq && kq.index !== undefined, `mô tả không nhắc tới giới hạn của "${key}"`);
+      assert.ok(kq[0].length > 0, `mẫu của "${key}" khớp chuỗi RỖNG - khẳng định rỗng, không đo gì`);
       doanKhop.push({ key, dau: kq.index, cuoi: kq.index + kq[0].length });
     }
 
