@@ -4839,7 +4839,8 @@ lại. Dấu hiệu đó nằm đó suốt từ V3.16 mà không ai đọc ra.
   vừa thêm một ca. Muốn số thật thì lấy bằng công thức:
   `grep -cE '^\s*it\(' <file>`. Luật rút ra: đừng viết hằng số đếm test vào
   tài liệu trong cùng commit có thêm/bớt ca.
-- Full suite **2168/2168 xanh**, `pnpm typecheck` sạch.
+- Full suite **2168/2168 xanh**, `pnpm typecheck` sạch. (ẢNH CHỤP lúc nghiệm thu
+  `d45f4d2` - sáu vòng rà soát sau đó có thêm ca, đừng đọc như số sống.)
 - **13 phép phá**, mỗi phép đỏ đúng ca dự kiến. Ba phép đáng ghi:
   - Sabotage `cap-guard` về bản cũ: chỉ 1 ca đỏ - chứng minh đường tick là ca
     riêng, không bị ca "trần ngày" phủ hộ.
@@ -5040,8 +5041,8 @@ khối chữ sai, và cả hai đều nằm trong chính commit được viết 
   Phép đo quyết định của vòng 6: bỏ `vite.config.ts` khỏi `include` mà GIỮ
   nguyên file test -> chính CÁC FILE TEST đỏ `Cannot find name 'node:test'`.
   Chúng là bên TIÊU THỤ, không phải nguồn. Nguồn thật là `vite.config.ts`
-  import `vite`, mà `.d.ts` của vite mở đầu bằng chỉ thị tham chiếu kiểu `node`
-  - thứ `types: [...]` không chặn. Kéo theo: "công thức đóng" mà vòng 5 ghi vào
+  import `vite`, mà `.d.ts` của vite mở đầu bằng chỉ thị tham chiếu kiểu `node` -
+  thứ `types: [...]` không chặn. Kéo theo: "công thức đóng" mà vòng 5 ghi vào
   mục còn treo chính là ca reviewer đo ra XANH, tức người sau bỏ công sửa 16
   file test rồi tick xong mục treo mà lỗ còn nguyên. Cả mốc thời gian cũng sai:
   2026-07-25 (commit dựng dashboard) chứ không phải 2026-08-02.
@@ -5066,6 +5067,42 @@ Mục nhỏ thứ ba cùng họ: câu đính chính con số "47" ở trên tự
 (28 + 20 = 48) và lạc hậu ngay trong commit viết ra nó, vì chính commit đó vừa
 thêm một ca test. Đã bỏ hằng số, thay bằng công thức lấy số.
 
+### Vòng rà soát 7: cơ chế đã đúng, cái sót lại là một TRẠNG THÁI BIÊN
+
+Vòng này xác nhận khối `@types/node` cuối cùng đã tự đứng được: 8 phép đo độc
+lập, kể cả mốc 2026-07-25 (tra bằng `git show` trên `web/tsconfig.json` của
+commit dựng dashboard) và chuỗi lỗi `Cannot find name 'node:test'` khớp từng
+chữ. Công thức ba bước khôi phục job cũng đo lại ra đúng bốn con số đã ghi.
+
+Nhưng vẫn còn một mục thật, và nó ở một trục KHÁC hẳn ba vòng trước:
+
+**Câu mô tả thứ người vận hành NHÌN THẤY chỉ đúng cho 2 trong 3 loại lịch.**
+Tài liệu bảo đi tìm job hiện "Đã tắt". Đo bằng cách chép nguyên văn hai biểu
+thức của `schedule-job-row.tsx` rồi chạy trên trạng thái bản cũ để lại:
+`every`/`cron` ra `maxRuns=null` nên đúng là "Đã tắt", còn `once` ra
+`maxRuns=1, runCount=1` nên hiện **"Đã xong (chạy đủ 1 lần)"**. Nhánh bot cũ
+gọi `tatJobKhongCanPhamVi` RỒI `conclude(...,"skipped")`, mà `markRun` cộng
+`run_count` - thế là giao diện tưởng job đã hoàn thành.
+
+Hậu quả không chỉ là chữ sai: người vận hành đi tìm "Đã tắt" sẽ BỎ SÓT đúng
+loại job đó, mà bảng điều khiển thì đang khẳng định nó ĐÃ GỬI trong khi nó
+chưa gửi gì. Một lời hẹn mất tích được báo cáo là hoàn thành - kết cục mà
+CLAUDE.md gọi là tệ nhất với bot cá nhân, cộng thêm một lớp nói dối.
+
+**Luật thứ hai, bổ sung cho luật của vòng 6.** Vòng 6 chốt "câu nào mô tả một
+CƠ CHẾ thì phải kèm phép đo" - luật đó đã có tác dụng đo được, cơ chế của cả
+hai khối lần này đều đúng. Cái nó không phủ: **câu nào mô tả thứ NGƯỜI DÙNG
+NHÌN THẤY thì phải dựng đủ MỌI BIẾN THỂ của trạng thái đó rồi mới viết.** Ở
+đây có ba loại lịch, tôi dựng thử một loại, và đúng loại không dựng lại là loại
+nói dối. Hai luật này khác trục: một cái hỏi "cơ chế có chạy không", cái kia
+hỏi "chạy trên MỌI hình dạng dữ liệu chưa".
+
+Ba mục nhỏ cùng vòng: dòng thân đoạn văn lại bị markdown hiểu thành bullet
+(lần thứ BA cùng hình dạng - reviewer đo bằng `marked` chứ không suy từ spec);
+công thức `references` cho mục treo có bẫy XANH GIẢ (`tsc --noEmit -p` trên
+một root chỉ có `references` kiểm ĐÚNG KHÔNG FILE NÀO, phải dùng `tsc -b`); và
+nút trên giao diện tên là "Sửa" chứ không phải "Sửa lịch".
+
 ### Việc còn treo
 
 - **MỌI file dashboard dùng được `process` / `Buffer` / `__dirname` mà
@@ -5088,7 +5125,9 @@ thêm một ca test. Đã bỏ hằng số, thay bằng công thức lấy số.
   Công thức đóng ĐÃ ĐO: một tsconfig riêng cho mã app, KHÔNG chứa
   `vite.config.ts` và loại các file test (mẫu chuẩn của Vite là tách
   `tsconfig.app.json` + `tsconfig.node.json` rồi `web/tsconfig.json` chỉ còn
-  `references`). Đo trực tiếp: `process.env` trong file app đỏ đúng `TS2591`,
+  `references`). CẢNH BÁO khi làm: `pnpm typecheck` hiện chạy `tsc --noEmit -p web`,
+  mà một root chỉ có `references` thì lệnh đó kiểm ĐÚNG KHÔNG FILE NÀO và vẫn
+  xanh - lưới compiler tệ hơn hiện trạng. Phải đổi sang `tsc -b`. Đo trực tiếp: `process.env` trong file app đỏ đúng `TS2591`,
   cây app không có `process.env` thì vẫn sạch. Chi phí thật nằm ở chỗ tách
   `vite.config.ts` và nối `pnpm typecheck` chạy đủ các project, không phải ở 16
   file test. Tách riêng vì đây là type-safety của CẢ dashboard.
@@ -5096,8 +5135,15 @@ thêm một ca test. Đã bỏ hằng số, thay bằng công thức lấy số.
   bằng công tắc.** `tatJobKhongCanPhamVi` (đã xóa) ghi `enabled = 0` kèm
   `next_run_at = NULL`, mà `setEnabled` chỉ lật cờ chứ không tính lại mốc, và
   `listDueJobs` lọc `next_run_at IS NOT NULL`. Giao diện đã chặn công tắc
-  (`schedule-job-row.tsx`) nên không sinh ra job ma im lặng - nhưng job hiện
-  "Đã tắt" với công tắc xám vĩnh viễn và không câu nào nói phải làm gì. Đường
+  (`schedule-job-row.tsx`) nên không sinh ra job ma im lặng - nhưng job nằm đó
+  với công tắc xám vĩnh viễn và không câu nào nói phải làm gì. Và nhãn thì
+  KHÁC NHAU theo loại lịch, đo trực tiếp bằng cách chép nguyên văn hai biểu
+  thức của `schedule-job-row.tsx`: `every`/`cron` ra `maxRuns=null` nên hiện
+  "Đã tắt", còn `once` ra `maxRuns=1, runCount=1` nên hiện **"Đã xong (chạy đủ
+  1 lần)"** - nhãn đó NÓI DỐI, job chưa gửi gì. Nguyên nhân: nhánh bot cũ gọi
+  `tatJobKhongCanPhamVi` RỒI `conclude(...,"skipped")`, mà `markRun` cộng
+  `run_count`. Người vận hành đi tìm "Đã tắt" sẽ bỏ sót đúng loại job đó, và
+  bảng điều khiển thì khẳng định nó đã hoàn thành. Đường
   thoát cần ĐÚNG BA BƯỚC, đã đo trên store thật: (1) ĐỔI mốc lịch - lưu mà
   giữ nguyên lịch cũ thì drawer không gửi trường `schedule` (cố ý, xem
   `schedule-form-helpers.ts`) nên `updateJob` giữ nguyên `next_run_at = NULL`;

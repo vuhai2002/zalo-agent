@@ -159,9 +159,17 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   sau, thay vì bị tắt hẳn như trước.
 
   **Nếu bạn đã chạy bản trước và có job lịch hẹn của tài khoản bot bị tắt hẳn**
-  (chỉ ảnh hưởng job tạo trong ngày 2026-08-11), làm ĐÚNG BA BƯỚC theo thứ tự:
+  (chỉ ảnh hưởng job tạo trong ngày 2026-08-11):
 
-  1. Mở **Sửa lịch** của job đó và **ĐỔI mốc thời gian** - đổi thật, sang một
+  Cách nhận ra chúng - hai loại lịch hiện HAI nhãn khác nhau, đừng chỉ tìm một:
+  job `every`/`cron` hiện **"Đã tắt"**, còn job **một lần** hiện
+  **"Đã xong (chạy đủ 1 lần)"**. Nhãn thứ hai NÓI DỐI: job đó chưa gửi gì cả -
+  bản cũ vừa tắt job vừa cộng số lần chạy, nên giao diện tưởng nó đã hoàn thành.
+  Dấu hiệu đúng nằm ở badge trạng thái bên cạnh: **"Bị bỏ lượt"**.
+
+  Rồi làm ĐÚNG BA BƯỚC theo thứ tự:
+
+  1. Mở **Sửa** của job đó và **ĐỔI mốc thời gian** - đổi thật, sang một
      mốc khác. Lưu mà giữ nguyên lịch cũ thì không có tác dụng gì: giao diện
      chỉ gửi phần lịch khi nó thực sự đổi.
   2. **Lưu.**
