@@ -193,10 +193,18 @@ async function runAgentJob(
   await runInTurnLogContext({ accountId: job.accountId, threadId: job.threadId, turnId }, async () => {
     try {
       const result = await runAgentTurn({
-        // `null` trên kênh bot - AN TOÀN vì mọi tool cần `api` đều đã bị loại
-        // khỏi lượt này BỞI HAI lớp chồng nhau: `runsInScheduledTurn: false`
-        // (lượt theo lịch) và bảng chặn của kênh bot. Còn đúng 4 tool tra cứu:
-        // get_datetime, web_search, web_fetch, kb_search.
+        // `null` trên kênh bot. AN TOÀN, nhưng KHÔNG phải vì "hai lớp lọc
+        // chồng nhau" như bản chú thích đầu ghi - đếm lại bằng mã nguồn thì
+        // câu đó SAI: trong 7 tool gọi `apiCaNhan(ctx)`, sáu cái có
+        // `runsInScheduledTurn: false`, riêng `get_group_info` KHÔNG khai gì
+        // cả nên lớp duy nhất giữ nó khỏi lượt này là bảng chặn kênh bot.
+        //
+        // Chỗ canh THẬT của bất biến là `api-ca-nhan-guard.test.ts` ("MỌI tool
+        // gọi `apiCaNhan` đều nằm trong bảng chặn" - đo theo NGUỒN, nên tool
+        // mới cũng bị soi), cộng ca "còn ĐÚNG 4 tool tra cứu" ở
+        // `lich-hen-kenh-bot.test.ts`. Đừng dựa vào phép cộng hai lớp: gỡ
+        // `get_group_info` khỏi bảng chặn là `api: null` hết an toàn ngay, dù
+        // "lớp thứ hai" vẫn còn nguyên trên giấy.
         api: dich.kenh.api,
         account,
         batch: [message],

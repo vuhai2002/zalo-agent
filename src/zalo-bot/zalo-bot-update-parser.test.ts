@@ -135,4 +135,40 @@ describe("doiUpdateSangParsedMessage", () => {
     assert.ok(!Number.isNaN(t), `sentAt hỏng: ${m?.sentAt}`);
     assert.ok(t >= truoc && t <= sau, `sentAt ${m?.sentAt} nằm ngoài [${truoc}, ${sau}]`);
   });
+
+  it("tin NHÓM của kênh bot KHÔNG sinh trích dẫn - lưới chắn phải tường minh", async () => {
+    // `mangDinhDang` chữa được ca `styles` bị tính vào ngân sách byte rồi bị
+    // đường gửi vứt. `quote` là ANH EM SINH ĐÔI chưa được gắn cờ đó:
+    // `message-turn-processor` đặt `quote` cho CẢ HAI kênh, `kenhBot.duongGui`
+    // thì vứt nó, mà `trichDanTrongNganSach` vẫn trừ tới 30% ngân sách byte
+    // cho một khối không bao giờ đi trên dây.
+    //
+    // Hôm nay không chạm tới được, nhưng nhờ một lưới chắn TÌNH CỜ:
+    // `trichDanTuTin` đọc `msg.rawData.msgType`, mà parser này đặt
+    // `rawData: {...m}` từ `ZaloBotMessage` - kiểu đó không có `msgType`. Zalo
+    // thêm một trường trùng tên vào payload bot là cửa mở lại ngay.
+    //
+    // Ca này biến lưới tình cờ thành lưới có canh. KHÔNG thêm cờ
+    // `mangTrichDan`: YAGNI cho tới khi có kênh thứ ba, và một ca test rẻ hơn
+    // một trường phải chở qua bốn chỗ.
+    const { trichDanTuTin } = await import("../zalo/reply-quote.js");
+    const u: ZaloBotUpdate = {
+      event_name: "message.text.received",
+      message: {
+        from: { id: "u1", display_name: "Hải", is_bot: false },
+        chat: { id: "g1", chat_type: "GROUP" },
+        text: "cho hỏi bảng giá",
+        message_id: "m1",
+        date: 1750316131602,
+      },
+    };
+    const m = doiUpdateSangParsedMessage("bot-1", u);
+    assert.equal(m?.isGroup, true, "fixture phải là tin NHÓM - chat riêng vốn không trích, ca này sẽ đo rỗng");
+    assert.equal(
+      trichDanTuTin(m!),
+      undefined,
+      "kênh bot sinh trích dẫn - nó sẽ bị `duongGui` vứt nhưng vẫn ăn ngân sách byte",
+    );
+  });
+
 });

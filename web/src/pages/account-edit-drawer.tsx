@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ManagedAccount, ManagedAgent, ReactionIcon } from "../dashboard-api-client";
 import { api, ApiError } from "../dashboard-api-client";
 import { useChotNen } from "../shared/backdrop-close-guard";
+import { MO_TA_KENH_BOT, MO_TA_KENH_CA_NHAN } from "./mo-ta-loai-kenh";
 import { SelectMenu } from "../shared/select-menu";
 import { ToggleKnob } from "../shared/ui-bits";
 
@@ -175,9 +176,7 @@ export function AccountEditDrawer({
                 onChange={(v) => doiLoai(v as "ca_nhan" | "bot")}
               />
               <p className="mt-1.5 text-[12px] leading-[1.6] text-ink-soft">
-                {form.loai === "bot"
-                  ? "Không gửi được file, ảnh tự vẽ, thả cảm xúc, tag thành viên hay đặt lịch hẹn - đó là giới hạn của Zalo Bot API. Đổi lại không có rủi ro bị khóa tài khoản."
-                  : "Dùng nick Zalo thật qua giao thức không chính thức - đủ tính năng nhất nhưng CÓ rủi ro bị Zalo khóa. Chỉ dùng nick phụ."}
+                {form.loai === "bot" ? MO_TA_KENH_BOT : MO_TA_KENH_CA_NHAN}
               </p>
               <p className="mt-1 text-[12px] text-ink-soft">Chốt lúc tạo, không đổi được sau đó.</p>
             </div>

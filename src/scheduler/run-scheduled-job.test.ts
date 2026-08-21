@@ -79,10 +79,18 @@ after(() => {
  * lưu lại callback). Gọi lại nhiều lần trong cùng file AN TOÀN: attachAccount
  * tự thay thế lượt gắn trước.
  */
+type TinDaGui = {
+  threadId: string;
+  /** Tham số thứ BA của `api.sendMessage` - xem chú thích trong `attachOnline` */
+  threadType?: number;
+  text: string;
+  styles?: { start: number; len: number }[];
+};
+
 function attachOnline(
   sendMessageImpl?: (msg: string, threadId: string) => unknown,
-): { threadId: string; text: string; styles?: { start: number; len: number }[] }[] {
-  const sent: { threadId: string; text: string; styles?: { start: number; len: number }[] }[] = [];
+): TinDaGui[] {
+  const sent: TinDaGui[] = [];
   const config: AccountConfig = {
     id: ACC,
     label: "Test",
@@ -102,11 +110,17 @@ function attachOnline(
   const api = {
     getOwnId: () => "self-1",
     listener: { on: () => {}, onConnected: () => {}, onError: () => {}, onClosed: () => {}, start: () => {}, stop: () => {} },
+    // GHI LẠI cả `threadType` (tham số thứ BA). Bản trước nuốt nó, và hậu quả
+    // đo được bằng phép phá: đổi `p.threadType` thành `0 as ThreadType` trong
+    // `reply-target-tu-kenh.ts` thì TOÀN BỘ 2168 test vẫn xanh - trong khi sai
+    // giá trị đó nghĩa là lời nhắc của một NHÓM đi qua endpoint chat riêng.
+    // Mù được vì mọi fixture job đều `threadType: 0`.
     sendMessage: async (
       payload: { msg: string; styles?: { start: number; len: number }[] },
       threadId: string,
+      threadType?: number,
     ) => {
-      sent.push({ threadId, text: payload.msg, styles: payload.styles });
+      sent.push({ threadId, threadType, text: payload.msg, styles: payload.styles });
       if (sendMessageImpl) return sendMessageImpl(payload.msg, threadId);
       return { msgId: `m-${sent.length}` };
     },
@@ -621,4 +635,75 @@ describe("runScheduledJob - kind=agent", () => {
   // nạp trước khi test kịp mock) - đã xác nhận bằng review code trực tiếp:
   // `turnFinished` được set NGAY SAU dòng finishAgentTurn(result.usage) đầu
   // tiên, và catch chỉ gọi lại finishAgentTurn/saveTurnTrace khi cờ còn false.
+});
+
+/**
+ * Hai bất biến từng KHÔNG có răng, phát hiện bằng phép phá ở vòng rà soát
+ * V3.19 - code đúng, nhưng phá đi thì cả 2168 test vẫn xanh.
+ */
+describe("runScheduledJob - hai cửa chặn từng không ai canh", () => {
+  it("`threadType` của job đi TỚI NƠI - lời nhắc của NHÓM không đi qua endpoint chat riêng", async () => {
+    // Phép phá đo được: đổi `p.threadType` thành `0 as ThreadType` trong
+    // `reply-target-tu-kenh.ts` -> 2168/2168 VẪN XANH. Mù vì mọi fixture job
+    // đều `threadType: 0` và hàm gửi giả nuốt tham số thứ ba.
+    //
+    // Bán kính hỏng: `duongGuiZcaJs` truyền thẳng giá trị này vào
+    // `api.sendMessage(msg, threadId, threadType)`, nên sai nó là gửi lời nhắc
+    // của một nhóm qua đường chat riêng.
+    const sent = attachOnline();
+    const job = makeJob({ threadId: THREAD, threadType: 1, payload: "Nhắc cả nhóm họp 3h" });
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, now: new Date() });
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]!.threadType, 1, "threadType của job không tới được api.sendMessage");
+  });
+
+  it("account bị TẮT giữa lượt agent: không gửi, giữ suất, phục hồi mốc", async () => {
+    // `taoDichGuiChoJob` cố ý đọc `running` MỘT LẦN rồi giữ `kenh` suốt lượt
+    // (lượt agent chạy hàng phút). Cửa duy nhất chặn `kenh` ôi thiu là
+    // `checkAccountAndThreadReady` trong `blockedByGuard`, gọi SÁT lúc gửi.
+    //
+    // Phép phá đo được: thay cửa đó bằng `{ ok: true }` -> 2168/2168 VẪN XANH.
+    // Cửa ấy trông thừa (vòng tick đã kiểm rồi) nên rất dễ bị "dọn dẹp", mà
+    // hậu quả thì câm: job gửi qua client của một account vừa bị bấm tắt -
+    // hoặc, sau đường xoay token, qua client mang token đã thu hồi.
+    const sent = attachOnline();
+    const job = makeJob({ kind: "agent", payload: "Tra cứu rồi báo cáo" });
+
+    let nhaModel!: () => void;
+    const dangCho = new Promise<void>((r) => {
+      nhaModel = r;
+    });
+    const model = new MockLanguageModelV4({
+      doStream: async () => {
+        // Account bị tắt ĐÚNG lúc lượt agent đang chạy dở
+        accountManager.stopAllAccounts();
+        nhaModel();
+        return thanhKetQuaStream({
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: "text", text: "Báo cáo đây." }],
+          warnings: [],
+        } as unknown as KetQuaGenerate);
+      },
+    });
+
+    await runJob.runScheduledJob(job, {
+      late: false,
+      scheduledFor: job.nextRunAt!,
+      now: new Date(),
+      resolveModel: () => model,
+    });
+    await dangCho;
+
+    assert.equal(sent.length, 0, "gửi qua client của account đã tắt");
+    const run = lastRunOf(job.id);
+    assert.equal(run.status, "skipped");
+    assert.match(run.detail, /không chạy/);
+
+    const sau = jobStore.getJobUnscoped(job.id)!;
+    assert.equal(sau.enabled, true, "job bị tắt vì account tạm dừng - lời nhắc mất vĩnh viễn");
+    assert.equal(sau.nextRunAt, job.nextRunAt, "`once` phải được phục hồi ĐÚNG mốc cũ để tick sau thử lại");
+  });
 });

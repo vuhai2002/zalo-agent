@@ -4318,7 +4318,11 @@ Dò 17 method: **13 cái trả 404**. Không tồn tại `sendDocument`/`sendFil
 (`pnpm zalo-bot-check`) để lần sau Zalo mở thêm method thì đo lại bằng một
 lệnh, không phải dựng lại từ đầu.
 
-### 8 trong 14 tool bị chặn, và vì sao ẩn tool thôi là chưa đủ
+### 8 trong 14 tool bị chặn
+
+> Số liệu của ĐỢT NÀY (10/08/2026). Từ V3.19 còn **7** - `schedule_task`
+> đã được nối vào bộ hẹn lịch. Giữ nguyên phần dưới làm bản ghi lịch sử.
+, và vì sao ẩn tool thôi là chưa đủ
 
 Bị chặn: `send_file`, `create_word_document`, `create_excel_file`,
 `create_image`, `add_reaction`, `tag_member`, `get_group_info`,
@@ -4440,10 +4444,9 @@ Còn treo sau vòng rà soát:
   ms). Ngày nào Zalo trả rỗng tức thì thì vòng quay ở tốc độ mạng, không trần -
   và đích đến là chính con nginx đã đo được trả 429. Một `await ngu(200)` khi
   poll rỗng mà vòng chạy dưới 1 giây là đủ.
-- `tatJobKhongCanPhamVi` ghi `updated_at` bằng `datetime('now')` trong khi 8 câu
-  UPDATE khác cùng file dùng `strftime('%Y-%m-%dT%H:%M:%fZ','now')`. Vô hại hôm
-  nay vì không component nào render `updatedAt` của job; sẽ thành giờ lệch múi
-  khi ai đó hiện nó lên (V8 hiểu chuỗi không có `T`/`Z` là giờ ĐỊA PHƯƠNG).
+- ~~`tatJobKhongCanPhamVi` ghi `updated_at` bằng `datetime('now')` lệch với 8
+  câu UPDATE khác cùng file~~ - HẾT: cả hàm đã bị xóa ở V3.19 cùng caller duy
+  nhất của nó.
 
 - **`pnpm zalo-login <id>` không kiểm `loai`** - `scripts/login-account.ts` cố ý
   không mở DB nên không biết loại kênh. Chạy cho một tài khoản bot sẽ ghi
@@ -4808,7 +4811,11 @@ giữ nguyên suất chạy.
 
 ### Bộ tool của lượt theo lịch trên kênh bot
 
-Còn ĐÚNG 4: `get_datetime`, `web_search`, `web_fetch`, `kb_search`. Phép tính:
+Còn ĐÚNG 4: `get_datetime`, `web_search`, `web_fetch`, `kb_search` - trong đó
+`kb_search` chỉ hiện khi agent ĐÃ được gán nguồn Kho tri thức (mặc định
+`agent_kb_sources` rỗng nghĩa là ĐÓNG), nên cài đặt mặc định thực ra là 3.
+Ca test phải tự gán nguồn mới đo được con số 4 - bản đầu quên bước đó và đỏ
+với 3 key, đúng hành vi nhưng sai kỳ vọng. Phép tính:
 14 tool trừ hợp của `runsInScheduledTurn: false` (9) và bảng chặn kênh bot (7,
 sau đợt này) = 10. `schedule_task` vẫn vắng mặt vì job không được đẻ job (luật
 số 1 của Hermes), `get_group_info` vắng vì `getChat` trả 404. Đủ cho "tra cứu
@@ -4873,6 +4880,62 @@ tư đã ghi ở V3.18 (khẳng định PHỦ ĐỊNH theo đồng hồ, chờ-�
 thật đến từ việc `node --test` chạy CẢ BỘ song song, không từ burner. Nên muốn
 tái hiện một ca nhấp nháy thì phải chạy đúng cả bộ - thu hẹp phạm vi để "đo cho
 nhanh" là tự làm mất khả năng tái hiện.
+
+### Vòng rà soát bằng hai subagent: ba lỗ TEST, một lỗi chữ nguy hiểm
+
+Hai reviewer chạy song song với hai lăng kính (logic scheduler / trừu tượng
+hóa kênh). Cả hai đều không tìm thấy lỗi CRITICAL, và cả hai đều TỰ CHẠY phép
+phá thay vì chỉ đọc - tổng 15 phép. Thứ chúng tìm ra không phải lỗi logic mà
+là chỗ code ĐÚNG nhưng KHÔNG AI CANH:
+
+- **`threadType` không được test nào chở tới nơi.** Đổi `p.threadType` thành
+  `0 as ThreadType` trong `reply-target-tu-kenh.ts` thì **2168/2168 vẫn xanh**.
+  Đây là trường có bán kính hỏng xấu nhất của nhà máy mới: `duongGuiZcaJs`
+  truyền thẳng nó vào `api.sendMessage`, nên sai giá trị là lời nhắc của một
+  NHÓM đi qua endpoint chat riêng. Mù được vì mọi fixture job đều
+  `threadType: 0` và cả ba hàm gửi giả đều nuốt tham số thứ ba. Chua chát:
+  docstring của chính file đó biện minh cho sự tồn tại của nhà máy bằng câu
+  "quên một trường thì trình biên dịch im lặng còn hậu quả thì câm" - hai
+  trường kia có răng, đúng trường thứ ba thì không.
+- **Cửa chặn `kenh` ôi thiu không có răng.** Thiết kế mới cố ý đọc `running`
+  MỘT LẦN rồi giữ `kenh` suốt lượt (lượt agent chạy hàng phút), nên cửa duy
+  nhất chặn client đã chết là `checkAccountAndThreadReady` trong
+  `blockedByGuard`. Thay nguyên khối đó bằng `{ ok: true }` thì **2168/2168
+  vẫn xanh**. Cửa ấy TRÔNG THỪA (vòng tick đã kiểm rồi) nên rất dễ bị dọn dẹp,
+  mà đợt này làm nó nặng gánh hơn hẳn: `kenh` giờ ôm `client` Bot API, và
+  đường xoay token (`stopAccount` rồi `startAccount`) tạo ra ca
+  `isAccountRunning === true` nhưng client trong tay lượt mang token ĐÃ THU HỒI.
+- **Chuỗi dashboard nói dối người vận hành đúng lúc họ ra quyết định không
+  đảo ngược được.** `account-edit-drawer.tsx` vẫn ghi tài khoản bot "không đặt
+  lịch hẹn", và khối đó chỉ hiện lúc TẠO account, ngay trên dòng "Chốt lúc
+  tạo, không đổi được sau đó". Người cần lịch hẹn đọc câu đó rồi chọn kênh CÁ
+  NHÂN - kênh CÓ rủi ro bị Zalo khóa nick - còn sửa lại thì phải xóa account,
+  mà xóa account là dọn luôn toàn bộ lịch hẹn của nó.
+
+  Đáng ghi vì đây là lỗ trong chính danh sách của kế hoạch: phase 04 ghi "gỡ
+  chặn 3 lớp + persona + dashboard", rồi kiểm `schedule-page.tsx`, thấy nó
+  không phân biệt `loai` nên kết luận "trang tự chạy đúng" - không ai grep
+  sang `account-edit-drawer.tsx`. Persona có test canh; chuỗi dashboard thì
+  không. **Bài học: chỗ nào đã có test canh thì sống sót qua đợt sửa, chỗ nào
+  chỉ dựa vào người nhớ thì trôi.** Giờ chuỗi đó tách ra
+  `web/src/pages/mo-ta-loai-kenh.ts` và có ca test cùng khuôn với ca persona.
+
+Ba mục nhỏ hơn: `tatJobKhongCanPhamVi` thành mã chết kèm docstring dạy đúng
+cái nhánh vừa bị xóa vì sai (xóa hẳn - cùng lý lẽ đã dùng cho
+`getRunningAccountApi`, và tiện đóng luôn mục treo `datetime('now')` lệch định
+dạng của chính nó); `account-routes.ts` còn một chú thích ghi "8 tool"; và
+`quote` là anh em sinh đôi CHƯA gắn cờ của `mangDinhDang` - kênh bot vứt nó
+nhưng vẫn bị trừ tới 30% ngân sách byte, hôm nay không chạm tới được nhờ một
+lưới chắn TÌNH CỜ (parser bot không đặt `msgType` vào `rawData`). Đã thêm ca
+test biến lưới tình cờ thành lưới có canh; không thêm cờ `mangTrichDan` vì
+YAGNI cho tới khi có kênh thứ ba.
+
+Một chuyện về QUY TRÌNH: một reviewer để sót phép phá trong cây làm việc
+(`reply.sentParts - 1` thành `reply.sentParts`, tức đếm dư suất trần ngày mỗi
+khi câu trả lời bị chẻ nhiều tin). Nó tự khôi phục trước khi kết thúc, nhưng
+có một quãng cây làm việc mang mã sai. Luật rút ra: sau MỖI vòng subagent rà
+soát, `git status` + `git diff` phải rỗng trước khi tin bất cứ số liệu nào -
+subagent chạy phép phá thì cây làm việc là trạng thái chia sẻ.
 
 ### Việc còn treo
 

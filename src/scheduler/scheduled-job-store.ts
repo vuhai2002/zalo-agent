@@ -272,18 +272,14 @@ export function markRun(id: string, status: Exclude<JobRunStatus, "running">, er
   markRunStmt.run(runCount, status, error, hitMax ? 0 : job.enabled ? 1 : 0, hitMax ? null : job.nextRunAt, id);
 }
 
-const tatJobStmt = db.prepare(
-  `UPDATE scheduled_jobs SET enabled = 0, next_run_at = NULL, updated_at = datetime('now') WHERE id = ?`,
-);
-
-/**
- * Tắt job KHÔNG kiểm phạm vi - chỉ dùng cho vòng tick, nơi id đến từ chính
- * `listDueJobs` chứ không từ người dùng (cùng lý do với `getJobUnscoped`).
+/*
+ * KHÔNG có `tatJobKhongCanPhamVi` nữa - xóa ở V3.19 cùng caller duy nhất của nó.
  *
- * Cần hàm riêng vì `markRun` chỉ tắt khi CHẠM TRẦN số lần chạy, mà trần đó chỉ
- * tồn tại với job `once`. Job `every`/`cron` của một tài khoản không gửi được
- * thì phải tắt tường minh, không thì nó quay lại mỗi tick vĩnh viễn.
+ * Nó ra đời để tắt hẳn job của tài khoản BOT, vì hồi đó scheduler không biết
+ * gửi qua kênh bot nên job `every`/`cron` quay lại mỗi tick vĩnh viễn. Giờ
+ * scheduler dựng đường gửi theo KÊNH nên tiền đề đó không còn, và giữ lại một
+ * hàm "tắt hẳn job, bỏ qua mọi phạm vi" là mời người sau tắt job của một
+ * account chỉ vì nó tạm rớt phiên - đúng thứ vừa sửa. Bất biến đang giữ:
+ * account không chạy thì `concludeBlockedNotRun` (giữ suất, phục hồi
+ * `next_run_at`), KHÔNG tắt job.
  */
-export function tatJobKhongCanPhamVi(id: string): void {
-  tatJobStmt.run(id);
-}

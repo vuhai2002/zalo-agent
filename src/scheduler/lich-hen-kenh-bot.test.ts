@@ -228,14 +228,19 @@ describe("lịch hẹn trên tài khoản Zalo Bot", () => {
     const nguon = kbSources.taoNguon({ ten: "Bảng giá", loai: "text", noiDungGoc: "giá 100k" });
     kbBinding.datNguonChoAgent(agent.id, [nguon.id]);
 
-    const scope = { account: accountStore.getAccount(ACC)!, agent };
-    const keys = registry.listAvailableTools(scope, { isolated: true }).map((t) => t.key).sort();
+    // `finally` chứ không dọn ở cuối thân test: ca này mà đỏ thì gán nguồn KB
+    // còn nguyên cho các ca sau trong cùng file. Hai ca `setTuning` phía trên
+    // đã dùng đúng khuôn này - chỗ đây từng lệch khuôn.
+    try {
+      const scope = { account: accountStore.getAccount(ACC)!, agent };
+      const keys = registry.listAvailableTools(scope, { isolated: true }).map((t) => t.key).sort();
 
-    assert.deepEqual(keys, ["get_datetime", "kb_search", "web_fetch", "web_search"]);
-    assert.ok(!keys.includes("schedule_task"), "job không được đẻ job");
-    assert.ok(!keys.includes("get_group_info"), "getChat/getChatMember trả 404 trên Bot API");
-
-    kbBinding.xoaGanNguonCuaAgent(agent.id);
+      assert.deepEqual(keys, ["get_datetime", "kb_search", "web_fetch", "web_search"]);
+      assert.ok(!keys.includes("schedule_task"), "job không được đẻ job");
+      assert.ok(!keys.includes("get_group_info"), "getChat/getChatMember trả 404 trên Bot API");
+    } finally {
+      kbBinding.xoaGanNguonCuaAgent(agent.id);
+    }
   });
 
   it("account bot ĐANG TẮT: skip và GIỮ suất chạy, không tắt job", async () => {

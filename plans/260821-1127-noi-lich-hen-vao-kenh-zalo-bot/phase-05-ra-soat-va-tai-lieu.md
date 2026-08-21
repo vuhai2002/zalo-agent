@@ -1,7 +1,7 @@
 # Phase 05 - Rà soát toàn cục, test dưới tải, cập nhật tài liệu
 
 Ưu tiên: cao (không có nó thì bốn phase trên chỉ là "chạy được trên máy tôi").
-Phụ thuộc: 01-04. Trạng thái: [ ] chưa làm.
+Phụ thuộc: 01-04. Trạng thái: [x] xong.
 
 ## 1. Rà soát toàn cục
 
@@ -11,14 +11,14 @@ Rà từng phase KHÔNG đủ - lỗi tương tác chéo không lộ ra khi soi 
 
 Danh sách phải tự đi lại một lượt trên cả dải thay đổi:
 
-- [ ] Grep `duongGuiZcaJs` - còn chỗ nào dựng `ReplyTarget` bằng tay không?
-- [ ] Grep `getRunningAccountApi` - còn caller nào giả định nó luôn có giá trị?
-- [ ] Grep `loai === "bot"` - còn nhánh nào chặn nhầm?
-- [ ] `taoReplyTargetChoJob` có bao giờ ném không? (bị gọi không-await từ tick)
-- [ ] `run-scheduled-job.ts` còn bao nhiêu dòng? (hiện ~298, luật là 200)
-- [ ] Mọi hàm trong `proactive-send-guard.ts` vẫn KHÔNG có `= new Date()`?
-- [ ] `attachAccount` vẫn ném cho `loai === "bot"` (lá chắn cuối)?
-- [ ] Kênh bot chạm trần ngày -> câu báo trần có tới nơi không? (lỗ câm mục 4)
+- [x] Grep `duongGuiZcaJs` - còn chỗ nào dựng `ReplyTarget` bằng tay không?
+- [x] Grep `getRunningAccountApi` - còn caller nào giả định nó luôn có giá trị?
+- [x] Grep `loai === "bot"` - còn nhánh nào chặn nhầm?
+- [x] `taoReplyTargetChoJob` có bao giờ ném không? (bị gọi không-await từ tick)
+- [x] `run-scheduled-job.ts` còn bao nhiêu dòng? (hiện ~298, luật là 200)
+- [x] Mọi hàm trong `proactive-send-guard.ts` vẫn KHÔNG có `= new Date()`?
+- [x] `attachAccount` vẫn ném cho `loai === "bot"` (lá chắn cuối)?
+- [x] Kênh bot chạm trần ngày -> câu báo trần có tới nơi không? (lỗ câm mục 4)
 
 ## 2. Test dưới tải
 
