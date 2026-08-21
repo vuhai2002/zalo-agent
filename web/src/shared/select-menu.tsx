@@ -127,16 +127,32 @@ export function SelectMenu({
         {prefix && (
           <span className="shrink-0 text-[13px] font-normal leading-[22px] text-ink-soft">{prefix}</span>
         )}
+        {/* Nhãn KHÔNG co (`shrink-0`), hint co hết phần thiếu. Ba bản trước
+            đều hỏng theo kiểu khác nhau, ghi lại để đừng quay vòng:
+
+            - `flex-1` trần (`flex:1 1 0%`): nhãn có phần gốc BẰNG 0 nên chỉ
+              nhận chỗ còn thừa. Ô 176px ra "1... phổ thông, an toàn".
+            - `flex-[1_1_auto]` + hint `shrink-[999]`: nhãn vẫn gánh 0,06% phần
+              co. Đo được hộp nhãn 61,46px trong khi chữ 61,49px - thiếu ĐÚNG
+              0,03px, mà `text-overflow` thì nuốt nguyên một chữ số cho khoản
+              đó: "128.000" hiện thành "128.00...". Sai lệch dưới 1px nên
+              `scrollWidth`/`clientWidth` làm tròn bằng nhau, đo bằng số nguyên
+              KHÔNG thấy - phải đo bằng `Range.getBoundingClientRect()`.
+
+            `max-w-full` là lưới đỡ cho ca ngược lại: nhãn dài hơn cả ô thì
+            `shrink-0` sẽ đẩy nó tràn ra ngoài nút, trần này kéo nó về rồi
+            `truncate` lo phần thừa. */}
         <span
-          className={`min-w-0 flex-1 truncate ${
+          className={`min-w-0 max-w-full shrink-0 truncate ${
             prefix ? "text-[13px] font-semibold leading-[22px]" : "font-medium"
           } ${current ? "" : "text-ink-soft"}`}
         >
           {current?.label ?? placeholder}
         </span>
-        {/* Co lại thay vì đẩy nhãn chính teo đi: nhãn là thứ người ta đọc,
-            hint chỉ là chú thích. Trước đây `shrink-0` làm nhãn "Tài khoản bot
-            chính thức" bị cắt thành "Tài khoản bot ..." trong drawer hẹp. */}
+        {/* Hint gánh TOÀN BỘ phần thiếu, co được tới 0. Đây là chú thích, mất
+            chữ thì vẫn còn tooltip `title`. Từng để `shrink-0` ở đây - hint
+            không co tí nào - làm nhãn "Tài khoản bot chính thức" bị cắt thành
+            "Tài khoản bot ..." trong drawer hẹp. */}
         {current?.hint && (
           <span className="min-w-0 shrink truncate text-[11px] text-ink-soft" title={current.hint}>
             {current.hint}

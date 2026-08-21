@@ -173,7 +173,7 @@ function ChiTiet({ agent }: { agent: ManagedAgent }) {
     { nhan: "Model riêng", giaTri: agent.modelName || "theo trang Cấu hình" },
     { nhan: "Số bước tối đa", giaTri: agent.maxSteps === null ? "theo trang Cấu hình" : String(agent.maxSteps) },
     {
-      nhan: "Trần token mỗi lần gọi",
+      nhan: "Cửa sổ ngữ cảnh",
       giaTri:
         agent.contextWindow === null
           ? "theo trang Cấu hình"

@@ -14,6 +14,7 @@
  * dashboard cho nhập giá trị mà env từ chối, hoặc chặn oan giá trị hợp lệ.
  */
 
+import { MOC_CUA_SO_NGU_CANH, type MocCuaSoNguCanh } from "./context-window-presets.js";
 import type { env } from "./env.js";
 
 /** Tên tham số trùng KHỚP tên biến môi trường - env chính là giá trị mặc định */
@@ -38,7 +39,10 @@ export type TuningDef = {
   label: string;
   hint: string;
 } & (
-  | { kind: "number"; min: number; max: number; unit?: string }
+  // `presets` là mốc CHỌN NHANH, không phải danh sách đóng: ô nhập tay vẫn
+  // nhận mọi giá trị trong `min`..`max`. Có nó thì giao diện hiện menu kèm mục
+  // "Tùy chỉnh"; không có thì vẫn là ô nhập số như cũ.
+  | { kind: "number"; min: number; max: number; unit?: string; presets?: readonly MocCuaSoNguCanh[] }
   | { kind: "boolean" }
   | { kind: "enum"; options: readonly string[] }
   // Danh sách chọn quá dài để nhét vào `enum` (418 tên timezone IANA) nên
@@ -233,11 +237,12 @@ const TUNING_BY_KEY = {
   LLM_CONTEXT_WINDOW: {
     kind: "number",
     group: "context",
-    label: "Trần token mỗi lần gọi model",
-    hint: "Khác với số tin nạp lại: một tin Zalo có thể rất dài, nên đếm tin không chặn được ngữ cảnh phình. Vượt mức này bot tự bỏ bớt ảnh cũ trước, rồi mới bỏ tin cũ - phần bỏ đi vẫn còn trong bản tóm tắt. Đặt theo cửa sổ của model đang chạy; agent dùng model khác đặt riêng được ở trang Agents.",
+    label: "Cửa sổ ngữ cảnh (Context window)",
+    hint: "Lượng token tối đa bot gửi đi trong MỘT lần gọi model. Vượt mức này bot tự bỏ bớt ảnh cũ trước, rồi mới bỏ tin cũ. Đừng đặt lớn hơn cửa sổ thật của model đang chạy - đặt cao hơn thì bot tưởng còn chỗ nên không cắt, và nhà cung cấp trả lỗi. Agent dùng model khác đặt riêng được ở trang Agents.",
     min: 4_000,
     max: 2_000_000,
     unit: "token",
+    presets: MOC_CUA_SO_NGU_CANH,
   },
   HISTORY_IMAGE_CONTEXT_LIMIT: {
     kind: "number",

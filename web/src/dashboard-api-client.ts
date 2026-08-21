@@ -544,7 +544,17 @@ export type TuningDef = {
   label: string;
   hint: string;
 } & (
-  | { kind: "number"; min: number; max: number; unit?: string }
+  // `presets` có thì ô này hiện menu chọn nhanh kèm mục "Tùy chỉnh", không có
+  // thì vẫn là ô nhập số. Danh sách do server gửi (`MOC_CUA_SO_NGU_CANH`) nên
+  // đổi mốc chỉ sửa một chỗ.
+  | {
+      kind: "number";
+      min: number;
+      max: number;
+      unit?: string;
+      /** `label` là CON SỐ (không bị cắt khi hẹp), `hint` là tên model (được phép cắt) */
+      presets?: { value: number; label: string; hint: string }[];
+    }
   | { kind: "boolean" }
   | { kind: "enum"; options: string[] }
   // Danh sách chọn dựng ở trình duyệt bằng Intl.supportedValuesOf("timeZone")

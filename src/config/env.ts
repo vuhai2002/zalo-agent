@@ -45,8 +45,13 @@ const envSchema = z.object({
   // Trần token cho phần INPUT của một lần gọi model. Trước khi có nó, ngữ cảnh
   // chỉ bị chặn bằng SỐ TIN (HISTORY_CONTEXT_LIMIT) - mà một tin Zalo dài tùy
   // ý, nên đó là đếm nhầm đơn vị. Đo trên DB thật: đã có lượt cộng dồn 184.835
-  // token qua 8 step. Mặc định 128k khớp cửa sổ phổ thông của model hiện nay;
-  // agent chạy model khác đặt riêng được ở trang Agents.
+  // token qua 8 step. Mặc định 128k là CẬN DƯỚI AN TOÀN chạy được với mọi
+  // model, không phải cửa sổ của model tuyến đầu (Opus 5 / Sonnet 5 /
+  // Gemini 3.1 Pro đã 1M, GPT-5.6 1,05M). Cố ý để thấp: đặt cao hơn cửa sổ
+  // THẬT của model đang chạy thì bot tưởng còn chỗ nên không cắt, provider trả
+  // 400 - hỏng câm. Bot đi qua router nên model thật đổi bằng env, có thể là
+  // model cửa sổ nhỏ. Nâng theo từng agent ở trang Agents, hoặc chọn mốc sẵn
+  // trên trang Cấu hình (`context-window-presets.ts`).
   LLM_CONTEXT_WINDOW: z.coerce.number().int().min(4_000).max(2_000_000).default(128_000),
   // Chặn vòng lặp tool. Trước khi có ba biến này, chặn trên duy nhất là
   // LLM_MAX_STEPS: model gọi cùng một tool lỗi 5 lần liên tiếp thì đốt nửa số

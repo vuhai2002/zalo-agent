@@ -127,7 +127,7 @@ const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => s
     keys: ["LLM_CONTEXT_WINDOW", "LLM_MAX_OUTPUT_TOKENS"],
     check: (so) =>
       so("LLM_CONTEXT_WINDOW") * 0.3 <= so("LLM_MAX_OUTPUT_TOKENS")
-        ? "Trần token mỗi lần gọi quá thấp so với trần token bot viết ra: bot chừa 30% trần cho phần viết ra và cho kết quả công cụ, nên trần này phải lớn hơn khoảng 3,4 lần trần token viết ra."
+        ? "Cửa sổ ngữ cảnh quá nhỏ so với trần token bot viết ra: bot chừa 30% cửa sổ cho phần viết ra và cho kết quả công cụ, nên cửa sổ phải lớn hơn khoảng 3,4 lần trần token viết ra."
         : null,
   },
   {

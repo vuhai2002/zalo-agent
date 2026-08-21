@@ -1,7 +1,18 @@
+import { useState } from "react";
 import type { ReasoningEffort } from "../dashboard-api-client";
 import { kiemSoBuoc, kiemTranContext } from "./agent-field-validators";
 import { SelectMenu } from "../shared/select-menu";
 import { AgentFormField, AgentFormRow, AgentFormSection } from "./agent-form-field";
+// Cùng danh sách mốc với trang Cấu hình. Trang này KHÔNG gọi `/api/tuning` nên
+// không nhận được `presets` qua JSON như bên kia - nhập thẳng từ nguồn chung.
+// File đó cố ý không import gì nên trình duyệt nạp được, không kéo module Node.
+import {
+  dangNhapTayCuaSo,
+  MOC_CUA_SO_NGU_CANH,
+} from "../../../src/config/context-window-presets.js";
+
+/** Mục cuối của menu cửa sổ ngữ cảnh - chọn nó thì hiện ô nhập số */
+const TUY_CHINH_CTX = "custom";
 
 export type AgentModelForm = {
   /** "" = theo Cấu hình chung */
@@ -40,6 +51,9 @@ export function AgentModelSection({
 }) {
   const loiSoBuoc = kiemSoBuoc(form.maxSteps);
   const loiTran = kiemTranContext(form.contextWindow);
+  const [epNhapTayCtx, setEpNhapTayCtx] = useState(false);
+  // Luật chọn chế độ dùng CHUNG với trang Cấu hình - xem chú thích của hàm.
+  const nhapTayCtx = dangNhapTayCuaSo(form.contextWindow, epNhapTayCtx);
   return (
     <AgentFormSection
       title="Model"
@@ -97,24 +111,56 @@ export function AgentModelSection({
       <AgentFormRow>
         <AgentFormField
           ngang
-          label="Trần token mỗi lần gọi"
+          label="Cửa sổ ngữ cảnh (Context window)"
           htmlFor="ag-d-ctx"
-          hint="Ngữ cảnh vượt mức này thì bot tự bỏ bớt ảnh cũ trước, rồi mới bỏ tin cũ - phần bỏ đi vẫn còn trong bản tóm tắt. Đặt riêng khi agent này chạy model có cửa sổ khác. Bỏ trống là theo trang Cấu hình."
+          hint="Lượng token tối đa bot gửi đi trong MỘT lần gọi model. Đặt riêng khi agent này chạy model có cửa sổ khác, và đừng đặt lớn hơn cửa sổ thật của model đó. Bỏ trống là theo trang Cấu hình."
         >
-          <div className="flex items-center gap-2">
-            <input
-              id="ag-d-ctx"
-              type="text"
-              inputMode="numeric"
-              className="gc-input w-32 shrink-0"
-              value={form.contextWindow}
-              onChange={(e) => onChange({ contextWindow: e.target.value })}
-              placeholder="theo Cấu hình"
-              aria-invalid={loiTran !== ""}
+          {/* `w-full` chứ KHÔNG đặt bề ngang cứng: cột phải của hàng này hẹp
+              hơn 20.5rem, đặt cứng là ô tràn khỏi thẻ và đẻ thanh cuộn ngang
+              cho cả trang - đã dính thật. Ô "Mức suy nghĩ" ngay dưới cũng
+              `w-full`, giữ cho hai ô thẳng mép. */}
+          <div className="w-full">
+            <SelectMenu
+              id={nhapTayCtx ? undefined : "ag-d-ctx"}
+              size="md"
+              value={nhapTayCtx ? TUY_CHINH_CTX : form.contextWindow}
+              options={[
+                { value: "", label: "Theo Cấu hình chung" },
+                ...MOC_CUA_SO_NGU_CANH.map((m) => ({
+                  value: String(m.value),
+                  label: m.label,
+                  hint: m.hint,
+                })),
+                { value: TUY_CHINH_CTX, label: "Tùy chỉnh" },
+              ]}
+              onChange={(v) => {
+                if (v === TUY_CHINH_CTX) {
+                  setEpNhapTayCtx(true);
+                  return;
+                }
+                setEpNhapTayCtx(false);
+                onChange({ contextWindow: v });
+              }}
             />
-            <span className="whitespace-nowrap text-[13px] text-ink-soft">token</span>
           </div>
-          <div className="mt-1 whitespace-nowrap text-[11px] text-ink-soft/70">(4.000 - 2.000.000)</div>
+          {nhapTayCtx && (
+            <>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  id="ag-d-ctx"
+                  type="text"
+                  inputMode="numeric"
+                  className="gc-input w-32 shrink-0"
+                  value={form.contextWindow}
+                  onChange={(e) => onChange({ contextWindow: e.target.value })}
+                  placeholder="theo Cấu hình"
+                  aria-invalid={loiTran !== ""}
+                />
+                <span className="whitespace-nowrap text-[13px] text-ink-soft">token</span>
+              </div>
+              <div className="mt-1 whitespace-nowrap text-[11px] text-ink-soft/70">(4.000 - 2.000.000)</div>
+            </>
+          )}
           {loiTran && <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{loiTran}</p>}
         </AgentFormField>
       </AgentFormRow>
