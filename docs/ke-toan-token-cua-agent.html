@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kế toán Token của Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+:root {
+  --paper:#F8F9FC; --surface:#FFFFFF; --sunk:#F1F3F9;
+  --ink:#12141C; --muted:#565D75; --faint:#7C8398;
+  --rule:#E1E4EE; --rule-strong:#C9CEDE;
+  --accent:#3B4D9E; --accent-soft:#EDEFFA;
+
+  /* Ba loại token - màu NGỮ NGHĨA, dùng nhất quán suốt tài liệu */
+  --tok-full:#A9690D;  --tok-full-bg:#FBF2E2;
+  --tok-write:#8E3B6B; --tok-write-bg:#FAEDF4;
+  --tok-read:#177A52;  --tok-read-bg:#E6F5EE;
+
+  /* Hai phía trong sơ đồ: máy của bạn / máy nhà cung cấp */
+  --ben-ban:#3B4D9E;   --ben-ban-bg:#EDEFFA;
+  --ben-model:#7A4BB8; --ben-model-bg:#F2ECFB;
+
+  --warn:#A9420D; --warn-bg:#FCEDE5;
+  --on-seg:#FFFFFF;
+  --measure:68ch;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#0E1017; --surface:#161923; --sunk:#1B1F2B;
+    --ink:#E8EAF3; --muted:#9BA2B9; --faint:#79809A;
+    --rule:#262B39; --rule-strong:#394053;
+    --accent:#93A2EE; --accent-soft:#1D2340;
+    --tok-full:#DCA850;  --tok-full-bg:#2A2213;
+    --tok-write:#DF93C0; --tok-write-bg:#2C1A26;
+    --tok-read:#63CB9E;  --tok-read-bg:#12291F;
+    --ben-ban:#93A2EE;   --ben-ban-bg:#1D2340;
+    --ben-model:#BF9BE8; --ben-model-bg:#241B33;
+    --warn:#E0925F; --warn-bg:#2C1C12;
+    --on-seg:#0E1017;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#0E1017; --surface:#161923; --sunk:#1B1F2B;
+  --ink:#E8EAF3; --muted:#9BA2B9; --faint:#79809A;
+  --rule:#262B39; --rule-strong:#394053;
+  --accent:#93A2EE; --accent-soft:#1D2340;
+  --tok-full:#DCA850;  --tok-full-bg:#2A2213;
+  --tok-write:#DF93C0; --tok-write-bg:#2C1A26;
+  --tok-read:#63CB9E;  --tok-read-bg:#12291F;
+  --ben-ban:#93A2EE;   --ben-ban-bg:#1D2340;
+  --ben-model:#BF9BE8; --ben-model-bg:#241B33;
+  --warn:#E0925F; --warn-bg:#2C1C12;
+  --on-seg:#0E1017;
+}
+
+* { box-sizing:border-box; }
+body {
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  font-size:16.5px; line-height:1.68; -webkit-font-smoothing:antialiased;
+}
+.wrap {
+  max-width:1180px; margin:0 auto; padding:0 24px 120px;
+  display:grid; grid-template-columns:minmax(0,1fr); gap:0 56px;
+}
+main { min-width:0; }
+
+/* Quy tắc nền PHẢI đứng trước media query bật nó lên - cùng độ cụ thể thì
+   quy tắc sau thắng, và rail bị ẩn sẽ đẩy main vào nhầm cột grid. */
+.rail { display:none; }
+@media (min-width:1080px) {
+  .wrap { grid-template-columns:230px minmax(0,1fr); }
+  .rail { display:block; }
+}
+.rail-inner { position:sticky; top:28px; padding:40px 0 0; font-size:13px; line-height:1.45; }
+.rail-label { font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin-bottom:12px; }
+.rail a { display:block; color:var(--muted); text-decoration:none; padding:4px 0 4px 11px; border-left:2px solid var(--rule); }
+.rail a:hover,.rail a:focus-visible { color:var(--accent); border-left-color:var(--accent); }
+.rail .grp { margin-top:16px; font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); padding-left:11px; margin-bottom:5px; }
+
+header.masthead { padding:70px 0 40px; border-bottom:1px solid var(--rule); }
+.eyebrow { font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.15em; text-transform:uppercase; color:var(--accent); margin:0 0 16px; }
+h1 { font-family:Lora,Georgia,serif; font-weight:600; font-size:clamp(32px,5vw,50px); line-height:1.1; letter-spacing:-.015em; margin:0 0 18px; text-wrap:balance; }
+.standfirst { font-size:18.5px; color:var(--muted); max-width:var(--measure); margin:0 0 22px; text-wrap:pretty; }
+
+.doc-map { display:grid; gap:10px; margin:26px 0 0; max-width:var(--measure); }
+@media (min-width:640px){ .doc-map { grid-template-columns:1fr 1fr; } }
+.map-card { border:1px solid var(--rule); border-radius:9px; padding:13px 15px; background:var(--surface); }
+.map-card b { display:block; font-size:14px; margin-bottom:3px; }
+.map-card span { font-size:13px; color:var(--muted); line-height:1.5; }
+
+section { padding-top:52px; scroll-margin-top:20px; }
+.part-head { border-top:2px solid var(--ink); padding-top:14px; margin-top:76px; }
+header.masthead + .part-head { margin-top:44px; }
+.part-num { font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); }
+h2 { font-family:Lora,Georgia,serif; font-weight:600; font-size:clamp(23px,3vw,30px); line-height:1.22; letter-spacing:-.01em; margin:0 0 6px; text-wrap:balance; }
+h3 { font-weight:600; font-size:17px; margin:34px 0 9px; text-wrap:balance; }
+.kind { font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); display:block; margin-bottom:9px; }
+p,ul,ol { max-width:var(--measure); }
+p { margin:0 0 15px; }
+ul,ol { margin:0 0 15px; padding-left:21px; }
+li { margin-bottom:6px; }
+li::marker { color:var(--faint); }
+a { color:var(--accent); text-underline-offset:2px; }
+
+code { font-family:"IBM Plex Mono",monospace; font-size:.875em; background:var(--sunk); border:1px solid var(--rule); border-radius:4px; padding:.1em .34em; }
+pre { font-family:"IBM Plex Mono",monospace; background:var(--sunk); border:1px solid var(--rule); border-radius:8px; padding:15px 17px; overflow-x:auto; font-size:13px; line-height:1.6; margin:0 0 20px; max-width:var(--measure); }
+pre code { background:none; border:0; padding:0; font-size:inherit; }
+
+/* ---- Sơ đồ ---- */
+figure { margin:0 0 26px; max-width:var(--measure); }
+figure.wide { max-width:none; }
+.fig-box { border:1px solid var(--rule); border-radius:10px; background:var(--surface); padding:18px 16px; overflow-x:auto; }
+.fig-box svg { display:block; width:100%; height:auto; min-width:440px; }
+figcaption { font-size:13px; color:var(--faint); margin-top:9px; line-height:1.55; }
+svg text { font-family:"IBM Plex Sans",sans-serif; }
+svg .mono { font-family:"IBM Plex Mono",monospace; }
+
+/* ---- Callout ---- */
+.note { background:var(--surface); border:1px solid var(--rule); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:15px 19px; margin:0 0 22px; max-width:var(--measure); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-bg); }
+.note.key { border-left-color:var(--tok-read); background:var(--tok-read-bg); }
+.note p:last-child { margin-bottom:0; }
+.note-label { font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px; }
+
+/* ---- Bảng ---- */
+.scroller { overflow-x:auto; margin:0 0 24px; border:1px solid var(--rule); border-radius:10px; background:var(--surface); }
+.scroller.wide table { min-width:640px; }
+table { border-collapse:collapse; width:100%; min-width:520px; font-size:14.5px; }
+th,td { text-align:left; padding:10px 14px; border-bottom:1px solid var(--rule); vertical-align:top; }
+thead th { font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:500; background:var(--sunk); white-space:nowrap; }
+tbody tr:last-child td { border-bottom:0; }
+td.num,th.num { text-align:right; font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap; }
+td.mono { font-family:"IBM Plex Mono",monospace; font-size:12.5px; }
+
+/* ---- Thẻ token ---- */
+.ledger { display:grid; gap:11px; margin:0 0 24px; max-width:var(--measure); }
+@media (min-width:620px){ .ledger { grid-template-columns:repeat(3,1fr); } }
+.tok { border:1px solid var(--rule); border-top:3px solid var(--c); border-radius:8px; background:var(--surface); padding:13px 15px; }
+.tok-name { font-weight:600; font-size:14px; color:var(--c); margin-bottom:2px; }
+.tok-mult { font-family:"IBM Plex Mono",monospace; font-size:21px; font-weight:500; font-variant-numeric:tabular-nums; letter-spacing:-.02em; line-height:1.2; }
+.tok-desc { font-size:12.5px; color:var(--muted); line-height:1.5; margin-top:4px; }
+.t-full{--c:var(--tok-full)} .t-write{--c:var(--tok-write)} .t-read{--c:var(--tok-read)}
+
+/* ---- Hỏi đáp ---- */
+.qa { border-top:1px solid var(--rule); padding-top:20px; margin-top:24px; max-width:var(--measure); }
+.q { font-family:Lora,Georgia,serif; font-size:18.5px; font-weight:600; margin:0 0 9px; }
+
+/* ---- Bước đánh số ---- */
+.steps { counter-reset:s; list-style:none; padding:0; max-width:var(--measure); }
+.steps > li { counter-increment:s; position:relative; padding-left:42px; margin-bottom:18px; }
+.steps > li::before {
+  content:counter(s); position:absolute; left:0; top:1px;
+  width:27px; height:27px; border-radius:50%;
+  background:var(--accent-soft); color:var(--accent);
+  font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:600;
+  display:flex; align-items:center; justify-content:center;
+}
+
+footer { margin-top:76px; padding-top:26px; border-top:1px solid var(--rule); font-size:13.5px; color:var(--faint); max-width:var(--measure); }
+footer a { color:var(--muted); }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:3px; }
+@media (prefers-reduced-motion:reduce){ *{transition:none!important;animation:none!important} }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<nav class="rail">
+  <div class="rail-inner">
+    <div class="rail-label">Mục lục</div>
+    <div class="grp">Nền tảng</div>
+    <a href="#tu-vung">Năm chữ phải thuộc</a>
+    <a href="#mot-lan-goi">Một lần gọi API</a>
+    <a href="#nhieu-luot">Nhiều lượt chat</a>
+    <div class="grp">Trọng tâm</div>
+    <a href="#step">Một lượt, nhiều step</a>
+    <a href="#vi-du">Ví dụ tính từng bước</a>
+    <a href="#cua-so">Cửa sổ ngữ cảnh</a>
+    <a href="#cai-vong">Cái vòng trong Claude Code</a>
+    <div class="grp">Tiết kiệm</div>
+    <a href="#cache">Cache hoạt động thế nào</a>
+    <a href="#pha-cache">Thứ phá cache</a>
+    <div class="grp">Tra cứu</div>
+    <a href="#tra-cuu">Bảng số liệu</a>
+    <a href="#chatgpt">ChatGPT khác gì</a>
+    <a href="#zalo">Áp vào zalo-agent</a>
+    <a href="#thuat-ngu">Thuật ngữ</a>
+  </div>
+</nav>
+
+<main>
+
+<header class="masthead">
+  <p class="eyebrow">Sổ tay vận hành LLM</p>
+  <h1>Kế toán Token của Agent</h1>
+  <p class="standfirst">Model không có trí nhớ. Mọi thứ trông giống trí nhớ đều là do code của bạn gửi lại. Hiểu đúng một câu đó là hiểu được toàn bộ chuyện token, cửa sổ ngữ cảnh và cache.</p>
+
+  <div class="doc-map">
+    <div class="map-card"><b>Đọc lần đầu</b><span>Đi tuần tự từ phần 1. Mỗi phần chỉ thêm một ý mới, có sơ đồ đi kèm.</span></div>
+    <div class="map-card"><b>Quay lại tra</b><span>Nhảy thẳng vào phần 4 - toàn bảng số, không văn xuôi.</span></div>
+  </div>
+</header>
+
+<!-- ===================== PHẦN 1 ===================== -->
+<div class="part-head"><span class="part-num">Phần 1 &middot; Nền tảng</span></div>
+
+<section id="tu-vung">
+  <span class="kind">Từ vựng trước, giải thích sau</span>
+  <h2>Năm chữ phải thuộc trước khi đọc tiếp</h2>
+
+  <p>Hầu hết hiểu nhầm về token đến từ việc năm chữ dưới đây bị dùng lẫn lộn. Bốn chữ trong số đó <strong>lồng vào nhau</strong> như búp bê Nga - cái ngoài chứa nhiều cái trong.</p>
+
+  <figure>
+    <div class="fig-box">
+      <svg viewBox="0 0 620 300" role="img" aria-label="Sơ đồ lồng nhau: token nằm trong request, request nằm trong step, step nằm trong lượt, lượt nằm trong phiên">
+        <rect x="8" y="8" width="604" height="284" rx="12" fill="var(--sunk)" stroke="var(--rule-strong)"/>
+        <text x="24" y="34" font-size="14" font-weight="600" fill="var(--ink)">PHIÊN</text>
+        <text x="24" y="53" font-size="12" fill="var(--muted)">một cuộc trò chuyện, từ lúc mở tới lúc xoá</text>
+
+        <rect x="24" y="66" width="572" height="212" rx="10" fill="var(--surface)" stroke="var(--rule-strong)"/>
+        <text x="40" y="90" font-size="14" font-weight="600" fill="var(--ink)">LƯỢT</text>
+        <text x="40" y="108" font-size="12" fill="var(--muted)">một lần người dùng nhắn, bot trả lời xong</text>
+
+        <rect x="40" y="122" width="540" height="140" rx="9" fill="var(--sunk)" stroke="var(--rule-strong)"/>
+        <text x="56" y="145" font-size="13.5" font-weight="600" fill="var(--ink)">STEP</text>
+        <text x="56" y="162" font-size="12" fill="var(--muted)">một lần gọi API. Một lượt có thể nhiều step.</text>
+
+        <rect x="56" y="176" width="508" height="70" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+        <text x="72" y="199" font-size="13" font-weight="600" fill="var(--accent)">REQUEST</text>
+        <text x="72" y="216" font-size="12" fill="var(--muted)">gói dữ liệu gửi đi trong step đó</text>
+        <text x="72" y="234" font-size="11.5" class="mono" fill="var(--tok-full)">= tổng TOKEN phải nằm vừa cửa sổ</text>
+      </svg>
+    </div>
+    <figcaption>Chỉ ô trong cùng - request - mới so được với cửa sổ ngữ cảnh. Ba ô ngoài là số cộng dồn, chúng có thể lớn hơn cửa sổ rất nhiều mà chẳng bao giờ tràn.</figcaption>
+  </figure>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Chữ</th><th>Nghĩa gọn</th><th>Ví dụ</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Token</strong></td><td>Đơn vị nhỏ nhất model đọc và viết. Không phải chữ, không phải từ.</td><td>"Xin chào" &asymp; 3-4 token</td></tr>
+        <tr><td><strong>Request</strong></td><td>Một gói dữ liệu gửi lên API. Chứa mọi thứ model được thấy lần đó.</td><td>10.600 token</td></tr>
+        <tr><td><strong>Step</strong></td><td>Một lần gọi API. Model đòi dùng tool thì phải thêm một step nữa.</td><td>Lượt này có 2 step</td></tr>
+        <tr><td><strong>Lượt</strong></td><td>Trọn một lần hỏi-đáp với người dùng. Gồm 1 hoặc nhiều step.</td><td>21.653 token</td></tr>
+        <tr><td><strong>Phiên</strong></td><td>Cả cuộc trò chuyện. Gồm nhiều lượt.</td><td>84.601 token</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="note-label">Câu chốt của phần này</span>
+    <p>Ba con số 10.600 / 21.653 / 84.601 ở trên đều là <strong>token</strong>, đều lấy từ cùng một cuộc trò chuyện thật, và <strong>không cái nào sai</strong>. Chúng đo ba thứ khác nhau. Chỉ con số đầu - request - mới liên quan tới chuyện "có tràn cửa sổ không".</p>
+  </div>
+</section>
+
+<section id="mot-lan-goi">
+  <span class="kind">Giải thích</span>
+  <h2>Một lần gọi API: model không nhớ gì cả</h2>
+
+  <p>Đây là điều quan trọng nhất trong cả tài liệu. Model <strong>không có trí nhớ</strong> giữa các lần gọi.</p>
+
+  <p>Hãy hình dung mỗi lần gọi API là bạn đưa một tập hồ sơ cho một chuyên gia <strong>chưa từng gặp bạn bao giờ</strong>. Người đó đọc trọn tập hồ sơ, viết câu trả lời, rồi <strong>quên sạch</strong>. Lần sau bạn quay lại, đó là một người mới tinh - bạn phải đưa lại cả tập hồ sơ, kèm phần mới.</p>
+
+  <figure>
+    <div class="fig-box">
+      <svg viewBox="0 0 660 250" role="img" aria-label="Sơ đồ một lần gọi API: bạn gửi system, tools, messages; model đọc rồi trả lời rồi quên">
+        <defs>
+          <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+            <path d="M0,0 L7,3.2 L0,6.4 z" fill="var(--muted)"/>
+          </marker>
+        </defs>
+
+        <text x="12" y="20" font-size="11" class="mono" fill="var(--ben-ban)" letter-spacing="1">MÁY CỦA BẠN</text>
+        <rect x="10" y="32" width="180" height="150" rx="9" fill="var(--ben-ban-bg)" stroke="var(--ben-ban)"/>
+        <text x="26" y="55" font-size="12.5" font-weight="600" fill="var(--ink)">REQUEST</text>
+        <rect x="26" y="66" width="148" height="26" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+        <text x="36" y="83" font-size="11.5" fill="var(--ink)">system prompt</text>
+        <rect x="26" y="97" width="148" height="26" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+        <text x="36" y="114" font-size="11.5" fill="var(--ink)">định nghĩa tool</text>
+        <rect x="26" y="128" width="148" height="42" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+        <text x="36" y="145" font-size="11.5" fill="var(--ink)">toàn bộ tin nhắn</text>
+        <text x="36" y="161" font-size="11" fill="var(--muted)">(cũ lẫn mới)</text>
+
+        <line x1="196" y1="90" x2="252" y2="90" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ar)"/>
+        <text x="204" y="82" font-size="11" fill="var(--muted)">gửi</text>
+
+        <text x="262" y="20" font-size="11" class="mono" fill="var(--ben-model)" letter-spacing="1">MÁY NHÀ CUNG CẤP</text>
+        <rect x="260" y="32" width="180" height="150" rx="9" fill="var(--ben-model-bg)" stroke="var(--ben-model)"/>
+        <text x="350" y="95" font-size="14" font-weight="600" fill="var(--ink)" text-anchor="middle">MODEL</text>
+        <text x="350" y="118" font-size="11.5" fill="var(--muted)" text-anchor="middle">đọc TOÀN BỘ tập hồ sơ</text>
+        <text x="350" y="136" font-size="11.5" fill="var(--muted)" text-anchor="middle">rồi viết câu trả lời</text>
+
+        <line x1="446" y1="90" x2="502" y2="90" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ar)"/>
+        <text x="452" y="82" font-size="11" fill="var(--muted)">trả</text>
+
+        <rect x="510" y="55" width="140" height="70" rx="9" fill="var(--surface)" stroke="var(--rule-strong)"/>
+        <text x="580" y="85" font-size="12.5" font-weight="600" fill="var(--ink)" text-anchor="middle">CÂU TRẢ LỜI</text>
+        <text x="580" y="104" font-size="11" fill="var(--muted)" text-anchor="middle">+ số token đã dùng</text>
+
+        <rect x="260" y="196" width="180" height="40" rx="8" fill="var(--warn-bg)" stroke="var(--warn)"/>
+        <text x="350" y="213" font-size="11.5" font-weight="600" fill="var(--warn)" text-anchor="middle">rồi QUÊN SẠCH</text>
+        <text x="350" y="229" font-size="11" fill="var(--warn)" text-anchor="middle">không lưu gì cho lần sau</text>
+      </svg>
+    </div>
+    <figcaption>Thuật ngữ kỹ thuật cho việc này là <em>stateless</em> - không giữ trạng thái. Đúng với cả Claude lẫn OpenAI.</figcaption>
+  </figure>
+
+  <div class="note key">
+    <span class="note-label">Hệ quả phải nhớ</span>
+    <p>Mọi thứ trông giống "trí nhớ" của một con bot - nhớ tên bạn, nhớ chuyện hôm qua, nhớ vừa gọi tool gì - đều <strong>không nằm trong model</strong>. Chúng nằm trong code của bạn, và được gửi lại ở mỗi lần gọi.</p>
+  </div>
+</section>
+
+<section id="nhieu-luot">
+  <span class="kind">Giải thích</span>
+  <h2>Nhiều lượt chat: bạn gửi lại toàn bộ, mỗi lần</h2>
+
+  <p>Vì model quên sạch, muốn nó biết chuyện cũ thì <strong>code của bạn phải gửi lại</strong>. Không có cách nào khác.</p>
+
+  <figure>
+    <div class="fig-box">
+      <svg viewBox="0 0 660 268" role="img" aria-label="Ba lượt chat, mỗi lượt gửi lại toàn bộ tin nhắn cũ cộng tin mới">
+        <text x="10" y="18" font-size="11" class="mono" fill="var(--faint)" letter-spacing="1">MỖI Ô = MỘT TIN NHẮN GỬI KÈM</text>
+
+        <text x="10" y="52" font-size="12" font-weight="600" fill="var(--ink)">Lượt 1</text>
+        <rect x="78" y="36" width="118" height="24" rx="5" fill="var(--tok-full-bg)" stroke="var(--tok-full)"/>
+        <text x="137" y="52" font-size="11" fill="var(--tok-full)" text-anchor="middle">Tên tôi là Hải</text>
+        <text x="212" y="52" font-size="11.5" class="mono" fill="var(--muted)">1 tin</text>
+
+        <text x="10" y="112" font-size="12" font-weight="600" fill="var(--ink)">Lượt 2</text>
+        <rect x="78" y="96" width="118" height="24" rx="5" fill="var(--sunk)" stroke="var(--rule-strong)"/>
+        <text x="137" y="112" font-size="11" fill="var(--muted)" text-anchor="middle">Tên tôi là Hải</text>
+        <rect x="202" y="96" width="118" height="24" rx="5" fill="var(--sunk)" stroke="var(--rule-strong)"/>
+        <text x="261" y="112" font-size="11" fill="var(--muted)" text-anchor="middle">Chào Hải!</text>
+        <rect x="326" y="96" width="130" height="24" rx="5" fill="var(--tok-full-bg)" stroke="var(--tok-full)"/>
+        <text x="391" y="112" font-size="11" fill="var(--tok-full)" text-anchor="middle">Tôi tên gì?</text>
+        <text x="472" y="112" font-size="11.5" class="mono" fill="var(--muted)">3 tin</text>
+
+        <text x="10" y="172" font-size="12" font-weight="600" fill="var(--ink)">Lượt 3</text>
+        <rect x="78" y="156" width="118" height="24" rx="5" fill="var(--sunk)" stroke="var(--rule-strong)"/>
+        <text x="137" y="172" font-size="11" fill="var(--muted)" text-anchor="middle">Tên tôi là Hải</text>
+        <rect x="202" y="156" width="118" height="24" rx="5" fill="var(--sunk)" stroke="var(--rule-strong)"/>
+        <text x="261" y="172" font-size="11" fill="var(--muted)" text-anchor="middle">Chào Hải!</text>
+        <rect x="326" y="156" width="130" height="24" rx="5" fill="var(--sunk)" stroke="var(--rule-strong)"/>
+        <text x="391" y="172" font-size="11" fill="var(--muted)" text-anchor="middle">Tôi tên gì?</text>
+        <rect x="462" y="156" width="80" height="24" rx="5" fill="var(--sunk)" stroke="var(--rule-strong)"/>
+        <text x="502" y="172" font-size="11" fill="var(--muted)" text-anchor="middle">Hải ạ</text>
+        <rect x="548" y="156" width="76" height="24" rx="5" fill="var(--tok-full-bg)" stroke="var(--tok-full)"/>
+        <text x="586" y="172" font-size="11" fill="var(--tok-full)" text-anchor="middle">Cảm ơn</text>
+
+        <line x1="78" y1="204" x2="624" y2="204" stroke="var(--rule-strong)" stroke-dasharray="3 3"/>
+        <text x="78" y="228" font-size="11.5" fill="var(--tok-full)">
+          <tspan font-weight="600">Ô đậm</tspan> = tin mới. <tspan font-weight="600" fill="var(--muted)">Ô mờ</tspan> = tin cũ, vẫn phải gửi lại và vẫn tính tiền.
+        </text>
+        <text x="78" y="250" font-size="11.5" fill="var(--muted)">Hội thoại càng dài, mỗi lượt càng đắt - dù bạn chỉ gõ thêm hai chữ.</text>
+      </svg>
+    </div>
+    <figcaption>Đây chính là bài toán mà prompt caching sinh ra để giải. Sẽ nói ở phần 3.</figcaption>
+  </figure>
+
+<pre><code>// Lượt 3 gửi đi trông như thế này - KHÔNG phải chỉ "Cảm ơn"
+messages: [
+  { role: "user",      content: "Tên tôi là Hải" },
+  { role: "assistant", content: "Chào Hải!" },
+  { role: "user",      content: "Tôi tên gì?" },
+  { role: "assistant", content: "Hải ạ" },
+  { role: "user",      content: "Cảm ơn" }        // <- chỉ dòng này là mới
+]</code></pre>
+</section>
+
+<!-- ===================== PHẦN 2 ===================== -->
+<div class="part-head"><span class="part-num">Phần 2 &middot; Trọng tâm</span></div>
+
+<section id="step">
+  <span class="kind">Giải thích</span>
+  <h2>Một lượt có nhiều step nghĩa là gì</h2>
+
+  <p>Đây là chỗ hay rối nhất, nên ta đi thật chậm.</p>
+
+  <p>Model <strong>không chạy được tool</strong>. Nó chỉ có thể <em>nói ra</em> rằng nó muốn gọi tool nào với tham số gì. Việc chạy tool là của <strong>code bạn</strong>. Mà muốn model biết kết quả, bạn phải <strong>gọi API thêm một lần nữa</strong> - vì model đã quên sạch lần trước.</p>
+
+  <p>Nên một lượt cần dùng tool sẽ có <strong>ít nhất hai lần gọi API</strong>. Mỗi lần gọi đó gọi là một <strong>step</strong>.</p>
+
+  <figure class="wide">
+    <div class="fig-box">
+      <svg viewBox="0 0 760 400" role="img" aria-label="Sơ đồ vòng lặp agent: code của bạn gọi API, model đòi tool, code chạy tool, gọi API lần hai kèm kết quả">
+        <defs>
+          <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+            <path d="M0,0 L7,3.2 L0,6.4 z" fill="var(--muted)"/>
+          </marker>
+        </defs>
+
+        <rect x="6" y="6" width="360" height="388" rx="10" fill="var(--ben-ban-bg)" opacity=".45"/>
+        <rect x="392" y="6" width="362" height="388" rx="10" fill="var(--ben-model-bg)" opacity=".45"/>
+        <text x="22" y="28" font-size="11.5" class="mono" font-weight="600" fill="var(--ben-ban)" letter-spacing="1">MÁY CỦA BẠN</text>
+        <text x="408" y="28" font-size="11.5" class="mono" font-weight="600" fill="var(--ben-model)" letter-spacing="1">MÁY NHÀ CUNG CẤP</text>
+
+        <!-- STEP 1 -->
+        <text x="22" y="60" font-size="12" class="mono" font-weight="600" fill="var(--accent)">STEP 1</text>
+        <rect x="22" y="70" width="326" height="58" rx="8" fill="var(--surface)" stroke="var(--rule-strong)"/>
+        <text x="36" y="90" font-size="12" fill="var(--ink)">Gom hồ sơ: system + tool + lịch sử</text>
+        <text x="36" y="108" font-size="12" fill="var(--ink)">+ tin mới của người dùng</text>
+        <text x="36" y="122" font-size="11" class="mono" fill="var(--tok-full)">10.600 token</text>
+
+        <line x1="352" y1="99" x2="404" y2="99" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+        <rect x="410" y="70" width="326" height="58" rx="8" fill="var(--surface)" stroke="var(--ben-model)"/>
+        <text x="424" y="90" font-size="12" fill="var(--ink)">Đọc tất cả. Quyết định:</text>
+        <text x="424" y="110" font-size="12" font-weight="600" fill="var(--ben-model)">"Tôi cần gọi tool schedule_task"</text>
+        <text x="424" y="124" font-size="11" class="mono" fill="var(--muted)">viết ra 196 token</text>
+
+        <line x1="404" y1="150" x2="352" y2="150" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ar2)"/>
+        <text x="360" y="145" font-size="10.5" fill="var(--muted)">trả về</text>
+
+        <!-- CHAY TOOL -->
+        <rect x="22" y="162" width="326" height="56" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+        <text x="36" y="182" font-size="12" font-weight="600" fill="var(--accent)">CODE CỦA BẠN chạy tool</text>
+        <text x="36" y="200" font-size="11.5" fill="var(--muted)">Model không chạm được vào máy bạn.</text>
+        <text x="36" y="214" font-size="11.5" fill="var(--muted)">Không tốn token nào ở bước này.</text>
+
+        <!-- STEP 2 -->
+        <text x="22" y="252" font-size="12" class="mono" font-weight="600" fill="var(--accent)">STEP 2</text>
+        <rect x="22" y="262" width="326" height="76" rx="8" fill="var(--surface)" stroke="var(--rule-strong)"/>
+        <text x="36" y="282" font-size="12" fill="var(--ink)">Gom lại TOÀN BỘ hồ sơ của step 1</text>
+        <text x="36" y="300" font-size="12" fill="var(--ink)">+ lời model đòi tool</text>
+        <text x="36" y="318" font-size="12" fill="var(--ink)">+ kết quả tool vừa chạy</text>
+        <text x="36" y="332" font-size="11" class="mono" fill="var(--tok-full)">10.803 token</text>
+
+        <line x1="352" y1="296" x2="404" y2="296" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+        <rect x="410" y="262" width="326" height="76" rx="8" fill="var(--surface)" stroke="var(--ben-model)"/>
+        <text x="424" y="282" font-size="12" fill="var(--ink)">Đọc LẠI TỪ ĐẦU (đã quên step 1)</text>
+        <text x="424" y="302" font-size="12" font-weight="600" fill="var(--ben-model)">"Đã đặt lịch 11:00 ngày 30/08"</text>
+        <text x="424" y="322" font-size="11" class="mono" fill="var(--muted)">viết ra 54 token</text>
+
+        <rect x="410" y="352" width="326" height="34" rx="7" fill="var(--warn-bg)" stroke="var(--warn)"/>
+        <text x="573" y="373" font-size="11.5" fill="var(--warn)" text-anchor="middle">Model KHÔNG nhớ step 1. Bạn gửi lại nên nó mới biết.</text>
+      </svg>
+    </div>
+    <figcaption>Vòng lặp này lặp tới khi model thôi đòi tool. Trong ví dụ trên nó dừng sau 2 step.</figcaption>
+  </figure>
+
+  <h3>Trả lời thẳng bốn câu hay hỏi</h3>
+
+  <div class="qa">
+    <p class="q">Nhiều step có phải là cùng một lần gọi API không?</p>
+    <p><strong>Không.</strong> Mỗi step là <strong>một lần gọi API riêng biệt</strong>, độc lập hoàn toàn. Lượt 2 step = 2 lần gọi. Lượt 5 step = 5 lần gọi.</p>
+  </div>
+
+  <div class="qa">
+    <p class="q">Có phải cùng một model không?</p>
+    <p><strong>Cùng model</strong> (trừ khi code bạn cố ý đổi), nhưng <em>không cùng phiên làm việc</em>. Coi như bạn hỏi cùng một chuyên gia hai lần, mà giữa hai lần đó người ta bị xoá trí nhớ.</p>
+  </div>
+
+  <div class="qa">
+    <p class="q">Trong lượt đó, model có thấy đủ ngữ cảnh của các step trước không?</p>
+    <p><strong>Có</strong> - nhưng <strong>không phải vì model nhớ</strong>. Là vì code bạn gom lại và gửi kèm. Step 2 nhận đúng mọi thứ step 1 đã gửi, cộng thêm hai mẩu mới: lời model đòi tool, và kết quả tool.</p>
+    <p>Nếu code bạn quên gửi kèm, model sẽ hành xử như chưa từng gọi tool bao giờ.</p>
+  </div>
+
+  <div class="qa">
+    <p class="q">Nhiều step thì token tăng thế nào?</p>
+    <p>Tăng <strong>nhân lên</strong>, không phải cộng thêm chút ít. Mỗi step trả tiền lại cho <em>toàn bộ</em> ngữ cảnh, mà ngữ cảnh còn <em>phình dần</em> vì kết quả tool cứ tích tụ.</p>
+  </div>
+
+  <figure>
+    <div class="fig-box">
+      <svg viewBox="0 0 620 250" role="img" aria-label="Biểu đồ cột: ngữ cảnh phình dần qua 4 step và tổng tiền phải trả">
+        <text x="10" y="18" font-size="11" class="mono" fill="var(--faint)" letter-spacing="1">NGỮ CẢNH GỬI ĐI Ở MỖI STEP</text>
+
+        <text x="10" y="52" font-size="11.5" class="mono" fill="var(--muted)">Step 1</text>
+        <rect x="72" y="38" width="200" height="20" rx="4" fill="var(--tok-full)"/>
+        <text x="284" y="53" font-size="11" class="mono" fill="var(--muted)">10.600</text>
+
+        <text x="10" y="88" font-size="11.5" class="mono" fill="var(--muted)">Step 2</text>
+        <rect x="72" y="74" width="200" height="20" rx="4" fill="var(--tok-full)"/>
+        <rect x="272" y="74" width="26" height="20" rx="4" fill="var(--tok-full)" opacity=".55"/>
+        <text x="310" y="89" font-size="11" class="mono" fill="var(--muted)">10.803</text>
+
+        <text x="10" y="124" font-size="11.5" class="mono" fill="var(--muted)">Step 3</text>
+        <rect x="72" y="110" width="200" height="20" rx="4" fill="var(--tok-full)"/>
+        <rect x="272" y="110" width="26" height="20" rx="4" fill="var(--tok-full)" opacity=".55"/>
+        <rect x="298" y="110" width="120" height="20" rx="4" fill="var(--tok-full)" opacity=".35"/>
+        <text x="430" y="125" font-size="11" class="mono" fill="var(--muted)">+ kết quả web_fetch</text>
+
+        <text x="10" y="160" font-size="11.5" class="mono" fill="var(--muted)">Step 4</text>
+        <rect x="72" y="146" width="200" height="20" rx="4" fill="var(--tok-full)"/>
+        <rect x="272" y="146" width="26" height="20" rx="4" fill="var(--tok-full)" opacity=".55"/>
+        <rect x="298" y="146" width="120" height="20" rx="4" fill="var(--tok-full)" opacity=".35"/>
+        <rect x="418" y="146" width="120" height="20" rx="4" fill="var(--tok-full)" opacity=".25"/>
+        <text x="10" y="200" font-size="11.5" fill="var(--muted)">Phần đậm nhất là ngữ cảnh gốc - nó bị gửi lại NGUYÊN VẸN ở mọi step.</text>
+        <text x="10" y="222" font-size="11.5" fill="var(--muted)">Mỗi mảng nhạt hơn là một kết quả tool cộng thêm vào, rồi cũng bị gửi lại mãi.</text>
+      </svg>
+    </div>
+    <figcaption>Vì thế một tool trả về nội dung dài (đọc trang web, đọc tài liệu) đắt hơn nhiều so với vẻ ngoài của nó: bạn trả tiền cho nó ở mọi step còn lại của lượt.</figcaption>
+  </figure>
+
+  <div class="note warn">
+    <span class="note-label">Ảnh là khoản đắt nhất</span>
+    <p>Một tấm ảnh tốn cỡ hàng nghìn token. Nạp lại 3 ảnh cũ vào mỗi lượt, mà lượt chạy 8 step, là bạn trả tiền cho 3 tấm ảnh đó <strong>8 lần</strong>. Đo trên bot thật: lượt có ảnh &asymp; 12.600 token, lượt chỉ có chữ &asymp; 2.600.</p>
+  </div>
+</section>
+
+<section id="vi-du">
+  <span class="kind">Ví dụ có thật</span>
+  <h2>Tính từng bước một lượt thật</h2>
+
+  <p>Số dưới đây chép nguyên từ trace của một bot Zalo đang chạy - không phải ví dụ dựng ra. Người dùng nhắn <em>"nhắc lúc 11h đi ạ"</em>, bot đặt lịch rồi trả lời.</p>
+
+  <ol class="steps">
+    <li>
+      <strong>Step 1.</strong> Code gom hồ sơ và gửi đi: <strong>10.600 token vào</strong>.
+      Model đọc xong, viết ra một câu ngắn kèm lời gọi tool: <strong>196 token ra</strong>.
+      <br><span style="color:var(--muted);font-size:14.5px">Step này tốn: 10.600 + 196 = <strong>10.796</strong></span>
+    </li>
+    <li>
+      <strong>Code bạn chạy tool</strong> <code>schedule_task</code>, tạo lịch trong database.
+      <br><span style="color:var(--muted);font-size:14.5px">Bước này <strong>0 token</strong> - không đụng gì tới model.</span>
+    </li>
+    <li>
+      <strong>Step 2.</strong> Code gom lại tất cả của step 1, cộng lời đòi tool và kết quả tool, gửi đi: <strong>10.803 token vào</strong>.
+      Model viết câu trả lời cuối: <strong>54 token ra</strong>.
+      <br><span style="color:var(--muted);font-size:14.5px">Step này tốn: 10.803 + 54 = <strong>10.857</strong></span>
+    </li>
+    <li>
+      Model không đòi tool nữa, vòng lặp dừng. <strong>Tổng cả lượt: 21.653 token.</strong>
+    </li>
+  </ol>
+
+  <h3>Hai điều đọc ra từ mấy con số này</h3>
+
+  <p><strong>Một.</strong> Step 2 gửi 10.803, chỉ hơn step 1 đúng <strong>203 token</strong>. Vì nó gửi lại y nguyên 10.600 của step 1, cộng thêm hai mẩu mới. Ngữ cảnh gần như không đổi - nhưng bạn trả tiền cho nó <em>lần thứ hai</em>.</p>
+
+  <p><strong>Hai.</strong> Tổng lượt 21.653 &asymp; gấp đôi ngữ cảnh thật. Không phải vì hồ sơ dày lên gấp đôi, mà vì <strong>cùng một hồ sơ bị tính tiền hai lần</strong>.</p>
+
+  <figure>
+    <div class="fig-box">
+      <svg viewBox="0 0 620 190" role="img" aria-label="So sánh: ngữ cảnh thật khoảng 10.800 token, tổng lượt 21.653 token, tổng phiên 84.601 token">
+        <text x="10" y="20" font-size="11" class="mono" fill="var(--faint)" letter-spacing="1">BA CON SỐ, CÙNG MỘT CUỘC TRÒ CHUYỆN</text>
+
+        <text x="10" y="52" font-size="12" fill="var(--ink)">Một request</text>
+        <rect x="130" y="38" width="61" height="20" rx="4" fill="var(--tok-full)"/>
+        <text x="200" y="53" font-size="11.5" class="mono" fill="var(--ink)">10.803</text>
+        <text x="268" y="53" font-size="11.5" fill="var(--tok-read)">so được với cửa sổ ngữ cảnh</text>
+
+        <text x="10" y="92" font-size="12" fill="var(--ink)">Một lượt</text>
+        <rect x="130" y="78" width="122" height="20" rx="4" fill="var(--tok-full)" opacity=".7"/>
+        <text x="262" y="93" font-size="11.5" class="mono" fill="var(--ink)">21.653</text>
+        <text x="330" y="93" font-size="11.5" fill="var(--muted)">chỉ là tiền, không so được</text>
+
+        <text x="10" y="132" font-size="12" fill="var(--ink)">Cả phiên</text>
+        <rect x="130" y="118" width="477" height="20" rx="4" fill="var(--tok-full)" opacity=".4"/>
+        <text x="130" y="158" font-size="11.5" class="mono" fill="var(--ink)">84.601</text>
+        <text x="196" y="158" font-size="11.5" fill="var(--muted)">cũng chỉ là tiền, cộng dồn từ lúc mở cuộc trò chuyện</text>
+
+        <line x1="130" y1="172" x2="607" y2="172" stroke="var(--rule-strong)" stroke-dasharray="3 3"/>
+        <text x="130" y="186" font-size="11" fill="var(--faint)">Cùng tỉ lệ. Ba thanh này đo ba thứ khác nhau.</text>
+      </svg>
+    </div>
+    <figcaption>Cửa sổ ngữ cảnh mặc định của bot này là 128.000, và nó chỉ dùng tới 70% để chừa chỗ. Request 10.803 token đang chiếm khoảng 12% ngân sách - còn rất xa tràn.</figcaption>
+  </figure>
+
+  <div class="note warn">
+    <span class="note-label">Lỗi đọc số hay gặp nhất</span>
+    <p>Nhìn thấy <em>84.601 token</em> trên bảng điều khiển rồi lo "sắp tràn cửa sổ 128.000". Không phải. Đó là <strong>tiền đã tiêu cho cả cuộc trò chuyện</strong>, cộng dồn qua nhiều lượt. Con số cần nhìn để lo chuyện tràn là <strong>10.803</strong> - ngữ cảnh của một request.</p>
+    <p>Dấu hiệu phân biệt: số cộng dồn <strong>chỉ tăng</strong>, kể cả khi bạn xoá sạch ngữ cảnh. Số request thì lên xuống theo độ dài hội thoại.</p>
+  </div>
+</section>
+
+<section id="cua-so">
+  <span class="kind">Giải thích</span>
+  <h2>Cửa sổ ngữ cảnh: sức chứa một lần gọi</h2>
+
+  <p>Cửa sổ ngữ cảnh (<em>context window</em>) là <strong>sức chứa tối đa của MỘT request</strong>. Không phải của cả cuộc trò chuyện.</p>
+
+  <figure>
+    <div class="fig-box">
+      <svg viewBox="0 0 620 200" role="img" aria-label="Cửa sổ ngữ cảnh chứa system prompt, tool, lịch sử, ảnh và cả phần model sắp viết ra">
+        <rect x="10" y="30" width="600" height="72" rx="9" fill="var(--surface)" stroke="var(--rule-strong)"/>
+        <text x="10" y="22" font-size="11" class="mono" fill="var(--faint)" letter-spacing="1">CỬA SỔ NGỮ CẢNH - MỘT REQUEST</text>
+
+        <rect x="20" y="42" width="86" height="48" rx="6" fill="var(--tok-full-bg)" stroke="var(--tok-full)"/>
+        <text x="63" y="63" font-size="11" fill="var(--tok-full)" text-anchor="middle">system</text>
+        <text x="63" y="78" font-size="11" fill="var(--tok-full)" text-anchor="middle">prompt</text>
+
+        <rect x="112" y="42" width="86" height="48" rx="6" fill="var(--tok-full-bg)" stroke="var(--tok-full)"/>
+        <text x="155" y="63" font-size="11" fill="var(--tok-full)" text-anchor="middle">định nghĩa</text>
+        <text x="155" y="78" font-size="11" fill="var(--tok-full)" text-anchor="middle">tool</text>
+
+        <rect x="204" y="42" width="150" height="48" rx="6" fill="var(--tok-full-bg)" stroke="var(--tok-full)"/>
+        <text x="279" y="63" font-size="11" fill="var(--tok-full)" text-anchor="middle">lịch sử hội thoại</text>
+        <text x="279" y="78" font-size="11" fill="var(--tok-full)" text-anchor="middle">+ kết quả tool</text>
+
+        <rect x="360" y="42" width="80" height="48" rx="6" fill="var(--tok-full-bg)" stroke="var(--tok-full)"/>
+        <text x="400" y="70" font-size="11" fill="var(--tok-full)" text-anchor="middle">ảnh</text>
+
+        <rect x="446" y="42" width="154" height="48" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+        <text x="523" y="63" font-size="11" fill="var(--accent)" text-anchor="middle">chỗ cho model</text>
+        <text x="523" y="78" font-size="11" fill="var(--accent)" text-anchor="middle">viết câu trả lời</text>
+
+        <text x="10" y="132" font-size="12" fill="var(--muted)">Vượt cửa sổ thì API <tspan font-weight="600" fill="var(--warn)">trả lỗi</tspan>, không tự cắt giúp.</text>
+        <text x="10" y="154" font-size="12" fill="var(--muted)">Nên mọi agent nghiêm túc đều phải tự cắt bớt ngữ cảnh TRƯỚC khi gửi.</text>
+        <text x="10" y="182" font-size="12" fill="var(--ink)" font-weight="600">Điều dễ quên: phần model sắp VIẾT RA cũng ăn vào cùng ngân sách.</text>
+      </svg>
+    </div>
+    <figcaption>Đây là lý do bot thật thường chỉ dùng tới 70% cửa sổ khai báo - phần chừa lại dành cho câu trả lời và cho sai số ước lượng.</figcaption>
+  </figure>
+
+  <div class="note key">
+    <span class="note-label">Vì sao bot "quên" chuyện cũ</span>
+    <p>Không phải model kém trí nhớ. Là vì <strong>code của bạn đã cắt bớt lịch sử</strong> trước khi gửi, để nó vừa cửa sổ. Trí nhớ của một agent là do code quyết định - muốn nhớ lâu hơn thì sửa cách cắt, không phải đổi model.</p>
+  </div>
+</section>
+
+<section id="cai-vong">
+  <span class="kind">Giải thích</span>
+  <h2>Cái vòng trong Claude Code là ô nào</h2>
+
+  <p>Claude Code hiện một chỉ báo ngữ cảnh, và nó <strong>tăng sau mỗi tin</strong>. Câu hỏi tự nhiên: vậy nó đang đếm cả phiên à?</p>
+
+  <p><strong>Không. Nó là ô REQUEST</strong> - ô trong cùng của sơ đồ búp bê Nga ở đầu tài liệu.</p>
+
+  <p>Nó tăng sau mỗi tin, nhưng không phải vì nó cộng dồn. Là vì <strong>chính cái request đó phình ra</strong>: mỗi lượt, code nối thêm tin mới vào danh sách tin nhắn, nên lần gọi API kế tiếp mang theo nhiều chữ hơn lần trước. Một cái duy nhất, ngày càng to.</p>
+
+  <h3>Hình dạng của hai đường nói hết</h3>
+
+  <figure class="wide">
+    <div class="fig-box">
+      <svg viewBox="0 0 660 320" role="img" aria-label="Biểu đồ hai đường qua sáu lượt: đường token cộng dồn leo thẳng và vượt trần cửa sổ mà không sao, đường request leo rồi rơi thẳng đứng tại mốc nén ngữ cảnh">
+        <!-- Trần cửa sổ -->
+        <line x1="60" y1="70" x2="640" y2="70" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="62" y="63" font-size="11" fill="var(--warn)">trần cửa sổ ngữ cảnh</text>
+
+        <!-- Truc -->
+        <line x1="60" y1="240" x2="640" y2="240" stroke="var(--rule-strong)"/>
+        <text x="70"  y="262" font-size="11" class="mono" fill="var(--faint)" text-anchor="middle">1</text>
+        <text x="180" y="262" font-size="11" class="mono" fill="var(--faint)" text-anchor="middle">2</text>
+        <text x="290" y="262" font-size="11" class="mono" fill="var(--faint)" text-anchor="middle">3</text>
+        <text x="400" y="262" font-size="11" class="mono" fill="var(--faint)" text-anchor="middle">4</text>
+        <text x="510" y="262" font-size="11" class="mono" fill="var(--faint)" text-anchor="middle">5</text>
+        <text x="620" y="262" font-size="11" class="mono" fill="var(--faint)" text-anchor="middle">6</text>
+        <text x="350" y="282" font-size="11" fill="var(--faint)" text-anchor="middle">lượt thứ</text>
+
+        <!-- Duong CONG DON: chi leo, vuot tran ma khong sao -->
+        <polyline points="70,210 180,183 290,150 400,123 510,93 620,57"
+                  fill="none" stroke="var(--muted)" stroke-width="1.6"/>
+        <circle cx="70"  cy="210" r="3" fill="var(--muted)"/>
+        <circle cx="180" cy="183" r="3" fill="var(--muted)"/>
+        <circle cx="290" cy="150" r="3" fill="var(--muted)"/>
+        <circle cx="400" cy="123" r="3" fill="var(--muted)"/>
+        <circle cx="510" cy="93"  r="3" fill="var(--muted)"/>
+        <circle cx="620" cy="57"  r="3" fill="var(--muted)"/>
+        <text x="620" y="42" font-size="11" fill="var(--muted)" text-anchor="end">vượt trần mà KHÔNG sao cả</text>
+
+        <!-- Duong REQUEST: leo roi ROI THANG DUNG tai moc nen -->
+        <polyline points="70,210 180,190 290,167 345,167 345,220 400,213 510,197 620,180"
+                  fill="none" stroke="var(--accent)" stroke-width="2.6"/>
+        <circle cx="70"  cy="210" r="3.5" fill="var(--accent)"/>
+        <circle cx="180" cy="190" r="3.5" fill="var(--accent)"/>
+        <circle cx="290" cy="167" r="3.5" fill="var(--accent)"/>
+        <circle cx="400" cy="213" r="3.5" fill="var(--accent)"/>
+        <circle cx="510" cy="197" r="3.5" fill="var(--accent)"/>
+        <circle cx="620" cy="180" r="3.5" fill="var(--accent)"/>
+
+        <!-- Moc nen ngu canh -->
+        <line x1="345" y1="150" x2="345" y2="236" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 3" opacity=".5"/>
+        <text x="352" y="238" font-size="11" font-weight="600" fill="var(--accent)">/compact</text>
+
+        <!-- Chu giai -->
+        <line x1="70" y1="300" x2="100" y2="300" stroke="var(--accent)" stroke-width="2.6"/>
+        <text x="108" y="304" font-size="11.5" fill="var(--ink)">vòng context = một REQUEST</text>
+        <line x1="300" y1="300" x2="330" y2="300" stroke="var(--muted)" stroke-width="1.6"/>
+        <text x="338" y="304" font-size="11.5" fill="var(--muted)">token cộng dồn cả phiên</text>
+      </svg>
+    </div>
+    <figcaption>Thang đo minh hoạ, không phải số thật. Điều cần nhìn là <strong>hình dạng</strong>: đường cộng dồn chỉ leo và vượt trần vô hại, đường request rơi thẳng đứng khi ngữ cảnh bị nén.</figcaption>
+  </figure>
+
+  <h3>Ba bằng chứng nó không phải số cộng dồn</h3>
+
+  <div class="scroller wide">
+    <table>
+      <thead><tr><th>Quan sát</th><th>Nếu là số cộng dồn thì</th><th>Thực tế</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Mới mở phiên, chưa gõ chữ nào</td>
+          <td>phải bằng 0</td>
+          <td>đã có sẵn 10-20%: system prompt, định nghĩa tool, <code>CLAUDE.md</code>, schema MCP</td>
+        </tr>
+        <tr>
+          <td>Chạy <code>/compact</code> hoặc <code>/clear</code></td>
+          <td>không đổi - tiền đã tiêu không đòi lại được</td>
+          <td><strong>tụt xuống</strong></td>
+        </tr>
+        <tr>
+          <td>Sau 6 lượt, mỗi lượt khoảng 10K</td>
+          <td>hơn 60K</td>
+          <td>có thể mới khoảng 12K</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note key">
+    <span class="note-label">Phép thử quyết định</span>
+    <p>Cái gì <strong>tụt xuống được</strong> thì cái đó đang đo <em>sức chứa</em>. Số cộng dồn không bao giờ tụt.</p>
+    <p>Ví như: vòng context là <strong>độ đầy của một cái vali</strong> sức chứa cố định - nhét thêm thì đầy lên, bỏ bớt ra thì vơi đi. Token cộng dồn là <strong>tổng số ký đã khiêng cả ngày</strong> - không bao giờ giảm, và lớn gấp nhiều lần sức chứa cái vali là chuyện bình thường.</p>
+    <p>Cả hai cùng tăng trong một phiên bình thường. Đó chính là lý do chúng dễ bị nhầm là một.</p>
+  </div>
+
+  <h3>Khoản to nhất mà người ta hay quên</h3>
+
+  <p>Mỗi lần gọi API, Claude Code mang theo: system prompt, định nghĩa toàn bộ tool, nội dung <code>CLAUDE.md</code>, schema MCP, toàn bộ lịch sử hội thoại, và <strong>kết quả của mọi tool đã chạy</strong>.</p>
+
+  <p>Khoản cuối là khoản đắt. Một lệnh đọc file 2000 dòng nằm lại trong ngữ cảnh và bị gửi lại ở <strong>mọi</strong> lượt sau đó - đúng cơ chế cột tích luỹ ở <a href="#step">mục về step</a>, chỉ khác là ở đây nó tích luỹ qua cả phiên chứ không riêng một lượt. Đó là lý do vòng nhảy vọt sau vài thao tác đọc file, dù bạn chỉ gõ một câu ngắn.</p>
+
+  <div class="note">
+    <span class="note-label">Hệ quả thực dụng</span>
+    <p><code>/clear</code> giữa hai việc không liên quan là thói quen đáng có: nó vứt đống kết quả tool cũ đang bị chở đi chở lại mỗi lượt.</p>
+  </div>
+</section>
+
+<!-- ===================== PHẦN 3 ===================== -->
+<div class="part-head"><span class="part-num">Phần 3 &middot; Tiết kiệm</span></div>
+
+<section id="cache">
+  <span class="kind">Giải thích</span>
+  <h2>Prompt caching: trả tiền lại nhưng rẻ hơn 10 lần</h2>
+
+  <p>Phần 1 và 2 để lại một vấn đề rõ ràng: <strong>cùng một đống chữ bị gửi đi gửi lại rất nhiều lần</strong> - mỗi step một lần, mỗi lượt một lần. Prompt caching sinh ra để giải đúng chuyện đó.</p>
+
+  <h3>Nó làm gì</h3>
+  <p>Nhà cung cấp lưu lại <strong>trạng thái tính toán</strong> của phần đầu prompt. Lần sau bạn gửi một prompt có phần đầu <strong>giống hệt từng byte</strong>, họ nạp lại trạng thái đã lưu thay vì tính lại từ đầu. Bạn được giảm giá và nhận trả lời nhanh hơn.</p>
+
+  <div class="note key">
+    <span class="note-label">Hiểu nhầm phổ biến nhất, nói rõ luôn</span>
+    <p>Cache <strong>không</strong> làm token cũ miễn phí. Chúng <strong>vẫn bị đếm, vẫn bị tính tiền</strong> ở mọi lượt - chỉ là rẻ hơn khoảng 10 lần.</p>
+    <p>Và chúng <strong>vẫn chiếm chỗ trong cửa sổ ngữ cảnh</strong> y như thường. Cache giúp <em>rẻ đi</em>, không giúp <em>nhét được nhiều hơn</em>.</p>
+  </div>
+
+  <h3>Ba loại token, ba mức giá</h3>
+  <div class="ledger">
+    <div class="tok t-full"><div class="tok-name">Chưa cache</div><div class="tok-mult">1,0&times;</div><div class="tok-desc">Giá đầy đủ. Phần mới của mỗi request.</div></div>
+    <div class="tok t-write"><div class="tok-name">Ghi cache</div><div class="tok-mult">1,25&times;</div><div class="tok-desc">Đắt hơn một chút, trả một lần lúc tạo.</div></div>
+    <div class="tok t-read"><div class="tok-name">Đọc cache</div><div class="tok-mult">0,1&times;</div><div class="tok-desc">Rẻ hơn 10 lần. Phần thưởng của mọi lần sau.</div></div>
+  </div>
+  <p style="font-size:13px;color:var(--faint);max-width:var(--measure);margin-top:-14px">Đúng cho cả Claude và OpenAI (GPT-5.6 trở lên). Claude có thêm lựa chọn giữ cache 1 giờ, giá ghi 2,0&times;.</p>
+
+  <h3>Luật quan trọng nhất: khớp theo TIỀN TỐ</h3>
+  <p>Cache khớp theo <strong>phần đầu</strong> của prompt, không phải theo từng đoạn rời rạc. Đổi <em>một byte</em> ở giữa thì mọi thứ từ đó trở đi mất cache - kể cả phần phía sau không đổi gì.</p>
+
+  <figure>
+    <div class="fig-box">
+      <svg viewBox="0 0 620 230" role="img" aria-label="Bố cục đúng và sai của prompt cache: phần ổn định trước, phần thay đổi sau">
+        <text x="10" y="20" font-size="11" class="mono" fill="var(--tok-read)" letter-spacing="1">ĐÚNG</text>
+        <rect x="10" y="30" width="380" height="34" rx="6" fill="var(--tok-read-bg)" stroke="var(--tok-read)"/>
+        <text x="200" y="52" font-size="11.5" fill="var(--tok-read)" text-anchor="middle">system + tool + lịch sử cũ (không đổi)</text>
+        <rect x="396" y="30" width="214" height="34" rx="6" fill="var(--tok-full-bg)" stroke="var(--tok-full)"/>
+        <text x="503" y="52" font-size="11.5" fill="var(--tok-full)" text-anchor="middle">câu hỏi mới</text>
+        <text x="10" y="84" font-size="11.5" fill="var(--muted)">Phần xanh cache được, lần sau chỉ trả 0,1&times; cho nó.</text>
+
+        <text x="10" y="126" font-size="11" class="mono" fill="var(--warn)" letter-spacing="1">SAI</text>
+        <rect x="10" y="136" width="130" height="34" rx="6" fill="var(--warn-bg)" stroke="var(--warn)"/>
+        <text x="75" y="158" font-size="11.5" fill="var(--warn)" text-anchor="middle">ngày giờ hiện tại</text>
+        <rect x="146" y="136" width="464" height="34" rx="6" fill="var(--sunk)" stroke="var(--rule-strong)"/>
+        <text x="378" y="158" font-size="11.5" fill="var(--muted)" text-anchor="middle">system + tool + lịch sử cũ + câu hỏi mới</text>
+        <text x="10" y="190" font-size="11.5" fill="var(--warn)">Ngày giờ đổi mỗi phút, nằm ở ĐẦU, nên toàn bộ phía sau mất cache.</text>
+        <text x="10" y="212" font-size="11.5" fill="var(--muted)">Không có lỗi nào báo. Chỉ là hoá đơn cao gấp 10 lần bình thường.</text>
+      </svg>
+    </div>
+    <figcaption>Quy tắc rút gọn: <strong>thứ không đổi để trước, thứ đổi mỗi lần để sau.</strong> Đúng cho cả hai nhà cung cấp.</figcaption>
+  </figure>
+
+  <h3>Hai nhà cung cấp làm khác nhau chỗ nào</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th></th><th>Claude</th><th>OpenAI</th></tr></thead>
+      <tbody>
+        <tr><td>Cách bật</td><td>Tự đánh dấu bằng <code>cache_control</code></td><td>Tự động, không cần sửa code</td></tr>
+        <tr><td>Chọn chỗ cắt cache</td><td>Có, tối đa 4 điểm</td><td>Không, hệ thống tự chọn</td></tr>
+        <tr><td>Xem được kết quả ở</td><td class="mono">cache_read_input_tokens</td><td class="mono">cached_tokens</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Chi tiết đầy đủ nằm ở <a href="#tra-cuu">phần tra cứu</a>. Điểm khác biệt thực dụng: Claude cho bạn quyết định chỗ nào đáng cache, OpenAI lo hộ - đổi lại Claude tối ưu sâu hơn được, và cũng sai được nhiều hơn.</p>
+</section>
+
+<section id="pha-cache">
+  <span class="kind">Vận hành</span>
+  <h2>Những thứ phá cache mà không báo gì</h2>
+
+  <p>Mọi mục dưới đây hỏng <strong>im lặng</strong> - không lỗi, không cảnh báo, chỉ là tiền tăng. Đây là danh sách để grep trong code dựng prompt.</p>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Mẫu code</th><th>Vì sao phá</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">Date.now() trong system prompt</td><td>Phần đầu đổi mỗi request</td></tr>
+        <tr><td class="mono">randomUUID() đặt sớm</td><td>Mỗi request thành một tiền tố riêng</td></tr>
+        <tr><td class="mono">JSON.stringify() không sắp key</td><td>Thứ tự key không ổn định, byte khác nhau</td></tr>
+        <tr><td class="mono">Nhét user id vào system prompt</td><td>Mỗi người một tiền tố, không chia sẻ được</td></tr>
+        <tr><td class="mono">if (flag) system += "..."</td><td>Mỗi tổ hợp cờ là một tiền tố khác</td></tr>
+        <tr><td class="mono">tools = buildTools(user)</td><td>Tool nằm ở vị trí đầu tiên - hỏng là hỏng hết</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Ba luật kiến trúc, quan trọng hơn cả việc đánh dấu cache</h3>
+  <ol class="steps">
+    <li><strong>Đóng băng system prompt.</strong> Đừng nhét ngày giờ, chế độ, tên người dùng vào đó. Cần bơm ngữ cảnh động thì bơm ở <em>cuối</em> danh sách tin nhắn - một tin ở lượt 5 không phá gì trước lượt 5.</li>
+    <li><strong>Đừng đổi tool hay model giữa chừng.</strong> Tool nằm ở vị trí đầu tiên; thêm, bớt hay đổi thứ tự một tool là mất sạch cache. Cache cũng gắn theo model, đổi model là mất.</li>
+    <li><strong>Lệnh gọi phụ phải dùng lại y nguyên phần đầu của lệnh chính.</strong> Tóm tắt, nén ngữ cảnh, sub-agent - nếu dựng lại system hoặc tool khác đi một chút là trượt sạch cache của lệnh cha.</li>
+  </ol>
+
+  <div class="note">
+    <span class="note-label">Cách kiểm nhanh</span>
+    <p>Chạy hai request liên tiếp có phần đầu giống hệt, rồi xem <code>cache_read_input_tokens</code> (Claude) hoặc <code>cached_tokens</code> (OpenAI). Vẫn bằng 0 nghĩa là chắc chắn có thứ đang phá tiền tố - diff byte của hai prompt đã dựng để tìm.</p>
+  </div>
+</section>
+
+<!-- ===================== PHẦN 4 ===================== -->
+<div class="part-head"><span class="part-num">Phần 4 &middot; Tra cứu</span></div>
+
+<section id="tra-cuu">
+  <span class="kind">Tra cứu - không cần đọc tuần tự</span>
+  <h2>Bảng số liệu</h2>
+
+  <h3>Cửa sổ và giá của các model</h3>
+  <div class="scroller wide">
+    <table>
+      <thead><tr><th>Model</th><th class="num">Cửa sổ</th><th class="num">Input $/1M</th><th class="num">Output $/1M</th></tr></thead>
+      <tbody>
+        <tr><td>Claude Opus 5</td><td class="num">1M</td><td class="num">$5,00</td><td class="num">$25,00</td></tr>
+        <tr><td>Claude Sonnet 5</td><td class="num">1M</td><td class="num">$3,00</td><td class="num">$15,00</td></tr>
+        <tr><td>Claude Haiku 4.5</td><td class="num">200K</td><td class="num">$1,00</td><td class="num">$5,00</td></tr>
+        <tr><td>GPT-5.6 Sol</td><td class="num">~1,05M</td><td class="num">$5,00</td><td class="num">$30,00</td></tr>
+        <tr><td>GPT-5.6 Terra</td><td class="num">~1,05M</td><td class="num">$2,00</td><td class="num">$12,00</td></tr>
+        <tr><td>GPT-5.6 Luna</td><td class="num">~1,05M</td><td class="num">$0,20</td><td class="num">$1,20</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--faint)">Giá Claude từ tài liệu chính thức Anthropic. Giá và cửa sổ GPT-5.6 từ nguồn tổng hợp bên thứ ba (8/2026) - kiểm lại trang giá chính thức trước khi tính chi phí thật. GPT-5.6 còn có mức long-context: vượt 272K token đầu vào thì cả request bị tính ~2&times; input, ~1,5&times; output.</p>
+
+  <h3>Ngưỡng cache tối thiểu của Claude</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Model</th><th class="num">Tiền tố tối thiểu</th></tr></thead>
+      <tbody>
+        <tr><td>Claude Opus 5, Fable 5, Mythos 5</td><td class="num">512</td></tr>
+        <tr><td>Opus 4.8, Sonnet 5, Sonnet 4.6 / 4.5, Opus 4.1 / 4, Sonnet 4</td><td class="num">1.024</td></tr>
+        <tr><td>Opus 4.7, Mythos Preview, Haiku 3.5</td><td class="num">2.048</td></tr>
+        <tr><td>Opus 4.6, Opus 4.5, Haiku 4.5</td><td class="num">4.096</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note warn">
+    <span class="note-label">Bẫy đáng nhớ nhất trong tài liệu này</span>
+    <p>Ngưỡng này <strong>không tăng đều theo đời model</strong>. Một prompt 3.000 token cache được trên Opus 5 và Sonnet 4.5, nhưng <strong>im lặng không cache</strong> trên Opus 4.6 hay Haiku 4.5. Ngắn hơn ngưỡng thì không báo lỗi - chỉ là <code>cache_creation_input_tokens: 0</code> và hoá đơn gấp 10 lần.</p>
+  </div>
+
+  <h3>Quy tắc cache của Claude</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Điều</th><th>Quy tắc</th></tr></thead>
+      <tbody>
+        <tr><td>Thứ tự render</td><td class="mono">tools &rarr; system &rarr; messages</td></tr>
+        <tr><td>Số điểm cắt tối đa</td><td>4 mỗi request</td></tr>
+        <tr><td>TTL</td><td>5 phút (mặc định) hoặc 1 giờ</td></tr>
+        <tr><td>Giá ghi</td><td>1,25&times; (5 phút) / 2,0&times; (1 giờ)</td></tr>
+        <tr><td>Giá đọc</td><td>0,1&times;</td></tr>
+        <tr><td>Điểm hoà vốn</td><td>2 request (TTL 5 phút) / 3 request (TTL 1 giờ)</td></tr>
+        <tr><td>Cửa sổ dò ngược</td><td>Tối đa 20 khối nội dung - lượt nhiều tool dễ vượt và trượt im lặng</td></tr>
+        <tr><td>Request song song</td><td>Cache chỉ đọc được sau khi response đầu bắt đầu stream</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+<pre><code>// Công thức phải nhớ khi đọc usage của Claude
+tổng prompt = input_tokens                  // phần chưa cache
+            + cache_creation_input_tokens   // phần vừa ghi vào cache
+            + cache_read_input_tokens       // phần đọc từ cache
+
+// Nhìn mỗi input_tokens rồi tưởng ngữ cảnh nhỏ là hiểu sai.</code></pre>
+
+  <h3>Thay đổi nào phá cache nào (Claude)</h3>
+  <div class="scroller wide">
+    <table>
+      <thead><tr><th>Thay đổi</th><th>Cache tools</th><th>Cache system</th><th>Cache messages</th></tr></thead>
+      <tbody>
+        <tr><td>Định nghĩa tool (thêm/bớt/đổi thứ tự)</td><td>mất</td><td>mất</td><td>mất</td></tr>
+        <tr><td>Đổi model</td><td>mất</td><td>mất</td><td>mất</td></tr>
+        <tr><td>Nội dung system prompt</td><td>giữ</td><td>mất</td><td>mất</td></tr>
+        <tr><td><code>tool_choice</code>, ảnh, bật/tắt thinking</td><td>giữ</td><td>giữ</td><td>mất</td></tr>
+        <tr><td>Nội dung tin nhắn</td><td>giữ</td><td>giữ</td><td>mất</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--faint)">Nghĩa là đổi <code>tool_choice</code> hay bật tắt thinking từng request không hề mất cache tools và system. Chỉ đổi tool và đổi model mới buộc dựng lại toàn bộ.</p>
+
+  <h3>Quy tắc cache của OpenAI</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Điều</th><th>Quy tắc</th></tr></thead>
+      <tbody>
+        <tr><td>Cách bật</td><td>Tự động, không cần khai báo</td></tr>
+        <tr><td>Ngưỡng tối thiểu</td><td>1.024 token (GPT-5.6+). Model cũ: 1.024 - 2.048</td></tr>
+        <tr><td>Bước tăng tiền tố</td><td>Model cũ: theo bội số 128 token</td></tr>
+        <tr><td>Giá đọc</td><td>0,1&times; (giảm 90%)</td></tr>
+        <tr><td>Giá ghi</td><td>1,25&times; trên GPT-5.6+</td></tr>
+        <tr><td>TTL</td><td>GPT-5.6+: chỉ <code>30m</code>. Model cũ có thể tới 24 giờ</td></tr>
+        <tr><td>Hết hạn thực tế</td><td>Thường bị dọn sau 5-10 phút không dùng, tối đa 1 giờ</td></tr>
+        <tr><td>Trường báo cáo</td><td class="mono">usage.prompt_tokens_details.cached_tokens<br>usage.input_tokens_details.cached_tokens</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <span class="note-label">Đừng tin số cũ</span>
+    <p>Nhiều bài trên mạng còn ghi OpenAI giảm <strong>50%</strong> - đó là mức lúc ra mắt năm 2024. Hiện tại là <strong>90%</strong>. Tra về giá thì luôn kiểm ngày của nguồn.</p>
+  </div>
+</section>
+
+<section id="chatgpt">
+  <span class="kind">Giải thích</span>
+  <h2>ChatGPT khác API chỗ nào</h2>
+
+  <p>Câu hỏi hay gặp: <em>"trên ChatGPT tôi đâu có gửi lại gì, sao nó vẫn nhớ?"</em></p>
+
+  <p>Vì <strong>ChatGPT là một ứng dụng dựng trên API</strong>, và chính nó lo phần gửi lại. Server của họ lưu hội thoại, mỗi lượt tự ghép lại rồi gửi cho model. Từ góc nhìn model thì <em>vẫn là toàn bộ hội thoại được gửi lại mỗi lượt</em> - y hệt bot của bạn.</p>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th></th><th>API trực tiếp</th><th>ChatGPT</th></tr></thead>
+      <tbody>
+        <tr><td>Ai giữ lịch sử</td><td>Bạn</td><td>OpenAI</td></tr>
+        <tr><td>Ai quyết định cắt gì khi dài</td><td>Bạn</td><td>OpenAI</td></tr>
+        <tr><td>Model có thấy toàn bộ hội thoại?</td><td>Có, phần bạn gửi</td><td>Có, phần họ ghép</td></tr>
+        <tr><td>Trả tiền theo</td><td>Token</td><td>Gói thuê bao</td></tr>
+        <tr><td>Xem được số token?</td><td>Có, trong <code>usage</code></td><td>Không</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Khi hội thoại ChatGPT vượt cửa sổ, họ tự cắt hoặc tóm tắt phần cũ - đó là lý do đôi khi nó "quên" thứ bạn nói ở đầu một cuộc trò chuyện rất dài. Cơ chế y hệt cái bạn phải tự viết cho agent của mình.</p>
+
+  <div class="note warn">
+    <span class="note-label">Về cửa sổ theo gói</span>
+    <p>Cửa sổ của ChatGPT Free / Plus / Pro nhỏ hơn cửa sổ tối đa của model trên API, và <strong>các con số lưu hành trên mạng mâu thuẫn nhau</strong> - nguồn bên thứ ba, đổi liên tục, khác nhau theo chế độ trả lời nhanh hay suy nghĩ sâu. Cần con số chính xác thì tra trang trợ giúp chính thức của OpenAI tại thời điểm đó.</p>
+  </div>
+</section>
+
+<section id="zalo">
+  <span class="kind">Áp dụng</span>
+  <h2>Đối chiếu với zalo-agent</h2>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Khái niệm trong tài liệu này</th><th>Trong repo</th></tr></thead>
+      <tbody>
+        <tr><td>Cửa sổ ngữ cảnh</td><td><code>LLM_CONTEXT_WINDOW</code>, mặc định 128.000</td></tr>
+        <tr><td>Chừa chỗ cho câu trả lời</td><td><code>nganSachAnToan()</code> - chỉ dùng tới 70%</td></tr>
+        <tr><td>Tự cắt trước khi gửi</td><td>Bỏ <strong>ảnh cũ trước</strong>, rồi mới bỏ tin cũ</td></tr>
+        <tr><td>Đếm token chứ không đếm tin</td><td>Một tin Zalo dài tuỳ ý, đếm tin không chặn được ngữ cảnh phình</td></tr>
+        <tr><td>Trần ảnh nạp lại</td><td><code>HISTORY_IMAGE_CONTEXT_LIMIT</code></td></tr>
+        <tr><td>Bật cache</td><td>Header <code>x-session-id</code> ổn định theo thread</td></tr>
+        <tr><td>Số token cộng dồn của phiên</td><td>Cột <code>total_tokens</code> trong bảng <code>agent_turns</code></td></tr>
+        <tr><td>Trần số step một lượt</td><td><code>LLM_MAX_STEPS</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Đọc ba con số trên dashboard</h3>
+  <div class="scroller wide">
+    <table>
+      <thead><tr><th>Thấy ở đâu</th><th>Là loại nào</th><th>So với cửa sổ?</th></tr></thead>
+      <tbody>
+        <tr><td>Sessions: <em>"6 tin - 84.601 token"</em></td><td>Cả phiên</td><td>Không</td></tr>
+        <tr><td>Trace, nhãn thẻ lượt: <em>"2 step - 21.653 token"</em></td><td>Một lượt</td><td>Không</td></tr>
+        <tr><td>Trace, trong step: <em>"10.600 vào / 196 ra"</em></td><td>Một request</td><td><strong>Có - chính nó</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="thuat-ngu">
+  <span class="kind">Tra cứu</span>
+  <h2>Thuật ngữ</h2>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Từ</th><th>Nghĩa</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Token</strong></td><td>Đơn vị model đọc và viết. Tiếng Việt tốn nhiều token hơn tiếng Anh cho cùng một ý - đừng ước lượng bằng số từ.</td></tr>
+        <tr><td><strong>Context window</strong></td><td>Sức chứa tối đa của một request. Gồm cả phần model sắp viết ra.</td></tr>
+        <tr><td><strong>Stateless</strong></td><td>Không giữ trạng thái. Server quên sạch sau mỗi lần gọi.</td></tr>
+        <tr><td><strong>Step</strong></td><td>Một lần gọi API bên trong một lượt. Model đòi tool xong là sang step mới.</td></tr>
+        <tr><td><strong>Agent loop</strong></td><td>Vòng lặp: gọi model, model đòi tool, code chạy tool, gửi kết quả, lặp tới khi model thôi đòi.</td></tr>
+        <tr><td><strong>Prefix</strong></td><td>Phần đầu của prompt. Cache khớp theo đây.</td></tr>
+        <tr><td><strong>Breakpoint</strong></td><td>Chỗ đánh dấu "cache tới đây". Chỉ Claude có.</td></tr>
+        <tr><td><strong>TTL</strong></td><td>Cache sống được bao lâu nếu không ai dùng lại.</td></tr>
+        <tr><td><strong>Cache write / read</strong></td><td>Lần đầu tạo cache (đắt hơn) và những lần dùng lại (rẻ hơn nhiều).</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <p><strong>Cách tài liệu này được dựng.</strong> Bố cục theo Diátaxis - tách phần <em>giải thích</em> (phần 1 đến 3, đọc tuần tự) khỏi phần <em>tra cứu</em> (phần 4, nhảy thẳng vào). Trình bày theo nguyên tắc của Mayer: định nghĩa từ vựng trước khi dùng, mỗi mục một ý, sơ đồ đặt ngay cạnh đoạn văn nó minh hoạ, và dùng màu nhất quán cho ba loại token suốt tài liệu.</p>
+  <p><strong>Nguồn.</strong> Phần Claude từ tài liệu chính thức của Anthropic. Phần OpenAI từ <a href="https://developers.openai.com/api/docs/guides/prompt-caching">trang hướng dẫn prompt caching chính thức</a> và <a href="https://openai.com/index/api-prompt-caching/">bài công bố tính năng</a>. Giá và cửa sổ GPT-5.6, cùng con số về gói ChatGPT, từ nguồn tổng hợp bên thứ ba tháng 8/2026 và đã đánh dấu rõ tại chỗ.</p>
+  <p>Mọi số đo trong phần ví dụ chép trực tiếp từ trace của một bot đang chạy, không phải ví dụ dựng ra.</p>
+</footer>
+
+</main>
+</div>
+</body>
+</html>

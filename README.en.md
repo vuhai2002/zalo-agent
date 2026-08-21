@@ -342,6 +342,8 @@ docs/              architecture, roadmap, release guide
 - [First-time VPS setup](docs/vps-setup-checklist.md) - user, firewall, cron, backup
 - [Roadmap](docs/project-roadmap.md) - the full history: bugs hit, how they were measured,
   decisions locked in, and the limitations that remain. The thickest and most honest document here
+- [Agent token accounting](docs/ke-toan-token-cua-agent.html) - a self-study explainer (Vietnamese):
+  context window, per-turn tokens, multi-step turns, prompt caching. Open it in a browser
 - [Changelog](CHANGELOG.md)
 
 ## Contributing

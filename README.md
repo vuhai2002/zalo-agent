@@ -340,6 +340,8 @@ docs/              kiến trúc, roadmap, hướng dẫn phát hành
 - [Dựng máy chủ lần đầu](docs/vps-setup-checklist.md) - user, tường lửa, cron, backup
 - [Roadmap](docs/project-roadmap.md) - toàn bộ lịch sử: lỗi đã gặp, cách đo, quyết định đã chốt và
   những giới hạn còn lại. Đây là tài liệu dày nhất và trung thực nhất của dự án
+- [Kế toán token của agent](docs/ke-toan-token-cua-agent.html) - tài liệu tự học: cửa sổ ngữ cảnh,
+  token mỗi lượt, một lượt nhiều step, prompt caching. Mở bằng trình duyệt
 - [CHANGELOG](CHANGELOG.md)
 - [Hướng dẫn phát hành](docs/release-guide.md)
 
