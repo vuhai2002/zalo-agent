@@ -20,22 +20,30 @@
  * `nang-luc-kenh-bot.ts` phải giữ THUẦN (không `node:*`, không DB, không
  * logger, không `process.env`).
  *
- * CẢ HAI ĐIỀU TRÊN LÀ QUY ƯỚC MIỆNG - KHÔNG CÓ GÌ CANH. Bản đầu của khối này
- * viết rằng `tsc --noEmit -p web` sẽ bắt được (b) vì program web không nạp
- * `@types/node`. SAI, và đã đo hai lần: thêm `import "node:fs"` vào
- * `nang-luc-kenh-bot.ts`, rồi thêm `process.env` vào chính file này - typecheck
- * XANH cả hai lần. Lý do: `web/tsconfig.json` include cả cây `src` theo mẫu
- * đệ quy nên nuốt
- * luôn các file `.test.ts` của web, mà chúng `import "node:test"` - thế là
- * `@types/node` vào program qua đường import tường minh; `types:
- * ["vite/client"]` chỉ chặn NẠP TỰ ĐỘNG, không chặn đường đó.
+ * CẢ HAI ĐIỀU TRÊN LÀ QUY ƯỚC MIỆNG - KHÔNG CÓ GÌ CANH. Khối này đã viết SAI
+ * cơ chế HAI LẦN, mỗi lần đều nghe hợp lý, và cả hai chỉ lộ ra khi có người đo:
  *
- * Hệ quả rộng hơn (CÓ TỪ TRƯỚC đợt này, từ lúc có file test web đầu tiên): mọi
- * file dashboard đều dùng được `process` / `Buffer` / `__dirname` mà typecheck
- * vẫn xanh, rồi nổ `ReferenceError` trong trình duyệt. Cách đóng đã có công
- * thức - tách test ra khỏi program app bằng `exclude` + một
- * `web/tsconfig.test.json` riêng - nhưng đó là việc của cả dashboard, không
- * phải của đợt lịch hẹn này. Xem mục còn treo ở roadmap V3.19.
+ *  - Bản 1: "program web không nạp `@types/node` nên typecheck sẽ bắt". Sai -
+ *    thêm `process.env` vào file web thuần vẫn XANH.
+ *  - Bản 2: "vì `include` nuốt các file `.test.ts`, mà chúng `import
+ *    "node:test"`". Cũng SAI. Phép đo quyết định: bỏ `vite.config.ts` khỏi
+ *    `include` mà GIỮ nguyên các file test -> chính CÁC FILE TEST đỏ với
+ *    `Cannot find name 'node:test'`. Tức chúng là bên TIÊU THỤ `@types/node`,
+ *    không phải nguồn.
+ *
+ * Nguồn thật: `web/tsconfig.json` include `vite.config.ts`, file đó import
+ * `vite`, và `vite/dist/node/index.d.ts` mở đầu bằng một chỉ thị tham chiếu
+ * kiểu `node`. Chỉ thị dạng đó KHÔNG bị `types: ["vite/client"]` chặn - trường
+ * đó chỉ chặn NẠP TỰ ĐỘNG từ `node_modules/@types`.
+ *
+ * Hệ quả rộng hơn, CÓ TỪ 2026-07-25 (commit dựng dashboard, không liên quan
+ * gì tới file test): mọi file dashboard đều dùng được `process` / `Buffer` /
+ * `__dirname` mà typecheck vẫn xanh, rồi nổ `ReferenceError` trong trình
+ * duyệt. Công thức đóng đã ĐO ĐƯỢC (không phải đoán): một `tsconfig` riêng
+ * cho mã app, KHÔNG chứa `vite.config.ts` và loại các file test - đo trực
+ * tiếp thì `process.env` trong file app đỏ đúng `TS2591`, còn cây app sạch
+ * thì vẫn sạch. Đó là việc của CẢ dashboard, không phải của đợt lịch hẹn
+ * này - xem mục còn treo ở roadmap V3.19.
  */
 
 export const MO_TA_KENH_BOT =

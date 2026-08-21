@@ -158,10 +158,19 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   Job của tài khoản bot lúc tạm dừng giờ GIỮ NGUYÊN suất chạy và thử lại ở tick
   sau, thay vì bị tắt hẳn như trước.
 
-  **Nếu bạn đã chạy bản trước và có job lịch hẹn của tài khoản bot bị tắt hẳn:**
-  bật lại bằng công tắc sẽ KHÔNG chạy (bản cũ xóa luôn mốc hẹn giờ, mà công tắc
-  không tính lại mốc). Vào **SỬA LỊCH** của job đó và lưu - mốc được tính lại và
-  job sống lại. Chỉ ảnh hưởng job tạo trong ngày 2026-08-11.
+  **Nếu bạn đã chạy bản trước và có job lịch hẹn của tài khoản bot bị tắt hẳn**
+  (chỉ ảnh hưởng job tạo trong ngày 2026-08-11), làm ĐÚNG BA BƯỚC theo thứ tự:
+
+  1. Mở **Sửa lịch** của job đó và **ĐỔI mốc thời gian** - đổi thật, sang một
+     mốc khác. Lưu mà giữ nguyên lịch cũ thì không có tác dụng gì: giao diện
+     chỉ gửi phần lịch khi nó thực sự đổi.
+  2. **Lưu.**
+  3. **Bật công tắc** của job. Bước này bắt buộc và phải làm SAU bước 2 - bản cũ
+     xóa cả mốc hẹn lẫn cờ bật, mà sửa lịch chỉ trả lại mốc chứ không bật lại
+     job. Trước bước 2 thì công tắc còn đang bị vô hiệu hóa.
+
+  Với job loại `once` thì mốc gốc đã nằm trong quá khứ nên hệ thống từ chối -
+  phải chọn một mốc mới, không khôi phục lại đúng lời hẹn cũ được.
 
 
 ### Sửa

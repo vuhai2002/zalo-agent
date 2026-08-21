@@ -4827,12 +4827,18 @@ lại. Dấu hiệu đó nằm đó suốt từ V3.16 mà không ai đọc ra.
 
 ### Kiểm chứng
 
-- **28 ca MỚI**: `account-manager-kenh.test.ts` (5), `lich-hen-kenh-bot.test.ts`
-  (8), `ngan-sach-byte-theo-kenh.test.ts` (6), `lich-hen-tren-kenh-bot.test.ts`
-  (8, thay `chan-lich-hen-kenh-bot.test.ts` cũ), cộng 1 ca hồi quy trong
-  `run-scheduled-job.test.ts`. Con số 47 ở mục nghiệm thu dưới đây là TỔNG số
-  ca trong 5 file đó (28 mới + 20 ca sẵn có của `run-scheduled-job.test.ts`),
-  không phải số ca mới - hai đại lượng khác nhau, đừng đọc lẫn.
+- **Bốn file test MỚI** (`account-manager-kenh.test.ts`,
+  `lich-hen-kenh-bot.test.ts`, `ngan-sach-byte-theo-kenh.test.ts`,
+  `lich-hen-tren-kenh-bot.test.ts` - file cuối thay
+  `chan-lich-hen-kenh-bot.test.ts` cũ), cộng các ca thêm vào
+  `run-scheduled-job.test.ts`.
+
+  KHÔNG ghi số ca ở đây nữa. Đã trả giá hai lần: con số "47" ban đầu trộn "ca
+  mới" với "tổng ca trong file bị đụng"; rồi câu ĐÍNH CHÍNH nó lại sai số học
+  (28 + 20 = 48) và lạc hậu NGAY trong commit viết ra nó, vì chính commit đó
+  vừa thêm một ca. Muốn số thật thì lấy bằng công thức:
+  `grep -cE '^\s*it\(' <file>`. Luật rút ra: đừng viết hằng số đếm test vào
+  tài liệu trong cùng commit có thêm/bớt ca.
 - Full suite **2168/2168 xanh**, `pnpm typecheck` sạch.
 - **13 phép phá**, mỗi phép đỏ đúng ca dự kiến. Ba phép đáng ghi:
   - Sabotage `cap-guard` về bản cũ: chỉ 1 ca đỏ - chứng minh đường tick là ca
@@ -5022,25 +5028,88 @@ với thông điệp SAI NGUYÊN NHÂN, mẫu khớp chuỗi RỖNG thì rời n
 khác nên qua cửa mà không đo gì. Cả hai giờ có khẳng định riêng, đã phá thử và
 bắn đúng nguyên nhân.
 
+### Vòng rà soát 6: bản đính chính của bản đính chính
+
+Vòng này không tìm thấy lỗi logic sản xuất nào, và cũng không tìm thấy lỗi cú
+pháp nào do vòng 5 đẻ ra (reviewer viết hẳn một bộ quét tokenizer chạy trên 20
+file của dải để tìm khối comment đóng sớm - không có). Nhưng nó bắt được HAI
+khối chữ sai, và cả hai đều nằm trong chính commit được viết ra để sửa chữ sai:
+
+- **Cơ chế `@types/node` lọt vào program web: bản đính chính ở vòng 5 CŨNG SAI.**
+  Vòng 5 nói nguồn là các file `.test.ts` của web (chúng `import "node:test"`).
+  Phép đo quyết định của vòng 6: bỏ `vite.config.ts` khỏi `include` mà GIỮ
+  nguyên file test -> chính CÁC FILE TEST đỏ `Cannot find name 'node:test'`.
+  Chúng là bên TIÊU THỤ, không phải nguồn. Nguồn thật là `vite.config.ts`
+  import `vite`, mà `.d.ts` của vite mở đầu bằng chỉ thị tham chiếu kiểu `node`
+  - thứ `types: [...]` không chặn. Kéo theo: "công thức đóng" mà vòng 5 ghi vào
+  mục còn treo chính là ca reviewer đo ra XANH, tức người sau bỏ công sửa 16
+  file test rồi tick xong mục treo mà lỗ còn nguyên. Cả mốc thời gian cũng sai:
+  2026-07-25 (commit dựng dashboard) chứ không phải 2026-08-02.
+
+- **Hướng dẫn nâng cấp trong CHANGELOG làm đúng từng chữ thì job VẪN CHẾT.**
+  Vòng 5 viết "vào Sửa lịch và lưu - job sống lại". Đo bốn đường trên store
+  thật thì chỉ một đường sống, và nó cần BA bước (đổi mốc thật -> lưu -> bật
+  công tắc). Lưu mà không đổi lịch: drawer không gửi `schedule` nên không có gì
+  xảy ra. Đổi lịch mà không bật công tắc: `updateJob` không đụng cột `enabled`.
+  Đây là chữ hướng ra NGƯỜI VẬN HÀNH nên hỏng ở đây đắt hơn hỏng trong một
+  docstring.
+
+**Ba lần liên tiếp cùng một hình dạng lỗi** (vòng 4 bắt "hai lớp chồng nhau",
+vòng 5 bắt "mẫu PHÂN BIỆT", vòng 6 bắt cả cơ chế `@types/node` lẫn hướng dẫn
+nâng cấp): mỗi lần đều là một lời giải thích NGHE HỢP LÝ về một cơ chế chưa ai
+chạy thử. Chúng không bao giờ lộ ra khi đọc lại - chỉ lộ khi có người dựng đúng
+tình huống rồi đo. Luật rút ra cho lần sau: **câu nào mô tả một CƠ CHẾ (vì sao
+X bắt được Y, làm Z thì Y sống lại) thì phải kèm phép đo, hoặc phải viết ở thể
+nghi vấn.** Bản sửa lần này của cả hai mục đều đi kèm số đo trong chính đoạn văn.
+
+Mục nhỏ thứ ba cùng họ: câu đính chính con số "47" ở trên tự sai số học
+(28 + 20 = 48) và lạc hậu ngay trong commit viết ra nó, vì chính commit đó vừa
+thêm một ca test. Đã bỏ hằng số, thay bằng công thức lấy số.
+
 ### Việc còn treo
 
-- **Program TypeScript của dashboard nuốt cả file test, nên `@types/node` lọt
-  vào và MỌI file web dùng được `process` / `Buffer` / `__dirname` mà typecheck
-  vẫn xanh - rồi nổ `ReferenceError` trong trình duyệt.** Có từ lúc có file
-  test web đầu tiên (2026-08-02), không phải của đợt lịch hẹn. Công thức đóng:
-  `web/tsconfig.json` thêm `exclude` cho các file `.test.ts`, dựng
-  `web/tsconfig.test.json` kế thừa nó và khai `types: ["node"]`, rồi
-  `pnpm typecheck` chạy cả hai. Chi phí: phải kiểm lại 16 file test web. Tách
-  riêng vì đây là chuyện type-safety của CẢ dashboard.
+- **MỌI file dashboard dùng được `process` / `Buffer` / `__dirname` mà
+  typecheck vẫn xanh, rồi nổ `ReferenceError` trong trình duyệt.** Có từ
+  **2026-07-25** (commit dựng dashboard), không phải của đợt lịch hẹn.
+
+  Nguồn `@types/node` là `vite.config.ts` nằm trong `include` của
+  `web/tsconfig.json`: nó import `vite`, mà `vite/dist/node/index.d.ts` mở đầu
+  bằng một chỉ thị tham chiếu kiểu `node` - thứ mà `types: ["vite/client"]`
+  KHÔNG chặn (trường đó chỉ chặn nạp TỰ ĐỘNG từ `node_modules/@types`).
+
+  Bản đầu của mục treo này ghi công thức đóng là "thêm `exclude` cho các file
+  `.test.ts` + dựng `web/tsconfig.test.json`, chi phí 16 file test web". SAI cả
+  chẩn đoán lẫn chi phí - đã ĐO: loại file test mà giữ `vite.config.ts` thì
+  `process.env` trong file app VẪN XANH, tức làm xong 16 file test kia mà lỗ
+  còn nguyên. Phép đo quyết định theo chiều ngược: bỏ `vite.config.ts` khỏi
+  `include` mà giữ file test thì chính CÁC FILE TEST đỏ `Cannot find name
+  'node:test'` - chúng tiêu thụ `@types/node`, không sinh ra nó.
+
+  Công thức đóng ĐÃ ĐO: một tsconfig riêng cho mã app, KHÔNG chứa
+  `vite.config.ts` và loại các file test (mẫu chuẩn của Vite là tách
+  `tsconfig.app.json` + `tsconfig.node.json` rồi `web/tsconfig.json` chỉ còn
+  `references`). Đo trực tiếp: `process.env` trong file app đỏ đúng `TS2591`,
+  cây app không có `process.env` thì vẫn sạch. Chi phí thật nằm ở chỗ tách
+  `vite.config.ts` và nối `pnpm typecheck` chạy đủ các project, không phải ở 16
+  file test. Tách riêng vì đây là type-safety của CẢ dashboard.
 - **Job lịch hẹn của tài khoản bot bị bản CŨ tắt hẳn thì không bật lại được
   bằng công tắc.** `tatJobKhongCanPhamVi` (đã xóa) ghi `enabled = 0` kèm
   `next_run_at = NULL`, mà `setEnabled` chỉ lật cờ chứ không tính lại mốc, và
   `listDueJobs` lọc `next_run_at IS NOT NULL`. Giao diện đã chặn công tắc
   (`schedule-job-row.tsx`) nên không sinh ra job ma im lặng - nhưng job hiện
   "Đã tắt" với công tắc xám vĩnh viễn và không câu nào nói phải làm gì. Đường
-  thoát có sẵn: SỬA LỊCH thì `updateJob` tính lại `next_run_at`. Không viết
-  migration vì dân số chỉ nằm trong 8 commit cùng ngày 2026-08-11 và repo
-  không có tag phát hành.
+  thoát cần ĐÚNG BA BƯỚC, đã đo trên store thật: (1) ĐỔI mốc lịch - lưu mà
+  giữ nguyên lịch cũ thì drawer không gửi trường `schedule` (cố ý, xem
+  `schedule-form-helpers.ts`) nên `updateJob` giữ nguyên `next_run_at = NULL`;
+  (2) lưu - lúc này `next_run_at` có lại, công tắc hết bị vô hiệu; (3) bật công
+  tắc - `updateJob` KHÔNG đụng cột `enabled` nên thiếu bước này job vẫn nằm
+  ngoài `listDueJobs`. Số đo bốn đường: chỉ-bật-công-tắc `tickThay=false`,
+  lưu-không-đổi-lịch `false`, đổi-lịch-mà-không-bật `false`, đủ ba bước `true`.
+  Job `once` còn thêm một ràng buộc: mốc gốc đã ở quá khứ nên `parseSchedule`
+  từ chối, buộc phải chọn giờ mới.
+
+  Không viết migration vì dân số chỉ nằm trong 8 commit cùng ngày 2026-08-11 và
+  repo không có tag phát hành.
 - `run-scheduled-job.ts` còn 283 dòng (từ 298), vẫn vượt luật 200.
 - `ReplyTarget.threadType` vẫn mang kiểu `ThreadType` của zca-js - trừu tượng
   kênh mới xong một nửa.
