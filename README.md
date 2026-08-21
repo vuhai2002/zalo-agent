@@ -22,7 +22,7 @@ mỗi account một "não" riêng, 14 công cụ, dashboard web đầy đủ. T�
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-2136%20xanh-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-2174%20xanh-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -45,7 +45,7 @@ account** trên dashboard, không đổi được sau đó.
 | Nhận tin | WebSocket listener + tự kết nối lại | long polling `getUpdates` |
 | Rủi ro khóa tài khoản | **có** - chỉ dùng nick phụ | **không** |
 | Ai nhắn được | phải là bạn bè | ai có link cũng nhắn được |
-| Công cụ dùng được | đủ **14** | **7** (xem bảng dưới) |
+| Công cụ dùng được | đủ **14** | **7 trong 14** (xem bảng dưới) |
 | Định dạng chữ | định dạng gốc Zalo (`textProperties`) | chữ trơn |
 | Trần một tin | theo cấu hình (mặc định 2000 ký tự) | 2000 ký tự, server ép cứng |
 | Gửi file / ảnh / thả cảm xúc / tag | có | **không có method trên API** |

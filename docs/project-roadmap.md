@@ -4966,9 +4966,18 @@ subagent chạy phép phá thì cây làm việc là trạng thái chia sẻ.
   Nhánh `[SILENT]` (`run-scheduled-job.ts`) `return` TRƯỚC `blockedByGuard`,
   nên `reserveProactiveSlot` không bao giờ chạy cho lượt im lặng - và bộ lọc
   sớm `checkProactiveDailyCap` ở tick (vốn sinh ra để "không đốt lại nguyên 1
-  lượt LLM mỗi 30 giây") không bao giờ bật cho job kiểu đó. Số: với
-  `SCHEDULER_MIN_INTERVAL_MINUTES=5` và `SCHEDULER_MAX_JOBS_PER_THREAD=20` thì
-  tối đa 5760 lượt LLM/ngày/thread, không giới hạn về thời gian.
+  lượt LLM mỗi 30 giây") không bao giờ bật cho job kiểu đó.
+
+  Số: với `SCHEDULER_MIN_INTERVAL_MINUTES=5` và
+  `SCHEDULER_MAX_JOBS_PER_THREAD=20` thì tối đa 5760 lượt LLM/ngày **MỖI
+  THREAD**. Đọc là "5760" trần trụi thì ra một con số nghe như đã bị chặn trên
+  - nó KHÔNG phải: `checkThreadJobCap` chỉ đếm theo cặp `(accountId,
+  threadId)`, không có trần tổng số job lẫn trần số thread; và vòng tick gọi
+  `void runScheduledJob(...)` không await, không semaphore, nên cũng không có
+  trần lượt LLM chạy đồng thời. `SCHEDULER_SEND_GAP_MS` chỉ rải ĐƯỜNG GỬI, mà
+  lượt im lặng không gửi gì nên không chạm hàng đợi đó. Cận trên thật là
+  `5760 x N` với N là số thread - và trên kênh bot thì N do NGƯỜI NGOÀI quyết,
+  vì ai có link cũng mở được một cuộc trò chuyện mới.
 
   Đây là tính chất CÓ SẴN, đúng thiết kế đã chốt: trần ngày đếm theo TIN ZALO
   THẬT, mà lượt `[SILENT]` thì không gửi tin nào. Không phải lỗi của đợt nối
@@ -4982,9 +4991,29 @@ subagent chạy phép phá thì cây làm việc là trạng thái chia sẻ.
   không phải trần TIN) cho job `kind='agent'`, hoặc ít nhất một cảnh báo ngay
   tại chỗ đổi allowlist của tài khoản bot.
 
-- `runScheduledJobTrial` ("Chạy thử ngay") chưa có ca test nào trên kênh bot.
-  Đã kiểm tay ở vòng rà soát 2 và chạy đúng (snapshot/giành/phục hồi không
-  phụ thuộc kênh), nhưng đó là lỗ PHỦ chứ không phải đã chứng minh.
+- ~~`runScheduledJobTrial` ("Chạy thử ngay") chưa có ca test nào trên kênh
+  bot~~ - ĐÓNG, cố ý KHÔNG thêm test. Đọc hết `run-scheduled-job-trial.ts`:
+  `snapshotStmt`/`claimStmt`/`restoreStmt` là ba câu SQL trên `scheduled_jobs`
+  theo `id`, phần dispatch đi thẳng vào `runScheduledJob` - và không có MỘT
+  nhánh nào rẽ theo kênh trong cả file. `runScheduledJob` thì đã được phủ trên
+  kênh bot bằng 8 ca (kể cả đường thông báo chạm trần). Một ca trial cho kênh
+  bot sẽ chỉ đo lại đúng phần sổ sách mà `run-scheduled-job-trial.test.ts` đã
+  đo: phủ SỐ chứ không phủ RỦI RO. Đã kiểm tay bằng test tích hợp tạm ở vòng
+  rà soát 2 (tạo job qua route thật, bấm chạy thử qua route thật, cột lịch
+  trước/sau y nguyên).
+- **Cửa `checkAccountAndThreadReady` KHÔNG chặn được ca "kênh ôi thiu qua
+  đường xoay token".** Nó chỉ hỏi `running.has(accountId)`, mà
+  `PUT /:id/bot-token` gọi `stopAccount` rồi `startAccount` - sau đó
+  `isAccountRunning` lại `true`, trong khi lượt đang chạy vẫn cầm `kenh` CŨ
+  chụp từ lúc dispatch. Kênh cá nhân dính y hệt khi login lại giữa lượt.
+
+  Hậu quả bị chặn trên nên không sửa: token đã thu hồi thì Zalo chối -> đếm
+  `delivery_attempts` -> tick sau chạy lại với kênh mới (tự lành); token còn
+  sống thì tin vẫn ra đúng nơi, chỉ là bằng credential cũ. Không phải lỗ an
+  ninh. Đóng bằng mã thì cần so định danh
+  (`getRunningAccountKenh(id) !== kenhDaChup`), việc đó đổi hành vi trên đường
+  nóng nên chờ tới khi có ca thật đòi. Ghi ở đây để đừng ai đọc docstring của
+  `blockedByGuard` rồi tưởng ca này đã xử lý.
 - Kênh bot vẫn không có chữ đậm/nghiêng; `create_image` vẫn cần đường phục vụ
   ảnh qua HTTPS công khai; `pnpm zalo-login <id>` vẫn không kiểm `loai`; vòng
   poll vẫn không có sàn nhịp.

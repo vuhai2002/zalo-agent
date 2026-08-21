@@ -31,9 +31,9 @@ describe("mô tả loại kênh trên trang Accounts", () => {
     // Đối chiếu thẳng với BẢNG CHẶN thay vì gõ tay danh sách: gõ tay là danh
     // sách này và bảng kia trôi khỏi nhau ngay lần thêm/bớt tool tiếp theo.
     const chuCanCo: Record<string, RegExp> = {
-      send_file: /file/i,
-      create_word_document: /file/i,
-      create_excel_file: /file/i,
+      send_file: /gửi được file/i,
+      create_word_document: /Word/i,
+      create_excel_file: /Excel/i,
       create_image: /ảnh tự vẽ/i,
       add_reaction: /thả cảm xúc/i,
       tag_member: /tag thành viên/i,
@@ -45,8 +45,22 @@ describe("mô tả loại kênh trên trang Accounts", () => {
       Object.keys(TOOL_KHONG_CHAY_TREN_BOT).sort(),
       "bảng chặn đã đổi mà câu mô tả trên dashboard chưa theo - người vận hành đọc phải thông tin cũ",
     );
-    for (const [key, mau] of Object.entries(chuCanCo)) {
-      assert.match(MO_TA_KENH_BOT, mau, `mô tả không nhắc tới giới hạn của "${key}"`);
+
+    // Mẫu phải PHÂN BIỆT NHAU. Bản đầu cho ba key `send_file` /
+    // `create_word_document` / `create_excel_file` cùng ánh xạ `/file/i`, tức
+    // bảy khẳng định thật ra chỉ là năm. Đo được bằng phép phá: thêm một tool
+    // mới vào bảng chặn rồi ánh xạ nó về `/file/i` thì ca này XANH, dù câu mô
+    // tả không hề nhắc tới tool đó - và đó chính là lối thoát rẻ nhất cho
+    // người sửa lần sau khi `deepEqual` ở trên bắn đỏ.
+    const mau = Object.values(chuCanCo).map((r) => r.source);
+    assert.equal(
+      new Set(mau).size,
+      mau.length,
+      "hai tool dùng chung một mẫu chữ - key sau đi ké khẳng định của key trước, phép đo mất răng",
+    );
+
+    for (const [key, m] of Object.entries(chuCanCo)) {
+      assert.match(MO_TA_KENH_BOT, m, `mô tả không nhắc tới giới hạn của "${key}"`);
     }
 
     assert.match(MO_TA_KENH_BOT, /Zalo Bot API/, "không nói rõ đây là giới hạn của nền tảng");

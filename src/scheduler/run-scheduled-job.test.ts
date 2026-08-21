@@ -666,8 +666,14 @@ describe("runScheduledJob - hai cửa chặn từng không ai canh", () => {
     //
     // Phép phá đo được: thay cửa đó bằng `{ ok: true }` -> 2168/2168 VẪN XANH.
     // Cửa ấy trông thừa (vòng tick đã kiểm rồi) nên rất dễ bị "dọn dẹp", mà
-    // hậu quả thì câm: job gửi qua client của một account vừa bị bấm tắt -
-    // hoặc, sau đường xoay token, qua client mang token đã thu hồi.
+    // hậu quả thì câm: job gửi qua client của một account vừa bị bấm tắt.
+    //
+    // ĐÍNH CHÍNH (vòng rà soát 3): cửa này KHÔNG phủ ca "xoay token giữa
+    // lượt". Nó chỉ hỏi `running.has(accountId)`, mà `PUT /:id/bot-token` gọi
+    // `stopAccount` rồi `startAccount` nên sau đó cờ đó lại `true`, trong khi
+    // lượt vẫn cầm `kenh` CŨ. Hậu quả ca đó bị chặn trên (token thu hồi ->
+    // Zalo chối -> `delivery_attempts` -> tick sau chạy với kênh mới) nên
+    // không sửa - xem mục còn treo ở roadmap V3.19.
     const sent = attachOnline();
     const job = makeJob({ kind: "agent", payload: "Tra cứu rồi báo cáo" });
 

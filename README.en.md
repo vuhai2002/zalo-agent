@@ -22,7 +22,7 @@ Provider-agnostic: any OpenAI-compatible endpoint, Anthropic, or Google.
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-2136%20passing-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-2174%20passing-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -48,7 +48,7 @@ created** in the dashboard and cannot be changed afterwards.
 | Receiving | WebSocket listener + auto reconnect | long polling `getUpdates` |
 | Ban risk | **yes** - use a throwaway account | **no** |
 | Who can message it | friends only | anyone with the link |
-| Tools available | all **14** | **7** (see table below) |
+| Tools available | all **14** | **7 of 14** (see table below) |
 | Text formatting | native Zalo styles (`textProperties`) | plain text |
 | Per-message cap | configurable (default 2000 chars) | 2000 chars, enforced server-side |
 | Files / images / reactions / @mention | yes | **no such method on the API** |
