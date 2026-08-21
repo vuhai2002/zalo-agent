@@ -1,6 +1,6 @@
 import type { API } from "zca-js";
 import { kenhCaNhan } from "./kenh-ca-nhan.js";
-import { duongGuiZcaJs } from "./send-reply-in-parts.js";
+import { replyTargetTuKenh } from "./reply-target-tu-kenh.js";
 import { getAccount } from "../config/account-store.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { recordContactActivity } from "../conversation/contact-store.js";
@@ -113,12 +113,20 @@ export function routeIncomingMessage(
   // tự quyết có đáng gửi hay không (xem `busy-wait-notice.ts` - mặc định chỉ
   // gửi sau khi dấu "đang nhập..." đã tắt). Fire-and-forget và tự nuốt lỗi:
   // đây là việc phụ, không được làm chậm đường nhận tin.
-  void maybeNotifyBusyWait({
-    guiMotDoan: duongGuiZcaJs(api, msg.threadId, msg.threadType),
-    threadKey,
-    threadId: msg.threadId,
-    threadType: msg.threadType,
-  }).catch((err) => log.debug({ threadId: msg.threadId, err }, "Gửi câu trấn an thất bại"));
+  //
+  // Dựng đích qua `replyTargetTuKenh` chứ không viết tay: các trường mang theo
+  // (`tranKyTuMotTin`, `mangDinhDang`) đều TÙY CHỌN nên quên là trình biên
+  // dịch im lặng. Ở đây mặc định của kênh cá nhân vốn đã đúng, nhưng đây là
+  // chỗ CUỐI CÙNG còn dựng đích bằng tay - để nguyên là chừa lại đúng một khe
+  // cho lần thêm trường tiếp theo.
+  void maybeNotifyBusyWait(
+    replyTargetTuKenh({
+      kenh: kenhCaNhan(api),
+      threadId: msg.threadId,
+      threadType: msg.threadType,
+      threadKey,
+    }),
+  ).catch((err) => log.debug({ threadId: msg.threadId, err }, "Gửi câu trấn an thất bại"));
 }
 
 /** Lấy tên group 1 lần khi gặp lần đầu, cache vào bảng threads */

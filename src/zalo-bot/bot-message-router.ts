@@ -10,6 +10,7 @@ import type { KenhLuot } from "../zalo/kenh-luot.js";
 import { processBatch } from "../zalo/message-turn-processor.js";
 import { ganAnhVaoHistory, ghiTinDenVaoHistory } from "../zalo/record-incoming-message.js";
 import { reportPayloadAnomalies } from "../zalo/payload-anomaly-watch.js";
+import { replyTargetTuKenh } from "../zalo/reply-target-tu-kenh.js";
 import { doiUpdateSangParsedMessage } from "./zalo-bot-update-parser.js";
 import type { ZaloBotUpdate } from "./zalo-bot-api-types.js";
 
@@ -103,11 +104,7 @@ export function routeBotUpdate(accountId: string, kenh: KenhLuot, update: ZaloBo
     );
   }
 
-  void maybeNotifyBusyWait({
-    guiMotDoan: kenh.duongGui(msg.threadId, msg.threadType),
-    tranKyTuMotTin: kenh.tranKyTuMotTin,
-    threadKey,
-    threadId: msg.threadId,
-    threadType: msg.threadType,
-  }).catch((err) => log.debug({ threadId: msg.threadId, err }, "Gửi câu trấn an thất bại"));
+  void maybeNotifyBusyWait(
+    replyTargetTuKenh({ kenh, threadId: msg.threadId, threadType: msg.threadType, threadKey }),
+  ).catch((err) => log.debug({ threadId: msg.threadId, err }, "Gửi câu trấn an thất bại"));
 }

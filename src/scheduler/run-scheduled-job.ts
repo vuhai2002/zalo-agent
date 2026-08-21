@@ -8,8 +8,6 @@
  * (luật goclaw: chỉ output THÀNH CÔNG mới deliver).
  */
 
-import type { API, ThreadType } from "zca-js";
-import { tatJobKhongCanPhamVi } from "./scheduled-job-store.js";
 import { runAgentTurn } from "../agent/agent-loop.js";
 import type { StepTrace } from "../agent/agent-step-trace.js";
 import { saveTurnTrace } from "../agent/agent-trace-store.js";
@@ -19,13 +17,12 @@ import { botTimeZone } from "../config/runtime-tuning-settings.js";
 import { finishAgentTurn, openAgentTurn } from "../conversation/usage-store.js";
 import { createLogger } from "../shared/logger.js";
 import { runInTurnLogContext } from "../shared/turn-log-context.js";
-import { getRunningAccountApi } from "../zalo/account-manager.js";
 import type { ReplyTarget } from "../zalo/send-reply-in-parts.js";
-import { duongGuiZcaJs } from "../zalo/send-reply-in-parts.js";
 import { openRun } from "./job-run-log-store.js";
 import { ACCOUNT_NOT_RUNNING_REASON } from "./proactive-send-guard.js";
 import { concludeBlockedNotRun, concludeDeliveryFailed, conclude } from "./scheduled-job-conclude.js";
 import { buildSyntheticMessage, withLateLabel } from "./scheduled-job-prompt.js";
+import { taoDichGuiChoJob, type DichGuiJob } from "./scheduled-job-reply-target.js";
 import { blockedByGuard, sendAndConclude } from "./scheduled-job-send.js";
 import type { ScheduledJob } from "./scheduled-job-store.js";
 import { isSilentResponse } from "./silent-sentinel.js";
@@ -97,49 +94,25 @@ async function dispatch(job: ScheduledJob, options: RunScheduledJobOptions, runI
   // kiểm phần này TRƯỚC clear-before-dispatch nên nhánh này giờ chỉ còn là
   // lưới đỡ cho ca hiếm (account rớt phiên giữa lúc job đang xếp hàng dispatch).
   // Chặn ở đây thì KHÔNG markRun - job chưa từng chạy thật sự.
-  const account = getAccount(job.accountId);
-  const api = getRunningAccountApi(job.accountId);
-
-  // Tài khoản BOT: `getRunningAccountApi` trả undefined vì Zalo Bot API không có
-  // gì tương đương zca-js. Phải TẮT HẲN job chứ không `concludeBlockedNotRun`:
-  // hàm đó phục hồi `next_run_at` cho job `once`, nên job quay lại MỖI TICK,
-  // vĩnh viễn, kèm lý do "Account hiện không chạy" trong khi account ĐANG chạy.
   //
-  // Job kiểu này chỉ tồn tại nếu được tạo trước khi có phép chặn ở
-  // `POST /api/schedules`, hoặc nếu tài khoản đổi loại - nhưng để nó quay mãi
-  // thì lịch sử chạy thật của chính job đó bị đẩy hết ra ngoài bởi prune.
-  if (account?.loai === "bot") {
-    // TẮT TƯỜNG MINH chứ không dựa vào `conclude`: `markRun` chỉ đặt
-    // `enabled = 0` khi CHẠM TRẦN số lần chạy, mà trần đó chỉ tồn tại với job
-    // `once` (max_runs = 1). Job `every`/`cron` đi qua `conclude` vẫn giữ
-    // nguyên `enabled` lẫn `next_run_at` - tức quay lại mỗi tick vĩnh viễn,
-    // đúng cái mà nhánh này sinh ra để ngăn. Đã đo: job `every` sau một lượt
-    // vẫn `enabled: true, nextRunAt` y nguyên.
-    tatJobKhongCanPhamVi(job.id);
-    conclude(job, runId, {
-      status: "skipped",
-      detail: "Tài khoản bot chưa gửi được tin theo lịch - Zalo Bot API chưa nối vào bộ hẹn lịch",
-    });
-    return;
-  }
+  // MỘT đường cho CẢ HAI kênh: `taoDichGuiChoJob` đọc kênh của account rồi
+  // dựng đường gửi tương ứng. Trước đây chỗ này lấy `getRunningAccountApi` rồi
+  // dựng `duongGuiZcaJs` bằng tay, nên tài khoản bot không bao giờ có target -
+  // và phải có một nhánh riêng TẮT HẲN job để nó khỏi quay vòng mỗi tick.
+  // Nhánh đó không còn lý do tồn tại: bot có đường gửi thật rồi.
+  const account = getAccount(job.accountId);
+  const dich = taoDichGuiChoJob(job);
 
-  if (!account || !api) {
+  if (!account || !dich) {
     concludeBlockedNotRun(job, runId, ACCOUNT_NOT_RUNNING_REASON, options.scheduledFor);
     return;
   }
 
-  const target: ReplyTarget = {
-    guiMotDoan: duongGuiZcaJs(api, job.threadId, job.threadType as ThreadType),
-    threadKey: `${job.accountId}:${job.threadId}`,
-    threadId: job.threadId,
-    threadType: job.threadType as ThreadType,
-  };
-
   if (job.kind === "message") {
-    await runMessageJob(job, target, runId, timeZone, options);
+    await runMessageJob(job, dich.target, runId, timeZone, options);
     return;
   }
-  await runAgentJob(job, account, api, target, runId, timeZone, options);
+  await runAgentJob(job, account, dich, runId, timeZone, options);
 }
 
 /** kind='message': 0 token, gửi thẳng nguyên văn payload - không chạm LLM */
@@ -201,12 +174,12 @@ async function runMessageJob(
 async function runAgentJob(
   job: ScheduledJob,
   account: AccountConfig,
-  api: API,
-  target: ReplyTarget,
+  dich: DichGuiJob,
   runId: number,
   timeZone: string,
   options: RunScheduledJobOptions,
 ): Promise<void> {
+  const target = dich.target;
   const message = buildSyntheticMessage(job, options.now);
   const trace: StepTrace[] = [];
   const turnId = openAgentTurn(job.accountId, job.threadId, "schedule");
@@ -220,7 +193,11 @@ async function runAgentJob(
   await runInTurnLogContext({ accountId: job.accountId, threadId: job.threadId, turnId }, async () => {
     try {
       const result = await runAgentTurn({
-        api,
+        // `null` trên kênh bot - AN TOÀN vì mọi tool cần `api` đều đã bị loại
+        // khỏi lượt này BỞI HAI lớp chồng nhau: `runsInScheduledTurn: false`
+        // (lượt theo lịch) và bảng chặn của kênh bot. Còn đúng 4 tool tra cứu:
+        // get_datetime, web_search, web_fetch, kb_search.
+        api: dich.kenh.api,
         account,
         batch: [message],
         trace,

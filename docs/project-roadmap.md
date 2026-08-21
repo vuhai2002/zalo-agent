@@ -4450,16 +4450,17 @@ Còn treo sau vòng rà soát:
   `credentials.enc` rác và đốt một lần quét QR. KHÔNG tạo ra tài khoản nửa nọ
   nửa kia (script không `attachAccount`), nên chỉ là phiền chứ không nguy hiểm -
   nhưng đây là đường vào duy nhất còn lại hoàn toàn không biết `loai`.
-- `PATCH /api/schedule/:id` không kiểm `loai`. Không tạo được job mới nên chưa
-  khai thác được, nhưng bật lại một job cũ thì không có chốt nào.
+- ~~`PATCH /api/schedule/:id` không kiểm `loai`~~ - HẾT NGHĨA từ V3.19: tài
+  khoản bot được phép đặt lịch, không còn gì để chặn ở đường này.
 - Ngân sách BYTE của kênh bot vẫn đếm cả `styles` mà nó sẽ vứt
   (`sendReplyInParts` truyền `ZALO_RICH_TEXT_MAX_PAYLOAD_BYTES` cho cả hai
   kênh). Ở mặc định 2000/2000 gần như không lệch, nhưng có thể chẻ thừa một tin.
 - `await res.text()` trong client nằm NGOÀI mọi `try`: thân đứt giữa chừng thì
   lỗi thoát ra dạng `TypeError` thô, mất `method` và không đi qua `che()`.
-- Sơ đồ đầu `docs/system-architecture.md` vẫn ghi `generateText` trong khi
-  CLAUDE.md chốt "mọi lời gọi LLM đi qua `chayStream()`". Nợ cũ, không phải
-  của đợt bot.
+- ~~Sơ đồ đầu `docs/system-architecture.md` vẫn ghi `generateText`~~ - đọc lại
+  ngày 2026-08-21 thì sơ đồ ĐÃ đúng ("MỌI lời gọi LLM đi qua chayStream, KHÔNG
+  còn generateText ở đâu cả"). Mục treo này là ghi chép cũ chưa xóa, không phải
+  nợ thật - đúng lý do phải kiểm bằng code chứ không tin danh sách.
 
 - `laLoiMayChuTuChoi` (`send-reply-in-parts.ts`) đọc `err.code` dạng số của
   `ZaloApiError`. `LoiZaloBotApi` mang `httpStatus`/`maLoi`, nên đường lui "gửi
@@ -4471,10 +4472,8 @@ Còn treo sau vòng rà soát:
   cho kênh này và gửi markdown thô - cần đo phương ngữ markdown của Zalo trước.
   (Đã đo: cả `parse_mode: "markdown"` lẫn `null` đều KHÔNG bị API từ chối với
   chuỗi có `_` và `[` lẻ, nên đây là chuyện chất lượng chứ không phải lỗi.)
-- **Nhắn chủ động / lịch hẹn**: `schedule_task` đã bị CHẶN trên kênh bot vì
-  `run-scheduled-job` chỉ biết gửi qua zca-js; không chặn thì job `once` bị
-  dispatch lại mỗi tick mãi mãi kèm lý do sai sự thật. Mở lại khi scheduler
-  biết kênh.
+- ~~**Nhắn chủ động / lịch hẹn**~~ - ĐÃ LÀM ở V3.19. Scheduler dựng đường gửi
+  theo KÊNH (`scheduled-job-reply-target.ts`) thay vì khóa cứng zca-js.
 - `reportPayloadAnomalies` KHÔNG phủ được ảnh trên kênh bot: nhánh ảnh của nó
   đọc `parsed.rawData.msgType`, trường của zca-js không tồn tại trong `rawData`
   của Bot API. Đã bù bằng nhãn tường minh trong parser, nhưng lưới đỡ chung thì
@@ -4704,3 +4703,187 @@ máy đứng hình quá 60ms là cửa sổ đã chốt và ca đó đỏ. Chờ
 (`node:test` có `mock.timers`), nhưng đó là viết lại cả
 `message-batcher.test.ts` nên tách thành việc riêng. Chưa quan sát thấy nó đỏ
 lần nào trong các lượt đo.
+
+## V3.19 - Nối lịch hẹn vào kênh Zalo Bot (2026-08-21, plan: plans/260821-1127-noi-lich-hen-vao-kenh-zalo-bot/)
+
+Người dùng nhìn dòng "Lịch hẹn - Chưa dùng được" trên trang Tools của một tài
+khoản bot và hỏi thẳng: "cứ dùng đặt lịch bình thường là được mà nhỉ?". Đúng.
+
+### Mục duy nhất trong bảng chặn không có số đo đứng sau
+
+`TOOL_KHONG_CHAY_TREN_BOT` có 8 mục. Bảy mục dẫn được một số đo 404 hoặc một
+ràng buộc cứng (`sendDocument`/`sendFile` 404, `setMessageReaction` 404,
+`sendPhoto` chỉ nhận URL công khai). Mục thứ tám - `schedule_task` - ghi "Zalo
+Bot API chưa nối vào bộ hẹn lịch", tức nói *chưa làm*, không nói *không làm
+được*. Và số đo có sẵn từ V3.16 nói ngược lại: Bot API gửi **10 tin trong
+416ms, không bị chặn**. Không có method riêng cho "nhắn chủ động" - `sendMessage`
+là CÙNG method bot đang dùng để trả lời tin thường mỗi ngày.
+
+Ràng buộc thật duy nhất (bot chỉ nhắn được `chat_id` đã thấy) vốn đã tự được
+phủ: `checkAccountAndThreadReady` bắt buộc thread phải có trong DB.
+
+### Nguyên nhân: scheduler khóa cứng vào zca-js
+
+`run-scheduled-job.ts` lấy `getRunningAccountApi(job.accountId)` rồi tự dựng
+`duongGuiZcaJs(api, ...)`. Tài khoản bot có `api = null` nên không bao giờ có
+target. Trong khi `ReplyTarget.guiMotDoan` ĐÃ trung lập kênh từ V3.16 -
+docstring của chính nó nói nó là ranh giới duy nhất giữa logic cắt/chữa lỗi và
+API thật của kênh - và `KenhLuot` đã có `duongGui` cho cả hai kênh. Trừu tượng
+hóa có sẵn, chỉ scheduler chưa chuyển sang.
+
+Mảnh thiếu thật sự nằm chỗ khác: **đối tượng kênh bot không lấy lại được**.
+`kenhBot(client)` dựng BÊN TRONG `chayTaiKhoanBot` và chỉ đi vào callback
+`onUpdate` của vòng poll; `chayTaiKhoanBot` trả đúng `{ dung }`; `running.set`
+lưu `api: null` chứ không lưu kênh. Nên không tồn tại đường nào cho một caller
+chỉ cầm `accountId`.
+
+### Chỗ khóa cứng THỨ HAI, mà vòng rà đầu bỏ sót
+
+Bản chẩn đoán đầu chỉ tìm ra `run-scheduled-job.ts:132`. Vòng rà thứ hai tìm
+thêm `scheduled-job-cap-guard.ts` (`toTarget`) - đường gửi THÔNG BÁO CHẠM TRẦN
+NGÀY, cũng `getRunningAccountApi` + `duongGuiZcaJs` dựng tay. Chỗ này hỏng CÂM:
+tài khoản bot chạm trần thì `api` undefined -> target undefined ->
+`notifyCapHitOnce` thành false -> KHÔNG AI ĐƯỢC BÁO. Sửa mỗi đường gửi chính là
+mở tính năng với một lỗ im lặng sẵn bên trong.
+
+Đáng ghi vì phép phá chứng minh được nó là ca RIÊNG: sabotage `cap-guard` về
+bản cũ chỉ làm ĐÚNG MỘT ca đỏ, và ca "trần tin chủ động" vẫn xanh - vì ca đó đi
+qua `blockedByGuard` -> `concludeCapBlocked` (nhận `target` từ caller), không
+qua `concludeCapBlockedAtTick`. Hai đường riêng, cần hai ca riêng.
+
+### Đính chính chẩn đoán của chính đợt này
+
+Bản báo cáo đầu viết: "cơ chế thử lại của scheduler dựa vào
+`laLoiMayChuTuChoi`, nên kênh bot sai chỗ này là nhắn TRÙNG lời nhắc". SAI.
+Grep ra `laLoiMayChuTuChoi` chỉ có 2 caller: `sendOneCoDuongLui` và
+`send-attachment-with-caption.ts` (tool đã bị chặn trên bot).
+`concludeDeliveryFailed` KHÔNG hề gọi nó - nó đếm `delivery_attempts` cho mọi
+loại lỗi, giống hệt nhau ở cả hai kênh. Đó là hành vi có sẵn, không phải rủi ro
+mới của kênh bot.
+
+Nhưng hệ quả thứ hai thì có thật, và ngầm hơn: `soByteTin` cộng cả
+`JSON.stringify({styles})` vào ngân sách byte, còn `kenhBot.duongGui` thì VỨT
+`styles`. Nên kênh bot đang bị tính tiền cho thứ không bao giờ đi trên dây, và
+chẻ thừa tin. Kèm theo: `sendOneCoDuongLui` thấy `coCaiDeBo === true`
+(`styles.length > 0`) nhưng `laLoiMayChuTuChoi` trả false cho `LoiZaloBotApi`
+(nó đọc `err.code` dạng SỐ của `ZaloApiError`) - tức đường lui không chạy, và
+đó là ĐÚNG một cách TÌNH CỜ. Không ai ghi xuống. Ai "dọn dẹp"
+`laLoiMayChuTuChoi` cho hiểu `LoiZaloBotApi` (một việc trông rất hợp lý) sẽ bật
+ra một lời gọi API thừa mỗi lần server từ chối.
+
+Chữa gốc bằng `KenhLuot.mangDinhDang` (thiếu = có): kênh khai, `ReplyTarget`
+chở theo, `sendReplyInParts` vứt `styles` ở ĐÚNG MỘT chỗ trước bộ cắt. Cả hai
+hệ quả tắt cùng lúc. Chữ vẫn qua `dinhDangNeuBat` để BÓC dấu markdown - bỏ hẳn
+bước đó là đẩy `**` thô xuống Zalo, tệ hơn hiện tại.
+
+### Xóa `getRunningAccountApi`
+
+Sau khi scheduler chuyển sang `getRunningAccountKenh`, hàm cũ còn ĐÚNG 0 caller
+sản xuất (chỉ test). Xóa hẳn chứ không để lại: mọi caller của nó đều đi tiếp
+một bước giống hệt nhau - tự dựng `duongGuiZcaJs` - nên nó là cái bẫy có hình
+dạng tiện lợi, dùng đúng như tên gọi gợi ý là khóa cứng caller vào kênh cá
+nhân. Đây chính là lỗi vừa mất một đợt để sửa; để lại là mời người sau đi đúng
+vào vết đó. Cần `api` cho tool thì `getRunningAccountKenh(id)?.api` - đường đó
+bắt người đọc thấy ngay `null` là khả năng thật.
+
+Cùng lý lẽ, gom việc dựng `ReplyTarget` vào `replyTargetTuKenh()`: bốn caller,
+mọi trường mang theo đều TÙY CHỌN, nên quên một cái là trình biên dịch im lặng
+còn hậu quả thì câm (thiếu `tranKyTuMotTin` là kênh bot MẤT TRỌN câu trả lời vì
+server chối nguyên tin). `incoming-message-router.ts` là chỗ cuối cùng còn dựng
+bằng tay, cũng chuyển nốt dù mặc định của nó vốn đã đúng.
+
+### Thứ tự phase là ràng buộc cứng
+
+Gỡ chặn TRƯỚC khi có đường gửi là mở đúng vòng dispatch vô hạn mà ba lớp chặn
+sinh ra để ngăn: job `once` được `concludeBlockedNotRun` phục hồi `next_run_at`
+nên quay lại mỗi tick; job `every`/`cron` đi qua `conclude` mà `markRun` chỉ
+đặt `enabled = 0` khi CHẠM TRẦN số lần chạy - trần đó chỉ tồn tại với `once` -
+nên cũng quay lại mỗi tick. Vì vậy 01 (lộ kênh) -> 02 (scheduler dùng kênh) ->
+04 (gỡ chặn), không đảo được.
+
+Nhánh `tatJobKhongCanPhamVi` cho kênh bot biến mất luôn: nó tồn tại CHỈ vì bot
+không có đường gửi. Giờ "tài khoản bot" và "account không chạy" là hai chuyện
+khác nhau - bot tạm dừng thì đi chung `concludeBlockedNotRun` với kênh cá nhân,
+giữ nguyên suất chạy.
+
+### Bộ tool của lượt theo lịch trên kênh bot
+
+Còn ĐÚNG 4: `get_datetime`, `web_search`, `web_fetch`, `kb_search`. Phép tính:
+14 tool trừ hợp của `runsInScheduledTurn: false` (9) và bảng chặn kênh bot (7,
+sau đợt này) = 10. `schedule_task` vẫn vắng mặt vì job không được đẻ job (luật
+số 1 của Hermes), `get_group_info` vắng vì `getChat` trả 404. Đủ cho "tra cứu
+rồi báo cáo" - đúng mục đích job `agent`. Job `kind='message'` không đụng LLM.
+
+Bảng chặn giờ TRÙNG KHÍT tập tool dùng `ctx.api` (7 tool, không dư không
+thiếu). Trước đợt này bảng có 8 mục, và chính mục thừa - `schedule_task`, không
+hề dùng `ctx.api` - là dấu hiệu cho thấy nó bị chặn vì lý do khác hẳn phần còn
+lại. Dấu hiệu đó nằm đó suốt từ V3.16 mà không ai đọc ra.
+
+### Kiểm chứng
+
+- 47 test mới/sửa: `account-manager-kenh.test.ts` (5), `lich-hen-kenh-bot.test.ts`
+  (8), `ngan-sach-byte-theo-kenh.test.ts` (6), `lich-hen-tren-kenh-bot.test.ts`
+  (8, thay `chan-lich-hen-kenh-bot.test.ts` cũ), cộng 1 ca hồi quy trong
+  `run-scheduled-job.test.ts`.
+- Full suite **2168/2168 xanh**, `pnpm typecheck` sạch.
+- **13 phép phá**, mỗi phép đỏ đúng ca dự kiến. Ba phép đáng ghi:
+  - Sabotage `cap-guard` về bản cũ: chỉ 1 ca đỏ - chứng minh đường tick là ca
+    riêng, không bị ca "trần ngày" phủ hộ.
+  - Sabotage bỏ `mangDinhDang` khỏi `kenhBot()`: **5 ca đầu vẫn XANH**. Chúng
+    dùng target giả nên chỉ chứng minh `sendReplyInParts` tôn trọng cờ, không
+    chứng minh cờ được KHAI và được CHỞ tới nơi. Phải thêm một ca đi trọn chuỗi
+    thật (`kenhBot` -> `replyTargetTuKenh` -> `sendReplyInParts`) mới bịt được.
+    Đúng bài học "phép phá chỉ đo chiều MỚI".
+  - Sabotage khôi phục `tatJobKhongCanPhamVi`: 5 ca đỏ.
+- Nghiệm thu dưới **12 tiến trình đốt CPU**: 47 test của đợt này 8/8 lượt xanh.
+
+### Ba lần test của chính tôi sai, không phải code sai
+
+Ghi lại vì cả ba đều suýt thành xanh giả hoặc đỏ oan:
+
+1. **Ca trần ký tự XANH GIẢ.** Nới `ZALO_MAX_MESSAGE_CHARS` bằng
+   `process.env` sau khi module đã nạp - env được Zod đọc MỘT LẦN ở module
+   scope nên không có tác dụng. Mặc định vốn đã là 2000, TRÙNG đúng trần kênh
+   bot, nên nó chẻ 2 tin vì lý do hoàn toàn khác thứ đang đo. Phải đi qua
+   `setTuning` (bảng `runtime_settings`) và khẳng định giá trị đã đổi trước khi
+   đo.
+2. **Ca đếm nhầm câu báo trần thành tin của job.** Lượt bị chặn còn gửi thêm
+   câu thông báo, nên `daGui.length` là 3 chứ không phải 2. Đếm theo NỘI DUNG
+   job thay vì theo tổng số tin.
+3. **Fixture đo ngân sách byte rơi vào nhánh sai.** Chuỗi 360 ký tự ngắn hơn
+   `KY_TU_TOI_THIEU` (400) nên bộ cắt không chẻ thêm được, nó rơi vào nhánh BỎ
+   ĐỊNH DẠNG chứ không phải nhánh CHẺ NHỎ. Rồi bản vá đầu tiên lại khẳng định
+   "mọi đoạn đều còn styles" - đỏ oan, vì đoạn cuối vốn là văn xuôi không có
+   span nào, đúng báo động giả mà docstring `demDoanBoDinhDang` đã cảnh báo.
+   Phép đo đúng: TỔNG số span giao được phải bằng số span đầu vào.
+
+Cả ba chỉ lộ ra nhờ test tự mang bộ KIỂM CHUẨN (`kiemChuanChuoiThu` khẳng định
+hai bất đẳng thức byte trước khi ca nào dùng tới nó). Test không tự kiểm chuẩn
+thì hằng số sai chỉ hiện ra dưới dạng "xanh mà không chứng minh gì".
+
+### Nhấp nháy: đo được, và KHÔNG phải của đợt này
+
+Chạy full suite dưới 12 burner thấy 2 ca đỏ (`message-batcher.test.ts:209`,
+`busy-wait-notice.test.ts:194`). Đo lại trên **HEAD sạch** (stash toàn bộ thay
+đổi) ở cùng điều kiện: **1/3 lượt đỏ**. Tức nợ có sẵn, đúng loại nhấp nháy thứ
+tư đã ghi ở V3.18 (khẳng định PHỦ ĐỊNH theo đồng hồ, chờ-đến-khi không chữa
+được, phải dùng `mock.timers`).
+
+Đáng ghi về CÁCH đo: chạy riêng 2 file đó dưới 12 burner ra **0/5 đỏ**. Tải
+thật đến từ việc `node --test` chạy CẢ BỘ song song, không từ burner. Nên muốn
+tái hiện một ca nhấp nháy thì phải chạy đúng cả bộ - thu hẹp phạm vi để "đo cho
+nhanh" là tự làm mất khả năng tái hiện.
+
+### Việc còn treo
+
+- `run-scheduled-job.ts` còn 275 dòng (từ 298), vẫn vượt luật 200.
+- `ReplyTarget.threadType` vẫn mang kiểu `ThreadType` của zca-js - trừu tượng
+  kênh mới xong một nửa.
+- `laLoiMayChuTuChoi` vẫn không hiểu `LoiZaloBotApi`. Sau đợt này thì vô hại
+  (kênh bot không còn `styles` để mà bỏ), nhưng vẫn là mìn cho ai muốn thêm
+  đường lui khác cho kênh bot.
+- Hai ca nhấp nháy ở trên chưa sửa - cần `mock.timers` và viết lại
+  `message-batcher.test.ts`, tách thành việc riêng đúng như V3.18 đã chốt.
+- Kênh bot vẫn không có chữ đậm/nghiêng; `create_image` vẫn cần đường phục vụ
+  ảnh qua HTTPS công khai; `pnpm zalo-login <id>` vẫn không kiểm `loai`; vòng
+  poll vẫn không có sàn nhịp.

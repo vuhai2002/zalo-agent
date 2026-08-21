@@ -27,10 +27,10 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
   Kênh bot hẹp hơn về năng lực, và đó là giới hạn của NỀN TẢNG chứ không phải
   agent bị lỗi: dò 17 method trên API sống thì 13 cái trả 404 (không có
-  `sendDocument`/`sendFile`/`setMessageReaction`/`getChat`...). Nên **8 trong
+  `sendDocument`/`sendFile`/`setMessageReaction`/`getChat`...). Nên **7 trong
   14 công cụ bị chặn** trên kênh này (`send_file`, `create_word_document`,
   `create_excel_file`, `create_image`, `add_reaction`, `tag_member`,
-  `get_group_info`, `schedule_task`), còn lại 6 công cụ chạy bình thường.
+  `get_group_info`), còn lại 7 công cụ chạy bình thường.
   Công cụ bị chặn được gỡ khỏi schema gửi model - model không biết chúng tồn
   tại nên không hứa hão, không tốn token mô tả, và prompt injection không dụ
   gọi được. Kèm theo đó persona được ghép một luật nói thẳng lý do và mời
@@ -142,6 +142,22 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   riêng không trích (hai người thì trích là nhiễu). Loại tin Zalo không cho
   trích, hoặc tin được trích quá dài so với ngân sách, thì gửi bình thường
   không kèm - trích dẫn không bao giờ được phép làm mất chữ.
+- **Lịch hẹn chạy được trên tài khoản Zalo Bot.** `schedule_task` và trang Lịch
+  hẹn giờ dùng được cho cả hai loại kênh. Trước đây nó nằm trong bảng chặn của
+  kênh bot và là mục DUY NHẤT ở đó không dẫn được một số đo 404 nào: Bot API
+  gửi chủ động tốt (đo thật 10 tin trong 416ms), chỉ là bộ hẹn lịch khóa cứng
+  vào `zca-js` nên tài khoản bot không bao giờ có đường gửi. Scheduler giờ dựng
+  đường gửi theo KÊNH, nên hai loại tài khoản đi chung đúng một đường.
+
+  Sửa kèm hai lỗi cùng gốc: (1) thông báo "đã chạm trần tin chủ động hôm nay"
+  trước đây KHÔNG BAO GIỜ tới được tài khoản bot - hỏng câm, vì đường gửi thông
+  báo đó cũng dựng bằng tay theo zca-js; (2) trên kênh bot, `styles` bị tính
+  vào ngân sách byte của bộ cắt tin rồi lại bị đường gửi vứt đi, làm câu trả
+  lời dài bị chẻ thừa tin.
+
+  Job của tài khoản bot lúc tạm dừng giờ GIỮ NGUYÊN suất chạy và thử lại ở tick
+  sau, thay vì bị tắt hẳn như trước.
+
 
 ### Sửa
 

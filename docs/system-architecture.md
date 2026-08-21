@@ -18,7 +18,7 @@ Zalo Bot API <--long polling--> src/zalo-bot/                  [kênh BOT]
                                 |                  lời gọi LLM đi qua chayStream, KHÔNG còn
                                 |                  generateText ở đâu cả; provider theo cấu
                                 |                  hình: openai-compatible / Anthropic / Google)
-              tools: 14 cái; kênh bot chặn 8 (xem "Kênh thứ hai")
+              tools: 14 cái; kênh bot chặn 7 (xem "Kênh thứ hai")
                                 |
               middleware: rate-limiter (queue per thread + delay ngẫu nhiên) -> sendMessage
                                 |
@@ -311,24 +311,27 @@ method chứ tuyệt đối không log URL.
 `upload.wikimedia.org` trả "The photo URL is invalid" dù vẫn là HTTPS mở được
 bằng trình duyệt - Zalo tự đi tải ảnh từ phía server.
 
-### 8 trong 14 tool không chạy được
+### 7 trong 14 tool không chạy được
 
 Dò 17 method trên API sống: 13 cái trả `{"ok":false,"description":"Not
 Found","error_code":404}`. Không có `sendDocument`/`sendFile`/`sendVideo`/
 `sendAudio`, cũng không có `editMessageText`/`deleteMessage`/
 `setMessageReaction`/`forwardMessage`/`getChat`/`getChatMember`.
 
-Bị chặn (8): `send_file`, `create_word_document`, `create_excel_file`,
-`create_image`, `add_reaction`, `tag_member`, `get_group_info`, `schedule_task`.
+Bị chặn (7): `send_file`, `create_word_document`, `create_excel_file`,
+`create_image`, `add_reaction`, `tag_member`, `get_group_info`.
 
-Chạy được (6): `get_datetime`, `web_search`, `web_fetch`, `kb_search`,
-`save_memory`, `read_image`.
+Chạy được (7): `get_datetime`, `web_search`, `web_fetch`, `kb_search`,
+`save_memory`, `read_image`, `schedule_task`.
 
-`schedule_task` bị chặn vì `run-scheduled-job.ts` chỉ biết gửi qua zca-js: job
-`once` được `concludeBlockedNotRun` phục hồi `next_run_at` nên bị dispatch lại
-MỖI TICK, mãi mãi, kèm lý do sai sự thật. Chặn ở BA chỗ vì có ba đường vào:
-tool (`nang-luc-kenh-bot.ts`), dashboard (`POST /api/schedule`), và job cũ đã
-tạo (`run-scheduled-job.ts` tắt hẳn thay vì phục hồi).
+`schedule_task` TỪNG nằm trong danh sách chặn và là mục DUY NHẤT ở đó không
+dẫn được một số đo 404 nào. Lý do thật: `run-scheduled-job.ts` lấy
+`getRunningAccountApi` rồi tự dựng `duongGuiZcaJs`, tức khóa cứng scheduler vào
+kênh cá nhân - tài khoản bot không bao giờ có target, job `once` bị
+`concludeBlockedNotRun` phục hồi `next_run_at` rồi dispatch lại MỖI TICK, mãi
+mãi, kèm lý do sai sự thật ("Account hiện không chạy" trong khi account ĐANG
+chạy). Ba lớp chặn khi đó là cách chữa TRIỆU CHỨNG. Đã chữa gốc ở V3.19:
+`scheduled-job-reply-target.ts` dựng đường gửi theo KÊNH.
 
 `read_image` chạy được nhưng CHƯA ĐO đường tải: URL ảnh của Bot API có lấy được
 bằng HTTP thường không (có thể cần auth hoặc hết hạn) thì chưa ai thử.
@@ -343,10 +346,12 @@ nhận được tool.
 bot ở trang Tools vẫn thấy đủ 14 tool và "Gửi file" vẫn xanh - đúng cái hậu quả
 đoạn trên nói nó ngăn được.
 
-Điểm đáng ghi: **mọi tool dùng `ctx.api` đều nằm trong bảng chặn** (7 tool zca-js;
-`schedule_task` bị chặn vì lý do khác - scheduler chưa biết kênh) - không phải
-trùng hợp, chúng bị chặn vì cần đúng năng lực gửi mà Bot API không có. Hệ quả:
-trên kênh bot không tool nào cần `api` của zca-js.
+Điểm đáng ghi: **bảng chặn giờ TRÙNG KHÍT tập tool dùng `ctx.api`** - đúng 7
+tool, không dư không thiếu. Trước V3.19 bảng có 8 mục và chính mục thừa
+(`schedule_task`, không hề dùng `ctx.api`) là dấu hiệu cho thấy nó bị chặn vì
+lý do khác hẳn phần còn lại. Hệ quả vẫn giữ nguyên: trên kênh bot không tool
+nào cần `api` của zca-js, nên `ToolContext.api` để `null` được mà không phải
+dựng stub ném lỗi.
 
 Ẩn tool là CHƯA ĐỦ - model sẽ nói "tôi không làm được" mà không nói vì sao, và
 người nhắn tưởng agent hỏng. `LUAT_PERSONA_KENH_BOT` chỉ ghép khi
@@ -366,6 +371,28 @@ qua - KHÔNG dựng stub ném lỗi, vì mấy việc đó đều là việc ph�
 | `tuThaCamXuc` | có | `setMessageReaction` trả 404 |
 | `api` (cho tool) | có | `null` |
 | `tranKyTuMotTin` | theo `ZALO_MAX_MESSAGE_CHARS` | 2000 (server ép cứng) |
+| `mangDinhDang` | có (thiếu = có) | `false` - Bot API không hiểu `styles` |
+
+`mangDinhDang` không phải cờ trang trí. `soByteTin` (`split-styled-message.ts`)
+cộng cả `JSON.stringify({styles})` vào ngân sách byte, mà `kenhBot.duongGui`
+thì VỨT `styles`. Giữ chúng cho kênh bot là tính tiền cho thứ không bao giờ đi
+trên dây, và chẻ thừa tin. Chữ vẫn đi qua `dinhDangNeuBat` để BÓC dấu markdown
+(`**Bảng giá**` -> `Bảng giá`); chỉ phần `Style[]` bị bỏ, ở ĐÚNG MỘT chỗ
+(`sendReplyInParts`) chứ không ở từng caller.
+
+Kênh đi tới đường gửi qua `replyTargetTuKenh()`
+(`src/zalo/reply-target-tu-kenh.ts`) - MỘT chỗ duy nhất biết trường nào của
+kênh phải chở theo. Bốn caller cần nó (lượt tin nhắn cá nhân, câu trấn an kênh
+bot, đường gửi scheduler, thông báo chạm trần ngày), và mọi trường mang theo
+đều TÙY CHỌN, nên tự dựng bằng tay là quên một cái thì trình biên dịch im lặng
+còn hậu quả thì câm.
+
+**KHÔNG có `getRunningAccountApi`** (đã xóa ở V3.19). Hàm đó trả `api` zca-js
+theo `accountId` và mọi caller của nó đều đi tiếp một bước giống hệt nhau: tự
+dựng `duongGuiZcaJs`. Nó là cái bẫy có hình dạng tiện lợi - dùng đúng như tên
+gọi gợi ý là khóa cứng caller vào kênh cá nhân. Cần `api` cho tool thì lấy qua
+`getRunningAccountKenh(id)?.api`, đường đó bắt người đọc thấy ngay rằng `null`
+là một khả năng thật.
 
 Hai nhà máy: `kenhCaNhan(api)` (`src/zalo/kenh-ca-nhan.ts`) và `kenhBot(client)`
 (`src/zalo-bot/kenh-bot.ts`). Đường đi của kênh bot:

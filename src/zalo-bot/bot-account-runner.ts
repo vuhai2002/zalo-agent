@@ -1,5 +1,6 @@
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { createLogger } from "../shared/logger.js";
+import type { KenhLuot } from "../zalo/kenh-luot.js";
 import { routeBotUpdate } from "./bot-message-router.js";
 import { kenhBot } from "./kenh-bot.js";
 import { LoiZaloBotApi, taoZaloBotClient } from "./zalo-bot-api-client.js";
@@ -35,7 +36,7 @@ export function tiemClientRunnerChoTest(gia: typeof taoZaloBotClient): () => voi
 export async function chayTaiKhoanBot(p: {
   accountId: string;
   token: string;
-}): Promise<{ dung: () => void }> {
+}): Promise<{ dung: () => void; kenh: KenhLuot }> {
   const client = taoClient({ token: p.token });
 
   // Kiểm token TRƯỚC khi mở vòng poll: token sai mà cứ poll thì mỗi vòng là một
@@ -115,5 +116,11 @@ export async function chayTaiKhoanBot(p: {
   });
 
   log.info({ accountId: p.accountId }, "Đã khởi động tài khoản bot");
-  return vong;
+  // Trả `kenh` RA NGOÀI, không giữ riêng cho vòng poll: scheduler chỉ cầm
+  // `accountId` (không có tin đến để mà lấy đường gửi như luồng tin nhắn) nên
+  // nó cần lấy lại được đúng đối tượng này. Bản trước chỉ trả `{ dung }`, và
+  // đó chính là lý do kỹ thuật DUY NHẤT khiến lịch hẹn không chạy được trên
+  // kênh bot - không phải vì Bot API thiếu năng lực gửi chủ động (đo thật:
+  // 10 tin trong 416ms). Xem `getRunningAccountKenh` ở `account-manager.ts`.
+  return { ...vong, kenh };
 }

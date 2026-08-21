@@ -48,11 +48,11 @@ created** in the dashboard and cannot be changed afterwards.
 | Receiving | WebSocket listener + auto reconnect | long polling `getUpdates` |
 | Ban risk | **yes** - use a throwaway account | **no** |
 | Who can message it | friends only | anyone with the link |
-| Tools available | all **14** | **6** (see table below) |
+| Tools available | all **14** | **7** (see table below) |
 | Text formatting | native Zalo styles (`textProperties`) | plain text |
 | Per-message cap | configurable (default 2000 chars) | 2000 chars, enforced server-side |
 | Files / images / reactions / @mention | yes | **no such method on the API** |
-| Scheduling | yes | not wired up yet |
+| Scheduling | yes | yes |
 | Allowlist default | open | **closed** (`mode: "list"`) |
 
 > [!IMPORTANT]
@@ -72,7 +72,7 @@ The server **validates the token with Zalo before saving** (it calls `getMe`) - 
 saves nothing, so you never end up with an account that looks configured but silently never runs.
 After saving, the account restarts immediately.
 
-### Why 8 tools cannot run on the Bot channel
+### Why 7 tools cannot run on the Bot channel
 
 Not a conservative choice - **measured against the live API**: of 17 probed methods, 13 return
 `{"ok":false,"description":"Not Found","error_code":404}`. There is no
@@ -84,6 +84,11 @@ tokens on their descriptions, and cannot be tricked into calling them by prompt 
 the persona gains a rule stating this is a platform limit rather than a malfunction - so when asked,
 the agent says plainly that a bot account cannot send that, and suggests the personal account.
 Hiding a tool without explaining why just makes the user think the agent is broken.
+
+> This list used to hold **8** tools, including `schedule_task`. It was the only entry with no
+> 404 behind it: the Bot API sends proactive messages just fine (measured: 10 messages in
+> 416ms), the scheduler was simply hard-wired to `zca-js`, so a bot account had no send path.
+> Wired up in V3.19.
 
 ## What the agent can do
 
@@ -101,7 +106,7 @@ Hiding a tool without explaining why just makes the user think the agent is brok
 | `create_word_document` | Compose a .docx (headings, paragraphs, tables, two-column layout) and send it in chat | no |
 | `create_excel_file` | Compose a multi-sheet .xlsx with **formulas plus cached results**, so mobile preview shows numbers | no |
 | `send_file` | Send from a local shared folder or download from a public URL | no |
-| `schedule_task` | Create/list/edit/cancel schedules so the agent messages this thread later | no |
+| `schedule_task` | Create/list/edit/cancel schedules so the agent messages this thread later | yes |
 | `tag_member` | @mention the right person in a group | no |
 | `get_group_info` | Group name, member count, member list | no |
 | `add_reaction` | React to a message | no |

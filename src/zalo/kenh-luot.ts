@@ -45,4 +45,17 @@ export type KenhLuot = {
    * chối NGUYÊN TIN, mất trọn câu trả lời.
    */
   tranKyTuMotTin?: number;
+  /**
+   * Kênh này có MANG được định dạng (`Style[]`) trên dây không. Thiếu = CÓ,
+   * tức hành vi của kênh cá nhân.
+   *
+   * Bot API không hiểu `styles` nên `kenhBot.duongGui` vứt chúng đi. Chuyện đó
+   * không vô hại như trông: `soByteTin` (`split-styled-message.ts`) cộng cả
+   * `JSON.stringify({styles})` vào ngân sách byte, nên giữ `styles` cho kênh
+   * bot là tính tiền cho thứ không bao giờ đi trên dây - và chẻ thừa tin.
+   *
+   * Cờ này KHÔNG có nghĩa "gửi markdown thô": chữ vẫn đi qua `dinhDangNeuBat`
+   * để BÓC dấu (`**Bảng giá**` -> `Bảng giá`), chỉ phần `Style[]` bị bỏ.
+   */
+  mangDinhDang?: boolean;
 };

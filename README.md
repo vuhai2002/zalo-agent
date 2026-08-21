@@ -45,11 +45,11 @@ account** trên dashboard, không đổi được sau đó.
 | Nhận tin | WebSocket listener + tự kết nối lại | long polling `getUpdates` |
 | Rủi ro khóa tài khoản | **có** - chỉ dùng nick phụ | **không** |
 | Ai nhắn được | phải là bạn bè | ai có link cũng nhắn được |
-| Công cụ dùng được | đủ **14** | **6** (xem bảng dưới) |
+| Công cụ dùng được | đủ **14** | **7** (xem bảng dưới) |
 | Định dạng chữ | định dạng gốc Zalo (`textProperties`) | chữ trơn |
 | Trần một tin | theo cấu hình (mặc định 2000 ký tự) | 2000 ký tự, server ép cứng |
 | Gửi file / ảnh / thả cảm xúc / tag | có | **không có method trên API** |
-| Lịch hẹn | có | chưa nối |
+| Lịch hẹn | có | có |
 | Allowlist mặc định | mở | **đóng** (`mode: "list"`) |
 
 > [!IMPORTANT]
@@ -68,7 +68,7 @@ Server **kiểm token với Zalo trước khi lưu** (gọi `getMe`) - token sai
 dựng ra một account trông như đã cấu hình xong mà không bao giờ chạy. Lưu xong account tự khởi
 động lại ngay.
 
-### Vì sao 8 công cụ không chạy trên kênh Bot
+### Vì sao 7 công cụ không chạy trên kênh Bot
 
 Không phải chọn cho an toàn - là **đo trên API sống**: dò 17 method, 13 cái trả
 `{"ok":false,"description":"Not Found","error_code":404}`. Không tồn tại
@@ -80,6 +80,10 @@ token mô tả, không thể bị prompt injection dụ gọi) **và** persona �
 đây là giới hạn nền tảng chứ agent không hỏng - ai nhờ thì agent trả lời thẳng là tài khoản bot
 không gửi được, mời nhắn qua tài khoản cá nhân. Ẩn công cụ mà không nói lý do thì người nhắn
 tưởng agent bị lỗi.
+
+> Trước đây danh sách này có **8** công cụ - `schedule_task` nằm trong đó. Nó là mục duy nhất
+> không dẫn được một số đo 404 nào: Bot API gửi chủ động tốt (đo: 10 tin trong 416ms), chỉ là
+> bộ hẹn lịch khóa cứng vào `zca-js` nên tài khoản bot không có đường gửi. Đã nối ở V3.19.
 
 ## Agent làm được gì
 
@@ -97,7 +101,7 @@ tưởng agent bị lỗi.
 | `create_word_document` | Soạn .docx (tiêu đề, đoạn văn, bảng, hai cột) rồi gửi thẳng trong chat | không |
 | `create_excel_file` | Soạn .xlsx nhiều sheet, **có công thức kèm sẵn kết quả** nên xem trước trên điện thoại vẫn thấy số | không |
 | `send_file` | Gửi file từ kho `data/shared-files/` hoặc tải từ URL công khai | không |
-| `schedule_task` | Đặt/xem/sửa/hủy lịch để agent tự nhắn lại đúng cuộc trò chuyện này | không |
+| `schedule_task` | Đặt/xem/sửa/hủy lịch để agent tự nhắn lại đúng cuộc trò chuyện này | có |
 | `tag_member` | @mention đúng người trong nhóm | không |
 | `get_group_info` | Tên nhóm, số thành viên, danh sách thành viên | không |
 | `add_reaction` | Thả cảm xúc vào tin nhắn | không |

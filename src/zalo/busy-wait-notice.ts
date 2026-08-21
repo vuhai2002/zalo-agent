@@ -44,7 +44,7 @@ const lanTranAnCuoi = new Map<string, number>();
  */
 export type MucTieuTranAn = Pick<
   ReplyTarget,
-  "guiMotDoan" | "threadKey" | "threadId" | "threadType" | "tranKyTuMotTin"
+  "guiMotDoan" | "threadKey" | "threadId" | "threadType" | "tranKyTuMotTin" | "mangDinhDang"
 >;
 
 /**

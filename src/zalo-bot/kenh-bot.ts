@@ -26,6 +26,11 @@ export function kenhBot(client: ZaloBotClient): KenhLuot {
   return {
     api: null,
     tranKyTuMotTin: TRAN_KY_TU_MOT_TIN,
+    // Bot API không hiểu `styles`. Khai TƯỜNG MINH thay vì chỉ lặng lẽ vứt ở
+    // `duongGui` bên dưới: bộ cắt tính `styles` vào ngân sách byte, nên nếu
+    // chỉ vứt ở phút chót thì mỗi tin vẫn bị tính thừa vài trăm byte và có
+    // lúc chẻ thành hai tin không cần thiết.
+    mangDinhDang: false,
 
     duongGui: (threadId) => async (doan) => {
       // `parse_mode: null` - GỬI CHỮ TRƠN, không xin server dựng markdown.

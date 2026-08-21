@@ -70,17 +70,11 @@ export const scheduleRoutes = new Hono()
 
     const acc = getAccount(input.accountId);
     if (!acc) return c.json({ error: "Account không tồn tại" }, 400);
-    // Tool `schedule_task` đã bị chặn trên kênh bot, nhưng dashboard là ĐƯỜNG
-    // VÒNG tạo được job y hệt. Không chặn ở đây thì lỗi mà bảng chặn sinh ra để
-    // tránh vẫn xảy ra nguyên vẹn: `run-scheduled-job` chỉ biết gửi qua zca-js,
-    // account bot không có api nên job `once` được phục hồi `next_run_at` và bị
-    // dispatch lại MỖI TICK, mãi mãi, kèm lý do sai sự thật.
-    if (acc.loai === "bot") {
-      return c.json(
-        { error: "Tài khoản bot chưa đặt lịch được - Zalo Bot API chưa nối vào bộ hẹn lịch" },
-        400,
-      );
-    }
+    // KHÔNG còn nhánh chặn `acc.loai === "bot"` ở đây. Nó tồn tại vì
+    // `run-scheduled-job` chỉ biết gửi qua zca-js nên job của tài khoản bot bị
+    // dispatch lại mỗi tick mãi mãi. Scheduler giờ dựng đường gửi theo KÊNH
+    // (`scheduled-job-reply-target.ts`) nên cả hai loại tài khoản đi chung một
+    // đường - xem V3.19 trong roadmap.
     if (!findThreadStatus(input.accountId, input.threadId)) {
       return c.json({ error: "Cuộc trò chuyện chưa từng ghi nhận trong hệ thống - không tạo lịch được." }, 400);
     }

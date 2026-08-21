@@ -31,6 +31,15 @@ function tuThaCamXuc(config: AccountConfig, api: API, msg: ParsedMessage): void 
  *
  * Gom vào một nhà máy để chỗ gọi không phải tự nhớ năng lực nào có: thêm một
  * kênh mới chỉ cần viết một nhà máy nữa, `processBatch` không đổi.
+ *
+ * PHẢI GIỮ THUẦN (không state, không bộ nhớ đệm giữa các lời gọi). Hàm này
+ * được gọi ở HAI chỗ cho cùng một account: một lần lúc `attachAccount` (bản
+ * lưu vào sổ `running`, cho scheduler lấy lại qua `getRunningAccountKenh`) và
+ * một lần MỖI BATCH ở `incoming-message-router`. Router không chuyển sang dùng
+ * bản đã lưu vì nó còn cần `api` cho việc riêng của zca-js
+ * (`sendDeliveredReceipt`, `getGroupInfo`) - đó là đợt refactor khác. Chừng
+ * nào nhà máy này còn thuần thì hai thực thể không thể lệch nhau; nhét state
+ * vào đây là biến chúng thành hai nguồn sự thật.
  */
 export function kenhCaNhan(api: API): KenhLuot {
   return {

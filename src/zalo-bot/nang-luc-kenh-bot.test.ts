@@ -45,12 +45,15 @@ describe("năng lực kênh bot", () => {
       "read_image",
       "kb_search",
       "save_memory",
+      // Nối vào bộ hẹn lịch ở V3.19 - scheduler dựng đường gửi theo KÊNH thay
+      // vì khóa cứng zca-js. Bot API gửi chủ động được (đo: 10 tin/416ms).
+      "schedule_task",
     ]);
     const chuaXet = TOOL_KEYS.filter((k) => !daXet.has(k));
     assert.deepEqual(chuaXet, [], `tool chưa xét cho kênh bot: ${chuaXet.join(", ")}`);
   });
 
-  it("8 tool đụng kênh bị chặn, tool thuần thì không", () => {
+  it("7 tool đụng năng lực Bot API KHÔNG CÓ thì bị chặn, tool thuần thì không", () => {
     assert.equal(toolChayDuocTrenBot("send_file"), false);
     assert.equal(toolChayDuocTrenBot("create_word_document"), false);
     assert.equal(toolChayDuocTrenBot("create_excel_file"), false);
@@ -58,8 +61,12 @@ describe("năng lực kênh bot", () => {
     assert.equal(toolChayDuocTrenBot("add_reaction"), false);
     assert.equal(toolChayDuocTrenBot("tag_member"), false);
     assert.equal(toolChayDuocTrenBot("get_group_info"), false);
+    assert.equal(Object.keys(TOOL_KHONG_CHAY_TREN_BOT).length, 7);
 
-    assert.equal(toolChayDuocTrenBot("schedule_task"), false);
+    // `schedule_task` TỪNG bị chặn và là mục DUY NHẤT trong bảng không dẫn
+    // được một số đo 404 nào - lý do thật là scheduler khóa cứng vào zca-js,
+    // đã sửa ở V3.19.
+    assert.equal(toolChayDuocTrenBot("schedule_task"), true);
 
     assert.equal(toolChayDuocTrenBot("kb_search"), true);
     assert.equal(toolChayDuocTrenBot("web_search"), true);

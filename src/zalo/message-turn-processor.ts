@@ -14,6 +14,7 @@ import { finishAgentTurn, openAgentTurn } from "../conversation/usage-store.js";
 import { createLogger } from "../shared/logger.js";
 import { runInTurnLogContext } from "../shared/turn-log-context.js";
 import { ganAnhVaoHistory } from "./record-incoming-message.js";
+import { replyTargetTuKenh } from "./reply-target-tu-kenh.js";
 import { trichDanTuTin } from "./reply-quote.js";
 import { deliverChatReply } from "./deliver-chat-reply.js";
 import { notifyTechnicalError, type ReplyTarget } from "./send-reply-in-parts.js";
@@ -74,11 +75,12 @@ async function xuLyLuot(
   const latest = batch[batch.length - 1]!;
   const threadKey = `${config.id}:${latest.threadId}`;
   const replyTarget: ReplyTarget = {
-    guiMotDoan: kenh.duongGui(latest.threadId, latest.threadType),
-    tranKyTuMotTin: kenh.tranKyTuMotTin,
-    threadKey,
-    threadId: latest.threadId,
-    threadType: latest.threadType,
+    ...replyTargetTuKenh({
+      kenh,
+      threadId: latest.threadId,
+      threadType: latest.threadType,
+      threadKey,
+    }),
     // Trích tin ĐẦU batch, không phải `latest`: đó là tin mở lượt, thường mang
     // câu hỏi chính, và không xê dịch khi có tin chen giữa lượt. Khác chỗ bám
     // của auto-react và biên nhận (cả hai nhắm `latest`) - cố ý, vì hai việc

@@ -73,6 +73,11 @@ export type ReplyTarget = {
    * Xem `KenhLuot.tranKyTuMotTin` cho lý do phải tách theo kênh.
    */
   tranKyTuMotTin?: number;
+  /**
+   * Kênh này có mang được định dạng không; thiếu = CÓ. Xem
+   * `KenhLuot.mangDinhDang` cho lý do đầy đủ.
+   */
+  mangDinhDang?: boolean;
   /** Khóa hàng đợi gửi của rate-limiter: `${accountId}:${threadId}` */
   threadKey: string;
   threadId: string;
@@ -209,6 +214,24 @@ export async function sendReplyInParts(
   text: string,
   styles: Style[] = [],
 ): Promise<ReplyResult> {
+  // Kênh không mang định dạng (Bot API) thì `styles` sẽ bị đường gửi vứt ở
+  // phút chót. Vứt Ở ĐÂY, TRƯỚC bộ cắt, vì hai lý do:
+  //
+  // 1. `soByteTin` cộng cả `JSON.stringify({styles})` vào ngân sách byte - giữ
+  //    lại là tính tiền cho thứ không bao giờ đi trên dây, và chẻ thừa tin.
+  // 2. `sendOneCoDuongLui` bên dưới quyết định có thử lại hay không dựa vào
+  //    `styles.length > 0`. Trên kênh bot, gửi lại "không định dạng" là gửi
+  //    lại Y HỆT (styles vốn đã bị vứt) - tốn thêm một lời gọi API mà không
+  //    đổi được gì. Hôm nay nhánh đó không chạy vì `laLoiMayChuTuChoi` đọc
+  //    `err.code` dạng số của `ZaloApiError` còn `LoiZaloBotApi` mang
+  //    `httpStatus`/`maLoi` - tức nó đúng một cách TÌNH CỜ. Ai "dọn dẹp"
+  //    `laLoiMayChuTuChoi` cho hiểu `LoiZaloBotApi` sẽ bật ra lời gọi thừa đó;
+  //    dòng dưới đóng cửa ấy lại bằng lý do tường minh.
+  //
+  // Đặt ở đây (MỘT chỗ) chứ không ở từng caller (`deliver-chat-reply` và
+  // `scheduled-job-send`): hai chỗ là hai cơ hội quên. Chữ đã được BÓC
+  // markdown ở tầng trên (`dinhDangNeuBat`) nên không mất gì.
+  if (target.mangDinhDang === false) styles = [];
   // Trích dẫn ăn vào CÙNG ngân sách byte với chữ của bot, mà bộ cắt không biết
   // gì về nó - phải trừ trước rồi mới cắt. Quá dài thì bỏ hẳn trích dẫn: mất
   // một khối trang trí còn hơn để Zalo chối cả tin.

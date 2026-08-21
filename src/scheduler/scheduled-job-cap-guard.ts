@@ -15,17 +15,16 @@
  *   sớm THUẦN ĐỌC) - chưa có gì sẵn, phải tự mở run + tự resolve api.
  */
 
-import type { API, ThreadType } from "zca-js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { appendMessage } from "../conversation/history-store.js";
 import { createLogger } from "../shared/logger.js";
 import { deferredRunAtUtc } from "../shared/zone-time.js";
-import { getRunningAccountApi } from "../zalo/account-manager.js";
-import { sendReplyInParts, type ReplyTarget, duongGuiZcaJs } from "../zalo/send-reply-in-parts.js";
+import { sendReplyInParts, type ReplyTarget } from "../zalo/send-reply-in-parts.js";
 import { resetDeliveryAttempts } from "./delivery-attempt-store.js";
 import { finishRun, openRun } from "./job-run-log-store.js";
 import { recordProactiveSend, reserveCapNotice, revertCapNotice } from "./proactive-send-guard.js";
 import { deliverProactively } from "./proactive-send-queue.js";
+import { taoDichGuiChoJob } from "./scheduled-job-reply-target.js";
 import { setNextRun, type ScheduledJob } from "./scheduled-job-store.js";
 
 const log = createLogger("run-scheduled-job");
@@ -72,22 +71,16 @@ export async function concludeCapBlockedAtTick(
 ): Promise<void> {
   try {
     const runId = openRun(job.id);
-    const api = notifyCapHitOnce ? getRunningAccountApi(job.accountId) : undefined;
-    const target = toTarget(job, api);
+    // Đi qua CÙNG nhà máy với đường gửi chính (`scheduled-job-reply-target.ts`).
+    // Bản trước tự dựng `duongGuiZcaJs` ở đây, nên với tài khoản bot thì
+    // `api` là undefined -> target undefined -> `notifyCapHitOnce` thành false
+    // -> KHÔNG AI ĐƯỢC BÁO là đã chạm trần ngày. Hỏng câm, và là đúng loại lỗi
+    // mà việc "sửa mỗi đường gửi chính" sẽ bỏ sót.
+    const target = notifyCapHitOnce ? taoDichGuiChoJob(job)?.target : undefined;
     await concludeCapBlocked(job, runId, reason, timeZone, now, { notifyCapHitOnce: Boolean(target), target });
   } catch (err) {
     log.error({ jobId: job.id, err }, "Lỗi kết luận job bị chặn ở trần ngày ngay tại tick");
   }
-}
-
-function toTarget(job: ScheduledJob, api: API | undefined): ReplyTarget | undefined {
-  if (!api) return undefined;
-  return {
-    guiMotDoan: duongGuiZcaJs(api, job.threadId, job.threadType as ThreadType),
-    threadKey: `${job.accountId}:${job.threadId}`,
-    threadId: job.threadId,
-    threadType: job.threadType as ThreadType,
-  };
 }
 
 /**

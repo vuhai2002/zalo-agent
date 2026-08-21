@@ -11,6 +11,8 @@ import { runStartupBackfill } from "../conversation/startup-backfill.js";
 import { clearPendingBatches } from "../middleware/message-batcher.js";
 import { createLogger } from "../shared/logger.js";
 import { routeIncomingMessage } from "./incoming-message-router.js";
+import { kenhCaNhan } from "./kenh-ca-nhan.js";
+import type { KenhLuot } from "./kenh-luot.js";
 import { loginWithStoredCredentials } from "./zalo-client.js";
 import { startListener } from "./zalo-listener.js";
 
@@ -23,11 +25,16 @@ import { startListener } from "./zalo-listener.js";
 type RunningAccount = {
   config: AccountConfig;
   /**
-   * `null` với tài khoản BOT: Zalo Bot API không có gì tương đương. Scheduler
-   * đọc trường này qua `getRunningAccountApi` và tự bỏ lượt khi không có -
-   * xem mục "Việc còn treo của kênh Zalo Bot" trong roadmap.
+   * NĂNG LỰC của kênh account này đang chạy - đường gửi, trần ký tự một tin,
+   * và `api` zca-js (`null` trên kênh bot).
+   *
+   * Trước đây chỗ này giữ thẳng `api: API | null`, tức sổ đăng ký account chỉ
+   * mô tả được ĐÚNG MỘT kênh. Hệ quả: caller nào chỉ cầm `accountId` (đường
+   * gửi chủ động của scheduler) không có cách nào gửi cho tài khoản bot, dù
+   * `kenhBot.duongGui` vẫn chạy tốt mỗi ngày ở luồng tin nhắn. `api` giờ là
+   * một TRƯỜNG CON của `kenh`, không còn bản sao thứ hai để lệch.
    */
-  api: API | null;
+  kenh: KenhLuot;
   /** Rỗng với tài khoản bot - Bot API không có khái niệm "id của chính mình" trong tin */
   selfId: string;
   stopListener: () => void;
@@ -50,13 +57,31 @@ export function isAccountRunning(accountId: string): boolean {
 }
 
 /**
- * `api` của account đang chạy - scheduler cần để gọi zca-js đúng account khi
- * gửi tin chủ động (không có tin đến để mà lấy `api` như đường tin nhắn
- * thường). `undefined` khi account chưa login hoặc đã dừng - caller (guard
- * lúc gửi) tự quyết định bỏ lượt.
+ * KHÔNG có `getRunningAccountApi` nữa - cố ý.
+ *
+ * Hàm đó trả `api` zca-js theo `accountId`, và mọi caller của nó đều đi tiếp
+ * một bước giống hệt nhau: tự dựng `duongGuiZcaJs`. Tức nó là một cái bẫy có
+ * hình dạng tiện lợi - dùng đúng như tên gọi gợi ý là khóa cứng caller vào
+ * kênh cá nhân, và đó chính là lỗi khiến lịch hẹn không chạy được trên tài
+ * khoản bot suốt từ V3.16 (xem V3.19 trong roadmap). Sau khi scheduler chuyển
+ * sang `getRunningAccountKenh`, hàm cũ không còn caller sản xuất nào; xóa hẳn
+ * thay vì để lại, vì để lại là mời người sau đi đúng vào vết đó.
+ *
+ * Cần `api` cho tool thì lấy qua `getRunningAccountKenh(id)?.api` - đường đó
+ * bắt người đọc thấy ngay rằng `null` là một khả năng thật.
  */
-export function getRunningAccountApi(accountId: string): API | undefined {
-  return running.get(accountId)?.api ?? undefined;
+
+/**
+ * Kênh của account đang chạy - đường DUY NHẤT để một caller chỉ cầm
+ * `accountId` gửi được tin mà không cần biết account đó thuộc kênh nào.
+ *
+ * `undefined` khi account chưa chạy (chưa login, đang tắt, đã dừng) - caller
+ * tự quyết định bỏ lượt. Với scheduler, "không có kênh" và "account không
+ * chạy" là CÙNG một trạng thái, nên nó dùng chung đúng một nhánh
+ * `concludeBlockedNotRun` cho cả hai kênh.
+ */
+export function getRunningAccountKenh(accountId: string): KenhLuot | undefined {
+  return running.get(accountId)?.kenh;
 }
 
 /**
@@ -77,7 +102,7 @@ export function attachAccount(config: AccountConfig, api: API): void {
   const stopListener = startListener(config.id, api, (raw) =>
     routeIncomingMessage(config.id, api, selfId, raw),
   );
-  running.set(config.id, { config, api, selfId, stopListener });
+  running.set(config.id, { config, kenh: kenhCaNhan(api), selfId, stopListener });
   log.info({ accountId: config.id, label: config.label }, "Account sẵn sàng");
 }
 
@@ -111,7 +136,7 @@ async function startBotAccount(config: AccountConfig): Promise<void> {
     );
   }
 
-  const { dung } = await chayTaiKhoanBot({ accountId: config.id, token });
+  const { dung, kenh } = await chayTaiKhoanBot({ accountId: config.id, token });
 
   // Đọc LẠI `enabled` ngay trước khi cài vào `running`: `chayTaiKhoanBot` mất
   // hai vòng mạng (hạn 15 giây mỗi cái), đủ rộng để người vận hành bấm TẮT
@@ -131,7 +156,7 @@ async function startBotAccount(config: AccountConfig): Promise<void> {
   // đó sống tới lúc restart, và vì `getUpdates` không có `offset` nên nó CƯỚP
   // tin của vòng chính rồi trả lời bằng config cũ.
   stopAccount(config.id);
-  running.set(config.id, { config, api: null, selfId: "", stopListener: dung });
+  running.set(config.id, { config, kenh, selfId: "", stopListener: dung });
   log.info({ accountId: config.id, label: config.label }, "Tài khoản bot sẵn sàng");
 }
 

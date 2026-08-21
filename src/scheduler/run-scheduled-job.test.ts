@@ -293,6 +293,23 @@ describe("runScheduledJob - kind=message", () => {
     assert.equal(lastRunOf(job.id).status, "skipped");
     assert.equal(sent.length, 11, "câu thông báo không được lặp lại trong cùng ngày");
   });
+
+  it("kênh CÁ NHÂN vẫn gửi kèm `styles` - chốt chống 'sửa cho kênh bot làm hỏng kênh đang chạy'", async () => {
+    // Đợt nối lịch hẹn vào kênh bot đổi chỗ dựng `ReplyTarget` sang một nhà
+    // máy chung theo kênh. Nếu nhà máy đó bỏ sót đường định dạng, kênh cá nhân
+    // mất in đậm/tiêu đề mà không test nào kêu - đúng loại hồi quy im lặng.
+    const sent = attachOnline();
+    const job = makeJob({ payload: "**Nhắc họp** lúc 3h" });
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, now: new Date() });
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]!.text, "Nhắc họp lúc 3h", "markdown phải được BÓC khỏi chữ, không gửi thô");
+    assert.ok(
+      sent[0]!.styles && sent[0]!.styles.length > 0,
+      "kênh cá nhân mất `styles` - câu trả lời ra Zalo phẳng lì",
+    );
+  });
 });
 
 // Mục 2 (vòng 3, "gửi thành công rồi chốt sổ hỏng KHÔNG được retry") ĐÃ SỬA
