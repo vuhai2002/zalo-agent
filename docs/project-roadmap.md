@@ -5219,3 +5219,94 @@ nút trên giao diện tên là "Sửa" chứ không phải "Sửa lịch".
 - Kênh bot vẫn không có chữ đậm/nghiêng; `create_image` vẫn cần đường phục vụ
   ảnh qua HTTPS công khai; `pnpm zalo-login <id>` vẫn không kiểm `loai`; vòng
   poll vẫn không có sàn nhịp.
+
+## V3.20 - Bot đặt trùng lịch khi người dùng cảm ơn (2026-08-21)
+
+Người dùng gửi ảnh trang Lịch hẹn: HAI job y hệt nhau, cùng tên, cùng mốc
+11:00 ngày 30/08, cùng "Chưa chạy lần nào". Cuộc trò chuyện chỉ có một lần nhờ
+đặt lịch.
+
+### Trace nói thẳng ra nguyên nhân, và nó không phải thứ tôi đoán đầu tiên
+
+Ba lượt, không lượt nào có dấu vết retry:
+
+| Lượt | Step | Tool |
+|---|---|---|
+| 23:38 | 1 | không gọi tool - chỉ hỏi "mấy giờ?" |
+| 23:38 | 2 | `create` -> job `d5b23288cb1b` |
+| 23:39 | 2 | `create` -> job `47071ab3fdb8` |
+
+Lượt 3 là lượt người dùng chỉ nhắn "okay cảm ơn bạn". Model suy nghĩ
+"Scheduling appointment for August 30", rồi nói:
+
+> "Mình **kiểm tra** và chốt lịch nhắc ngay để bảo đảm tin sẽ được gửi đúng giờ nhé."
+
+Nó MUỐN KIỂM TRA. Nhưng `historyToModelMessages` map tin của bot thành
+`{role:"assistant", content}` - thuần chữ, KHÔNG mang tool call. Sang lượt sau
+model không có bằng chứng nào là tool đã chạy; nó chỉ thấy đúng câu nó tự nói
+"Đã đặt lịch xong rồi". Mô tả tool thì bắt gọi `list` trước `cancel`/`update`
+mà không nói gì về `create`. Thứ duy nhất trong tầm với để "kiểm tra" là gọi
+`create` lần nữa - rồi step 2 nói "Mình đã đặt lịch THẬT rồi nhé".
+
+`createJob` là `INSERT` trần, không kiểm trùng. `tool-loop-guard` chỉ đếm LỖI
+và tool ĐỌC trả cùng kết quả - một tool TÁC ĐỘNG chạy thành công hai lần cùng
+tham số không nằm trong luật nào của nó.
+
+### Hai đề xuất đầu của tôi đều SAI, và trace là thứ bác chúng
+
+**Lần 1: khóa `(name, kind, payload, schedule)`.** Đọc payload thật của hai job:
+
+```
+job 1: "🔔 Kim Phượng ơi, nhớ đóng tiền học phí Phật học nhé! Hạn chót nộp là ngày 05/09/2026."
+job 2: "Kim Phượng ơi, hôm nay nhớ đóng tiền học phí Phật học nhé. Hạn chót nộp là ngày 05/09/2026."
+```
+
+`payload` KHÁC - model viết lại câu, thêm "hôm nay", bỏ emoji. Khóa có
+`payload` trượt đúng ca thật. Đây là lý do phải ĐỌC TRACE chứ không đoán từ
+code: nhìn code thì "payload trong khóa" nghe rất hợp lý.
+
+**Lần 2: bỏ `name`, khóa `(thread, kind, schedule)`.** Người dùng bác ngay:
+"1 người có thể hẹn 2 điều vào trùng 1 giờ là cũng có thể mà". Đúng - "11:00
+nhắc đóng học phí" và "11:00 nhắc họp phụ huynh" là hai việc thật, khóa đó
+chặn oan cái thứ hai.
+
+**Chốt: `(thread, kind, schedule, name)`.** `payload` là văn xuôi tự do nên
+model viết lại mỗi lần một khác; `name` là nhãn NGẮN tóm tắt ý định nên trong
+ca thật nó ra giống hệt nhau tới từng ký tự. Đó là thứ duy nhất vừa bắt được
+ca hỏng vừa giữ được ca hợp lệ.
+
+### Chỗ yếu, ghi thẳng ra
+
+Khóa này là PHỎNG ĐOÁN THEO TÊN, không phải bằng chứng cứng: model đặt tên
+lệch một chữ là trượt. Lưới đỡ là câu ghép vào kết quả khi có lịch khác CÙNG
+MỐC nhưng khác tên - không chặn, chỉ đưa cho model đúng thông tin nó đang
+thiếu để nói lại cho người dùng.
+
+Hướng chắc chắn hơn đã cân nhắc và HOÃN: nhét danh sách lịch hiện có của
+thread vào ngữ cảnh mỗi lượt có `schedule_task`. Lúc đó model không phải đoán,
+nhưng prompt dài thêm và vỡ cache mỗi lần lịch đổi. Người dùng chốt "nếu sau
+này có vỡ tiếp thì tính sau".
+
+### Kiểm chứng
+
+- 6 ca mới trong `schedule-task-tool.test.ts`, dựng lại ĐÚNG ca thật (kể cả
+  hai payload khác nhau chép nguyên văn từ trace).
+- **6 phép phá**, mỗi phép đỏ đúng ca dự kiến. Hai phép đáng ghi vì chúng
+  chính là hai đề xuất sai của tôi: thêm `payload` vào khóa -> ca THẬT đỏ; bỏ
+  `name` khỏi khóa -> ca "hai việc khác nhau cùng giờ" đỏ. Test giờ khoá cả hai
+  chiều, không ai lùi lại được nữa mà không thấy đỏ.
+- Full suite 2182/2182 xanh, typecheck sạch.
+
+### Việc còn treo
+
+- **Đường retry của agent-loop vẫn phát lại tool đã thực thi.**
+  `context_overflow` và 429 đều làm `lanChay++; guard.datLai(); return runOnce()`
+  - chạy lại TRỌN lượt, kể cả tool đã chạy xong ở step trước. Chỉ nhánh "router
+  trả rỗng" có chốt (`toolCallCount === 0`). Trace của ca này loại nó khỏi diện
+  nghi (ba lượt đều sạch, không lượt nào retry), nhưng đường code còn nguyên và
+  nó đụng cả `send_file`/`create_image` - gửi trùng file/ảnh. Khử trùng vừa
+  thêm che được phần `schedule_task`. Sửa đúng gốc là đụng `runOnce()`, rủi ro
+  cao, tách riêng.
+- Gốc sâu hơn: **lịch sử không mang dấu vết hành động đã làm**, nên mọi tool
+  tác động đều có cùng lớp rủi ro "model không biết mình đã làm rồi". Đụng bất
+  biến "history chỉ ghi phần ĐÃ gửi cho người dùng" nên chưa động.

@@ -22,7 +22,7 @@ mỗi account một "não" riêng, 14 công cụ, dashboard web đầy đủ. T�
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-2176%20xanh-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-2182%20xanh-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---

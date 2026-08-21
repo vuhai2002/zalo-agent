@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { loiCuaTool } from "./tool-failure-result-test-helper.js";
+import { ketQuaThanhCong, loiCuaTool } from "./tool-failure-result-test-helper.js";
 import { after, before, describe, it } from "node:test";
 import { DateTime } from "luxon";
 import type { API } from "zca-js";
@@ -521,5 +521,109 @@ describe("schedule_task - thiếu tham số theo action bị chặn ở execute"
 
     assert.match(result, /Đã tạo lịch/);
     assert.equal(store.listJobsForThread("acc-1", "t-truong-thua").length, 1);
+  });
+});
+
+/**
+ * Khử trùng khi model gọi `create` lại cho CÙNG một lời nhắc.
+ *
+ * Dựng lại đúng ca thật ngày 2026-08-20 (đọc từ trace): người dùng nhờ đặt
+ * lịch, bot đặt xong ở lượt 2, lượt 3 người dùng chỉ nhắn "okay cảm ơn bạn" và
+ * bot TẠO LẠI y hệt. Model tự khai trong trace: "Mình KIỂM TRA và chốt lịch
+ * nhắc ngay..." - nó muốn kiểm tra, nhưng lịch sử không mang tool call nên
+ * thứ duy nhất trong tầm với là `create`.
+ *
+ * Số đo từ chính hai job đó: `name`/`kind`/`schedule` TRÙNG KHÍT, còn
+ * `payload` KHÁC (model viết lại câu). Vì vậy khóa so trùng cố ý không có
+ * `payload` - xem `tim-lich-hen-trung.ts`.
+ */
+describe("schedule_task - không tạo bản trùng khi model gọi create lại", () => {
+  const lichNhac = {
+    action: "create" as const,
+    name: "Nhắc đóng học phí Phật học",
+    kind: "message" as const,
+    schedule: { kind: "once" as const, date: ONCE_TEST_DATE, time: ONCE_TEST_TIME },
+  };
+
+  it("ca THẬT: cùng tên + cùng mốc, payload model viết khác đi -> vẫn chỉ MỘT job", async () => {
+    const ctx = makeCtx({ message: msg({ threadId: "t-trung-that" }) });
+
+    const lan1 = await run(ctx, {
+      ...lichNhac,
+      payload: "🔔 Kim Phượng ơi, nhớ đóng tiền học phí Phật học nhé! Hạn chót nộp là ngày 05/09/2026.",
+    });
+    const lan2 = await run(ctx, {
+      ...lichNhac,
+      payload: "Kim Phượng ơi, hôm nay nhớ đóng tiền học phí Phật học nhé. Hạn chót nộp là ngày 05/09/2026.",
+    });
+
+    const jobs = store.listJobsForThread("acc-1", "t-trung-that");
+    assert.equal(jobs.length, 1, "tạo ra bản trùng - người dùng sẽ nhận hai tin cùng lúc");
+    assert.match(lan1, /Đã tạo lịch/);
+    assert.match(lan2, /ĐÃ CÓ SẴN/, "lần hai phải nói rõ lịch đã có, không phải vừa tạo thêm");
+    assert.match(lan2, new RegExp(jobs[0]!.id), "phải trả về id của job đã có để model nói đúng");
+    assert.doesNotMatch(lan2, /^Đã tạo lịch/, "không được nói là vừa tạo");
+  });
+
+  it("kết quả lần hai KHÔNG phải dấu hiệu lỗi - trạng thái mong muốn đã có sẵn", async () => {
+    // Repo chốt: nhánh HỎNG trả object `{ok:false,loi}` qua `ketQuaLoi`, nhánh
+    // thành công trả chuỗi trần. Lịch đã có sẵn là THÀNH CÔNG - trả lỗi ở đây
+    // sẽ kích `tool-loop-guard` và làm model tưởng nó vừa thất bại.
+    const ctx = makeCtx({ message: msg({ threadId: "t-trung-khong-loi" }) });
+    await run(ctx, { ...lichNhac, payload: "lần một" });
+    const lan2 = await run(ctx, { ...lichNhac, payload: "lần hai" });
+    ketQuaThanhCong(lan2);
+  });
+
+  it("HAI việc khác nhau vào CÙNG một giờ vẫn đặt được cả hai", async () => {
+    // Ràng buộc do người dùng chốt: "11:00 nhắc đóng học phí" và "11:00 nhắc
+    // họp phụ huynh" là hai việc thật. Khóa so trùng có `name` chính là để
+    // giữ ca này - bỏ `name` đi là chặn oan.
+    const ctx = makeCtx({ message: msg({ threadId: "t-hai-viec" }) });
+    await run(ctx, { ...lichNhac, payload: "đóng học phí" });
+    const khac = await run(ctx, {
+      ...lichNhac,
+      name: "Nhắc họp phụ huynh",
+      payload: "họp phụ huynh",
+    });
+
+    assert.equal(store.listJobsForThread("acc-1", "t-hai-viec").length, 2, "chặn oan lịch thứ hai");
+    assert.match(khac, /Đã tạo lịch/);
+    assert.match(khac, /LƯU Ý/, "phải nhắc model rằng đã có lịch khác cùng mốc giờ");
+    assert.match(khac, /Nhắc đóng học phí Phật học/, "phải nêu tên lịch cùng mốc để model nói lại được");
+  });
+
+  it("tên chỉ khác hoa/thường và khoảng trắng thừa vẫn tính là trùng", async () => {
+    const ctx = makeCtx({ message: msg({ threadId: "t-trung-chuan-hoa" }) });
+    await run(ctx, { ...lichNhac, payload: "x" });
+    const lan2 = await run(ctx, {
+      ...lichNhac,
+      name: "  nhắc ĐÓNG   học phí Phật học ",
+      payload: "y",
+    });
+    assert.equal(store.listJobsForThread("acc-1", "t-trung-chuan-hoa").length, 1);
+    assert.match(lan2, /ĐÃ CÓ SẴN/);
+  });
+
+  it("lịch ĐÃ TẮT thì đặt lại được - job đó không bao giờ chạy nữa", async () => {
+    // Chặn ở đây là sai: người dùng nhờ đặt lại đúng lời nhắc họ vừa tắt là
+    // yêu cầu hợp lệ, mà job cũ thì `listDueJobs` không bao giờ nhặt.
+    const ctx = makeCtx({ message: msg({ threadId: "t-da-tat" }) });
+    await run(ctx, { ...lichNhac, payload: "x" });
+    const [cu] = store.listJobsForThread("acc-1", "t-da-tat");
+    store.setEnabled("acc-1", "t-da-tat", cu!.id, false);
+
+    const lan2 = await run(ctx, { ...lichNhac, payload: "y" });
+    assert.match(lan2, /Đã tạo lịch/, "lịch đã tắt mà vẫn bị coi là trùng");
+    assert.equal(store.listJobsForThread("acc-1", "t-da-tat").length, 2);
+  });
+
+  it("thread KHÁC không ảnh hưởng nhau", async () => {
+    const a = makeCtx({ message: msg({ threadId: "t-pham-vi-a" }) });
+    const b = makeCtx({ message: msg({ threadId: "t-pham-vi-b" }) });
+    await run(a, { ...lichNhac, payload: "x" });
+    const ketQuaB = await run(b, { ...lichNhac, payload: "x" });
+    assert.match(ketQuaB, /Đã tạo lịch/, "khử trùng bị rò sang cuộc trò chuyện khác");
+    assert.equal(store.listJobsForThread("acc-1", "t-pham-vi-b").length, 1);
   });
 });

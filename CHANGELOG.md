@@ -181,6 +181,19 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   phải chọn một mốc mới, không khôi phục lại đúng lời hẹn cũ được.
 
 
+- **Bot không còn đặt trùng lịch khi người dùng cảm ơn.** Ca thật: sau khi bot
+  đặt lịch xong và báo lại, người dùng nhắn "okay cảm ơn bạn" - bot tạo thêm
+  một lịch y hệt, tới giờ người dùng nhận hai tin. Nguyên nhân: lịch sử hội
+  thoại chỉ lưu CHỮ, không lưu lời gọi công cụ, nên sang lượt sau model không
+  có bằng chứng nào là nó đã đặt lịch; trace cho thấy nó định "kiểm tra" mà
+  công cụ duy nhất trong tầm với là "đặt lịch" - thế là đặt lại.
+
+  Giờ `schedule_task` nhận ra lịch trùng (cùng cuộc trò chuyện, cùng loại,
+  cùng mốc giờ, cùng tên) và trả về lịch đã có thay vì tạo thêm. Hai việc KHÁC
+  nhau vào cùng một giờ vẫn đặt được bình thường, và bot được nhắc để nói cho
+  bạn biết là đã có lịch khác cùng mốc. Mô tả công cụ cũng dạy model dùng
+  "xem danh sách" để kiểm tra thay vì đặt lại cho chắc.
+
 ### Sửa
 
 - **Dashboard trên màn hình thấp**: ba lỗi cùng một họ, chỉ lộ ra khi cửa sổ

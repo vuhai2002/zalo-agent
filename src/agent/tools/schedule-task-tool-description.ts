@@ -16,5 +16,9 @@ export const SCHEDULE_TASK_DESCRIPTION =
   "Payload của kind='agent' phải TỰ CHỨA đủ ngữ cảnh: lúc job chạy KHÔNG còn thấy lại cuộc " +
   "trò chuyện hiện tại, chỉ có đúng payload này.\n" +
   "action='list': xem lịch đang có trong cuộc trò chuyện này, trả về id từng lịch.\n" +
+  "MUỐN KIỂM TRA xem một lịch đã đặt được chưa thì dùng action='list'. TUYỆT ĐỐI không gọi lại " +
+  "action='create' để kiểm - làm vậy là đặt thêm một lịch trùng và người dùng nhận tin hai lần. " +
+  "Bạn KHÔNG thấy lại lời gọi tool của các lượt trước trong lịch sử hội thoại: đã nói với người " +
+  "dùng là đặt xong thì tin vào đó, đừng đặt lại cho chắc.\n" +
   "action='cancel'/'update': PHẢI gọi action='list' trước để lấy đúng id - TUYỆT ĐỐI không tự đoán id.\n" +
   "Sau khi tạo/sửa xong, đọc lại mốc giờ tool vừa trả cho người dùng nghe để họ xác nhận đúng ý.";
