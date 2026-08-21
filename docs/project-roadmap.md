@@ -4827,10 +4827,12 @@ lại. Dấu hiệu đó nằm đó suốt từ V3.16 mà không ai đọc ra.
 
 ### Kiểm chứng
 
-- 47 test mới/sửa: `account-manager-kenh.test.ts` (5), `lich-hen-kenh-bot.test.ts`
+- **28 ca MỚI**: `account-manager-kenh.test.ts` (5), `lich-hen-kenh-bot.test.ts`
   (8), `ngan-sach-byte-theo-kenh.test.ts` (6), `lich-hen-tren-kenh-bot.test.ts`
   (8, thay `chan-lich-hen-kenh-bot.test.ts` cũ), cộng 1 ca hồi quy trong
-  `run-scheduled-job.test.ts`.
+  `run-scheduled-job.test.ts`. Con số 47 ở mục nghiệm thu dưới đây là TỔNG số
+  ca trong 5 file đó (28 mới + 20 ca sẵn có của `run-scheduled-job.test.ts`),
+  không phải số ca mới - hai đại lượng khác nhau, đừng đọc lẫn.
 - Full suite **2168/2168 xanh**, `pnpm typecheck` sạch.
 - **13 phép phá**, mỗi phép đỏ đúng ca dự kiến. Ba phép đáng ghi:
   - Sabotage `cap-guard` về bản cũ: chỉ 1 ca đỏ - chứng minh đường tick là ca
@@ -4952,6 +4954,42 @@ có một quãng cây làm việc mang mã sai. Luật rút ra: sau MỖI vòng 
 soát, `git status` + `git diff` phải rỗng trước khi tin bất cứ số liệu nào -
 subagent chạy phép phá thì cây làm việc là trạng thái chia sẻ.
 
+### Vòng rà soát 4: một lỗ thật, và bản vá vòng 3 không đóng đúng thứ nó nói
+
+Hai phát hiện đáng ghi, cả hai đều do reviewer PHÁ CODE chứ không đọc suông:
+
+- **Cờ `mangDinhDang` được canh trên đường CHAT nhưng KHÔNG trên đường LỊCH
+  HẸN.** Dựng target bằng tay trong `taoDichGuiChoJob`, thiếu đúng một trường
+  đó -> cả 2174 test VẪN XANH; trong khi bỏ `tranKyTuMotTin` hay `threadType`
+  đều đỏ đúng một ca. Tức đây là lỗ riêng của một trường trên một đường, không
+  phải "cả nhà máy không ai canh".
+
+  Vì sao lọt qua ba vòng: bài học "target GIẢ chỉ chứng minh `sendReplyInParts`
+  tôn trọng cờ, không chứng minh cờ được CHỞ tới nơi" đã được ghi thành ca
+  "chuỗi THẬT" - nhưng chỉ cho chuỗi CHAT. Chuỗi LỊCH HẸN chưa có ca đối xứng,
+  đúng lúc docstring của `scheduled-job-reply-target.ts` nói sẽ còn "bất cứ
+  đường nào thêm sau này". **Bài học rút gọn: một bài học đã học được chỉ bảo
+  vệ ĐÚNG con đường mà người ta nghĩ ra nó, không tự lan sang đường song song.**
+
+- **Phép đo "mẫu PHÂN BIỆT" ở vòng 3 KHÔNG đóng lớp lỗ mà commit message nói nó
+  đóng.** Nó so `RegExp.source`, mà một mẫu `/file/i` có `source` khác
+  `/gửi được file/i` nên qua được cửa trong khi vẫn khớp ĐÚNG đoạn chữ của
+  `send_file`. Reviewer chạy lại đúng phép phá mà commit message khẳng định là
+  "đỏ" - nó XANH. Đo đúng bản chất là so VỊ TRÍ KHỚP (span khớp phải rời nhau
+  từng đôi một), vì hai mẫu viết khác nhau vẫn có thể trỏ vào cùng một chỗ.
+  Kèm theo: `/Word/i` trần trụi khớp cả "passWORD" - đã neo thành
+  `/tài liệu Word/i`.
+
+Mục thứ ba là hệ quả trực tiếp của cùng một họ: sau khi vòng 3 bổ sung
+`get_group_info` vào câu mô tả trên dashboard, độ lệch giữa dashboard và
+`LUAT_PERSONA_KENH_BOT` chỉ ĐẢO CHIỀU chứ chưa hết (dashboard 7, persona 6) -
+vì dashboard có ca canh độ phủ còn persona thì không. Đã bổ sung câu thiếu VÀ
+thêm ca canh đối xứng cho persona. Ràng buộc này không làm prompt phình vô
+hạn: bảng chặn chỉ CO LẠI theo thời gian (Zalo mở thêm method là bớt một mục).
+
+Ca canh persona vừa thêm bắt lỗi ngay lần chạy đầu - mẫu `/thả cảm xúc/i` của
+tôi không khớp vì persona ghi "thả ĐƯỢC cảm xúc". Đúng thứ nó sinh ra để bắt.
+
 ### Việc còn treo
 
 - `run-scheduled-job.ts` còn 283 dòng (từ 298), vẫn vượt luật 200.
@@ -4970,8 +5008,8 @@ subagent chạy phép phá thì cây làm việc là trạng thái chia sẻ.
 
   Số: với `SCHEDULER_MIN_INTERVAL_MINUTES=5` và
   `SCHEDULER_MAX_JOBS_PER_THREAD=20` thì tối đa 5760 lượt LLM/ngày **MỖI
-  THREAD**. Đọc là "5760" trần trụi thì ra một con số nghe như đã bị chặn trên
-  - nó KHÔNG phải: `checkThreadJobCap` chỉ đếm theo cặp `(accountId,
+  THREAD**. Đọc là "5760" trần trụi thì ra một con số nghe như đã bị chặn
+  trên, mà nó KHÔNG phải: `checkThreadJobCap` chỉ đếm theo cặp `(accountId,
   threadId)`, không có trần tổng số job lẫn trần số thread; và vòng tick gọi
   `void runScheduledJob(...)` không await, không semaphore, nên cũng không có
   trần lượt LLM chạy đồng thời. `SCHEDULER_SEND_GAP_MS` chỉ rải ĐƯỜNG GỬI, mà

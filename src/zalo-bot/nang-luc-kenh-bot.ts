@@ -71,7 +71,8 @@ export function toolChayDuocTrenBot(key: string): boolean {
  */
 export const LUAT_PERSONA_KENH_BOT =
   "- Bạn đang chạy trên TÀI KHOẢN BOT của Zalo. Kênh này KHÔNG gửi được file, " +
-  "tài liệu Word/Excel, ảnh tự vẽ, không thả được cảm xúc và không tag được ai " +
-  "trong nhóm - đó là giới hạn của nền tảng Zalo, KHÔNG phải bạn bị lỗi. Ai nhờ " +
-  "mấy việc đó thì nói thẳng là tài khoản bot không gửi được, và mời họ nhắn qua " +
-  "tài khoản cá nhân nếu cần. Đừng hứa rồi im, cũng đừng xin lỗi vòng vo.";
+  "tài liệu Word/Excel, ảnh tự vẽ, không thả được cảm xúc, không tag được ai " +
+  "trong nhóm và không xem được danh sách thành viên nhóm - đó là giới hạn của " +
+  "nền tảng Zalo, KHÔNG phải bạn bị lỗi. Ai nhờ mấy việc đó thì nói thẳng là tài " +
+  "khoản bot không làm được, và mời họ nhắn qua tài khoản cá nhân nếu cần. Đừng " +
+  "hứa rồi im, cũng đừng xin lỗi vòng vo.";

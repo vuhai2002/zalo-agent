@@ -81,6 +81,52 @@ describe("năng lực kênh bot", () => {
     }
   });
 
+  it("persona nêu ĐỦ CẢ BẢY tool bị chặn - không để model im lặng về một giới hạn", () => {
+    // Bất đối xứng đã trả giá: câu mô tả trên dashboard có ca canh độ phủ, còn
+    // persona thì không - nên khi vòng rà soát 3 bổ sung `get_group_info` vào
+    // dashboard, persona trôi lại và độ lệch chỉ ĐẢO CHIỀU chứ chưa hết
+    // (dashboard 7, persona 6). Đúng bài học "chỗ nào có test canh thì sống
+    // sót, chỗ nào dựa vào người nhớ thì trôi".
+    //
+    // Ràng buộc này KHÔNG làm prompt phình vô hạn: bảng chặn chỉ CO LẠI theo
+    // thời gian (Zalo mở thêm method là bớt một mục), không nở ra.
+    //
+    // So VỊ TRÍ KHỚP chứ không so mẫu, cùng lý do đã ghi ở
+    // `web/src/pages/mo-ta-loai-kenh.test.ts`: hai mẫu khác nhau vẫn có thể
+    // khớp cùng một đoạn chữ, và khi đó key sau chỉ đang đi ké key trước.
+    const chuCanCo: Record<string, RegExp> = {
+      send_file: /gửi được file/i,
+      create_word_document: /tài liệu Word/i,
+      create_excel_file: /Excel/i,
+      create_image: /ảnh tự vẽ/i,
+      add_reaction: /thả được cảm xúc/i,
+      tag_member: /tag được ai/i,
+      get_group_info: /danh sách thành viên nhóm/i,
+    };
+
+    assert.deepEqual(
+      Object.keys(chuCanCo).sort(),
+      Object.keys(TOOL_KHONG_CHAY_TREN_BOT).sort(),
+      "bảng chặn đã đổi mà persona chưa theo - model sẽ nói 'không làm được' mà không nói vì sao",
+    );
+
+    const doanKhop: { key: string; dau: number; cuoi: number }[] = [];
+    for (const [key, m] of Object.entries(chuCanCo)) {
+      const kq = LUAT_PERSONA_KENH_BOT.match(m);
+      assert.ok(kq && kq.index !== undefined, `persona không nhắc tới giới hạn của "${key}"`);
+      doanKhop.push({ key, dau: kq.index, cuoi: kq.index + kq[0].length });
+    }
+    for (const a of doanKhop) {
+      for (const b of doanKhop) {
+        if (a.key >= b.key) continue;
+        assert.ok(
+          a.cuoi <= b.dau || b.cuoi <= a.dau,
+          `"${a.key}" và "${b.key}" khớp CHỒNG LẤN cùng một đoạn chữ - phép đo mất răng`,
+        );
+      }
+    }
+  });
+
   it("luật persona nói RÕ đây là giới hạn nền tảng, không phải agent hỏng", () => {
     // Ẩn tool là chưa đủ: model sẽ nói "tôi không làm được" mà không nói vì sao,
     // và người nhắn tưởng agent bị lỗi - đúng điều cần tránh.

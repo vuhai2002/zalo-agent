@@ -38,6 +38,7 @@ let registry: typeof import("../agent/tools/tool-registry.js");
 let tuning: typeof import("../config/runtime-tuning-settings.js");
 let kbSources: typeof import("../knowledge/kb-source-store.js");
 let kbBinding: typeof import("../knowledge/kb-agent-binding.js");
+let taoDich: typeof import("./scheduled-job-reply-target.js");
 
 const ACC = "acc-lich-bot";
 const THREAD = "chat-lich-bot";
@@ -65,6 +66,7 @@ before(async () => {
   tuning = await import("../config/runtime-tuning-settings.js");
   kbSources = await import("../knowledge/kb-source-store.js");
   kbBinding = await import("../knowledge/kb-agent-binding.js");
+  taoDich = await import("./scheduled-job-reply-target.js");
 
   agentStore.ensureDefaultAgent();
   threadStore.recordThreadActivity({
@@ -193,6 +195,37 @@ describe("lịch hẹn trên tài khoản Zalo Bot", () => {
     } finally {
       tuning.setTuning("ZALO_MAX_MESSAGE_CHARS", null);
     }
+  });
+
+  it("chuỗi THẬT của LỊCH HẸN: lời nhắc có markdown ra kênh bot KHÔNG mang styles", async () => {
+    // Đối xứng với ca "chuỗi THẬT" của đường CHAT
+    // (`ngan-sach-byte-theo-kenh.test.ts`). Vòng rà soát 4 đo được rằng bài
+    // học của ca đó mới chỉ áp cho một nửa: bỏ `mangDinhDang` khỏi target mà
+    // `taoDichGuiChoJob` dựng thì CẢ 2174 test vẫn XANH, trong khi bỏ
+    // `tranKyTuMotTin` hay `threadType` đều đỏ đúng một ca. Tức đúng cờ này,
+    // đúng đường này, không ai canh.
+    //
+    // Ca sống chứ không phải giả định: `scheduled-job-send.ts` gọi
+    // `dinhDangNeuBat(text)` cho MỌI lượt gửi theo lịch và
+    // `ZALO_RICH_TEXT_ENABLED` mặc định bật. Mất cờ thì `soByteTin` cộng cả
+    // JSON của styles vào ngân sách -> chẻ thừa tin -> mà trần ngày tính theo
+    // `reply.sentParts`, nên `SCHEDULER_MAX_PROACTIVE_PER_DAY` bị đốt nhanh
+    // hơn một cách CÂM.
+    await botOnline();
+    const dich = taoDich.taoDichGuiChoJob(
+      makeJob({ payload: "khong dung toi" }),
+    );
+    assert.equal(
+      dich?.target.mangDinhDang,
+      false,
+      "cờ không đi từ kênh bot qua `taoDichGuiChoJob` tới đường gửi của scheduler",
+    );
+
+    const job = makeJob({ payload: "**Nhắc họp** lúc 3h" });
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, now: new Date() });
+
+    // Chữ vẫn phải được BÓC markdown ở tầng trên - bỏ cờ khác với bỏ định dạng
+    assert.deepEqual(daGui, [{ chatId: THREAD, text: "Nhắc họp lúc 3h" }]);
   });
 
   it("job kind=agent chạy được với `api: null` - lượt cô lập không cần zca-js", async () => {
