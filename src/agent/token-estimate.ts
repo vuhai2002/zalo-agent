@@ -1,5 +1,7 @@
 import type { ModelMessage } from "ai";
 
+import { KY_TU_MOI_TOKEN } from "../shared/ky-tu-moi-token.js";
+
 /**
  * Ước lượng số token của input TRƯỚC khi gọi model.
  *
@@ -23,23 +25,11 @@ import type { ModelMessage } from "ai";
  * từng ghi 184.835 token cộng dồn qua 8 step.
  */
 
-/**
- * Ký tự trên một token cho tiếng Việt.
- *
- * ĐÃ ĐO bằng `gpt-tokenizer` (bảng BPE gốc của OpenAI) trên 4 mẫu tiếng Việt
- * thật - hội thoại, tin tức, kỹ thuật, khối `<noi_dung_ngoai>`:
- *
- *   họ o200k (GPT-4o/5):  3,1 - 3,8 ký tự/token
- *   họ cl100k (GPT-4):    2,1 - 2,2 ký tự/token
- *   tiếng Anh đối chứng:  4,5
- *
- * Lấy 2.5 nên ước CAO hơn thực tế (khoảng 24-52% nếu tính trên số thật) với họ o200k, nhưng vẫn HỤT 12-17%
- * với họ cl100k. Tokenizer của Anthropic không công khai nên không đo được cho
- * chính model mặc định của repo. Biên `HE_SO_AN_TOAN` (chừa 30%) nuốt được mức
- * hụt đó, nhưng đây là chỗ phải theo dõi qua log `uocLuong.lechPhanTram` chứ
- * không phải hằng số đã yên.
- */
-export const KY_TU_MOI_TOKEN = 2.5;
+// Hằng số quy đổi ký tự -> token nằm ở `shared/ky-tu-moi-token.ts` (kèm phép
+// đo và lý do). Ở riêng vì luật chéo bên `config/` và trang Cấu hình trên
+// trình duyệt cũng cần nó, mà cả hai không được kéo file này vào. Re-export để
+// nơi đang dùng không phải sửa đường import.
+export { KY_TU_MOI_TOKEN } from "../shared/ky-tu-moi-token.js";
 
 /**
  * Chi phí mỗi ảnh, tính bằng token - theo CỠ ẢNH ĐANG CẤU HÌNH.

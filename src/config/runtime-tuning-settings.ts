@@ -1,5 +1,6 @@
 import { db } from "../conversation/database.js";
 import { isValidTimezone } from "../shared/current-datetime.js";
+import { uocTokenTuKyTu } from "../shared/ky-tu-moi-token.js";
 import { env } from "./env.js";
 import { TUNING_DEFS, type TuningKey } from "./tuning-definitions.js";
 
@@ -132,11 +133,18 @@ const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => s
   },
   {
     // Bot viết cả nội dung file vào lệnh gọi công cụ nên trần ký tự tài liệu
-    // phải nằm gọn trong trần token. Ước lượng thô 4 ký tự/token, chừa biên cho
-    // phần suy nghĩ và câu trả lời.
+    // phải nằm gọn trong trần token, chừa biên cho phần suy nghĩ và câu trả lời.
+    //
+    // Quy đổi PHẢI dùng `KY_TU_MOI_TOKEN` - CÙNG hằng số mà bộ cắt ngữ cảnh
+    // dùng. Trước đây chỗ này tự viết riêng số 4, tức con số của TIẾNG ANH
+    // (đo đối chứng 4,5) trong một bot tiếng Việt, còn bộ ước lượng thật thì
+    // chạy 2,5. Hai bản lệch nhau nên luật cho qua tới 45.875 ký tự trong khi
+    // bộ ước lượng chỉ chịu được 28.672 - chênh 60%: người đặt 40.000 lưu được
+    // bình thường rồi bot bị cắt giữa lúc viết file, đúng cái mà luật này sinh
+    // ra để chặn.
     keys: ["DOCUMENT_MAX_CHARS", "LLM_MAX_OUTPUT_TOKENS"],
     check: (so) =>
-      so("DOCUMENT_MAX_CHARS") / 4 > so("LLM_MAX_OUTPUT_TOKENS") * 0.7
+      uocTokenTuKyTu(so("DOCUMENT_MAX_CHARS")) > so("LLM_MAX_OUTPUT_TOKENS") * 0.7
         ? "Trần ký tự tài liệu quá lớn so với trần token bot viết ra - bot sẽ bị cắt giữa lúc tạo file và mất cả lượt."
         : null,
   },

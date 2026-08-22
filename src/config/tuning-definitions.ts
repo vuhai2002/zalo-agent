@@ -46,7 +46,23 @@ export type TuningDef = {
   // `presets` là mốc CHỌN NHANH, không phải danh sách đóng: ô nhập tay vẫn
   // nhận mọi giá trị trong `min`..`max`. Có nó thì giao diện hiện menu kèm mục
   // "Tùy chỉnh"; không có thì vẫn là ô nhập số như cũ.
-  | { kind: "number"; min: number; max: number; unit?: string; presets?: readonly MocSoGoiY[] }
+  // `hienQuyDoiToken`: ô đo bằng KÝ TỰ nhưng nội dung của nó đi thẳng vào
+  // request gửi model, nên nó cạnh tranh trực tiếp với Cửa sổ ngữ cảnh và Trần
+  // token viết ra. Bật cờ này thì dưới ô hiện thêm "≈ N token" để đối chiếu
+  // được với hai ô kia.
+  //
+  // CHỈ bật cho ô mà nội dung THẬT SỰ vào ngữ cảnh. `ZALO_MAX_MESSAGE_CHARS`
+  // là giới hạn của Zalo lúc GỬI TIN và `AGENT_TRACE_MAX_CHARS` chỉ cắt để lưu
+  // trace - hai ô đó không dính model, gắn con số token vào là bịa ra một mối
+  // liên hệ không có thật.
+  | {
+      kind: "number";
+      min: number;
+      max: number;
+      unit?: string;
+      presets?: readonly MocSoGoiY[];
+      hienQuyDoiToken?: boolean;
+    }
   | { kind: "boolean" }
   | { kind: "enum"; options: readonly string[] }
   // Danh sách chọn quá dài để nhét vào `enum` (418 tên timezone IANA) nên
@@ -158,7 +174,7 @@ const TUNING_BY_KEY = {
     kind: "number",
     group: "turn",
     label: "Trần token bot viết ra",
-    hint: "Độ dài tối đa của MỘT câu trả lời, tính cho TỪNG bước chứ không phải cả lượt. Phải đủ chỗ cho bước tốn nhất là tạo file: bot viết cả nội dung file vào lệnh gọi công cụ. Ô này bị kẹp hai đầu: hạ quá thấp thì phải hạ Trần ký tự tài liệu theo, nâng quá cao thì phải nới Cửa sổ ngữ cảnh theo (cửa sổ phải lớn hơn khoảng 3,4 lần). Với bộ mặc định, khoảng dùng được là 7.143 - 38.399.",
+    hint: "Độ dài tối đa của MỘT câu trả lời, tính cho TỪNG bước chứ không phải cả lượt. Phải đủ chỗ cho bước tốn nhất là tạo file: bot viết cả nội dung file vào lệnh gọi công cụ. Ô này bị kẹp hai đầu: hạ quá thấp thì phải hạ Trần ký tự tài liệu theo, nâng quá cao thì phải nới Cửa sổ ngữ cảnh theo (cửa sổ phải lớn hơn khoảng 3,4 lần). Với bộ mặc định, khoảng dùng được là 11.429 - 38.399.",
     min: 256,
     max: 200_000,
     unit: "token",
@@ -304,6 +320,7 @@ const TUNING_BY_KEY = {
     min: 2000,
     max: 100_000,
     unit: "ký tự",
+    hienQuyDoiToken: true,
   },
 
   // --- Tạo file ---
@@ -342,6 +359,7 @@ const TUNING_BY_KEY = {
     min: 500,
     max: 500_000,
     unit: "ký tự",
+    hienQuyDoiToken: true,
   },
   DOCUMENT_MAX_SHEETS: {
     kind: "number",
@@ -603,6 +621,7 @@ const TUNING_BY_KEY = {
     min: 400,
     max: 4000,
     unit: "ký tự",
+    hienQuyDoiToken: true,
   },
   KB_CHUNK_OVERLAP_PERCENT: {
     kind: "number",
@@ -638,6 +657,7 @@ const TUNING_BY_KEY = {
     min: 2000,
     max: 20_000,
     unit: "ký tự",
+    hienQuyDoiToken: true,
   },
   KB_MAX_FILE_MB: {
     kind: "number",

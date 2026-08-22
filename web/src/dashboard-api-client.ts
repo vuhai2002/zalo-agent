@@ -554,6 +554,11 @@ export type TuningDef = {
       unit?: string;
       /** `label` là CON SỐ (không bị cắt khi hẹp), `hint` là tên model (được phép cắt) */
       presets?: { value: number; label: string; hint: string }[];
+      /**
+       * Ô đo bằng ký tự nhưng nội dung đi vào request gửi model - hiện thêm
+       * dòng quy đổi ra token để đối chiếu được với Cửa sổ ngữ cảnh.
+       */
+      hienQuyDoiToken?: boolean;
     }
   | { kind: "boolean" }
   | { kind: "enum"; options: string[] }

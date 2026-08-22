@@ -1,12 +1,19 @@
 import { useState } from "react";
 import type { TuningDef } from "../dashboard-api-client";
 import { dangNhapTayCuaSo } from "../../../src/config/tuning-number-presets.js";
+import { uocTokenTuKyTu } from "../../../src/shared/ky-tu-moi-token.js";
 import { SelectMenu } from "../shared/select-menu";
 import { ToggleKnob } from "../shared/ui-bits";
 import { TimezoneSelect } from "./timezone-select";
 
 /** Mục cuối của menu mốc gợi ý - chọn nó thì hiện ô nhập số */
 const TUY_CHINH = "custom";
+
+/** Bản nháp có phải một số dương đọc được không - rác thì không quy đổi */
+function soHopLe(nhap: string): boolean {
+  const n = Number(nhap.trim());
+  return nhap.trim() !== "" && Number.isFinite(n) && n > 0;
+}
 
 /**
  * Cột bên PHẢI của một dòng cấu hình: ô nhập / công tắc / menu chọn, tùy `kind`.
@@ -125,6 +132,20 @@ export function TuningFieldControl({
               <div className="mt-1 whitespace-nowrap text-[11px] text-ink-soft/70">
                 ({def.min.toLocaleString("vi-VN")} - {def.max.toLocaleString("vi-VN")})
               </div>
+              {/* Quy đổi ra token cho ô đo bằng KÝ TỰ mà nội dung lại đi vào
+                  request gửi model - không có dòng này thì không cách nào đối
+                  chiếu nó với Cửa sổ ngữ cảnh hay Trần token viết ra.
+
+                  Bám theo BẢN NHÁP (`nhap`) chứ không phải giá trị đã lưu, để
+                  con số chạy ngay lúc gõ - đó mới là lúc người ta cần ước lượng.
+
+                  Giá trị rác hay rỗng thì KHÔNG hiện gì: "khoảng 0 token" là
+                  một khẳng định sai, im lặng trung thực hơn. */}
+              {def.hienQuyDoiToken && soHopLe(nhap) && (
+                <div className="mt-0.5 whitespace-nowrap text-[11px] text-ink-soft/70">
+                  khoảng {uocTokenTuKyTu(Number(nhap)).toLocaleString("vi-VN")} token
+                </div>
+              )}
             </>
           )}
         </div>

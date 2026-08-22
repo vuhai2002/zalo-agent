@@ -10,6 +10,7 @@ import {
   type MocSoGoiY,
 } from "./tuning-number-presets.js";
 import { TUNING_DEFS } from "./tuning-definitions.js";
+import { uocTokenTuKyTu } from "../shared/ky-tu-moi-token.js";
 
 /** Mỗi danh sách mốc phải qua đúng bộ luật này - thêm danh sách mới thì thêm một dòng */
 const DANH_SACH: { ten: string; key: string; moc: readonly MocSoGoiY[] }[] = [
@@ -84,14 +85,18 @@ for (const { ten, key, moc } of DANH_SACH) {
 }
 
 describe("mốc trần token viết ra - ràng buộc chéo", () => {
-  it("có ít nhất một mốc DÙNG ĐƯỢC NGAY với bộ mặc định", () => {
-    // Hai luật chéo kẹp ô này: `DOCUMENT_MAX_CHARS/4 > tran*0,7` chặn từ dưới,
-    // `cuaSo*0,3 <= tran` chặn từ trên. Với mặc định (20.000 và 128.000) khoảng
-    // hợp lệ là 7.143 - 38.399. Danh sách mà KHÔNG có mốc nào lọt khoảng đó thì
-    // mở menu ra chọn cái nào cũng bị từ chối lưu.
-    const duoi = 20_000 / 4 / 0.7;
+  it("có ít nhất hai mốc DÙNG ĐƯỢC NGAY với bộ mặc định", () => {
+    // Hai luật chéo kẹp ô này: quy đổi trần tài liệu ra token phải <= tran*0,7
+    // (chặn từ dưới), và `cuaSo*0,3 <= tran` (chặn từ trên). Với mặc định
+    // (`DOCUMENT_MAX_CHARS` 20.000, cửa sổ 128.000) khoảng hợp lệ là
+    // 11.429 - 38.399. Danh sách mà KHÔNG có mốc nào lọt khoảng đó thì mở menu
+    // ra chọn cái nào cũng bị từ chối lưu.
+    //
+    // Tính bằng `uocTokenTuKyTu` chứ KHÔNG viết lại phép chia: đây đúng là chỗ
+    // đã đẻ ra bản sao hằng số quy đổi thứ hai một lần rồi.
+    const duoi = uocTokenTuKyTu(20_000) / 0.7;
     const tren = 128_000 * 0.3;
-    const dungDuoc = MOC_TRAN_TOKEN_VIET_RA.filter((m) => m.value >= duoi && m.value < tren);
+    const dungDuoc = MOC_TRAN_TOKEN_VIET_RA.filter((m) => m.value > duoi && m.value < tren);
     assert.ok(
       dungDuoc.length >= 2,
       `phải có >= 2 mốc trong khoảng ${Math.ceil(duoi)}..${tren - 1}, đang có: ${dungDuoc.map((m) => m.value).join(", ")}`,
@@ -99,7 +104,22 @@ describe("mốc trần token viết ra - ràng buộc chéo", () => {
   });
 
   it("mặc định 16.384 nằm trong khoảng dùng được ngay", () => {
-    assert.ok(16_384 >= 20_000 / 4 / 0.7 && 16_384 < 128_000 * 0.3);
+    assert.ok(16_384 > uocTokenTuKyTu(20_000) / 0.7 && 16_384 < 128_000 * 0.3);
+  });
+
+  it("mô tả của ô ghi ĐÚNG khoảng dùng được - số trong chữ phải khớp số trong luật", () => {
+    // Câu "khoảng dùng được là X - Y" nằm trong `hint`, mà hint là chữ tĩnh nên
+    // nó lạc hậu ngay khi ai đó chỉnh hằng số quy đổi. Đã xảy ra: siết luật từ
+    // 4 xuống 2,5 ký tự/token làm cận dưới nhảy từ 7.143 lên 11.429.
+    const def = TUNING_DEFS.LLM_MAX_OUTPUT_TOKENS;
+    if (def?.kind !== "number") return assert.fail("phải là kind number");
+    const duoi = Math.ceil(uocTokenTuKyTu(20_000) / 0.7 + 0.001);
+    const tren = 128_000 * 0.3 - 1;
+    assert.ok(
+      def.hint.includes(duoi.toLocaleString("vi-VN")) &&
+        def.hint.includes(tren.toLocaleString("vi-VN")),
+      `hint phải ghi khoảng ${duoi.toLocaleString("vi-VN")} - ${tren.toLocaleString("vi-VN")}`,
+    );
   });
 });
 
