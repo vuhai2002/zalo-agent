@@ -61,6 +61,39 @@ ENV NODE_ENV=production
 # cách publish `127.0.0.1:<host>:<container>` trong compose.
 ENV DASHBOARD_HOST=0.0.0.0
 
+# yt-dlp cho tool `tai_video`: nguồn DUY NHẤT của Facebook và là tầng dự phòng
+# của TikTok. Thiếu nó thì Facebook hỏng 100% còn TikTok mất hẳn tầng 2, mà lỗi
+# thì đội lốt "video riêng tư" trong câu trả lời cho người dùng nếu tầng dưới
+# không nhận ra. `chay-yt-dlp.ts` nhận ra CẢ HAI hình dạng (thiếu binary =
+# ENOENT, thiếu module = mã thoát 1 kèm "No module named yt_dlp") rồi bật cờ
+# `loiCauHinh` - ca thứ hai mới là ca image này gặp.
+#
+# `python3` chứ không phải `python`: Alpine chỉ có `python3` trong PATH, nên
+# `PYTHON_PATH` phải đặt tường minh (mặc định trong code là `python`).
+#
+# Python >= 3.11 theo Changelog yt-dlp 2026.07.04. Alpine của node:24 hiện cấp
+# 3.12, nhưng ghi lại đây để lần nâng base image biết cần kiểm gì.
+#
+# `--break-system-packages`: Alpine đánh dấu môi trường Python là "externally
+# managed" (PEP 668). Đây là container dùng một việc, không có gì để vỡ.
+#
+# Gỡ pip sau khi cài để không để lại công cụ cài đặt trong image chạy production.
+#
+# Bước kiểm cuối chạy `python3 -m yt_dlp` chứ KHÔNG chạy `yt-dlp`: đó mới là
+# đường mà runtime dùng (xem `lenhYtDlp`). Kiểm bằng console script thì một image
+# có script nhưng hỏng module vẫn build xanh. Bước kiểm nằm SAU `apk del` trong
+# CÙNG một RUN, nên nếu gỡ pip có làm hỏng gì thì build đỏ ngay tại đây.
+RUN apk add --no-cache python3 py3-pip \
+    && pip3 install --no-cache-dir --break-system-packages yt-dlp \
+    && apk del py3-pip \
+    && python3 -m yt_dlp --version
+ENV PYTHON_PATH=python3
+# Cache của yt-dlp. `adduser --system` KHÔNG tạo /home/zalo, nên thiếu dòng này
+# thì nó ghi cache vào một thư mục không tồn tại và `--no-warnings` nuốt luôn
+# cảnh báo - không chết, chỉ mất cache trong im lặng. Biến này nằm trong danh
+# sách CHO PHÉP của `chay-yt-dlp.ts` nên chở được sang tiến trình con.
+ENV XDG_CACHE_HOME=/tmp
+
 # uid/gid 1001 rời hẳn user `node` (uid 1000) có sẵn trong image - cùng cách 4
 # dịch vụ khác đang chạy trên VPS này làm, để quyền trên thư mục dữ liệu mount
 # vào là con số biết trước chứ không phụ thuộc image.

@@ -13,8 +13,8 @@ import { hostnameToAddress, isPublicAddress } from "./private-address-guard.js";
  * - tự đi theo redirect nhưng mỗi hop đều bị kiểm lại
  */
 
-const DEFAULT_TIMEOUT_MS = 15_000;
-const MAX_REDIRECTS = 3;
+export const DEFAULT_TIMEOUT_MS = 15_000;
+export const MAX_REDIRECTS = 3;
 
 /**
  * Request trần (không header) bị nhiều site trả 403/406 - đo thực tế:
@@ -68,7 +68,7 @@ const guardedLookup: LookupFunction = (hostname, options, callback) => {
   });
 };
 
-const formatMb = (bytes: number): string => `${Math.round(bytes / (1024 * 1024))}MB`;
+export const formatMb = (bytes: number): string => `${Math.round(bytes / (1024 * 1024))}MB`;
 
 /**
  * Đọc stream với hạn mức byte. Vượt hạn thì ném lỗi và huỷ stream ngay (thoát
@@ -133,7 +133,42 @@ export function decompressBody(
   }
 }
 
-function openGuardedRequest(url: URL, timeoutMs: number): Promise<IncomingMessage> {
+/**
+ * Header ĐƯỢC PHÉP thêm vào một request đã qua gác.
+ *
+ * Danh sách CHO PHÉP, không phải `Record` tự do - xem chú thích ở
+ * `openGuardedRequest`. Hai header này chỉ ảnh hưởng phần nội dung được trả về,
+ * không đụng tới danh tính hay đích đến của request.
+ */
+export type HeaderDocThem = Partial<Record<"range" | "Accept-Encoding", string>>;
+
+/**
+ * Mở một request ĐÃ QUA GÁC tới URL công khai.
+ *
+ * `method` và `headerThem` mặc định giữ nguyên hành vi cũ (GET, không header
+ * thêm) để mọi caller có sẵn không đổi gì.
+ *
+ * `headerThem` cố ý CHỈ nhận vài header đọc-thêm, không nhận `Record` tự do:
+ * `setHeader` của Node chuẩn hóa khóa nên một `Record<string,string>` ghi đè
+ * được cả `Host`, `Cookie`, `Authorization` - đã đo trên dây, Node bỏ hẳn Host
+ * tự sinh khi caller cung cấp, và còn cho gửi đồng thời `content-length` +
+ * `transfer-encoding: chunked`. Hôm nay chưa caller nào đưa dữ liệu ngoài vào
+ * đây, nhưng một tham số hình dạng tự do là lời mời cho lần sau. Kiểu hẹp thì
+ * trình biên dịch canh hộ, không tốn gì lúc chạy.
+ *
+ * ĐỪNG DÙNG `"HEAD"` ĐỂ DÒ XEM URL CÒN SỐNG - đã đo và trả giá: CDN của TikTok
+ * trả **503 cho HEAD nhưng 206 cho GET kèm `Range`** trên cùng một URL, và điều
+ * đó khác nhau theo từng host (`v19.tiktokcdn-us.com` trả lời HEAD bình thường,
+ * `v16m.tiktokcdn-us.com` thì không). Dò bằng HEAD là đẩy oan những video hoàn
+ * toàn sống sang đường dự phòng đắt nhất. Dùng GET kèm `Range: bytes=0-0`:
+ * đúng cách máy người nhận sẽ tải, mà chỉ tốn một byte.
+ */
+export function openGuardedRequest(
+  url: URL,
+  timeoutMs: number,
+  method: "GET" | "HEAD" = "GET",
+  headerThem: HeaderDocThem = {},
+): Promise<IncomingMessage> {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error(`Chỉ hỗ trợ http/https, không hỗ trợ "${url.protocol}"`);
   }
@@ -149,7 +184,7 @@ function openGuardedRequest(url: URL, timeoutMs: number): Promise<IncomingMessag
     const send = url.protocol === "https:" ? httpsRequest : httpRequest;
     const req = send(
       url,
-      { lookup: guardedLookup, timeout: timeoutMs, headers: BROWSER_HEADERS },
+      { method, lookup: guardedLookup, timeout: timeoutMs, headers: { ...BROWSER_HEADERS, ...headerThem } },
       resolve,
     );
     req.on("timeout", () => req.destroy(new Error(`Hết thời gian chờ ${timeoutMs}ms`)));

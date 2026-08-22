@@ -19,7 +19,7 @@ const TRAN_DANG_NHAP_MS = 10 * 60 * 1000;
  * thật thì không có method nào tương đương (`setMessageReaction` trả 404), mà
  * đây đều là việc phụ - thiếu thì bot vẫn trả lời bình thường.
  *
- * `api: null` - 7 tool cần zca-js đã bị `nang-luc-kenh-bot.ts` chặn khỏi lượt
+ * `api: null` - 8 tool cần zca-js đã bị `nang-luc-kenh-bot.ts` chặn khỏi lượt
  * này nên không ai đụng tới nó.
  */
 export function kenhBot(client: ZaloBotClient): KenhLuot {

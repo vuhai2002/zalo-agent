@@ -311,7 +311,7 @@ method chứ tuyệt đối không log URL.
 `upload.wikimedia.org` trả "The photo URL is invalid" dù vẫn là HTTPS mở được
 bằng trình duyệt - Zalo tự đi tải ảnh từ phía server.
 
-### 7 trong 14 tool không chạy được
+### 8 trong 15 tool không chạy được
 
 Dò 17 method trên API sống: 13 cái trả `{"ok":false,"description":"Not
 Found","error_code":404}`. Không có `sendDocument`/`sendFile`/`sendVideo`/
@@ -343,11 +343,11 @@ nhận được tool.
 
 `GET /api/tools` phải nhận `?accountId=` mới biết loại kênh. Bản đầu đóng cứng
 `loai: "ca_nhan"` nên nhánh bot là code chết trên đường này: chọn một tài khoản
-bot ở trang Tools vẫn thấy đủ 14 tool và "Gửi file" vẫn xanh - đúng cái hậu quả
+bot ở trang Tools vẫn thấy đủ 15 tool và "Gửi file" vẫn xanh - đúng cái hậu quả
 đoạn trên nói nó ngăn được.
 
-Điểm đáng ghi: **bảng chặn giờ TRÙNG KHÍT tập tool dùng `ctx.api`** - đúng 7
-tool, không dư không thiếu. Trước V3.19 bảng có 8 mục và chính mục thừa
+Điểm đáng ghi: **bảng chặn giờ TRÙNG KHÍT tập tool dùng `ctx.api`** - đúng 8
+tool, không dư không thiếu (`tai_video` thêm vào V3.21 giữ nguyên bất biến này). Trước V3.19 bảng có 8 mục và chính mục thừa
 (`schedule_task`, không hề dùng `ctx.api`) là dấu hiệu cho thấy nó bị chặn vì
 lý do khác hẳn phần còn lại. Hệ quả vẫn giữ nguyên: trên kênh bot không tool
 nào cần `api` của zca-js, nên `ToolContext.api` để `null` được mà không phải

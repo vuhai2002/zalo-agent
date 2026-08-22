@@ -166,6 +166,30 @@ const envSchema = z.object({
   // Số file tối đa 1 thread được tạo trong 1 giờ - chặn spam "xuất file" liên tục
   DOCUMENT_MAX_PER_HOUR: z.coerce.number().int().min(1).max(200).default(10),
 
+  // --- Tải video TikTok / Facebook ---
+  //
+  // Trần THỜI LƯỢNG chặn được TRƯỚC khi tải một byte nào: cả hai nguồn đều trả
+  // `duration` ở bước metadata, tốn đúng một request. Đó là lý do chặn theo
+  // thời lượng chứ không chỉ theo dung lượng.
+  VIDEO_MAX_DURATION_MINUTES: z.coerce.number().int().min(1).max(300).default(30),
+  // Lưới đỡ thứ hai: video ngắn mà bitrate cao vẫn nặng. Nguồn không phải lúc
+  // nào cũng trả kích thước, nên trần này chỉ chặn được khi biết - không thay
+  // thế được trần thời lượng.
+  VIDEO_MAX_SIZE_MB: z.coerce.number().int().min(1).max(2000).default(100),
+  // Trần mỗi THREAD mỗi giờ. Rủi ro lớn nhất của tính năng này là mất nick Zalo
+  // vì gửi video ồ ạt, không phải VPS quá tải.
+  VIDEO_MAX_PER_HOUR: z.coerce.number().int().min(1).max(200).default(15),
+  // Số tiến trình tải chạy CÙNG LÚC. Đo thật: mỗi tiến trình yt-dlp ăn ~75 MB
+  // RAM bất kể cỡ video (nó ghi thẳng ra đĩa, không đệm). 2 -> ~150 MB.
+  VIDEO_MAX_CONCURRENT: z.coerce.number().int().min(1).max(8).default(2),
+  // Số lần thử MỖI nguồn. Đo: 4 lần -> 5/6 phiên thành công với yt-dlp trên
+  // TikTok (nguồn hay bị trang thử thách chống bot).
+  VIDEO_SOURCE_RETRIES: z.coerce.number().int().min(1).max(10).default(4),
+  // Nghỉ giữa hai lần thử. PHẢI >= 1000: TikWM giới hạn 1 request/giây (đo
+  // thật, họ báo thẳng `Free Api Limit: 1 request/second`), nghỉ ngắn hơn là
+  // lần thử lại tự đâm vào giới hạn rồi ta tưởng nguồn hỏng.
+  VIDEO_RETRY_DELAY_MS: z.coerce.number().int().min(1000).max(30_000).default(1500),
+
   // Tool vẽ ảnh. Endpoint OpenAI-compatible /v1/images/generations (9Router,
   // OpenAI, hoặc gateway bất kỳ nói cùng giao thức). Cấu hình được từ dashboard
   // (Settings của dòng tool trên trang Tools) - env chỉ là giá trị khởi điểm.
@@ -217,6 +241,15 @@ const envSchema = z.object({
   // Số tin tối đa giữ lại mỗi thread; tin cũ hơn bị xóa sau mỗi lần ghi để DB
   // không phình vô hạn khi bot chạy dài ngày.
   HISTORY_MAX_MESSAGES_PER_THREAD: z.coerce.number().int().min(20).max(100_000).default(500),
+  // Đường chạy yt-dlp cho tool `tai_video`. KHÔNG có `.default()` vì "không đặt"
+  // là một trạng thái có nghĩa riêng: `YTDLP_PATH` trống thì chạy
+  // `<PYTHON_PATH> -m yt_dlp`, còn `PYTHON_PATH` trống thì lùi về `python`.
+  // Khai ở đây để hai biến này tra được cùng chỗ với mọi biến khác - gõ nhầm
+  // `YT_DLP_PATH` trong compose thì trước đây rơi về mặc định trong im lặng.
+  // KHÔNG nhầm `PYTHON_PATH` với `PYTHONPATH`: biến sau nạp mã Python vào tiến
+  // trình và bị danh sách cho phép trong `chay-yt-dlp.ts` cố ý chặn.
+  YTDLP_PATH: z.string().optional(),
+  PYTHON_PATH: z.string().optional(),
   SEND_DELAY_MIN_MS: z.coerce.number().int().min(0).default(800),
   SEND_DELAY_MAX_MS: z.coerce.number().int().min(0).default(2500),
   // Zalo chặn tin quá dài ở phía server (error_code 118 "Nội dung quá dài") -

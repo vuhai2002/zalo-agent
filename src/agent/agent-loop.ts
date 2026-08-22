@@ -79,7 +79,7 @@ export const STEP_LIMIT_REPLY =
 export type AgentTurnParams = {
   /**
    * API zca-js, đi thẳng vào `ToolContext.api`. `null` trên kênh BOT - xem
-   * docstring của `ToolContext.api`. An toàn vì 7 tool cần nó đều đã bị
+   * docstring của `ToolContext.api`. An toàn vì 8 tool cần nó đều đã bị
    * `listAvailableTools` loại khỏi lượt của kênh bot.
    */
   api: API | null;

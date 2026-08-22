@@ -18,12 +18,12 @@ export type ToolContext = {
    * API của zca-js. `null` trên kênh BOT - Zalo Bot API không có method nào
    * tương đương nên không tool nào dùng tới.
    *
-   * Điều làm chuyện này an toàn: 7 tool dùng `api` TRÙNG KHÍT 7 tool bị chặn
+   * Điều làm chuyện này an toàn: 8 tool dùng `api` TRÙNG KHÍT 8 tool bị chặn
    * trên kênh bot (`nang-luc-kenh-bot.ts`). Không phải trùng hợp - chúng bị
    * chặn vì cần đúng năng lực gửi mà Bot API không có. Nên khi `api` là null
-   * thì `build()` của 7 tool đó không bao giờ được gọi.
+   * thì `build()` của 8 tool đó không bao giờ được gọi.
    *
-   * Compiler không thấy được bất biến ấy, nên 7 tool đó gọi `apiCaNhan(ctx)`
+   * Compiler không thấy được bất biến ấy, nên 8 tool đó gọi `apiCaNhan(ctx)`
    * để nói ra tường minh thay vì rải `!` khắp nơi.
    */
   api: API | null;
@@ -86,7 +86,7 @@ export type ToolGroup = "read" | "action";
 export type ToolScope = {
   agent: Pick<AgentProfile, "id" | "disabledTools">;
   /**
-   * `loai` BẮT BUỘC (không optional): 7 trong 14 tool không chạy được trên kênh
+   * `loai` BẮT BUỘC (không optional): 8 trong 15 tool không chạy được trên kênh
    * bot, và để optional thì quên truyền sẽ âm thầm cấp thừa tool - model hứa
    * gửi file rồi thất bại, người nhắn tưởng agent hỏng. Cùng lý do với việc
    * `agent` bắt buộc ở trên.
@@ -166,8 +166,8 @@ export type ToolDefinition = {
 /**
  * Lấy `api` của kênh tài khoản cá nhân, khẳng định nó có thật.
  *
- * Dùng ở 7 tool cần zca-js. Nhánh ném KHÔNG THỂ tới được trong lúc chạy bình
- * thường: `listAvailableTools` đã loại đúng 7 tool này khỏi lượt của kênh bot
+ * Dùng ở 8 tool cần zca-js. Nhánh ném KHÔNG THỂ tới được trong lúc chạy bình
+ * thường: `listAvailableTools` đã loại đúng 8 tool này khỏi lượt của kênh bot
  * nên `build()` của chúng không bao giờ chạy khi `api` null. Viết ra để trình
  * biên dịch có chỗ bám, và để ai nối kênh mới sau này vấp phải một thông điệp
  * nói rõ chuyện gì thay vì một `TypeError: cannot read property of null`.

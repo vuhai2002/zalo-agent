@@ -195,7 +195,7 @@ async function runAgentJob(
       const result = await runAgentTurn({
         // `null` trên kênh bot. AN TOÀN, nhưng KHÔNG phải vì "hai lớp lọc
         // chồng nhau" như bản chú thích đầu ghi - đếm lại bằng mã nguồn thì
-        // câu đó SAI: trong 7 tool gọi `apiCaNhan(ctx)`, sáu cái có
+        // câu đó SAI: trong 8 tool gọi `apiCaNhan(ctx)`, bảy cái có
         // `runsInScheduledTurn: false`, riêng `get_group_info` KHÔNG khai gì
         // cả nên lớp duy nhất giữ nó khỏi lượt này là bảng chặn kênh bot.
         //

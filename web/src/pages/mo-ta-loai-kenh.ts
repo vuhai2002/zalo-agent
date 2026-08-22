@@ -47,7 +47,7 @@
  */
 
 export const MO_TA_KENH_BOT =
-  "Không gửi được file, tài liệu Word/Excel, ảnh tự vẽ, thả cảm xúc, tag thành viên, " +
+  "Không gửi được file, tài liệu Word/Excel, ảnh tự vẽ, video tải về, thả cảm xúc, tag thành viên, " +
   "và không đọc được danh sách thành viên nhóm - đó là giới hạn của Zalo Bot API. " +
   "Đổi lại không có rủi ro bị khóa tài khoản.";
 

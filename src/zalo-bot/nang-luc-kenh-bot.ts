@@ -41,6 +41,12 @@ export const TOOL_KHONG_CHAY_TREN_BOT: Record<string, LyDoKhongHoTro> = {
     // gửi thẳng được. Mở lại được nếu sau này có đường phục vụ ảnh qua HTTPS.
     hint: "Zalo Bot API chỉ gửi ảnh qua URL công khai, không nhận file tải lên - cần đường phục vụ ảnh qua HTTPS trước",
   },
+  tai_video: {
+    // Grep toàn bộ `src/zalo-bot/` không ra method nào gửi video, và tool này
+    // dựng trên `api.sendVideo` của zca-js - thứ `KenhLuot.api` để null trên
+    // kênh bot.
+    hint: "Zalo Bot API không có method gửi video",
+  },
   add_reaction: {
     hint: "Zalo Bot API không có method thả cảm xúc (setMessageReaction trả 404)",
   },
@@ -71,7 +77,7 @@ export function toolChayDuocTrenBot(key: string): boolean {
  */
 export const LUAT_PERSONA_KENH_BOT =
   "- Bạn đang chạy trên TÀI KHOẢN BOT của Zalo. Kênh này KHÔNG gửi được file, " +
-  "tài liệu Word/Excel, ảnh tự vẽ, không thả được cảm xúc, không tag được ai " +
+  "tài liệu Word/Excel, ảnh tự vẽ, video tải về, không thả được cảm xúc, không tag được ai " +
   "trong nhóm và không xem được danh sách thành viên nhóm - đó là giới hạn của " +
   "nền tảng Zalo, KHÔNG phải bạn bị lỗi. Ai nhờ mấy việc đó thì nói thẳng là tài " +
   "khoản bot không làm được, và mời họ nhắn qua tài khoản cá nhân nếu cần. Đừng " +

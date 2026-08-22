@@ -3,7 +3,7 @@
 <p align="center">
 A self-hosted AI agent that lives inside <strong>Zalo</strong>. Runs on <strong>two channel types</strong>:<br/>
 a <strong>personal</strong> Zalo account (via zca-js) and an <strong>official Zalo Bot</strong> account (via the Zalo Bot API).<br/>
-Multi-account in one process, a separate "brain" per account, 14 tools, full web dashboard.<br/>
+Multi-account in one process, a separate "brain" per account, 15 tools, full web dashboard.<br/>
 Provider-agnostic: any OpenAI-compatible endpoint, Anthropic, or Google.
 </p>
 
@@ -22,7 +22,7 @@ Provider-agnostic: any OpenAI-compatible endpoint, Anthropic, or Google.
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-2182%20passing-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-2267%20passing-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -48,7 +48,7 @@ created** in the dashboard and cannot be changed afterwards.
 | Receiving | WebSocket listener + auto reconnect | long polling `getUpdates` |
 | Ban risk | **yes** - use a throwaway account | **no** |
 | Who can message it | friends only | anyone with the link |
-| Tools available | all **14** | **7 of 14** (see table below) |
+| Tools available | all **15** | **7 of 15** (see table below) |
 | Text formatting | native Zalo styles (`textProperties`) | plain text |
 | Per-message cap | configurable (default 2000 chars) | 2000 chars, enforced server-side |
 | Files / images / reactions / @mention | yes | **no such method on the API** |
@@ -72,7 +72,7 @@ The server **validates the token with Zalo before saving** (it calls `getMe`) - 
 saves nothing, so you never end up with an account that looks configured but silently never runs.
 After saving, the account restarts immediately.
 
-### Why 7 tools cannot run on the Bot channel
+### Why 8 tools cannot run on the Bot channel
 
 Not a conservative choice - **measured against the live API**: of 17 probed methods, 13 return
 `{"ok":false,"description":"Not Found","error_code":404}`. There is no
@@ -92,7 +92,7 @@ Hiding a tool without explaining why just makes the user think the agent is brok
 
 ## What the agent can do
 
-14 tools, each toggleable per account from the dashboard.
+15 tools, each toggleable per account from the dashboard.
 
 | Tool | Purpose | Bot channel |
 |---|---|---|
@@ -110,14 +110,15 @@ Hiding a tool without explaining why just makes the user think the agent is brok
 | `tag_member` | @mention the right person in a group | no |
 | `get_group_info` | Group name, member count, member list | no |
 | `add_reaction` | React to a message | no |
+| `tai_video` | Download a TikTok/Facebook video without the watermark and send it in chat | no |
 
 The effective tool set of a turn is the **intersection** of two disable lists: the **agent** declares
 capability ("what this persona knows how to do"), the **account** applies policy ("what this Zalo
 identity is allowed to do"). Neither side can re-enable what the other disabled, so adding a new
 agent can never widen an account's permissions.
 
-Scheduled turns are narrower still: **9 tools are excluded**, because a scheduled turn runs isolated
-from chat history and 5 of them send straight to Zalo, bypassing the daily proactive-message cap.
+Scheduled turns are narrower still: **10 tools are excluded**, because a scheduled turn runs isolated
+from chat history and 6 of them send straight to Zalo, bypassing the daily proactive-message cap.
 
 ### Real rich text, not plain walls
 
@@ -190,8 +191,8 @@ Hono + React + Tailwind, served by the agent process itself at `http://127.0.0.1
 | Memory | Inspect, edit, delete anything the agent remembers |
 | Knowledge base | Upload documents or type them in, inspect the chunks, assign sources per agent for `kb_search` |
 | Schedule | All jobs, dry-run now, per-run history |
-| Tools | Toggle the 14 tools per account; configure image generation and the vision sidecar. Picking a bot account shows exactly why a platform-blocked tool is unavailable |
-| Tuning | **60 runtime parameters** in 11 groups, applied live with no restart |
+| Tools | Toggle the 15 tools per account; configure image generation and the vision sidecar. Picking a bot account shows exactly why a platform-blocked tool is unavailable |
+| Tuning | **66 runtime parameters** in 12 groups, applied live with no restart |
 | Trace | Step-by-step replay of an agent turn: reasoning, tool calls, arguments |
 | Logs | System log viewer |
 
@@ -261,7 +262,7 @@ pnpm build:web              # build the UI; the process serves it at http://127.
 pnpm dev:web                # dashboard UI in dev mode (Vite, proxies the API)
 pnpm zalo-login acc-main    # QR login from the CLI (the web flow is easier; PERSONAL accounts only)
 pnpm zalo-bot-check         # probe the Zalo Bot API with a real token, print which methods live or 404
-pnpm test                   # 2136 tests
+pnpm test                   # 2267 tests
 pnpm typecheck
 pnpm eval                   # 17 cases against a REAL model; no message ever reaches real Zalo
 ```
@@ -297,7 +298,7 @@ Image generation and the vision sidecar are configured separately, also OpenAI-c
 
 | | |
 |---|---|
-| Unit + integration tests | **2136**, on `node:test`, no external framework, across 202 test files |
+| Unit + integration tests | **2267**, on `node:test`, no external framework, across 210 test files |
 | Eval cases against a real model | **17** - measuring what tests cannot: does it research instead of guessing, ask when information is missing, format readably |
 | Source | ~41,900 lines excluding tests, across 355 files |
 
@@ -320,7 +321,7 @@ src/
 │                  channel capability abstraction (KenhLuot)
 ├── zalo-bot/      [BOT channel] Zalo Bot API client, long polling, update parser, capability
 │                  table + tool blocking, its own inbound router, per-account runner
-├── agent/         agent loop (AI SDK), providers, persona, tools/ (14 tools)
+├── agent/         agent loop (AI SDK), providers, persona, tools/ (15 tools)
 ├── scheduler/     schedules: tick, job claiming, proactive-send caps, run history
 ├── conversation/  SQLite: history, threads, contacts, usage, memory, images, summarizer
 ├── middleware/    allowlist + @mention, per-thread batching, send rate limiting

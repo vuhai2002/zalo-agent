@@ -185,6 +185,22 @@ Dữ liệu không bị đụng - nó nằm ngoài image.
 | Đăng nhập dashboard xong bị đá ra | Chạy sau HTTPS mà quên `DASHBOARD_BEHIND_PROXY=true` |
 | Container ghi được nhưng khởi động lại là mất dữ liệu | Volume chưa mount, hoặc thư mục host sai chủ sở hữu (phải là `1001:1001`) |
 | Bot im, log báo bị đá listener | Có phiên Zalo Web khác đang mở cùng tài khoản |
+| Tải video Facebook luôn hỏng, TikTok mất tầng dự phòng | Thiếu yt-dlp trong image. Bot sẽ nói rõ "máy chủ chưa cài yt-dlp" chứ không đổ cho video. Kiểm bằng `docker compose exec bot python3 -m yt_dlp --version` |
+
+### Hai biến môi trường của tool tải video
+
+Bình thường **KHÔNG cần đặt** - Dockerfile lo hết. Ghi ở đây để tra khi máy chủ
+cài khác thường. Cố ý KHÔNG đưa lên trang Cấu hình: chúng là đường dẫn tới một
+FILE THỰC THI, đưa lên dashboard là biến "vào được web" thành "chạy được lệnh
+tùy ý trên máy chủ", đổi lấy tiện lợi gần bằng không.
+
+| Biến | Bỏ trống nghĩa là | Dockerfile đặt |
+|---|---|---|
+| `YTDLP_PATH` | chạy `<PYTHON_PATH> -m yt_dlp` | không đặt |
+| `PYTHON_PATH` | `python` | `python3` (Alpine không có lệnh `python`) |
+
+Đừng nhầm `PYTHON_PATH` với `PYTHONPATH`: biến sau nạp mã Python vào tiến trình
+và bị danh sách cho phép trong `chay-yt-dlp.ts` cố ý chặn.
 
 ## Không có sẵn trong repo
 

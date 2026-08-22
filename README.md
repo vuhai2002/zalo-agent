@@ -3,7 +3,7 @@
 <p align="center">
 Agent AI thường trú trên Zalo. Chạy được trên <strong>hai loại kênh</strong>: tài khoản Zalo <strong>cá nhân</strong> (qua zca-js)<br/>
 và tài khoản <strong>Zalo Bot chính thức</strong> (qua Zalo Bot API). Nhiều account chạy chung một tiến trình,<br/>
-mỗi account một "não" riêng, 14 công cụ, dashboard web đầy đủ. Tự host, không phụ thuộc nhà cung cấp LLM nào.
+mỗi account một "não" riêng, 15 công cụ, dashboard web đầy đủ. Tự host, không phụ thuộc nhà cung cấp LLM nào.
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@ mỗi account một "não" riêng, 14 công cụ, dashboard web đầy đủ. T�
   <img src="https://img.shields.io/badge/Node-22.13+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/AI_SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
-  <img src="https://img.shields.io/badge/tests-2182%20xanh-brightgreen?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-2267%20xanh-brightgreen?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -45,7 +45,7 @@ account** trên dashboard, không đổi được sau đó.
 | Nhận tin | WebSocket listener + tự kết nối lại | long polling `getUpdates` |
 | Rủi ro khóa tài khoản | **có** - chỉ dùng nick phụ | **không** |
 | Ai nhắn được | phải là bạn bè | ai có link cũng nhắn được |
-| Công cụ dùng được | đủ **14** | **7 trong 14** (xem bảng dưới) |
+| Công cụ dùng được | đủ **15** | **7 trong 15** (xem bảng dưới) |
 | Định dạng chữ | định dạng gốc Zalo (`textProperties`) | chữ trơn |
 | Trần một tin | theo cấu hình (mặc định 2000 ký tự) | 2000 ký tự, server ép cứng |
 | Gửi file / ảnh / thả cảm xúc / tag | có | **không có method trên API** |
@@ -68,7 +68,7 @@ Server **kiểm token với Zalo trước khi lưu** (gọi `getMe`) - token sai
 dựng ra một account trông như đã cấu hình xong mà không bao giờ chạy. Lưu xong account tự khởi
 động lại ngay.
 
-### Vì sao 7 công cụ không chạy trên kênh Bot
+### Vì sao 8 công cụ không chạy trên kênh Bot
 
 Không phải chọn cho an toàn - là **đo trên API sống**: dò 17 method, 13 cái trả
 `{"ok":false,"description":"Not Found","error_code":404}`. Không tồn tại
@@ -87,7 +87,7 @@ tưởng agent bị lỗi.
 
 ## Agent làm được gì
 
-14 công cụ, bật/tắt từng cái theo account ngay trên dashboard.
+15 công cụ, bật/tắt từng cái theo account ngay trên dashboard.
 
 | Công cụ | Làm gì | Kênh Bot |
 |---|---|---|
@@ -105,13 +105,14 @@ tưởng agent bị lỗi.
 | `tag_member` | @mention đúng người trong nhóm | không |
 | `get_group_info` | Tên nhóm, số thành viên, danh sách thành viên | không |
 | `add_reaction` | Thả cảm xúc vào tin nhắn | không |
+| `tai_video` | Tải video TikTok/Facebook bản không watermark rồi gửi thẳng vào chat | không |
 
 Bộ công cụ thật của một lượt là **phần giao** giữa hai danh sách tắt: **agent** khai năng lực
 ("vai này biết làm gì"), **account** áp chính sách ("nick này được phép làm gì"). Không bên nào
 bật ngược lại được bên kia, nên thêm một agent mới không bao giờ nới rộng quyền của một nick.
 
-Lượt chạy theo lịch còn hẹp hơn nữa: **9 công cụ bị loại** khỏi lượt đó, vì lượt theo lịch chạy cô
-lập khỏi lịch sử chat và 5 trong số đó gửi thẳng ra Zalo, né mất trần "số tin chủ động mỗi ngày".
+Lượt chạy theo lịch còn hẹp hơn nữa: **10 công cụ bị loại** khỏi lượt đó, vì lượt theo lịch chạy cô
+lập khỏi lịch sử chat và 6 trong số đó gửi thẳng ra Zalo, né mất trần "số tin chủ động mỗi ngày".
 
 ### Tin nhắn có định dạng thật
 
@@ -180,13 +181,13 @@ Hono + React + Tailwind, phục vụ ngay từ chính tiến trình agent tại 
 | Memory | Xem, sửa, xóa từng điều agent đã nhớ |
 | Kho tri thức | Nạp tài liệu (upload hoặc gõ tay), xem đoạn đã cắt, gán nguồn cho từng agent để `kb_search` tra |
 | Lịch hẹn | Danh sách lịch, chạy thử ngay, lịch sử từng lần chạy |
-| Tools | Bật/tắt 14 công cụ theo account, cấu hình vẽ ảnh và model vision. Chọn một account bot thì công cụ nền tảng không hỗ trợ hiện rõ lý do |
-| Cấu hình | **60 tham số** vận hành chỉnh nóng, không cần khởi động lại, chia 11 nhóm |
+| Tools | Bật/tắt 15 công cụ theo account, cấu hình vẽ ảnh và model vision. Chọn một account bot thì công cụ nền tảng không hỗ trợ hiện rõ lý do |
+| Cấu hình | **66 tham số** vận hành chỉnh nóng, không cần khởi động lại, chia 12 nhóm |
 | Trace | Xem lại từng bước của một lượt agent: model nghĩ gì, gọi tool nào, tham số ra sao |
 | Logs | Nhật ký hệ thống |
 
-11 nhóm cấu hình: Nhà cung cấp LLM, Chung, Lượt trả lời (9), Ngữ cảnh & Trí nhớ (6), Tra cứu web
-(2), Tạo file Word/Excel (5), Vẽ ảnh (4), Gửi tin trên Zalo (11), Trace và dọn dẹp (4), Lịch hẹn
+12 nhóm cấu hình: Nhà cung cấp LLM, Chung, Lượt trả lời (9), Ngữ cảnh & Trí nhớ (6), Tra cứu web
+(2), Tạo file Word/Excel (5), Tải video (6), Vẽ ảnh (4), Gửi tin trên Zalo (11), Trace và dọn dẹp (4), Lịch hẹn
 (9), Kho tri thức (9).
 
 Thứ tự ưu tiên cấu hình ở mọi nơi: **dashboard (DB) > `.env` > mặc định trong schema**. Thiếu cấu
@@ -258,7 +259,7 @@ pnpm build:web              # build UI -> web/dist, tiến trình tự serve t�
 pnpm dev:web                # dev UI dashboard (Vite, proxy vào API)
 pnpm zalo-login acc-chinh   # login QR bằng CLI (cách cũ - trên web tiện hơn; chỉ dùng cho tài khoản CÁ NHÂN)
 pnpm zalo-bot-check         # dò Zalo Bot API bằng token thật, in ra method nào sống method nào 404
-pnpm test                   # 2136 test
+pnpm test                   # 2267 test
 pnpm typecheck              # bắt buộc chạy trước khi báo hoàn thành
 pnpm eval                   # 17 case chạy MODEL THẬT, không tin nào ra Zalo thật
 ```
@@ -295,7 +296,7 @@ Vẽ ảnh và model vision phụ cấu hình riêng, cũng theo chuẩn OpenAI-
 
 | | |
 |---|---|
-| Test đơn vị + tích hợp | **2136**, chạy bằng `node:test`, không framework ngoài, 202 file test |
+| Test đơn vị + tích hợp | **2267**, chạy bằng `node:test`, không framework ngoài, 210 file test |
 | Case eval chạy model THẬT | **17** - đo thứ test không đo nổi: có tra cứu thay vì đoán không, có hỏi lại khi thiếu thông tin không, trình bày có dễ đọc không |
 | Nguồn | ~41.900 dòng (không tính test), 355 file |
 
@@ -312,13 +313,13 @@ TRÙM code cũ.
 
 ```
 src/
-├── config/        env (Zod), account store, agent store, 60 tham số chỉnh nóng
+├── config/        env (Zod), account store, agent store, 66 tham số chỉnh nóng
 ├── zalo/          [kênh CÁ NHÂN] login QR, credential mã hóa, listener + reconnect, parse tin,
 │                  lớp làm sạch + dịch markdown sang định dạng Zalo, cắt tin theo byte,
 │                  trừu tượng hóa năng lực kênh (KenhLuot)
 ├── zalo-bot/      [kênh BOT] client Zalo Bot API, long polling, parser update, bảng năng lực
 │                  + chặn tool, router riêng, runner theo account
-├── agent/         agent loop (AI SDK), provider, persona, tools/ (14 công cụ)
+├── agent/         agent loop (AI SDK), provider, persona, tools/ (15 công cụ)
 ├── scheduler/     lịch hẹn: tick, giành job, trần tin chủ động, lịch sử chạy
 ├── conversation/  SQLite: history, threads, contacts, usage, memory, ảnh, summarizer
 ├── middleware/    allowlist + @mention, gộp tin theo thread, rate limit gửi

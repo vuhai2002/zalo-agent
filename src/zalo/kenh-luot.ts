@@ -18,12 +18,12 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
  * | dấu "đang nhập" | có | có (`sendChatAction`) |
  * | biên nhận "đã xem" | có | KHÔNG có method |
  * | thả cảm xúc tự động | có | `setMessageReaction` trả 404 |
- * | `api` cho tool | có | null - 7 tool cần nó đều đã bị chặn |
+ * | `api` cho tool | có | null - 8 tool cần nó đều đã bị chặn |
  */
 export type KenhLuot = {
   /**
    * API zca-js, đi thẳng vào `ToolContext.api`. `null` trên kênh bot; an toàn
-   * vì 7 tool dùng nó trùng khít 7 tool bị chặn (xem `nang-luc-kenh-bot.ts`).
+   * vì 8 tool dùng nó trùng khít 8 tool bị chặn (xem `nang-luc-kenh-bot.ts`).
    */
   api: API | null;
   /** Dựng đường gửi cho một thread cụ thể */

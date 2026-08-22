@@ -151,10 +151,12 @@ describe("lịch hẹn trên tài khoản bot - ba đường vào", () => {
     assert.equal(dong.unavailableHint, undefined);
   });
 
-  it("bảng chặn của kênh bot còn ĐÚNG 7 mục, không còn `schedule_task`", async () => {
+  it("bảng chặn của kênh bot còn ĐÚNG 8 mục, không còn `schedule_task`", async () => {
     // Con số này nằm rải trong README/README.en/system-architecture - đổi ở
     // đây mà quên phần chữ là tài liệu nói dối về chính sản phẩm.
-    assert.equal(Object.keys(nangLuc.TOOL_KHONG_CHAY_TREN_BOT).length, 7);
+    //
+    // 7 -> 8 ở V3.21: thêm `tai_video` (Bot API không có method gửi video).
+    assert.equal(Object.keys(nangLuc.TOOL_KHONG_CHAY_TREN_BOT).length, 8);
     assert.equal(nangLuc.toolChayDuocTrenBot("schedule_task"), true);
     assert.equal(nangLuc.toolChayDuocTrenBot("send_file"), false);
   });

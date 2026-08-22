@@ -7,6 +7,7 @@ import { createScheduleTaskTool } from "./schedule-task-tool.js";
 import { createSaveMemoryTool } from "./save-memory-tool.js";
 import { createSendFileTool } from "./send-file-tool.js";
 import { createTagMemberTool } from "./tag-member-tool.js";
+import { createTaiVideoTool } from "./tai-video-tool.js";
 import type { ToolDefinition } from "./tool-catalog-types.js";
 
 /**
@@ -74,6 +75,17 @@ export const ACTION_TOOL_DEFINITIONS: ToolDefinition[] = [
     // hàng trăm tin chủ động/ngày mà trần không bao giờ chặn được.
     runsInScheduledTurn: false,
     build: (ctx) => createImageTool(ctx),
+  },
+  {
+    key: "tai_video",
+    label: "Tải video TikTok/Facebook",
+    description: "Người dùng dán link TikTok hoặc Facebook, bot tải bản không watermark rồi gửi lại",
+    group: "action",
+    // Cùng lý do runsInScheduledTurn:false của send_file - gửi thẳng qua
+    // enqueueSend nên né hoàn toàn trần tin chủ động mỗi ngày. Nặng hơn nữa:
+    // một job "tải video mỗi 5 phút" là đường ngắn nhất tới việc mất nick Zalo.
+    runsInScheduledTurn: false,
+    build: (ctx) => createTaiVideoTool(ctx),
   },
   {
     key: "tag_member",

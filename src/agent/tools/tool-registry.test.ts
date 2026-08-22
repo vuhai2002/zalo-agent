@@ -214,10 +214,11 @@ describe("tool-registry", () => {
     "create_word_document",
     "create_excel_file",
     "create_image",
+    "tai_video",
     "tag_member",
   ];
 
-  it("isolated:true (lượt theo lịch) loại đủ 9 tool kể cả khi hạ tầng/cấu hình đã sẵn sàng", () => {
+  it("isolated:true (lượt theo lịch) loại đủ 10 tool kể cả khi hạ tầng/cấu hình đã sẵn sàng", () => {
     // Cấu hình sidecar + endpoint vẽ ảnh TRƯỚC để chứng minh read_image/create_image
     // bị loại vì runsInScheduledTurn, không phải vì thiếu cấu hình - nếu không
     // cấu hình thì test này không phân biệt được 2 nguyên nhân (vắng mặt do
@@ -249,7 +250,7 @@ describe("tool-registry", () => {
     imageStore.clearImageSettings();
   });
 
-  it("runsInScheduledTurn khai đúng false cho đúng 9 tool, còn lại mặc định undefined (coi như true)", () => {
+  it("runsInScheduledTurn khai đúng false cho đúng 10 tool, còn lại mặc định undefined (coi như true)", () => {
     const bịLoại = registry.TOOL_DEFINITIONS.filter((t) => t.runsInScheduledTurn === false).map((t) => t.key);
     assert.deepEqual(bịLoại.sort(), [...TOOL_LOAI_KHOI_LICH].sort());
   });

@@ -21,7 +21,7 @@ describe("mô tả loại kênh trên trang Accounts", () => {
     assert.doesNotMatch(MO_TA_KENH_BOT, /lịch|hẹn|schedule/i);
   });
 
-  it("mô tả kênh bot nêu ĐỦ CẢ BẢY tool bị chặn, không sót cái nào", () => {
+  it("mô tả kênh bot nêu ĐỦ CẢ TÁM tool bị chặn, không sót cái nào", () => {
     // Bỏ chữ "lịch hẹn" mà bỏ luôn phần đúng thì thành nói THIẾU theo chiều
     // ngược lại - người vận hành chọn kênh bot rồi mới phát hiện không gửi
     // được file. Vòng rà soát 2 bắt được đúng ca đó: bản đầu sót
@@ -36,6 +36,7 @@ describe("mô tả loại kênh trên trang Accounts", () => {
       create_word_document: /tài liệu Word/i,
       create_excel_file: /Excel/i,
       create_image: /ảnh tự vẽ/i,
+      tai_video: /video tải về/i,
       add_reaction: /thả cảm xúc/i,
       tag_member: /tag thành viên/i,
       get_group_info: /thành viên nhóm/i,

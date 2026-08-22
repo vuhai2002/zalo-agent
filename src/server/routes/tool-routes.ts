@@ -54,12 +54,12 @@ const SCOPE_KHONG_CO_AGENT_THAT: ToolScope = {
  */
 function dungScope(agentId: string | undefined, accountId: string | undefined): ToolScope | null {
   // Loại kênh của ĐÚNG account đang xem. Thiếu bước này thì trang Tools chọn
-  // một tài khoản bot xong vẫn hiện đủ 14 tool và "Gửi file" vẫn xanh - trong
+  // một tài khoản bot xong vẫn hiện đủ 15 tool và "Gửi file" vẫn xanh - trong
   // khi model chạy trên tài khoản đó không hề nhận được nó. Đúng lớp lỗi mà cờ
   // `available` sinh ra để chặn, chỉ là ở trục kênh.
   // `accountId` trỏ tới account KHÔNG TỒN TẠI thì trả null để caller ra 400,
   // đúng như nhánh `agentId` ngay dưới - im lặng rơi về "ca_nhan" là gài bẫy
-  // cho lần debug sau: trang Tools với một accountId cũ sẽ hiện đủ 14 tool
+  // cho lần debug sau: trang Tools với một accountId cũ sẽ hiện đủ 15 tool
   // "dùng được" cho một tài khoản bot.
   const accCuThe = accountId ? getAccount(accountId) : undefined;
   if (accountId && !accCuThe) return null;
