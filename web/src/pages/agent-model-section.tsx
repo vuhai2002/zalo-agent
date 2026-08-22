@@ -9,7 +9,7 @@ import { AgentFormField, AgentFormRow, AgentFormSection } from "./agent-form-fie
 import {
   dangNhapTayCuaSo,
   MOC_CUA_SO_NGU_CANH,
-} from "../../../src/config/context-window-presets.js";
+} from "../../../src/config/tuning-number-presets.js";
 
 /** Mục cuối của menu cửa sổ ngữ cảnh - chọn nó thì hiện ô nhập số */
 const TUY_CHINH_CTX = "custom";
@@ -53,7 +53,7 @@ export function AgentModelSection({
   const loiTran = kiemTranContext(form.contextWindow);
   const [epNhapTayCtx, setEpNhapTayCtx] = useState(false);
   // Luật chọn chế độ dùng CHUNG với trang Cấu hình - xem chú thích của hàm.
-  const nhapTayCtx = dangNhapTayCuaSo(form.contextWindow, epNhapTayCtx);
+  const nhapTayCtx = dangNhapTayCuaSo(MOC_CUA_SO_NGU_CANH, form.contextWindow, epNhapTayCtx);
   return (
     <AgentFormSection
       title="Model"

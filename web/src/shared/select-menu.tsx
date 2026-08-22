@@ -139,11 +139,18 @@ export function SelectMenu({
               `scrollWidth`/`clientWidth` làm tròn bằng nhau, đo bằng số nguyên
               KHÔNG thấy - phải đo bằng `Range.getBoundingClientRect()`.
 
+            `grow` PHẢI giữ: nó là thứ đẩy MŨI TÊN ra sát mép phải của ô. Bản
+            vá chỉ để `shrink-0` (không `grow`) làm nhãn co về đúng bề rộng chữ,
+            mũi tên dính luôn vào sau chữ và bỏ trống cả khoảng bên phải - hỏng
+            ở MỌI dropdown trong app chứ không riêng ô này.
+
+            Tổ hợp cuối là `flex: 1 0 auto`: nở khi dư chỗ, không co khi thiếu.
+
             `max-w-full` là lưới đỡ cho ca ngược lại: nhãn dài hơn cả ô thì
             `shrink-0` sẽ đẩy nó tràn ra ngoài nút, trần này kéo nó về rồi
             `truncate` lo phần thừa. */}
         <span
-          className={`min-w-0 max-w-full shrink-0 truncate ${
+          className={`min-w-0 max-w-full grow shrink-0 basis-auto truncate ${
             prefix ? "text-[13px] font-semibold leading-[22px]" : "font-medium"
           } ${current ? "" : "text-ink-soft"}`}
         >

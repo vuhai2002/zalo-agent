@@ -14,7 +14,11 @@
  * dashboard cho nhập giá trị mà env từ chối, hoặc chặn oan giá trị hợp lệ.
  */
 
-import { MOC_CUA_SO_NGU_CANH, type MocCuaSoNguCanh } from "./context-window-presets.js";
+import {
+  MOC_CUA_SO_NGU_CANH,
+  MOC_TRAN_TOKEN_VIET_RA,
+  type MocSoGoiY,
+} from "./tuning-number-presets.js";
 import type { env } from "./env.js";
 
 /** Tên tham số trùng KHỚP tên biến môi trường - env chính là giá trị mặc định */
@@ -42,7 +46,7 @@ export type TuningDef = {
   // `presets` là mốc CHỌN NHANH, không phải danh sách đóng: ô nhập tay vẫn
   // nhận mọi giá trị trong `min`..`max`. Có nó thì giao diện hiện menu kèm mục
   // "Tùy chỉnh"; không có thì vẫn là ô nhập số như cũ.
-  | { kind: "number"; min: number; max: number; unit?: string; presets?: readonly MocCuaSoNguCanh[] }
+  | { kind: "number"; min: number; max: number; unit?: string; presets?: readonly MocSoGoiY[] }
   | { kind: "boolean" }
   | { kind: "enum"; options: readonly string[] }
   // Danh sách chọn quá dài để nhét vào `enum` (418 tên timezone IANA) nên
@@ -154,10 +158,11 @@ const TUNING_BY_KEY = {
     kind: "number",
     group: "turn",
     label: "Trần token bot viết ra",
-    hint: "Tính cho TỪNG bước, không phải cả lượt. Phải đủ chỗ cho bước tốn nhất là tạo file: bot viết cả nội dung file vào lệnh gọi công cụ. Hạ xuống dưới 12.000 thì phải hạ trần ký tự tài liệu theo.",
+    hint: "Độ dài tối đa của MỘT câu trả lời, tính cho TỪNG bước chứ không phải cả lượt. Phải đủ chỗ cho bước tốn nhất là tạo file: bot viết cả nội dung file vào lệnh gọi công cụ. Ô này bị kẹp hai đầu: hạ quá thấp thì phải hạ Trần ký tự tài liệu theo, nâng quá cao thì phải nới Cửa sổ ngữ cảnh theo (cửa sổ phải lớn hơn khoảng 3,4 lần). Với bộ mặc định, khoảng dùng được là 7.143 - 38.399.",
     min: 256,
     max: 200_000,
     unit: "token",
+    presets: MOC_TRAN_TOKEN_VIET_RA,
   },
   LLM_TURN_TIMEOUT_MS: {
     kind: "number",

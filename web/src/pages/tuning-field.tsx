@@ -91,7 +91,15 @@ export function TuningField({
     //
     // Màn hẹp thì đổ dọc lại (`flex-col` mặc định) - nhồi ô nhập vào cạnh đoạn
     // mô tả dài trên điện thoại là bóp cả hai bên.
-    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-6">
+    //
+    // `items-start` chứ KHÔNG `items-center`: căn giữa thì vị trí ô phụ thuộc
+    // ĐỘ DÀI MÔ TẢ của chính hàng đó, nên đi dọc trang mỗi ô một mức. Đo được
+    // khoảng cách từ ô tới dòng nhãn nhảy từ +0,5px tới +30px giữa các hàng,
+    // và hai loại ô không bao giờ thẳng nhau: ô SỐ có thêm dòng khoảng giá trị
+    // ("(1 - 30)") bên dưới nên khối của nó cao hơn và bị đẩy lên 20,6px so với
+    // tâm hàng, còn menu thì không có dòng đó nên nằm đúng tâm. Căn theo đỉnh
+    // thì mọi ô thẳng hàng với nhãn của nó, không quan tâm mô tả mấy dòng.
+    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between xl:gap-6">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <label htmlFor={id} className="text-[14px] font-medium text-ink">

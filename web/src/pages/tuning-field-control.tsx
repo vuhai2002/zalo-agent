@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { TuningDef } from "../dashboard-api-client";
-import { dangNhapTayCuaSo } from "../../../src/config/context-window-presets.js";
+import { dangNhapTayCuaSo } from "../../../src/config/tuning-number-presets.js";
 import { SelectMenu } from "../shared/select-menu";
 import { ToggleKnob } from "../shared/ui-bits";
 import { TimezoneSelect } from "./timezone-select";
@@ -41,7 +41,7 @@ export function TuningFieldControl({
   const [epNhapTay, setEpNhapTay] = useState(false);
   // Luật chọn chế độ nằm ở `context-window-presets.ts` - dùng chung với trang
   // Agents, xem khối chú thích của hàm đó cho từng ca.
-  const dangNhapTay = mocGoiY != null && dangNhapTayCuaSo(String(value), epNhapTay);
+  const dangNhapTay = mocGoiY != null && dangNhapTayCuaSo(mocGoiY, String(value), epNhapTay);
 
   return (
     // Cột RỘNG CỐ ĐỊNH và căn TRÁI, để mọi ô nhập trên trang cùng một mép trái.
@@ -73,7 +73,12 @@ export function TuningFieldControl({
       {def.kind === "number" && (
         <div className="w-full">
           {mocGoiY && (
-            <div className="mb-2 w-full">
+            // Khoảng cách dưới CHỈ khi còn ô nhập ở dưới. Để `mb-2` cố định thì
+            // ở chế độ menu nó là 8px treo lơ lửng không có gì phía dưới: cột
+            // điều khiển cao 47,8px trong khi cái nút chỉ 39,8px, mà hàng căn
+            // theo `items-center` nên 8px thừa ở đáy đẩy nút LÊN 4px và nó cấn
+            // vào nội dung hàng trên. Đã đo và đã bị bắt.
+            <div className={`w-full ${dangNhapTay ? "mb-2" : ""}`}>
               <SelectMenu
                 id={dangNhapTay ? undefined : id}
                 size="md"
