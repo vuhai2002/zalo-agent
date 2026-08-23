@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { ThreadType } from "zca-js";
-import { doiChoSoLuong } from "../shared/doi-cho-den-khi.js";
+import { doiChoDenKhi, doiChoSoLuong } from "../shared/doi-cho-den-khi.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 
@@ -216,15 +216,22 @@ describe("message-batcher - tin đến trong lúc thread đang bận", () => {
       batches.push(batch.map((m) => m.text));
     };
 
+    // Phần DỰNG ca này không được đua với cửa sổ gộp. Đo trong lượt chạy thật
+    // dưới tải: hai `sleep(10)` cũ mất 63ms cho một cửa sổ 60ms, nên "a" chốt
+    // một mình TRƯỚC khi "b" kịp tới và ca đỏ oan - đúng lỗi mà chính ca này
+    // sinh ra để bắt. Neo vào mốc xác định thay vì đoán mili giây.
     const nha = chiemThread("k-ban-cho-them", events);
-    await sleep(20);
+    await doiChoDenKhi(() => events.includes("start:lượt-dài"), { moTa: "lượt dài chiếm thread" });
 
+    // `enqueueMessage` là hàm ĐỒNG BỘ - "a" nằm trong hàng chờ ngay khi nó trả
+    // về, không cần ngủ để đợi.
     batcher.enqueueMessage("k-ban-cho-them", makeMessage("a"), handler, 60);
-    await sleep(10);
     nha(); // thread rảnh trong khi cửa sổ gộp còn đang chạy
-    await sleep(10);
+    await doiChoDenKhi(() => events.includes("end:lượt-dài"), { moTa: "lượt dài nhả thread" });
     batcher.enqueueMessage("k-ban-cho-them", makeMessage("b"), handler, 60);
 
+    // Đây là khẳng định PHỦ ĐỊNH ("chưa được chạy") nên GIỮ `sleep`: chờ-đến-khi
+    // về ngay lần thử đầu nên chẳng chứng minh được gì về tương lai.
     await sleep(30);
     assert.equal(batches.length, 0, "còn trong cửa sổ gộp thì chưa được chạy");
 
