@@ -12,7 +12,9 @@ import type { ThongTinVideo } from "./thong-tin-video.js";
  *     xem được còn ĐIỆN THOẠI KHÔNG - đã đo bằng ba biến thể cùng một video.
  *   - Khung hình phải đọc từ CHÍNH BUFFER sắp gửi. Khai sai làm ứng dụng Zalo
  *     trên điện thoại CRASH; TikWM không trả kích thước, yt-dlp thì khai lệch.
- *   - Ảnh bìa phải là ảnh của Zalo. Host ngoài thì thẻ video hiện đen thui.
+ *   - Có poster (ảnh bìa nguồn đã upload lên Zalo) thì gửi THẺ VIDEO; không dựng
+ *     được poster thì gửi DẠNG FILE - thà vậy còn hơn thẻ dính placeholder rẻ
+ *     tiền, và Zalo còn từ chối thumbnail rỗng (code 114).
  */
 
 let dataDir: string;
@@ -26,40 +28,29 @@ before(async () => {
 });
 
 after(() => {
-  // Module này kéo theo `runtime-tuning-settings` -> `database.js`, vốn mở
-  // SQLite ở MODULE SCOPE. Còn handle mở thì `rmSync` trên Windows trả EPERM.
   database.closeDatabase();
   cleanupTestEnv(dataDir);
 });
 
-/**
- * Dựng một MP4 tối thiểu có `tkhd` khai đúng khung hình.
- *
- * Dùng buffer thật thay vì mock bộ đọc: điều cần canh là "khung hình đến từ
- * FILE chứ không từ metadata của nguồn", mà mock bộ đọc thì đúng chỗ đó bị che.
- */
+/** Dựng một MP4 tối thiểu có `tkhd` khai đúng khung hình. */
 function dungMp4(width: number, height: number): Buffer {
   const tkhd = Buffer.alloc(92);
   tkhd.writeUInt32BE(92, 0);
   tkhd.write("tkhd", 4, "latin1");
   const than = 8;
-  // Ma trận đơn vị: phần tử a = 1.0 (16.16) ở đầu -> không xoay
-  tkhd.writeUInt32BE(0x00010000, than + 40);
+  tkhd.writeUInt32BE(0x00010000, than + 40); // ma trận đơn vị -> không xoay
   tkhd.writeUInt32BE(Math.round(width * 65536), than + 76);
   tkhd.writeUInt32BE(Math.round(height * 65536), than + 80);
 
   const trak = Buffer.alloc(8);
   trak.writeUInt32BE(8 + tkhd.length, 0);
   trak.write("trak", 4, "latin1");
-
   const moov = Buffer.alloc(8);
   moov.writeUInt32BE(8 + trak.length + tkhd.length, 0);
   moov.write("moov", 4, "latin1");
-
   const ftyp = Buffer.alloc(16);
   ftyp.writeUInt32BE(16, 0);
   ftyp.write("ftypisom", 4, "latin1");
-
   return Buffer.concat([ftyp, moov, trak, tkhd]);
 }
 
@@ -79,35 +70,31 @@ const VIDEO: ThongTinVideo = {
 const URL_GOC = "https://vt.tiktok.com/ABC123/";
 const TRAN = 100 * 1024 * 1024;
 const URL_ZALO = "https://ot147.dlfl.vn/abc/123";
-const ANH_BIA_ZALO = "https://photo-link-talk.zadn.vn/photolinkv2/720/zlv2abc";
+const POSTER_ZALO = "https://f120-zpc.zdn.vn/abc/poster.jpg";
 
 type Viec =
   | { k: "do"; url: string }
   | { k: "taiUrl"; url: string }
   | { k: "taiYtDlp"; url: string }
-  | { k: "anhBia"; url: string }
+  | { k: "poster"; thumb: string }
   | { k: "upload"; byte: number; ten: string }
-  | { k: "sendVideo"; url: string; thumb: string; w: number; h: number };
+  | { k: "sendVideo"; url: string; thumb: string; w: number; h: number }
+  | { k: "sendFile"; byte: number; ten: string };
 let daLam: Viec[] = [];
 let demCa = 0;
 
 let ketDo: import("./kiem-url-video-truoc-khi-gui.js").KetQuaDo;
 let byteTai: Buffer;
 let loiTai: { loi: string; loiCauHinh?: boolean } | null;
-let anhBiaZalo: string | null;
+let posterUrl: string | null;
 let ketUpload: unknown;
 
 beforeEach(() => {
   daLam = [];
-  ketDo = {
-    ok: true,
-    soByte: 5_000_000,
-    kieuNoiDung: "video/mp4",
-    urlCuoi: VIDEO.videoUrl,
-  };
+  ketDo = { ok: true, soByte: 5_000_000, kieuNoiDung: "video/mp4", urlCuoi: VIDEO.videoUrl };
   byteTai = dungMp4(1002, 576); // NGANG - khác hẳn 576x1024 nguồn khai
   loiTai = null;
-  anhBiaZalo = ANH_BIA_ZALO;
+  posterUrl = POSTER_ZALO;
   ketUpload = [{ fileUrl: URL_ZALO }];
 });
 
@@ -120,6 +107,10 @@ function dich() {
       },
       sendVideo: async (o: { videoUrl: string; thumbnailUrl: string; width: number; height: number }) => {
         daLam.push({ k: "sendVideo", url: o.videoUrl, thumb: o.thumbnailUrl, w: o.width, h: o.height });
+        return {};
+      },
+      sendMessage: async (c: { attachments: { data: Buffer; filename: string }[] }) => {
+        daLam.push({ k: "sendFile", byte: c.attachments[0]!.data.length, ten: c.attachments[0]!.filename });
         return {};
       },
     } as never,
@@ -145,9 +136,9 @@ function phuThuoc(): import("./gui-video-qua-zalo.js").PhuThuocGuiVideo {
       if (loiTai) return { ok: false as const, ...loiTai };
       return { ok: true as const, byte: byteTai, duong: "yt-dlp" as const };
     },
-    layAnhBia: async (_api, u: string) => {
-      daLam.push({ k: "anhBia", url: u });
-      return anhBiaZalo;
+    chuanBiAnhBia: async (_dich, thumb: string) => {
+      daLam.push({ k: "poster", thumb });
+      return posterUrl;
     },
   };
 }
@@ -157,8 +148,6 @@ const tinGui = () => daLam.find((v) => v.k === "sendVideo") as Extract<Viec, { k
 
 describe("sendVideo phải nhận URL CỦA ZALO", () => {
   it("gửi đúng URL Zalo trả về sau upload, không phải URL của nguồn", async () => {
-    // Đây là cả lý do tồn tại của bước upload: đo bằng lượt gửi thật, URL của
-    // TikTok/Facebook thì điện thoại KHÔNG xem được.
     await chay();
     assert.equal(tinGui().url, URL_ZALO);
     assert.notEqual(tinGui().url, VIDEO.videoUrl);
@@ -204,33 +193,39 @@ describe("khung hình đọc từ CHÍNH buffer sắp gửi", () => {
   });
 });
 
-describe("ảnh bìa", () => {
-  it("ưu tiên ảnh của Zalo", async () => {
+describe("poster: có thì gửi thẻ video, không thì gửi file", () => {
+  it("có poster -> gửi THẺ VIDEO với đúng URL poster của Zalo", async () => {
     await chay();
-    assert.equal(tinGui().thumb, ANH_BIA_ZALO);
+    assert.equal(tinGui().thumb, POSTER_ZALO);
+    assert.ok(!daLam.some((v) => v.k === "sendFile"), "có poster thì không gửi dạng file");
   });
 
-  it("xin ảnh bìa bằng URL GỐC của người dùng, không phải URL CDN", async () => {
-    // `parseLink` là API dựng thẻ xem trước cho link người dùng dán; đưa nó một
-    // URL CDN thì không có gì để đọc.
+  it("dựng poster bằng ẢNH BÌA NGUỒN, không phải URL nào khác", async () => {
     await chay();
-    const a = daLam.find((v) => v.k === "anhBia") as Extract<Viec, { k: "anhBia" }>;
-    assert.equal(a.url, URL_GOC);
+    const p = daLam.find((v) => v.k === "poster") as Extract<Viec, { k: "poster" }>;
+    assert.equal(p.thumb, VIDEO.thumbnailUrl);
   });
 
-  it("không xin được thì dùng ảnh bìa https của nguồn", async () => {
-    anhBiaZalo = null;
-    await chay();
-    assert.equal(tinGui().thumb, VIDEO.thumbnailUrl);
+  it("KHÔNG dựng được poster -> gửi DẠNG FILE, KHÔNG gọi sendVideo", async () => {
+    // Người dùng chốt: thà file còn hơn placeholder. Và Zalo từ chối thumb rỗng.
+    posterUrl = null;
+    const r = await chay();
+    assert.ok(daLam.some((v) => v.k === "sendFile"), "phải lùi sang gửi file");
+    assert.ok(!daLam.some((v) => v.k === "sendVideo"), "không được gửi thẻ video khi thiếu poster");
+    assert.equal(r.dang, "file");
   });
 
-  it("ảnh bìa nguồn không phải https thì bỏ hẳn, vẫn gửi", async () => {
-    // Chuỗi này đi tới máy của MỌI người nhận trong nhóm.
-    anhBiaZalo = null;
-    const d = dich();
-    const v = { ...VIDEO, thumbnailUrl: "javascript:alert(1)" };
-    await mod.guiVideoQuaZalo(d, v, URL_GOC, TRAN, phuThuoc());
-    assert.equal(tinGui().thumb, "");
+  it("gửi dạng file thì đính đúng byte đã tải, tên có đuôi .mp4", async () => {
+    posterUrl = null;
+    await chay();
+    const f = daLam.find((v) => v.k === "sendFile") as Extract<Viec, { k: "sendFile" }>;
+    assert.equal(f.byte, byteTai.length);
+    assert.match(f.ten, /\.mp4$/);
+  });
+
+  it("có poster thì ket qua dang = video", async () => {
+    const r = await chay();
+    assert.equal(r.dang, "video");
   });
 });
 
@@ -243,8 +238,6 @@ describe("chọn nguồn byte theo kết quả dò", () => {
   });
 
   it("dò TRƯỢT thì để yt-dlp tự tải, từ URL GỐC", async () => {
-    // URL của yt-dlp gắn với phiên của nó - đo thật, trả 403 ngay trên chính
-    // máy vừa chạy yt-dlp. Tự tải URL đó cũng trượt; để nó tự tải thì được.
     ketDo = { ok: false, ly: "HTTP 403" };
     const r = await chay();
     const t = daLam.find((v) => v.k === "taiYtDlp") as Extract<Viec, { k: "taiYtDlp" }>;
@@ -258,6 +251,7 @@ describe("chọn nguồn byte theo kết quả dò", () => {
     loiTai = { loi: "video riêng tư" };
     await assert.rejects(() => chay(), /riêng tư/);
     assert.ok(!daLam.some((v) => v.k === "sendVideo"));
+    assert.ok(!daLam.some((v) => v.k === "sendFile"));
   });
 
   it("thiếu công cụ thì chở cờ loiCauHinh lên trên", async () => {
@@ -281,8 +275,6 @@ describe("trần dung lượng", () => {
   });
 
   it("nguồn giấu dung lượng: tải xong mới biết vượt thì vẫn chặn", async () => {
-    // `--max-filesize` của yt-dlp và `content-length` đều có thể vắng mặt hoặc
-    // nói dối. Phép kiểm trên buffer là lưới cuối.
     ketDo = { ...ketDo, soByte: null } as typeof ketDo;
     byteTai = Buffer.alloc(TRAN + 1);
     await assert.rejects(

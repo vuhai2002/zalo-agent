@@ -130,14 +130,13 @@ export function createTaiVideoTool(ctx: ToolContext, phuThuoc: PhuThuocTaiVideo 
           if (!gioiHan.ok) return ketQuaLoi(gioiHan.loi);
 
           if (video.thumbnailUrl === "") {
-            // ĐO THẬT: Facebook qua yt-dlp không trả thumbnail nào (`thumbnail`
-            // và `thumbnails` đều null). `sendVideo` đòi trường này, và chưa
-            // kiểm chứng được Zalo xử lý chuỗi rỗng ra sao. Ghi log để khi
-            // người vận hành thấy video Facebook hiện sai khung xem trước thì
-            // biết ngay nguyên nhân, thay vì đi tìm mò.
+            // Nguồn không trả ảnh bìa (đo thật: một số video Facebook qua yt-dlp
+            // có `thumbnail` và `thumbnails` đều null). `guiVideoQuaZalo` sẽ
+            // không dựng được poster nên lùi sang GỬI DẠNG FILE - video vẫn tới,
+            // chỉ khác thẻ. Ghi log để người vận hành biết vì sao ra thẻ file.
             log.warn(
               { nguon: video.nguon, nenTang: video.nenTang },
-              "video không có ảnh bìa - Zalo có thể hiện khung xem trước trống",
+              "video không có ảnh bìa nguồn - sẽ gửi dạng file thay vì thẻ video",
             );
           }
 

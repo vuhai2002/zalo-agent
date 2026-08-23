@@ -75,7 +75,7 @@ const phuThuoc: import("./tai-video-tool.js").PhuThuocTaiVideo = {
   guiVideo: async (_dich, video) => {
     viecDaLam.push({ kind: "gui", url: video.videoUrl });
     if (loiGui) throw loiGui;
-    return { duong: "url", bytes: 1234 };
+    return { duong: "url", bytes: 1234, dang: "video" };
   },
 };
 

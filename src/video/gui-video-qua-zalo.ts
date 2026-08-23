@@ -5,12 +5,12 @@
  *   2. LẤY BYTE VÀO RAM               -> dò qua thì tải thẳng; dò trượt thì để
  *                                        yt-dlp tự tải qua stdout
  *   3. ĐỌC KHUNG HÌNH từ chính buffer -> không tin metadata của nguồn
- *   4. XIN ẢNH BÌA của Zalo           -> `parseLink`, không tốn byte nào
- *   5. UPLOAD từ RAM lên Zalo         -> nhận lại một URL trên hạ tầng Zalo
- *   6. `sendVideo` với URL đó
+ *   4. DỰNG POSTER                    -> tải ảnh bìa nguồn rồi upload lên Zalo
+ *   5a. CÓ poster  -> upload video lên Zalo -> `sendVideo` (thẻ video)
+ *   5b. KHÔNG có   -> gửi DẠNG FILE (không cần poster)
  *
- * VÌ SAO PHẢI UPLOAD - đo bằng lượt gửi thật tới điện thoại người dùng, ba biến
- * thể cùng một video, chỉ khác chỗ chứa:
+ * VÌ SAO PHẢI UPLOAD - đo bằng lượt gửi thật tới điện thoại người dùng, cùng một
+ * video chỉ khác chỗ chứa:
  *
  *   videoUrl = URL TikTok/Facebook  -> máy tính xem được, ĐIỆN THOẠI KHÔNG
  *   videoUrl = URL của Zalo         -> điện thoại xem mượt
@@ -23,16 +23,17 @@
  * thoại CRASH (ca thật). TikWM không trả width/height gì cả; yt-dlp thì format
  * được chọn không mang, còn mảng `formats` khai lệch gấp đôi so với luồng thật.
  *
- * VÌ SAO XIN ẢNH BÌA CỦA ZALO: đưa `thumbnailUrl` trỏ host ngoài thì thẻ video
- * hiện ĐEN THUI - Zalo rất kén host ảnh.
+ * VÌ SAO POSTER PHẢI UPLOAD LÊN ZALO: URL ảnh host ngoài -> thẻ video ĐEN THUI;
+ * `thumbnailUrl` rỗng -> Zalo TỪ CHỐI (code 114); `parseLink` -> trả placeholder
+ * rác cho Facebook. Chi tiết ở `chuan-bi-anh-bia-video.ts`.
  */
 
 import type { API, ThreadType } from "zca-js";
 
 import { createLogger } from "../shared/logger.js";
+import { chuanBiAnhBiaVideo } from "./chuan-bi-anh-bia-video.js";
 import { docKhungHinhMp4 } from "./doc-khung-hinh-mp4.js";
 import { kiemUrlVideoConSong } from "./kiem-url-video-truoc-khi-gui.js";
-import { layAnhBiaZalo } from "./lay-anh-bia-zalo.js";
 import { taiBangYtDlpVaoRam, taiTuUrlVaoRam } from "./tai-video-vao-ram.js";
 import type { ThongTinVideo } from "./thong-tin-video.js";
 
@@ -57,21 +58,22 @@ export type DichGuiVideo = {
   threadType: ThreadType;
 };
 
-export type KetQuaGui = { duong: "url" | "yt-dlp"; bytes: number };
+/** `dang` cho biết đã gửi thẻ video (có poster) hay gửi dạng file (không poster) */
+export type KetQuaGui = { duong: "url" | "yt-dlp"; bytes: number; dang: "video" | "file" };
 
 /** Các chỗ chạm ra ngoài, thay được từ ngoài CHỈ để test */
 export type PhuThuocGuiVideo = {
   kiemUrl: typeof kiemUrlVideoConSong;
   taiUrl: typeof taiTuUrlVaoRam;
   taiYtDlp: typeof taiBangYtDlpVaoRam;
-  layAnhBia: typeof layAnhBiaZalo;
+  chuanBiAnhBia: typeof chuanBiAnhBiaVideo;
 };
 
 const PHU_THUOC_THAT: PhuThuocGuiVideo = {
   kiemUrl: kiemUrlVideoConSong,
   taiUrl: taiTuUrlVaoRam,
   taiYtDlp: taiBangYtDlpVaoRam,
-  layAnhBia: layAnhBiaZalo,
+  chuanBiAnhBia: chuanBiAnhBiaVideo,
 };
 
 /**
@@ -99,29 +101,33 @@ export class LoiGuiVideo extends Error {
   }
 }
 
-/**
- * Ảnh bìa an toàn để đẩy tới máy người nhận.
- *
- * Ưu tiên ảnh của Zalo. Không có thì dùng của nguồn, nhưng phải là https hợp lệ:
- * chuỗi này đến từ bên thứ ba và được đẩy tới máy của MỌI người nhận trong nhóm.
- */
-function anhBiaAnToan(cuaZalo: string | null, cuaNguon: string): string {
-  if (cuaZalo !== null && cuaZalo !== "") return cuaZalo;
-  if (cuaNguon === "") return "";
-  try {
-    return new URL(cuaNguon).protocol === "https:" ? cuaNguon : "";
-  } catch {
-    return "";
-  }
-}
-
-/** Tên file người nhận nhìn thấy khi tải về. Đuôi CỐ ĐỊNH, không lấy từ URL người lạ. */
+/** Tên file người nhận nhìn thấy khi gửi dạng file. Đuôi CỐ ĐỊNH, không lấy từ URL người lạ. */
 function tenFile(video: ThongTinVideo): string {
   const goc = (video.tacGia ?? "video").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 40);
   return `${goc || "video"}.mp4`;
 }
 
-/** Upload buffer lên Zalo, trả về URL trên hạ tầng của họ. Có trần thời gian. */
+/**
+ * Bọc trần thời gian quanh một lời gọi upload video của zca-js.
+ *
+ * BẮT BUỘC: `uploadAttachment` cho video đăng ký callback theo `fileId` và chỉ
+ * giải quyết khi sự kiện hoàn tất tới qua WEBSOCKET. Mất listener thì promise
+ * treo VĨNH VIỄN (zca-js không đặt timeout). Cả `sendVideo` (upload rồi gửi) lẫn
+ * `sendMessage` với attachment video đều dính, nên cả hai đường gửi đều bọc.
+ */
+function voiTranUpload<T>(goi: Promise<T>): Promise<T> {
+  return Promise.race([
+    goi,
+    new Promise<never>((_, hong) =>
+      setTimeout(
+        () => hong(new LoiGuiVideo(`Gửi lên Zalo quá ${TRAN_UPLOAD_MS}ms`)),
+        TRAN_UPLOAD_MS,
+      ).unref(),
+    ),
+  ]);
+}
+
+/** Upload buffer video lên Zalo, trả về URL trên hạ tầng của họ. */
 async function upLenZalo(dich: DichGuiVideo, byte: Buffer, ten: string): Promise<string> {
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const goi = (dich.api as any).uploadAttachment(
@@ -130,16 +136,7 @@ async function upLenZalo(dich: DichGuiVideo, byte: Buffer, ten: string): Promise
     dich.threadType,
   ) as Promise<unknown>;
 
-  const ket = await Promise.race([
-    goi,
-    new Promise<never>((_, hong) =>
-      setTimeout(
-        () => hong(new LoiGuiVideo(`Upload lên Zalo quá ${TRAN_UPLOAD_MS}ms`)),
-        TRAN_UPLOAD_MS,
-      ).unref(),
-    ),
-  ]);
-
+  const ket = await voiTranUpload(goi);
   const r = (Array.isArray(ket) ? ket[0] : ket) as
     | { fileUrl?: string; normalUrl?: string; hdUrl?: string }
     | undefined;
@@ -149,10 +146,27 @@ async function upLenZalo(dich: DichGuiVideo, byte: Buffer, ten: string): Promise
 }
 
 /**
+ * Gửi video DẠNG FILE - đường lui khi không dựng được poster.
+ *
+ * `sendMessage` với attachment `.mp4` KHÔNG cần thumbnail (đã đọc zca-js: chỉ
+ * GIF mới tự sinh thumb). Nhận Buffer trực tiếp nên vẫn KHÔNG chạm đĩa. Người
+ * dùng chốt: thà gửi file còn hơn thẻ video dính ảnh placeholder nhìn rẻ.
+ */
+async function guiDangFile(dich: DichGuiVideo, byte: Buffer, ten: string): Promise<void> {
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  const goi = (dich.api as any).sendMessage(
+    { attachments: [{ data: byte, filename: ten, metadata: { totalSize: byte.length } }] },
+    dich.threadId,
+    dich.threadType,
+  ) as Promise<unknown>;
+  await voiTranUpload(goi);
+}
+
+/**
  * Gửi video. Ném khi không gửi được - caller (tool) bắt lại và trả `ketQuaLoi`.
  *
  * `urlGoc` là đường dẫn NGƯỜI DÙNG gửi (đã qua whitelist), khác `video.videoUrl`
- * là đường dẫn CDN do nguồn trả về. yt-dlp và `parseLink` đều cần cái trước.
+ * là đường dẫn CDN do nguồn trả về. yt-dlp tự tải thì cần cái trước.
  */
 export async function guiVideoQuaZalo(
   dich: DichGuiVideo,
@@ -200,22 +214,35 @@ export async function guiVideoQuaZalo(
   }
   const co = khung ?? { width: video.width, height: video.height };
 
-  // 4. Ảnh bìa của Zalo - không tốn byte nào
-  const anhBia = anhBiaAnToan(await phuThuoc.layAnhBia(dich.api, urlGoc), video.thumbnailUrl);
-
-  // 5 + 6. Upload rồi gửi. Cả hai đi qua hàng đợi gửi của thread để giữ thứ tự.
-  const urlZalo = await upLenZalo(dich, tai.byte, tenFile(video));
-  await dich.api.sendVideo(
-    {
-      videoUrl: urlZalo,
-      thumbnailUrl: anhBia,
-      duration: video.durationMs,
-      width: co.width,
-      height: co.height,
-    },
-    dich.threadId,
-    dich.threadType,
+  // 4. Poster: tải ảnh bìa nguồn rồi upload lên Zalo. Không dựng được thì `null`.
+  const poster = await phuThuoc.chuanBiAnhBia(
+    { api: dich.api, threadId: dich.threadId, threadType: dich.threadType },
+    video.thumbnailUrl,
   );
+
+  // 5 + 6. Không có poster thì gửi DẠNG FILE, thà vậy còn hơn thẻ video dính
+  // placeholder rẻ tiền (Zalo còn từ chối thumbnail rỗng). Gửi thẳng qua `api`
+  // để nằm trong suất hàng đợi tải, giữ đúng thứ tự tin trong thread.
+  const ten = tenFile(video);
+  let dang: "video" | "file";
+  if (poster === null) {
+    await guiDangFile(dich, tai.byte, ten);
+    dang = "file";
+  } else {
+    const urlZalo = await upLenZalo(dich, tai.byte, ten);
+    await dich.api.sendVideo(
+      {
+        videoUrl: urlZalo,
+        thumbnailUrl: poster,
+        duration: video.durationMs,
+        width: co.width,
+        height: co.height,
+      },
+      dich.threadId,
+      dich.threadType,
+    );
+    dang = "video";
+  }
 
   log.info(
     {
@@ -224,9 +251,9 @@ export async function guiVideoQuaZalo(
       bytes: tai.byte.length,
       khung: `${co.width}x${co.height}`,
       khungDocDuoc: khung !== null,
-      anhBiaZalo: anhBia !== "" && anhBia !== video.thumbnailUrl,
+      dang,
     },
     "đã gửi video",
   );
-  return { duong: tai.duong, bytes: tai.byte.length };
+  return { duong: tai.duong, bytes: tai.byte.length, dang };
 }

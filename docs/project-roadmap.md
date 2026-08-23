@@ -5920,3 +5920,87 @@ Cả hai đều `khungDocDuoc: true`, `anhBiaZalo: true`. Người dùng xác nh
 - **Gửi dạng file (biến thể C) chạy tốt nhưng không dùng** - xem khối "ĐÃ KIỂM
   CHỨNG TRÊN MÁY THẬT" ở trên. Đây là đường lui duy nhất đã được xác nhận bằng
   máy thật, không phải giả thiết.
+
+---
+
+## V3.23 - Poster video: upload ảnh bìa lên Zalo, thiếu thì gửi dạng file (2026-08-23)
+
+Sau V3.22, video Facebook gửi lên hiện **poster hỏng** (thẻ xám + vòng xoay) dù
+video phát mượt. Người dùng: "video gửi mà kiểu này thì hỏng".
+
+### Nguyên nhân gốc (xác nhận bằng đo thật, không suy luận)
+
+Ba mảnh ghép:
+
+1. `sendVideo` nhét thẳng `thumbnailUrl` ta đưa vào `thumbUrl` của tin - không
+   tự sinh poster (`sendVideo.ts:97`).
+2. `UploadAttachmentVideoResponse` của zca-js KHÔNG có `thumbUrl` - Zalo không
+   dựng poster giúp cho video upload (chỉ nhánh IMAGE mới trả `thumbUrl`).
+3. Nguồn poster cũ hỏng theo hai cách:
+   - `parseLink` cho link Facebook trả một URL `zadn.vn` nhưng là ảnh
+     PLACEHOLDER chung ("feed_thumb_link" từ 2019), không phải khung hình video.
+     Nó LOAD được nên `anhBiaZalo:true` là niềm tin giả; "kiểm ảnh có load" cũng
+     không bắt được.
+   - Nhánh lùi về `thumbnailUrl` nguồn (host TikTok/Facebook) render ĐEN THUI.
+
+Đo thật thêm: **`thumbnailUrl` rỗng bị Zalo TỪ CHỐI** (`ZaloApiError code 114`).
+Nên "để poster xám bằng cách gửi rỗng" là bất khả thi - luôn phải có URL ảnh thật.
+
+### Vì sao không trích khung tại chỗ (đã research kỹ, loại)
+
+Hai luồng research đối chứng nhiều nguồn:
+
+- Facebook: gần như không lấy được ảnh bìa server-side không đăng nhập. yt-dlp
+  hay trả `thumbnail: null`; `og:image` không hơn (yt-dlp đã làm đúng việc đó);
+  không có frame-grab nào trong yt-dlp mà không cần ffmpeg.
+- Trích khung không-ffmpeg: **Node 24 không có WebCodecs**; mọi "WebCodecs cho
+  Node" trên npm đều là FFmpeg native đội lốt; decoder H.264 thuần JS duy nhất
+  (Broadway) chỉ Baseline (TikTok/FB dùng Main/High) và bỏ hoang từ 2022. Muốn
+  ra một điểm ảnh xem được thì buộc chạy decoder đầy đủ trên byte người lạ -
+  đúng mặt tấn công mà thiết kế này loại (lý do không cài ffmpeg). Loại.
+
+### Cách sửa
+
+Poster mới (`src/video/chuan-bi-anh-bia-video.ts`):
+
+1. Có ảnh bìa nguồn (`video.thumbnailUrl` từ TikWM `cover` / yt-dlp `thumbnail`):
+   tải vào RAM (qua `downloadFromPublicUrl`, gác SSRF, trần 5MB) -> đọc kích
+   thước bằng byte (`readImageSize`, không decoder) -> upload lên Zalo (nhánh
+   IMAGE, đồng bộ, không cần listener) -> dùng `normalUrl`. Poster thật, hạ tầng
+   Zalo, ~vài chục KB, KHÔNG chạm đĩa.
+2. Không dựng được (không có ảnh nguồn / tải hỏng / đọc không ra kích thước /
+   upload lỗi) -> trả `null`.
+
+`gui-video-qua-zalo.ts`:
+- Có poster -> upload video -> `sendVideo` (thẻ video).
+- `null` -> **gửi DẠNG FILE** (`sendMessage` với attachment `.mp4` từ Buffer -
+  không cần thumbnail, đã đọc zca-js chỉ GIF mới tự sinh thumb; vẫn KHÔNG chạm
+  đĩa). Người dùng chốt: thà file còn hơn placeholder nhìn rẻ.
+- BỎ HẲN `parseLink` (nguồn placeholder rác) và nhánh lùi-về-URL-ngoài.
+- File-fallback dùng chung trần thời gian `voiTranUpload` với đường video, vì
+  `sendMessage` attachment video cũng chờ callback websocket như `sendVideo`.
+
+Xóa `lay-anh-bia-zalo.ts` (+test) - không còn dùng.
+
+Tên file khi gửi dạng file: `<tên người đăng đã lọc [^a-zA-Z0-9._-]>.mp4`, rỗng
+thì `video.mp4` (dùng lại `tenFile`, đã lọc an toàn ở nguồn).
+
+### Nghiệm thu
+
+- Đo trên máy thật, gửi tới thread người dùng: video Facebook (ca bug) qua đúng
+  `guiVideoQuaZalo` sản xuất -> `dang: 'video'`, poster hiện ĐÚNG ảnh bìa thật
+  trên điện thoại. Người dùng xác nhận "ngon, có ảnh đàng hoàng".
+- Đã đo trước đó: thumbnail rỗng -> code 114; upload cover -> `normalUrl` trên
+  `zpc.zdn.vn`, poster hiện đúng.
+- Test cho hai module mới; 5/6 phép phá đỏ. Phép còn lại (`if (!co)`) do TRÌNH
+  BIÊN DỊCH canh (`co` nullable) chứ không phải unit test - ghi chú trong code
+  thay vì đẻ test giả.
+
+### Việc còn treo
+
+- Video Facebook mà yt-dlp KHÔNG trả ảnh bìa (một số video) -> gửi dạng file.
+  Đúng ý người dùng (thà file còn hơn placeholder), nhưng nghĩa là không phải
+  video FB nào cũng ra thẻ video đẹp - tùy nguồn có ảnh bìa hay không.
+- Ảnh bìa WebP: `readImageSize` chỉ đọc PNG/JPEG, gặp WebP trả null -> gửi dạng
+  file. TikWM/yt-dlp đo được trả JPEG nên hiếm gặp; nếu sau này nguồn đổi sang
+  WebP thì thêm nhánh đọc kích thước WebP.
