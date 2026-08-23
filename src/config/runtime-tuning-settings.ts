@@ -1,3 +1,5 @@
+import { totalmem } from "node:os";
+
 import { db } from "../conversation/database.js";
 import { isValidTimezone } from "../shared/current-datetime.js";
 import { uocTokenTuKyTu } from "../shared/ky-tu-moi-token.js";
@@ -98,6 +100,39 @@ export function listTuning(): {
  * trang Cấu hình và người dùng không còn đường nào sửa lại. Đã dính lúc test:
  * môi trường test hạ trần token xuống 2048 nên không lưu nổi ô nào khác.
  */
+/**
+ * RAM mỗi tiến trình yt-dlp, ĐO THẬT: 72,8 MB đỉnh, và con số này CỐ ĐỊNH chứ
+ * không theo cỡ video (~73 MB là bản thân Python) - tải video 40 MB chỉ lên
+ * 75,6 MB vì nó ghi thẳng ra luồng chứ không gom.
+ */
+const RAM_MOI_LUOT_YTDLP_MB = 75;
+
+/**
+ * Phần RAM máy chủ được phép dành cho video lúc cao điểm. Chừa phần còn lại cho
+ * chính tiến trình bot, SQLite, và hệ điều hành.
+ */
+const PHAN_RAM_CHO_VIDEO = 0.25;
+
+/**
+ * Cấu hình video này có nằm gọn trong RAM của máy chủ không.
+ *
+ * Nhận `ramMayMb` làm THAM SỐ chứ không tự gọi `totalmem()`: cửa nằm trong hàm
+ * chạm hệ thống thì không có gì canh được nó - bài học đã trả giá ở
+ * `envToiThieu`, được test rất kỹ như một hàm nhưng "nó có được DÙNG không" thì
+ * không ai đo.
+ */
+export function kiemRamVideo(coMb: number, songSong: number, ramMayMb: number): string | null {
+  const dinhMb = songSong * (coMb + RAM_MOI_LUOT_YTDLP_MB);
+  const tranMb = Math.round(ramMayMb * PHAN_RAM_CHO_VIDEO);
+  if (dinhMb <= tranMb) return null;
+  return (
+    `Dung lượng tối đa ${coMb} MB x ${songSong} lượt cùng lúc cần tới ${dinhMb} MB bộ nhớ ` +
+    `lúc cao điểm, vượt mức an toàn ${tranMb} MB của máy chủ này ` +
+    `(${(ramMayMb / 1024).toFixed(1)} GB RAM). Video được giữ trong bộ nhớ chứ không ghi ra ` +
+    `đĩa, nên hạ một trong hai số.`
+  );
+}
+
 const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => string | null }[] = [
   {
     keys: ["LLM_TURN_TIMEOUT_MS", "IMAGE_GEN_TIMEOUT_MS"],
@@ -173,6 +208,26 @@ const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => s
         ? `Trần ký tự kết quả (${so("KB_MAX_RESULT_CHARS")}) nhỏ hơn tổng chỗ mà ${so("KB_TOP_K")} đoạn x ${so("KB_CHUNK_CHARS")} ký tự (cộng chồng lấn ${so("KB_CHUNK_OVERLAP_PERCENT")}%) cần - kết quả sẽ bị cắt và mấy đoạn cuối không bao giờ tới được bot. Hạ số đoạn, độ dài đoạn hay chồng lấn, hoặc nâng trần ký tự kết quả.`
         : null;
     },
+  },
+  {
+    // Byte của video giờ nằm trong RAM chứ không còn trên đĩa: `uploadAttachment`
+    // nhận thẳng Buffer, và người dùng chốt là không muốn tải-xóa liên tục bào
+    // SSD. Đổi lại RAM đỉnh = số lượt song song x (cỡ video + ~73 MB cho tiến
+    // trình yt-dlp, con số CỐ ĐỊNH vì đó là bản thân Python).
+    //
+    // Không có luật này thì hai thanh trượt trên dashboard cho phép 2000 MB x 8
+    // lượt = 16 GB, và không ô nhập nào nhìn riêng rẽ thấy được điều đó - đúng
+    // loại lỗi chỉ lộ ra khi NHIỀU tham số kết hợp.
+    //
+    // Neo vào RAM THẬT của máy chứ không vào một con số bịa: cùng một cấu hình
+    // thì lành trên máy 16 GB và chết trên VPS 1 GB.
+    keys: ["VIDEO_MAX_SIZE_MB", "VIDEO_MAX_CONCURRENT"],
+    check: (so) =>
+      kiemRamVideo(
+        so("VIDEO_MAX_SIZE_MB"),
+        so("VIDEO_MAX_CONCURRENT"),
+        totalmem() / 1024 / 1024,
+      ),
   },
 ];
 

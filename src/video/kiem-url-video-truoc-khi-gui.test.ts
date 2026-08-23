@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  cungHo,
   doCoThat,
   kiemUrlVideoConSong,
   laKieuVideo,
@@ -116,43 +115,13 @@ describe("quyetDinhTuHeader - phần QUYẾT ĐỊNH của bộ dò", () => {
   });
 });
 
-describe("quyetDinhTuHeader - đánh dấu chuyển hướng ĐỔI TÊN MIỀN", () => {
-  // Đo thật: fbcdn trả 302 từ `video.fsgn2-6.fna.fbcdn.net` sang
-  // `video.xx.fbcdn.net` với MỌI video Facebook. Đánh dấu đó là "đáng ngờ" thì
-  // mọi video Facebook đều phải tự tải qua VPS - 42 MB x 2 mỗi lượt.
-  it("cùng họ tên miền thì KHÔNG đánh dấu", () => {
-    const r = quyetDinhTuHeader(206, "video/mp4", "bytes 0-0/100", 1, "https://video.xx.fbcdn.net/a", false);
-    assert.ok(r.ok);
-    assert.equal(r.doiTenMien, false);
-  });
-
-  it("KHÁC họ tên miền thì PHẢI đánh dấu", () => {
-    // Caller sẽ tự tải thay vì giao URL cho zca-js, vì zca-js đi theo
-    // `location` đệ quy không kiểm địa chỉ.
-    const r = quyetDinhTuHeader(206, "video/mp4", "bytes 0-0/100", 1, "https://ke-la.example/x", true);
-    assert.ok(r.ok);
-    assert.equal(r.doiTenMien, true);
-  });
-
-  it("mang theo URL CUỐI để caller giao cho sendVideo", () => {
-    const r = quyetDinhTuHeader(206, "video/mp4", "bytes 0-0/100", 1, "https://cdn.test/cuoi.mp4", false);
+describe("quyetDinhTuHeader - mang theo URL đã xác thực", () => {
+  it("trả về URL CUỐI để caller tải đúng chỗ đã kiểm", () => {
+    // Caller tải bằng URL này chứ không bằng chuỗi gốc: bộ dò đã đi hết chuyển
+    // hướng và kiểm địa chỉ ở TỪNG hop, nên đây là thứ duy nhất được xác thực.
+    const r = quyetDinhTuHeader(206, "video/mp4", "bytes 0-0/100", 1, "https://cdn.test/cuoi.mp4");
     assert.ok(r.ok);
     assert.equal(r.urlCuoi, "https://cdn.test/cuoi.mp4");
-  });
-});
-
-describe("cungHo - phân biệt định tuyến CDN với việc bị dắt đi nơi khác", () => {
-  it("cùng họ: khác nhãn con nhưng chung hai nhãn cuối", () => {
-    // Ca thật của fbcdn, xảy ra với MỌI video Facebook.
-    assert.equal(cungHo("video.fsgn2-6.fna.fbcdn.net", "video.xx.fbcdn.net"), true);
-    assert.equal(cungHo("v19.tiktokcdn-us.com", "v16m.tiktokcdn-us.com"), true);
-    assert.equal(cungHo("a.b", "a.b"), true);
-  });
-
-  it("KHÁC họ: đây mới là ca đáng ngờ", () => {
-    assert.equal(cungHo("video.xx.fbcdn.net", "ke-tan-cong.net"), false);
-    assert.equal(cungHo("cdn.tiktokcdn-us.com", "cdn.tiktokcdn-us.com.ke-la.net"), false);
-    assert.equal(cungHo("a.fbcdn.net", "a.fbcdn.org"), false);
   });
 });
 

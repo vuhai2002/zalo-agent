@@ -2,7 +2,7 @@
  * MỘT chỗ duy nhất biết cách chạy tiến trình yt-dlp cho an toàn.
  *
  * Có hai đường dùng yt-dlp: đọc metadata (`nguon-yt-dlp.ts`) và tải hẳn file về
- * (`tai-bang-yt-dlp.ts`). Nếu mỗi bên tự gọi `execFile` thì lớp siết bảo mật
+ * (`tai-video-vao-ram.ts`). Nếu mỗi bên tự gọi `execFile` thì lớp siết bảo mật
  * nằm ở hai nơi, và cái bị quên khi sửa luôn là cái ít người đọc hơn - đúng bài
  * học đã ghi cho `openGuardedRequest`.
  *
@@ -121,8 +121,21 @@ function lenhYtDlp(): { file: string; dauVao: string[] } {
 }
 
 export type KetQuaChayYtDlp =
-  | { ok: true; stdout: string }
+  | { ok: true; stdout: string; stdoutNhiPhan?: Buffer }
   | { ok: false; loi: string; loiCauHinh?: boolean };
+
+export type TuyChonChay = {
+  /**
+   * Nhận stdout dạng NHỊ PHÂN thay vì chuỗi.
+   *
+   * Dùng cho `-o -` (yt-dlp xuất thẳng video ra stdout). Ép về chuỗi là hỏng
+   * dữ liệu nhị phân - mỗi byte không hợp lệ trong UTF-8 biến thành ký tự thay
+   * thế và file không mở được nữa.
+   */
+  nhiPhan?: boolean;
+  /** Trần buffer stdout. Mặc định đủ cho JSON metadata, tải video cần rộng hơn nhiều. */
+  tranStdout?: number;
+};
 
 /**
  * yt-dlp CÓ trên máy nhưng chạy hỏng vì THIẾU CÔNG CỤ chứ không phải vì video?
@@ -169,14 +182,43 @@ export function dungLoiGoi(doiSo: string[]): {
   return { file, doiSo: [...dauVao, ...CO_AN_TOAN, ...doiSo], env: envToiThieu() };
 }
 
-export function chayYtDlp(doiSo: string[], tranMs: number): Promise<KetQuaChayYtDlp> {
+/**
+ * Dựng tùy chọn cho `execFile`. Hàm THUẦN, tách ra để test được.
+ *
+ * Thứ đáng canh nhất ở đây là `encoding: "buffer"` khi lấy stdout NHỊ PHÂN
+ * (`-o -` cho yt-dlp xuất video thẳng ra stdout). Thiếu nó thì Node ép byte về
+ * chuỗi UTF-8, mỗi byte không hợp lệ thành ký tự thay thế, và file nhận được
+ * KHÔNG MỞ ĐƯỢC - hỏng câm, vì mọi thứ khác vẫn chạy bình thường.
+ */
+export function tuyChonExec(
+  tranMs: number,
+  env: NodeJS.ProcessEnv,
+  tuyChon: TuyChonChay,
+): { timeout: number; maxBuffer: number; env: NodeJS.ProcessEnv; windowsHide: true; encoding?: "buffer" } {
+  return {
+    timeout: tranMs,
+    maxBuffer: tuyChon.tranStdout ?? TRAN_STDOUT,
+    env,
+    windowsHide: true,
+    // stderr vẫn phải đọc thành chữ để nhận diện lỗi - chuyển đổi ở chỗ nhận.
+    ...(tuyChon.nhiPhan ? { encoding: "buffer" as const } : {}),
+  };
+}
+
+export function chayYtDlp(
+  doiSo: string[],
+  tranMs: number,
+  tuyChon: TuyChonChay = {},
+): Promise<KetQuaChayYtDlp> {
   const lenh = dungLoiGoi(doiSo);
   return new Promise((resolve) => {
     execFile(
       lenh.file,
       lenh.doiSo,
-      { timeout: tranMs, maxBuffer: TRAN_STDOUT, env: lenh.env, windowsHide: true },
-      (err, stdout, stderr) => {
+      tuyChonExec(tranMs, lenh.env, tuyChon),
+      (err, stdoutTho, stderrTho) => {
+        const stdout = tuyChon.nhiPhan ? "" : String(stdoutTho);
+        const stderr = String(stderrTho);
         if (err) {
           if (laLoiThieuCongCu(err as NodeJS.ErrnoException, stderr || "")) {
             resolve({ ok: false, loi: LOI_THIEU_YTDLP, loiCauHinh: true });
@@ -201,7 +243,11 @@ export function chayYtDlp(doiSo: string[], tranMs: number): Promise<KetQuaChayYt
           resolve({ ok: false, loi: doanLoi.slice(0, 300) });
           return;
         }
-        resolve({ ok: true, stdout });
+        resolve({
+          ok: true,
+          stdout,
+          stdoutNhiPhan: tuyChon.nhiPhan ? Buffer.from(stdoutTho as unknown as Buffer) : undefined,
+        });
       },
     );
   });

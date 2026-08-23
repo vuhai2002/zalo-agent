@@ -47,21 +47,6 @@ const TRAN_DO_MS = 15_000;
 const TRAN_HOP = MAX_REDIRECTS;
 
 /**
- * Hai host có cùng "họ" tên miền không (so hai nhãn cuối).
- *
- * Đủ cho việc cần làm: phân biệt một bước định tuyến CDN thường lệ
- * (`video.fsgn2-6.fna.fbcdn.net` -> `video.xx.fbcdn.net`) với việc bị dắt sang
- * một nơi khác hẳn. KHÔNG cần bảng eTLD đầy đủ vì đây KHÔNG phải cửa bảo mật -
- * cửa bảo mật là `openGuardedRequest`, vốn kiểm địa chỉ ở TỪNG hop bất kể tên
- * miền là gì; hàm này chỉ chọn đường đi cho rẻ.
- */
-export function cungHo(a: string, b: string): boolean {
-  if (a === b) return true;
-  const hai = (h: string) => h.toLowerCase().split(".").slice(-2).join(".");
-  return hai(a) === hai(b);
-}
-
-/**
  * Cỡ THẬT của cả file, từ header nào nói đúng.
  *
  * Với 206 thì `content-length` là độ dài của PHẦN vừa xin (1 byte) chứ không
@@ -93,19 +78,6 @@ export type KetQuaDo =
        * đếm hop và không kiểm địa chỉ.
        */
       urlCuoi: string;
-      /**
-       * Chuyển hướng có RỜI KHỎI họ tên miền ban đầu không.
-       *
-       * Chỉ ca này mới đáng đi đường TỰ TẢI. Bản đầu đánh dấu MỌI chuyển hướng
-       * và đo ra là quá chặt: fbcdn trả `302` từ `video.fsgn2-6.fna.fbcdn.net`
-       * sang `video.xx.fbcdn.net` với MỌI video Facebook - một bước định tuyến
-       * CDN thường lệ. Bắt tự tải ở đó là đẩy 42 MB x 2 qua VPS mỗi lượt, trong
-       * khi đường 1 vốn không tốn byte nào của ta.
-       *
-       * Rời tên miền thì khác: bên kia đang dắt ta sang một nơi khác hẳn, mà
-       * `sendVideo` sẽ tự đi lại chặng đó bằng HEAD không qua lớp gác nào.
-       */
-      doiTenMien: boolean;
     }
   | { ok: false; ly: string };
 
@@ -143,7 +115,6 @@ export function quyetDinhTuHeader(
   dayDu: string | undefined,
   daiPhan: number,
   urlCuoi = "",
-  doiTenMien = false,
 ): KetQuaDo {
   if (status < 200 || status >= 300) return { ok: false, ly: `HTTP ${status}` };
   if (!laKieuVideo(kieu)) {
@@ -154,7 +125,6 @@ export function quyetDinhTuHeader(
     soByte: doCoThat(status, dayDu, daiPhan),
     kieuNoiDung: kieu,
     urlCuoi,
-    doiTenMien,
   };
 }
 
@@ -170,8 +140,6 @@ export async function kiemUrlVideoConSong(rawUrl: string): Promise<KetQuaDo> {
   } catch {
     return { ok: false, ly: "URL không hợp lệ" };
   }
-
-  const hostDau = url.hostname;
 
   for (let hop = 0; hop <= TRAN_HOP; hop++) {
     let res;
@@ -204,7 +172,7 @@ export async function kiemUrlVideoConSong(rawUrl: string): Promise<KetQuaDo> {
       continue;
     }
 
-    return quyetDinhTuHeader(status, kieu, dayDu, daiPhan, url.href, !cungHo(hostDau, url.hostname));
+    return quyetDinhTuHeader(status, kieu, dayDu, daiPhan, url.href);
   }
 
   return { ok: false, ly: `Quá ${TRAN_HOP} lần chuyển hướng` };

@@ -5759,3 +5759,164 @@ link này cần đăng nhập, gửi link bài đăng hoặc reel công khai tha
   đích hôm nay, đã có bản siết chứng minh siêu tập); `content-range: bytes 0-0/*`
   bỏ qua trần dung lượng; nguồn khai cỡ nhỏ hơn thật thì file cụt vẫn báo thành
   công.
+
+---
+
+## V3.22 - Video crash ứng dụng điện thoại: hai nguyên nhân độc lập (2026-08-23)
+
+Nghiệm thu V3.21 trên máy thật lộ ra hai lỗi KHÁC NHAU mà triệu chứng chồng lên
+nhau, và cả hai chỉ hiện trên ĐIỆN THOẠI - máy tính xem bình thường suốt.
+
+Người dùng báo: "video tiktok tôi gửi sau đó là dạng video ngang nhưng nó lại
+nhận khung dọc, trên điện thoại là ko xem được luôn á", rồi sau khi vá khung
+hình: "giờ ra đúng rồi nhưng trên điện thoại vẫn ko xem được, zalo crash luôn".
+
+### Tách hai nguyên nhân bằng phép đối chứng
+
+Gửi CÙNG một video, chỉ đổi một biến mỗi lần, tới đúng máy người dùng:
+
+| Biến thể | Ảnh bìa | Khung hình | Máy tính | **Điện thoại** |
+|---|---|---|---|---|
+| V3.21 | đen | SAI (dọc cho video ngang) | méo | **crash** |
+| A: URL ngoài + ảnh bìa Zalo | đúng | đúng | tốt | **không phát được** (hết crash) |
+| B: upload lên Zalo + ảnh bìa Zalo | đúng | đúng | tốt | **mượt** |
+| C: gửi dạng file đính kèm | - | - | tốt | tốt |
+
+Đọc bảng theo cột "điện thoại": vá khung hình chữa được CRASH nhưng không chữa
+được KHÔNG PHÁT ĐƯỢC. Đó là hai bệnh, không phải một.
+
+### ĐÃ KIỂM CHỨNG TRÊN MÁY THẬT - ĐỪNG RESEARCH LẠI
+
+Người dùng yêu cầu ghi rõ khoản này để lần sau khỏi phải đo lại từ đầu. Tất cả
+đều là lượt gửi THẬT tới điện thoại của họ, không phải suy luận:
+
+**Hai CÁCH GỬI, cả hai đều CHẠY ĐƯỢC, đã test cùng một video:**
+
+| Cách gửi | Hình thức người nhận thấy | Máy tính | Điện thoại | Kết luận |
+|---|---|---|---|---|
+| **`sendVideo`** (upload lên Zalo trước) | thẻ video xem ngay trong khung chat | tốt | **tốt** | ĐANG DÙNG |
+| **`sendMessage` kèm file** | thẻ file `.mp4`, bấm để tải/mở | tốt | **tốt** | đường lui đã kiểm chứng |
+
+Người dùng chốt: *"ok good, cả 2 cái đều chuẩn. Tôi chọn B vì nó tốt hơn hẳn
+thật đó!"* - chọn thẻ video vì trải nghiệm đẹp hơn, KHÔNG phải vì cách kia hỏng.
+Nếu sau này `uploadAttachment` cho video gặp vấn đề (nó phụ thuộc listener, xem
+phần dưới), gửi dạng file là đường lui đã chạy được trên máy thật, không cần
+nghiên cứu lại.
+
+**Còn `videoUrl` trỏ CDN NGOÀI (biến thể A) thì KHÔNG dùng được** - đây mới là
+thứ đã bị loại. Nó gửi được, máy tính xem được, ảnh bìa đúng, không crash; chỉ
+là ĐIỆN THOẠI không phát được. Đừng thấy "máy tính xem tốt" rồi tưởng nó dùng
+được: mọi lần đo trên máy tính đều cho kết quả sai về ca này.
+
+- **Crash** = khung hình khai sai. Ứng dụng dựng sẵn bề mặt phát theo số ta khai
+  rồi nhận khung khác hẳn. Máy tính co giãn được nên không ai thấy.
+- **Không phát được** = `videoUrl` trỏ CDN ngoài. Trình phát trên điện thoại
+  không lấy được byte từ đó; trên máy tính thì được.
+
+### Vá 1: đọc khung hình từ chính file (`doc-khung-hinh-mp4.ts`)
+
+Không nguồn nào khai đúng được, đã kiểm từng nguồn:
+
+| Nguồn | Khai gì | Sự thật (ffprobe) |
+|---|---|---|
+| TikWM | KHÔNG có width/height (đã dump toàn bộ khóa) | - |
+| yt-dlp, format `hd` | không mang width/height ở đâu | 1280x720 |
+| yt-dlp, mảng `formats` | 2560x1440 | 1280x720 |
+
+Nên đọc thẳng hộp `tkhd` của MP4. Offset là ĐO THẬT rồi đối chiếu ffprobe: bản
+đầu tính nhẩm lệch 4 byte và đọc ra chiều cao 16384 - đó là phần tử cuối của ma
+trận biến đổi. Bẫy thứ hai: `tkhd` ĐẦU TIÊN trong file TikTok là track ÂM THANH,
+khai 0x0. Kết quả 4/4 khớp ffprobe từng số.
+
+Bộ đọc này ăn byte của người lạ nên cố ý rất hẹp: chỉ đi cây hộp tìm `tkhd`,
+không giải mã khung hình nào, không cấp phát theo số file khai, có trần số hộp
+và trần độ sâu, hỏng thì trả `null`.
+
+### Vá 2: byte đi qua bot, nhưng KHÔNG chạm đĩa
+
+Người dùng đặt đúng ràng buộc: *"tôi rất ngại video đi qua vps của tôi, băng
+thông tôi ko lo vì ko có giới hạn, nhưng cứ tải xóa liên tục như vậy thể nào vps
+cũng rất rác... Và chưa tính lỡ video đó chứa gì đó mình ko handle được."*
+
+Nghĩa là mối lo KHÔNG phải băng thông mà là (a) đọc/ghi SSD liên tục và (b) nội
+dung không kiểm soát được. Rà cả 140 API của zca-js: **không có** đường nào đưa
+Zalo một URL rồi Zalo tự tải về tự host. Nên (a) và (b) phải giải riêng.
+
+Giải (a): `uploadAttachment` nhận `{ data: Buffer, filename, metadata }` chứ
+không bắt buộc đường dẫn file - đã rà từng nhánh, kể cả chỗ tính checksum. Đường
+đi thành **mạng -> RAM -> Zalo**, không có file tạm nào để mà xóa. yt-dlp cũng
+xuất qua `-o -` nên không ghi đĩa. Đã xóa hẳn `tai-bang-yt-dlp.ts` và
+`safe-remote-download-to-file.ts`.
+
+Giải (b): không đổi gì - byte chỉ đi qua bộ đọc `tkhd` rất hẹp ở trên rồi lên
+Zalo, không có bộ giải mã media nào chạy trên máy chủ (đây cũng là lý do image
+cố ý không cài ffmpeg).
+
+### Vá 3: ảnh bìa xin của chính Zalo (`lay-anh-bia-zalo.ts`)
+
+Đưa `thumbnailUrl` trỏ host ngoài thì thẻ video hiện ĐEN THUI - Zalo kén host
+ảnh. `parseLink` là API Zalo dùng để dựng thẻ xem trước khi người dùng dán link,
+và nó trả ảnh Zalo đã tự lưu trên `*.zadn.vn`. Xin lại được mà **không tốn byte
+nào**. Chỉ nhận host `zadn.vn`: Zalo trả lại chính URL của TikTok thì dùng cũng
+đen thui như cũ.
+
+### Hệ quả: RAM thành ràng buộc mới, và dashboard chưa biết điều đó
+
+Trước đây trần dung lượng chỉ tốn chỗ trên đĩa. Giờ nó nằm trong RAM, và RAM
+đỉnh = `số lượt song song x (cỡ video + 75 MB cho tiến trình yt-dlp)`. Hai thanh
+trượt nhìn RIÊNG RẼ thì ô nào cũng hợp lệ, nhân lên là **2000 MB x 8 lượt =
+16 GB**.
+
+Thêm luật chéo trong `LUAT_CHEO`, neo vào `totalmem()` THẬT chứ không vào một
+con số bịa - cùng một cấu hình thì lành trên máy 16 GB và chết trên VPS 1 GB.
+Công thức tách thành hàm thuần `kiemRamVideo(coMb, songSong, ramMayMb)` nhận RAM
+làm THAM SỐ: cửa nằm trong hàm chạm hệ thống thì không có gì canh được nó - đúng
+bài học đã trả giá ở `envToiThieu`.
+
+Hai câu gợi ý trên dashboard cũng đã sai kể từ vá 2 (còn mô tả hành vi ghi đĩa),
+đã sửa lại theo phép tính RAM thật.
+
+### Nghiệm thu
+
+Chạy qua ĐÚNG code sản xuất, gửi tới thread thật của người dùng:
+
+| Video | Nguồn KHAI | Đọc từ file | Byte | Thời gian |
+|---|---|---|---|---|
+| TikTok ngang | 576x1024 (sai) | **1002x576** | 9.972.708 | 3,7 s |
+| Facebook (video từng gây crash) | 1280x720 | **1280x720** | 44.018.991 | 3,5 s |
+
+Cả hai đều `khungDocDuoc: true`, `anhBiaZalo: true`. Người dùng xác nhận trên
+điện thoại: *"B thì xem được mượt mà nhé"*, và chốt hướng B.
+
+### Phép phá
+
+12 phép phá cho phần viết mới, 12/12 đỏ sau khi vá:
+
+- gửi URL nguồn thay vì URL Zalo; khai khung theo nguồn thay vì đọc file; dùng
+  ảnh bìa host ngoài; bỏ trần dung lượng trên buffer; upload không trả URL vẫn
+  gửi tiếp - 5/5 đỏ ngay.
+- ghi ra đĩa thay vì stdout; nhánh format cần ffmpeg; không xin stdout nhị phân;
+  bỏ trần độ dài buffer; đánh rơi cờ `loiCauHinh`; nhận ảnh bìa host ngoài - 6/6
+  đỏ ngay.
+- **`encoding: "buffer"` thì KHÔNG bắt được** ở vòng đầu: nó nằm trong hàm chạm
+  tiến trình nên không ca nào tới. Tách `tuyChonExec()` thành hàm thuần rồi mới
+  đỏ. Đây là lần thứ ba cùng một hình dạng lỗi trong dự án này (`envToiThieu`,
+  `dungLoiGoi`, giờ là `tuyChonExec`).
+- Riêng hai phép kiểm biên trong bộ đọc MP4 (`co < 8`, `Math.min` kẹp biên) thì
+  phá KHÔNG đỏ, và đó là đúng: chúng trùng với `try/catch` bao ngoài. Ghi thẳng
+  điều đó vào comment thay vì đẻ ra test giả để lấp chỗ.
+
+### Việc còn treo
+
+- **Trần song song hạ từ 2 xuống 1** (người dùng chốt: *"hạ nhé để 1 thôi cho
+  chắc"*). RAM đỉnh còn `1 x (100 + 75) = 175 MB` thay vì 350 MB. Trần dung
+  lượng giữ nguyên 100 MB - đó là ngưỡng người dùng đã chọn từ trước, và với
+  song song 1 thì nó không còn là mối lo. Đánh đổi: hai người cùng gửi link thì
+  người thứ hai xếp hàng chờ, không chạy song song nữa.
+- **`uploadAttachment` cần listener đang chạy.** Nó đăng ký callback theo
+  `fileId` và chỉ giải quyết khi sự kiện hoàn tất tới qua WEBSOCKET; zca-js
+  không đặt timeout nào nên mất listener là promise treo VĨNH VIỄN. Đã bọc trần
+  5 phút, nhưng đó là lưới đỡ chứ không phải lời giải - lượt gửi vẫn hỏng.
+- **Gửi dạng file (biến thể C) chạy tốt nhưng không dùng** - xem khối "ĐÃ KIỂM
+  CHỨNG TRÊN MÁY THẬT" ở trên. Đây là đường lui duy nhất đã được xác nhận bằng
+  máy thật, không phải giả thiết.

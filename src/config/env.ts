@@ -180,8 +180,11 @@ const envSchema = z.object({
   // vì gửi video ồ ạt, không phải VPS quá tải.
   VIDEO_MAX_PER_HOUR: z.coerce.number().int().min(1).max(200).default(15),
   // Số tiến trình tải chạy CÙNG LÚC. Đo thật: mỗi tiến trình yt-dlp ăn ~75 MB
-  // RAM bất kể cỡ video (nó ghi thẳng ra đĩa, không đệm). 2 -> ~150 MB.
-  VIDEO_MAX_CONCURRENT: z.coerce.number().int().min(1).max(8).default(2),
+  // RAM bất kể cỡ video, CỘNG cỡ video vì byte nằm trong RAM chứ không ghi đĩa
+  // (V3.22). Mặc định 1 -> ~175 MB đỉnh với trần dung lượng 100 MB. Nâng lên
+  // thì nhân thẳng: `song song x (cỡ video + 75 MB)`, và `kiemRamVideo` chặn
+  // nếu vượt 25% RAM máy chủ.
+  VIDEO_MAX_CONCURRENT: z.coerce.number().int().min(1).max(8).default(1),
   // Số lần thử MỖI nguồn. Đo: 4 lần -> 5/6 phiên thành công với yt-dlp trên
   // TikTok (nguồn hay bị trang thử thách chống bot).
   VIDEO_SOURCE_RETRIES: z.coerce.number().int().min(1).max(10).default(4),

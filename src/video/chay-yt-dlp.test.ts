@@ -176,6 +176,55 @@ describe("dungLoiGoi - ba lớp siết PHẢI có mặt trong lời gọi thật
   });
 });
 
+describe("stdout NHỊ PHÂN cho đường yt-dlp tự tải", () => {
+  /**
+   * `-o -` cho yt-dlp xuất thẳng video ra stdout, nhờ vậy byte đi từ mạng vào
+   * RAM mà KHÔNG chạm đĩa - đúng thứ người dùng yêu cầu (họ ngại tải-xóa liên
+   * tục bào SSD, không ngại băng thông).
+   *
+   * Ép stdout về chuỗi là HỎNG dữ liệu: mỗi byte không hợp lệ trong UTF-8 biến
+   * thành ký tự thay thế và file không mở được nữa.
+   */
+  it("dựng lời gọi có `-o -` và trần buffer rộng cho video", () => {
+    const lenh = mod.dungLoiGoi(["-o", "-", "https://x"]);
+    assert.ok(lenh.doiSo.includes("-o"));
+    assert.equal(lenh.doiSo[lenh.doiSo.indexOf("-o") + 1], "-");
+  });
+
+  it("cờ siết bảo mật VẪN đứng trước, kể cả ở đường tải", () => {
+    // Đường tải cũng chạy tiến trình yt-dlp, nên nó cần đúng lớp siết như
+    // đường đọc metadata - không được có đường tắt nào.
+    const lenh = mod.dungLoiGoi(["-o", "-", "https://x"]);
+    assert.ok(lenh.doiSo.includes("--ignore-config"));
+    assert.ok(lenh.doiSo.includes("--no-plugin-dirs"));
+    assert.ok(lenh.doiSo.indexOf("--ignore-config") < lenh.doiSo.indexOf("-o"));
+  });
+
+  it("BẬT `encoding: buffer` khi lấy stdout nhị phân", () => {
+    // Thiếu cờ này thì Node ép byte về chuỗi UTF-8 và file nhận được không mở
+    // được - hỏng CÂM, vì mọi thứ khác vẫn chạy bình thường.
+    const tc = mod.tuyChonExec(1000, {}, { nhiPhan: true, tranStdout: 50 });
+    assert.equal(tc.encoding, "buffer");
+    assert.equal(tc.maxBuffer, 50, "tải video cần trần buffer rộng hơn mặc định");
+  });
+
+  it("KHÔNG bật khi đọc metadata - JSON thì đọc thành chữ mới dùng được", () => {
+    const tc = mod.tuyChonExec(1000, {}, {});
+    assert.equal(tc.encoding, undefined);
+    assert.ok(tc.maxBuffer > 0, "vẫn phải có trần buffer");
+  });
+
+  it("env vẫn là env ĐÃ LỌC ở đường tải", () => {
+    const cu = { ...process.env };
+    process.env.CREDENTIALS_ENCRYPTION_KEY = "bi-mat";
+    try {
+      assert.equal(mod.dungLoiGoi(["-o", "-"]).env.CREDENTIALS_ENCRYPTION_KEY, undefined);
+    } finally {
+      process.env = cu;
+    }
+  });
+});
+
 describe("chayYtDlp - chạy thật với binary không tồn tại", () => {
   it("báo ĐÚNG BỆNH kèm cờ loiCauHinh, KHÔNG đổ cho video", async () => {
     const ket = await mod.chayYtDlp(["--version"], 20_000);

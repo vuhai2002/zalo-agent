@@ -13,7 +13,7 @@ import { hostnameToAddress, isPublicAddress } from "./private-address-guard.js";
  * - tự đi theo redirect nhưng mỗi hop đều bị kiểm lại
  */
 
-export const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 export const MAX_REDIRECTS = 3;
 
 /**
@@ -68,7 +68,7 @@ const guardedLookup: LookupFunction = (hostname, options, callback) => {
   });
 };
 
-export const formatMb = (bytes: number): string => `${Math.round(bytes / (1024 * 1024))}MB`;
+const formatMb = (bytes: number): string => `${Math.round(bytes / (1024 * 1024))}MB`;
 
 /**
  * Đọc stream với hạn mức byte. Vượt hạn thì ném lỗi và huỷ stream ngay (thoát

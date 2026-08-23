@@ -86,79 +86,18 @@ describe("temp-file-store", () => {
   });
 });
 
-describe("withEmptyTempFile - đưa chỗ trống để ghi thẳng vào", () => {
-  it("đưa đường dẫn TRONG thư mục tạm và file CHƯA tồn tại", async () => {
-    let p = "";
-    await store.withEmptyTempFile("video.mp4", async (duongDan) => {
-      p = duongDan;
-      assert.equal(path.dirname(duongDan), tmpDir());
-      assert.equal(fs.existsSync(duongDan), false, "phải là chỗ trống, không phải file rỗng đã tạo sẵn");
-      fs.writeFileSync(duongDan, "abc");
-      return null;
-    });
-    assert.equal(fs.existsSync(p), false);
-  });
-
-  it("XÓA file kể cả khi việc bên trong NÉM", async () => {
-    let p = "";
-    await assert.rejects(
-      () =>
-        store.withEmptyTempFile("video.mp4", async (duongDan) => {
-          p = duongDan;
-          fs.writeFileSync(duongDan, "tai dang do");
-          throw new Error("Zalo từ chối");
-        }),
-      /Zalo từ chối/,
-    );
-
-    // Đây là ca đáng lo nhất: tải video 40 MB xong thì gửi hỏng. Không xóa ở
-    // nhánh này là mỗi lần gửi hỏng để lại một file trên đĩa VPS.
-    assert.equal(fs.existsSync(p), false, "gửi hỏng mà giữ file lại là đầy đĩa dần");
-  });
-
-  it("tên file có ../ KHÔNG thoát ra khỏi thư mục tạm", async () => {
-    // Tên suy từ dữ liệu của bên thứ ba (tác giả video), nên đây là đường vào
-    // ghi đè file bất kỳ trên máy chủ.
-    let p = "";
-    await store.withEmptyTempFile("../../../etc/passwd", async (duongDan) => {
-      p = duongDan;
-      return null;
-    });
-    assert.equal(path.dirname(p), tmpDir(), `thoát ra ngoài: ${p}`);
-    assert.doesNotMatch(p, /\.\./);
-  });
-
-  it("hai lời gọi cùng tên vẫn ra hai đường dẫn khác nhau", async () => {
-    // Hai người cùng gửi link một lúc: trùng đường dẫn là hai lượt ghi đè nhau
-    // rồi cùng gửi một file.
-    let a = "";
-    let b = "";
-    await store.withEmptyTempFile("video.mp4", async (x) => {
-      a = x;
-      return null;
-    });
-    await store.withEmptyTempFile("video.mp4", async (x) => {
-      b = x;
-      return null;
-    });
-    assert.notEqual(a, b);
-  });
-
-  it("trả về đúng giá trị của việc bên trong", async () => {
-    const ra = await store.withEmptyTempFile("v.mp4", async () => 12_345);
-    assert.equal(ra, 12_345);
-  });
-});
-
-describe("chặn thoát thư mục tạm - cả ba hàm cùng một bất biến", () => {
+describe("chặn thoát thư mục tạm - cả hai hàm cùng một bất biến", () => {
   /**
-   * Tên file ở cả ba hàm đều đến từ chỗ ta không kiểm soát: model tự đặt tên
-   * cho `send_file` và hai tool tài liệu, còn `withEmptyTempFile` suy tên từ
-   * tác giả video của bên thứ ba. `path.basename` là thứ duy nhất đứng giữa cái
-   * tên đó và một lời ghi đè file bất kỳ trên máy chủ.
+   * Tên file ở cả hai hàm đều đến từ chỗ ta không kiểm soát: model tự đặt tên
+   * cho `send_file` và hai tool tài liệu. `path.basename` là thứ duy nhất đứng
+   * giữa cái tên đó và một lời ghi đè file bất kỳ trên máy chủ.
    *
-   * Hai hàm đầu đã có cửa chặn từ trước nhưng KHÔNG có test - phép phá cho thấy
-   * bỏ `path.basename` ở đó thì cả bộ vẫn xanh.
+   * Cả hai đã có cửa chặn từ trước nhưng KHÔNG có test - phép phá cho thấy bỏ
+   * `path.basename` ở đó thì cả bộ vẫn xanh.
+   *
+   * Trước đây có hàm thứ ba (`withEmptyTempFile`) cho tool video, suy tên từ
+   * tác giả của bên thứ ba. Đã xóa cùng lúc với việc video chuyển sang đi thẳng
+   * qua RAM, không còn file tạm nào.
    */
   const TEN_XAU = "../../../etc/passwd";
 

@@ -209,3 +209,50 @@ describe("validateTuning - ràng buộc chéo", () => {
     });
   });
 });
+
+describe("video: dung lượng x số lượt song song phải nằm gọn trong RAM máy chủ", () => {
+  /**
+   * Byte video giờ nằm trong RAM chứ không ghi ra đĩa nữa. Hai thanh trượt trên
+   * dashboard nhìn RIÊNG RẼ thì ô nào cũng hợp lệ, nhưng nhân lên là 2000 MB x
+   * 8 lượt = 16 GB - đúng loại lỗi chỉ lộ ra khi nhiều tham số kết hợp.
+   *
+   * `kiemRamVideo` nhận RAM máy làm THAM SỐ nên test được bằng số cố định; luật
+   * chéo mới là chỗ đưa `totalmem()` thật vào.
+   */
+  const RAM_2GB = 2048;
+
+  it("mặc định 100 MB x 2 lượt lọt trên VPS 2 GB", () => {
+    assert.equal(tuning.kiemRamVideo(100, 2, RAM_2GB), null);
+  });
+
+  it("kịch trần cả hai thanh trượt thì CHẶN", () => {
+    const cau = tuning.kiemRamVideo(2000, 8, RAM_2GB);
+    assert.ok(cau, "2000 MB x 8 lượt = 16 GB, phải chặn");
+    assert.match(cau, /16600 MB/, "phải nói con số đỉnh để người dùng biết hạ bao nhiêu");
+    assert.match(cau, /512 MB/, "và nói mức an toàn của máy này");
+  });
+
+  it("CỘNG cả RAM của tiến trình tải, không chỉ cỡ video", () => {
+    // Mỗi tiến trình yt-dlp ăn ~75 MB CỐ ĐỊNH bất kể video nặng nhẹ. Bỏ qua
+    // phần đó là ước thiếu, và ước thiếu ở đây nghĩa là máy chủ hết bộ nhớ.
+    assert.equal(tuning.kiemRamVideo(50, 4, RAM_2GB), null, "4 x (50+75) = 500, lọt dưới 512");
+    assert.ok(tuning.kiemRamVideo(60, 4, RAM_2GB), "4 x (60+75) = 540 > 512, phải chặn");
+  });
+
+  it("máy nhiều RAM hơn thì cho phép cấu hình lớn hơn", () => {
+    assert.ok(tuning.kiemRamVideo(500, 4, 4096), "trên 4 GB thì 2300 MB là quá");
+    assert.equal(tuning.kiemRamVideo(500, 4, 32768), null, "trên 32 GB thì vẫn còn dư");
+  });
+
+  it("luật chéo có nối vào validateTuning cho CẢ HAI ô", () => {
+    // Sửa một ô trong cặp vẫn phải kiểm với ô còn lại - không thì đổi số lượt
+    // song song mà không đụng dung lượng là lách được luật.
+    for (const key of ["VIDEO_MAX_SIZE_MB", "VIDEO_MAX_CONCURRENT"]) {
+      const loi = tuning.validateTuning({ VIDEO_MAX_SIZE_MB: 2000, VIDEO_MAX_CONCURRENT: 8, [key]: key === "VIDEO_MAX_SIZE_MB" ? 2000 : 8 });
+      assert.ok(
+        loi.some((c: string) => c.includes("bộ nhớ lúc cao điểm")),
+        `đổi ${key} phải kích hoạt luật`,
+      );
+    }
+  });
+});
