@@ -20,7 +20,7 @@ cầu key riêng per-agent.
 | [00](phase-00-dieu-tra-abort-signal.md) | Điều tra bug abortSignal | XONG (đính chính: chẩn đoán ban đầu sai - `totalMs` ĐÃ cấp signal cho tool; bug thật là tool không tiêu signal) |
 | [01](phase-01-forward-abort-signal-tool-mang.md) | Tool mạng honor abortSignal (Layer 2); gỡ `toolMs` no-op | XONG (2 vòng review Opus, sạch) |
 | [02](phase-02-chat-luong-tom-tat-thread.md) | Prompt tóm tắt cấu trúc + framing checkpoint (bọc chống injection) + guard truncation (thay guard cỡ) | XONG (2 vòng review Opus, sạch) |
-| [03](phase-03-chong-injection-prompt-job-lich.md) | Bọc prompt job theo lịch như nội dung không tin | chờ làm |
+| [03](phase-03-chong-injection-prompt-job-lich.md) | Bọc payload job theo lịch (wrapUntrustedContent) chống injection có độ trễ | XONG code (review Opus sạch); LƯU Ý: rủi ro hành vi model chưa đo bằng eval |
 | [04](phase-04-hieu-chinh-char-token.md) | Ghi promptTokens per-step để hiệu chỉnh KY_TU_MOI_TOKEN | chờ làm |
 
 Hoãn: #7 config LLM đa-route (YAGNI).
