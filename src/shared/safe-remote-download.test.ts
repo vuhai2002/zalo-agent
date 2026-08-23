@@ -23,6 +23,35 @@ describe("readCappedStream", () => {
     const data = await readCappedStream(streamOf(Buffer.alloc(8)), 8);
     assert.equal(data.byteLength, 8);
   });
+
+  // Kết quả của một readCappedStream: "huy" nếu từ chối vì abort, "treo" nếu quá
+  // 2s không xong (sabotage bỏ abort -> treo, biến thành assert đỏ GỌN thay vì
+  // để test-runner timeout thành cancelled).
+  const ketTrong2s = async (p: Promise<unknown>): Promise<string> =>
+    Promise.race([
+      p.then(() => "xong").catch((e) => (/hủy/.test(String(e)) ? "huy" : `loi:${e}`)),
+      new Promise<string>((r) => setTimeout(() => r("treo"), 2000)),
+    ]);
+
+  it("signal đã abort SẴN + stream vô tận thì từ chối NGAY, không kẹt đọc", async () => {
+    // Stream vô tận: nếu bỏ check-abort-đầu thì listener không kích hoạt (signal
+    // đã bắn trước khi add) -> for-await kẹt mãi. Check đầu là thứ cứu.
+    const stream = new Readable({ read() {} });
+    const ac = new AbortController();
+    ac.abort();
+    assert.equal(await ketTrong2s(readCappedStream(stream, 10, ac.signal)), "huy");
+  });
+
+  it("abort GIỮA CHỪNG thì huỷ stream và từ chối - đúng ca nguồn nhỏ giọt", async () => {
+    // Stream không bao giờ tự kết thúc: chỉ huỷ (từ abort) mới cắt được for-await
+    // đang chờ chunk kế. Đây là ca slow-drip mà idle-timeout không bắt.
+    const stream = new Readable({ read() {} });
+    const ac = new AbortController();
+    const p = readCappedStream(stream, 1_000_000, ac.signal);
+    setTimeout(() => ac.abort(), 10);
+    assert.equal(await ketTrong2s(p), "huy", "abort phải làm từ chối trong 2s, không treo");
+    assert.equal(stream.destroyed, true, "abort phải huỷ stream, không để socket sống tiếp");
+  });
 });
 
 describe("decompressBody", () => {

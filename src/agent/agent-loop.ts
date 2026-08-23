@@ -394,8 +394,18 @@ export async function runAgentTurn({
           maxRetries: 2,
           // Chặn trên cho CẢ lượt. Không có nó, router nhận kết nối rồi treo sẽ ăn
           // 300s (undici) x maxRetries x số step, khóa thread hàng giờ trong khi tin
-          // nhắn sau xếp hàng chờ. `totalMs` bao gồm cả thời gian chạy tool, nên giá
-          // trị này bắt buộc lớn hơn IMAGE_GEN_TIMEOUT_MS.
+          // nhắn sau xếp hàng chờ. `totalMs` bắt buộc lớn hơn IMAGE_GEN_TIMEOUT_MS.
+          //
+          // `totalMs` CŨNG là nguồn `abortSignal` mà AI SDK truyền vào tool
+          // `execute`: ĐO THẬT trên ai@7.0.37 (probe streamText->tool), chỉ đặt
+          // `totalMs=300` thì tool nhận signal bắn ở mốc 302ms. Nên các tool mạng
+          // (web_fetch, send_file) forward `options.abortSignal` xuống
+          // `downloadFromPublicUrl` là ĐỦ để cắt socket khi lượt hết giờ - trước
+          // đây chúng bỏ qua signal nên tải nền tiếp dù lượt đã bỏ cuộc.
+          // KHÔNG thêm `toolMs`: đo được nó chỉ có tác dụng khi NHỎ HƠN `totalMs`
+          // (mốc `toolMs` tính từ lúc tool bắt đầu nên luôn trễ hơn), còn bằng
+          // `totalMs` thì `totalMs` bắn trước -> thừa. Muốn siết riêng tool rẻ thì
+          // đặt `timeout.tools[name]Ms`, nhưng nay chưa cần.
           timeout: { totalMs: getTuning("LLM_TURN_TIMEOUT_MS") },
           // Log từng tool call kèm input + đầu output: khi bot trả lời kém phải đọc
           // được ngay nó fetch trang nào và thấy gì (vụ dò vé số chỉ có số steps,

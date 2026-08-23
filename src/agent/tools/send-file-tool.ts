@@ -49,10 +49,13 @@ export function createSendFileTool(ctx: ToolContext) {
       source: z.string().describe("Tên file trong shared-files hoặc URL http(s)"),
       caption: z.string().optional().describe("Chú thích kèm file (tùy chọn)"),
     }),
-    execute: async ({ source, caption }) => {
+    execute: async ({ source, caption }, { abortSignal }) => {
       try {
         if (/^https?:\/\//i.test(source)) {
-          const file = await downloadFromPublicUrl(source, { maxBytes: MAX_DOWNLOAD_BYTES });
+          const file = await downloadFromPublicUrl(source, {
+            maxBytes: MAX_DOWNLOAD_BYTES,
+            signal: abortSignal,
+          });
           await withTempFile(file.fileName, file.data, (filePath) =>
             sendAttachment(filePath, caption, file.fileName),
           );

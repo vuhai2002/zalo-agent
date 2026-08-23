@@ -67,6 +67,21 @@ describe("fetchViaJinaReader", () => {
     assert.equal(result, null);
   });
 
+  it("gộp signal của lượt vào fetch - lượt abort thì Jina cũng bị hủy", async () => {
+    let signalNhan: AbortSignal | undefined;
+    const fetchFn = (async (_url: string, init?: RequestInit) => {
+      signalNhan = init?.signal ?? undefined;
+      return new Response(JINA_BODY);
+    }) as unknown as typeof fetch;
+    const ac = new AbortController();
+    await jina.fetchViaJinaReader("https://a.vn", { maxChars: 100, fetchFn, signal: ac.signal });
+
+    assert.ok(signalNhan, "phải truyền signal xuống fetch");
+    assert.equal(signalNhan.aborted, false);
+    ac.abort();
+    assert.equal(signalNhan.aborted, true, "lượt abort thì signal gộp phải abort theo");
+  });
+
   it("cắt theo maxChars để không phình context", async () => {
     const long = `Markdown Content:\n${"x".repeat(500)}`;
     const result = await jina.fetchViaJinaReader("https://a.vn", {

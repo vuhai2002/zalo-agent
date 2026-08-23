@@ -32,6 +32,8 @@ export type JinaFetchOptions = {
   apiKey?: string;
   timeoutMs?: number;
   fetchFn?: typeof fetch;
+  /** Signal của lượt (hết `LLM_TURN_TIMEOUT_MS` hoặc bị hủy) - gộp với timeout riêng */
+  signal?: AbortSignal;
 };
 
 export type JinaResult = { text: string; title: string };
@@ -53,13 +55,16 @@ export async function fetchViaJinaReader(
   options: JinaFetchOptions,
 ): Promise<JinaResult | null> {
   const doFetch = options.fetchFn ?? fetch;
+  // Gộp timeout riêng của Jina với signal của lượt: cái nào bắn trước thì hủy.
+  const tuTimeout = AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([tuTimeout, options.signal]) : tuTimeout;
   try {
     const res = await doFetch(`${ENDPOINT}${url}`, {
       headers: {
         Accept: "text/plain",
         ...(options.apiKey ? { Authorization: `Bearer ${options.apiKey}` } : {}),
       },
-      signal: AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS),
+      signal,
     });
     if (!res.ok) {
       log.debug({ url, status: res.status }, "Jina Reader trả lỗi");

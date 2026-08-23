@@ -36,7 +36,14 @@ const BROWSER_HEADERS: Record<string, string> = {
 };
 
 export type RemoteFile = { data: Buffer; mediaType: string; fileName: string };
-export type DownloadOptions = { maxBytes: number; timeoutMs?: number };
+export type DownloadOptions = { maxBytes: number; timeoutMs?: number; signal?: AbortSignal };
+
+/**
+ * Lỗi khi bị HỦY qua `AbortSignal` (lượt agent hết `LLM_TURN_TIMEOUT_MS` hoặc bị
+ * dừng). Khác lỗi timeout mạng nội bộ: đây là "lượt bỏ cuộc rồi, đừng tải nữa".
+ * Caller bắt như mọi lỗi tải khác rồi trả `ketQuaLoi` - không ném ra agent loop.
+ */
+const LOI_DA_HUY = "Đã hủy tải (lượt hết thời gian)";
 
 /**
  * DNS lookup có kiểm tra, truyền vào option `lookup` của http.request nên chính
@@ -77,16 +84,35 @@ const formatMb = (bytes: number): string => `${Math.round(bytes / (1024 * 1024))
 export async function readCappedStream(
   stream: AsyncIterable<Buffer | string>,
   maxBytes: number,
+  signal?: AbortSignal,
 ): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of stream) {
-    const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-    total += buffer.byteLength;
-    if (total > maxBytes) throw new Error(`Nội dung vượt giới hạn ${formatMb(maxBytes)}`);
-    chunks.push(buffer);
+  if (signal?.aborted) throw new Error(LOI_DA_HUY);
+
+  // Huỷ Readable khi abort để BUNG for-await đang chờ chunk kế. Ca nhỏ giọt
+  // (stream không tự kết thúc, chỉ trả 1 byte thật chậm) thì kiểm cờ trong vòng
+  // lặp vô dụng - nó kẹt ở `await` chunk sau; chỉ destroy stream mới cắt được.
+  const onAbort = () => {
+    const s = stream as Partial<import("node:stream").Readable>;
+    if (typeof s.destroy === "function") s.destroy(new Error(LOI_DA_HUY));
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+
+  try {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const chunk of stream) {
+      const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      total += buffer.byteLength;
+      if (total > maxBytes) throw new Error(`Nội dung vượt giới hạn ${formatMb(maxBytes)}`);
+      chunks.push(buffer);
+    }
+    // Stream kết thúc bình thường NGAY khi abort (mock không destroy được) vẫn
+    // phải báo huỷ, không trả về buffer cụt như thành công.
+    if (signal?.aborted) throw new Error(LOI_DA_HUY);
+    return Buffer.concat(chunks);
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
   }
-  return Buffer.concat(chunks);
 }
 
 /**
@@ -168,6 +194,7 @@ export function openGuardedRequest(
   timeoutMs: number,
   method: "GET" | "HEAD" = "GET",
   headerThem: HeaderDocThem = {},
+  signal?: AbortSignal,
 ): Promise<IncomingMessage> {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error(`Chỉ hỗ trợ http/https, không hỗ trợ "${url.protocol}"`);
@@ -184,7 +211,10 @@ export function openGuardedRequest(
     const send = url.protocol === "https:" ? httpsRequest : httpRequest;
     const req = send(
       url,
-      { method, lookup: guardedLookup, timeout: timeoutMs, headers: { ...BROWSER_HEADERS, ...headerThem } },
+      // `signal` để Node huỷ chính socket khi lượt bỏ cuộc - cắt được cả kết nối
+      // đang bắt tay lẫn stream đang chảy, thứ mà idle-timeout không bắt kịp với
+      // nguồn nhỏ giọt. GIỮ `timeout` (idle) làm lớp hai.
+      { method, lookup: guardedLookup, timeout: timeoutMs, headers: { ...BROWSER_HEADERS, ...headerThem }, signal },
       resolve,
     );
     req.on("timeout", () => req.destroy(new Error(`Hết thời gian chờ ${timeoutMs}ms`)));
@@ -223,7 +253,8 @@ export async function downloadFromPublicUrl(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const res = await openGuardedRequest(url, timeoutMs);
+    if (options.signal?.aborted) throw new Error(LOI_DA_HUY);
+    const res = await openGuardedRequest(url, timeoutMs, "GET", {}, options.signal);
     const status = res.statusCode ?? 0;
     const location = res.headers.location;
 
@@ -245,7 +276,7 @@ export async function downloadFromPublicUrl(
       throw new Error(`Nội dung vượt giới hạn ${formatMb(options.maxBytes)}`);
     }
 
-    const raw = await readCappedStream(res, options.maxBytes);
+    const raw = await readCappedStream(res, options.maxBytes, options.signal);
     if (raw.byteLength === 0) throw new Error("Nội dung rỗng");
 
     // Giải nén TRƯỚC khi trả về: caller nào cũng đang coi đây là dữ liệu thô

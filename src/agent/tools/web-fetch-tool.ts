@@ -26,9 +26,9 @@ const log = createLogger("web-fetch");
 type FetchedPage = { text: string; title: string; via: "truc-tiep" | "jina-reader" };
 
 /** Tự fetch: nhanh, riêng tư, miễn phí. Hỏng thì trả null để rơi xuống lưới đỡ. */
-async function fetchDirect(url: string): Promise<FetchedPage | null> {
+async function fetchDirect(url: string, signal?: AbortSignal): Promise<FetchedPage | null> {
   try {
-    const file = await downloadFromPublicUrl(url, { maxBytes: MAX_HTML_BYTES });
+    const file = await downloadFromPublicUrl(url, { maxBytes: MAX_HTML_BYTES, signal });
     const isHtml = file.mediaType.includes("html") || file.mediaType === "application/octet-stream";
     const raw = file.data.toString("utf-8");
     const text = isHtml ? htmlToReadableText(raw) : raw.trim();
@@ -59,13 +59,15 @@ export function createWebFetchTool() {
     inputSchema: z.object({
       url: z.string().url().describe("URL đầy đủ, vd https://example.com/bai-viet"),
     }),
-    execute: async ({ url }) => {
+    execute: async ({ url }, { abortSignal }) => {
       const maxChars = getTuning("WEB_FETCH_MAX_CHARS");
 
-      // Đọc lại mỗi lượt - bật/tắt bậc 2 trên dashboard có hiệu lực ngay
-      let page = await fetchDirect(url);
+      // `abortSignal` do AI SDK cấp, bắn khi lượt hết `LLM_TURN_TIMEOUT_MS` hoặc
+      // bị hủy. Forward xuống tận socket để URL người lạ treo/nhỏ giọt không tải
+      // nền sau khi lượt đã bỏ cuộc.
+      let page = await fetchDirect(url, abortSignal);
       if (!page && getFetchSettings().fallbackEnabled) {
-        const jina = await fetchViaJinaReader(url, { maxChars });
+        const jina = await fetchViaJinaReader(url, { maxChars, signal: abortSignal });
         if (jina) page = { ...jina, via: "jina-reader" };
       }
 
