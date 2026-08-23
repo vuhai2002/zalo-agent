@@ -60,4 +60,30 @@ describe("contact-store", () => {
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.userId, "u-search");
   });
+
+  it("xoaContact bỏ ĐÚNG một dòng, theo cả account_id", () => {
+    contacts.recordContactActivity("acc-x", "u-xoa", "Xóa Tôi");
+    contacts.recordContactActivity("acc-y", "u-xoa", "Cùng id khác account");
+
+    const ok = contacts.xoaContact("acc-x", "u-xoa");
+    assert.equal(ok, true);
+    assert.equal(contacts.listContacts({ accountId: "acc-x", query: "u-xoa" }).length, 0);
+    // Cùng user_id ở account khác PHẢI còn - thiếu account_id trong WHERE là xóa oan
+    assert.equal(contacts.listContacts({ accountId: "acc-y", query: "u-xoa" }).length, 1);
+  });
+
+  it("xóa xong người đó nhắn lại thì danh bạ tự hiện lại (auto-collected)", () => {
+    contacts.recordContactActivity("acc-1", "u-lai", "Hải");
+    contacts.xoaContact("acc-1", "u-lai");
+    assert.equal(contacts.listContacts({ accountId: "acc-1", query: "u-lai" }).length, 0);
+
+    contacts.recordContactActivity("acc-1", "u-lai", "Hải");
+    const rows = contacts.listContacts({ accountId: "acc-1", query: "u-lai" });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.messageCount, 1, "đếm lại từ đầu sau khi xóa");
+  });
+
+  it("xóa cái không tồn tại trả false, không ném", () => {
+    assert.equal(contacts.xoaContact("acc-1", "u-khong-co"), false);
+  });
 });

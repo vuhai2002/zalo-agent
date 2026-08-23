@@ -9,6 +9,7 @@ import {
 } from "../../conversation/thread-store.js";
 import { getThreadUsageTotals } from "../../conversation/usage-store.js";
 import { xoaNguCanhThread } from "../../conversation/wipe-thread-context.js";
+import { xoaHanSession } from "../../conversation/xoa-han-session.js";
 import { huyBatchCuaThread } from "../../middleware/message-batcher.js";
 
 /** /api/threads - màn Sessions: list, xem hội thoại, bật/tắt bot per thread */
@@ -97,6 +98,25 @@ export const threadRoutes = new Hono()
     const ketQua = xoaNguCanhThread(accountId, threadId, {
       xoaTriNho: c.req.query("xoaTriNho") === "true",
     });
+
+    return c.json({ ok: true, ...ketQua, tinDangCho });
+  })
+
+  /**
+   * XÓA HẲN session (khác `/history` chỉ reset nội dung, giữ dòng): xóa nội dung
+   * + chính dòng session + lịch hẹn của thread. GIỮ danh bạ (Phương án A) và trí
+   * nhớ (có nút riêng). Xem `xoa-han-session.ts`.
+   *
+   * Hủy hàng chờ TRƯỚC khi xóa: một batch đang đỗ mà chạy xen vào sẽ dựng lại
+   * session vừa xóa.
+   */
+  .delete("/:threadId", (c) => {
+    const accountId = c.req.query("accountId") ?? "";
+    if (!accountId) return c.json({ error: "Thiếu accountId" }, 400);
+    const threadId = c.req.param("threadId");
+
+    const tinDangCho = huyBatchCuaThread(`${accountId}:${threadId}`);
+    const ketQua = xoaHanSession(accountId, threadId);
 
     return c.json({ ok: true, ...ketQua, tinDangCho });
   });

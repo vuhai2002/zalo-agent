@@ -192,10 +192,22 @@ export const api = {
         `?accountId=${encodeURIComponent(accountId)}&xoaTriNho=${xoaTriNho}`,
       { method: "DELETE" },
     ),
+  /** XÓA HẲN session (dòng + tin + lịch hẹn). Khác `xoaNguCanhThread` (chỉ reset). */
+  xoaSession: (accountId: string, threadId: string) =>
+    request<{ ok: true; tinNhan: number; lichHen: number; coDong: boolean }>(
+      `/api/threads/${encodeURIComponent(threadId)}?accountId=${encodeURIComponent(accountId)}`,
+      { method: "DELETE" },
+    ),
 
   contacts: (accountId: string, q: string, page: number) =>
     request<{ items: ContactItem[]; hasMore: boolean }>(
       `/api/contacts?accountId=${encodeURIComponent(accountId)}&q=${encodeURIComponent(q)}&page=${page}`,
+    ),
+  /** Xóa 1 dòng danh bạ (không đụng tin nhắn) */
+  xoaContact: (accountId: string, userId: string) =>
+    request<{ ok: boolean }>(
+      `/api/contacts/${encodeURIComponent(userId)}?accountId=${encodeURIComponent(accountId)}`,
+      { method: "DELETE" },
     ),
 
   accountsAdmin: {

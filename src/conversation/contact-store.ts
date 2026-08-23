@@ -28,6 +28,19 @@ export function recordContactActivity(accountId: string, userId: string, display
   upsertStmt.run(accountId, userId, displayName);
 }
 
+const xoaContactStmt = db.prepare("DELETE FROM contacts WHERE account_id = ? AND user_id = ?");
+
+/**
+ * Xóa MỘT dòng danh bạ. Chỉ đụng bảng `contacts` - KHÔNG xóa tin nhắn.
+ *
+ * Danh bạ là "auto-collected" từ tin đến (`recordContactActivity`), nên xóa xong
+ * mà người đó nhắn lại thì dòng tự hiện lại (đếm lại từ đầu; tin nhắn cũ trong
+ * DB vẫn nguyên). Đó là hành vi đúng của một danh bạ tự thu thập, không phải bug.
+ */
+export function xoaContact(accountId: string, userId: string): boolean {
+  return xoaContactStmt.run(accountId, userId).changes > 0;
+}
+
 const listStmt = db.prepare(`
   SELECT account_id, user_id, display_name, first_seen, last_seen, message_count
   FROM contacts

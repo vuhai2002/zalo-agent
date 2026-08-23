@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { AccountInfo, ContactItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
-import { IconUsers } from "../shared/dashboard-icons";
+import { IconTrash, IconUsers } from "../shared/dashboard-icons";
+import { useConfirmDialog } from "../shared/confirm-dialog";
 import { AccountFilter, accountLabel } from "../shared/account-filter";
 import {
   Badge,
@@ -20,6 +21,7 @@ export function ContactsPage({ accounts }: { accounts: AccountInfo[] }) {
   const [query, setQuery] = useState("");
   const [accountFilter, setAccountFilter] = useState("");
   const [page, setPage] = useState(0);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const showAccountColumn = accounts.length > 1;
 
@@ -35,6 +37,21 @@ export function ContactsPage({ accounts }: { accounts: AccountInfo[] }) {
 
   useEffect(reload, [reload]);
   useEffect(() => setPage(0), [accountFilter, query]);
+
+  async function xoa(contact: ContactItem) {
+    const ok = await confirm({
+      title: `Xóa danh bạ "${contact.displayName || contact.userId}"?`,
+      message:
+        "Chỉ xóa khỏi danh sách danh bạ, KHÔNG đụng lịch sử chat. Người này nhắn lại thì tự hiện lại.",
+      confirmLabel: "Xóa danh bạ",
+    });
+    if (!ok) return;
+    try {
+      await api.xoaContact(contact.accountId, contact.userId);
+    } finally {
+      reload();
+    }
+  }
 
   return (
     <div>
@@ -57,13 +74,13 @@ export function ContactsPage({ accounts }: { accounts: AccountInfo[] }) {
       <TableShell
         headers={
           showAccountColumn
-            ? ["Tên", "Account", "User ID", "Số tin", "Lần đầu", "Gần nhất"]
-            : ["Tên", "User ID", "Số tin", "Lần đầu", "Gần nhất"]
+            ? ["Tên", "Account", "User ID", "Số tin", "Lần đầu", "Gần nhất", ""]
+            : ["Tên", "User ID", "Số tin", "Lần đầu", "Gần nhất", ""]
         }
-        minWidth={showAccountColumn ? 860 : 760}
+        minWidth={showAccountColumn ? 900 : 800}
       >
         {items.length === 0 && (
-          <EmptyRow colSpan={showAccountColumn ? 6 : 5} text="Chưa có contact nào" />
+          <EmptyRow colSpan={showAccountColumn ? 7 : 6} text="Chưa có contact nào" />
         )}
         {items.map((contact) => (
           <tr
@@ -85,9 +102,20 @@ export function ContactsPage({ accounts }: { accounts: AccountInfo[] }) {
             <td className="px-4 py-3 text-ink-soft">{formatNumber(contact.messageCount)}</td>
             <td className="px-4 py-3 text-ink-soft">{formatTime(contact.firstSeen)}</td>
             <td className="px-4 py-3 text-ink-soft">{formatTime(contact.lastSeen)}</td>
+            <td className="px-4 py-3 text-right">
+              <button
+                onClick={() => xoa(contact)}
+                className="rounded-lg p-1.5 text-ink-soft/60 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                title="Xóa danh bạ"
+              >
+                <IconTrash className="h-4 w-4" />
+              </button>
+            </td>
           </tr>
         ))}
       </TableShell>
+
+      {confirmDialog}
     </div>
   );
 }

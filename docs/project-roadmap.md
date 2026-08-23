@@ -6004,3 +6004,52 @@ thì `video.mp4` (dùng lại `tenFile`, đã lọc an toàn ở nguồn).
 - Ảnh bìa WebP: `readImageSize` chỉ đọc PNG/JPEG, gặp WebP trả null -> gửi dạng
   file. TikWM/yt-dlp đo được trả JPEG nên hiếm gặp; nếu sau này nguồn đổi sang
   WebP thì thêm nhánh đọc kích thước WebP.
+
+---
+
+## V3.24 - Nút xóa lẻ contact / session, và vì sao có "trùng" (2026-08-24)
+
+Người dùng thấy cùng một người Zalo (`1234567890123456789`) hiện 2 dòng ở cả
+Contacts lẫn Sessions, và không có nút xóa.
+
+### Nguyên nhân "trùng" (không phải mất data, mà chia namespace)
+
+`account_id` là CHUỖI người dùng tự gõ khi `pnpm zalo-login <id>`, và là khóa
+namespace cho `contacts`/`threads`/`messages` (khóa chính gồm `account_id`). Cùng
+một tài khoản Zalo đăng nhập dưới HAI id khác nhau (`acc-test` rồi `haivv`) ->
+hai namespace -> hai dòng. DB xác nhận: bảng `accounts` chỉ còn `haivv`, nhưng
+`contacts`/`threads`/`messages` còn cả `acc-test` và một account cũ khác
+(`ngoc-anh`, 29 contact). Xóa account (`deleteAccount`) chỉ bỏ `accounts` +
+`scheduled_jobs`, KHÔNG dọn dữ liệu hội thoại - và đó CỐ Ý là thứ bảo toàn data:
+đăng nhập lại CÙNG id thì lịch sử tự nối lại. Trang Contacts/Sessions liệt kê mọi
+`account_id` nên dữ liệu của account đã xóa vẫn hiện.
+
+Người dùng chốt: KHÔNG auto-merge, KHÔNG cascade-delete (sợ mất data), KHÔNG dọn
+mồ côi tự động. Chỉ thêm nút xóa lẻ để tự bấm.
+
+### Đã làm: nút xóa lẻ (Phương án A - độc lập, không phá hủy ngầm)
+
+- **Xóa contact** (`xoaContact`, `DELETE /api/contacts/:userId`): chỉ bỏ dòng
+  `contacts`, KHÔNG đụng tin nhắn. Danh bạ là auto-collected nên người đó nhắn
+  lại thì tự hiện lại (đếm lại từ đầu; tin cũ trong DB vẫn nguyên).
+- **Xóa session** (`xoaHanSession`, `DELETE /api/threads/:threadId`): tái dùng
+  `xoaNguCanhThread` (messages, agent_steps, media, counters) + xóa CHÍNH dòng
+  `threads` + `scheduled_jobs` của thread. GIỮ danh bạ (Phương án A), GIỮ trí nhớ
+  (có nút riêng), GIỮ `agent_turns` (sổ token, để thống kê không bị viết lại).
+  Xóa `scheduled_jobs` vì session đã biến mất mà để lại lịch nhắc thì nó dựng
+  lại session - mâu thuẫn "đã xóa" (khác `/history` chỉ reset nên giữ lịch).
+- UI: nút thùng rác mỗi dòng ở cả hai trang, dùng `useConfirmDialog` sẵn có; hộp
+  xác nhận nói rõ phạm vi (contact: "không đụng lịch sử chat"; session: "xóa hẳn
+  N tin, giữ danh bạ, không hoàn tác").
+
+### Kiểm chứng
+
+- 13 test store + 6 test route (auth 401, thiếu accountId 400, scoping theo
+  account, giữ đúng thứ phải giữ). 3 phép phá store đều đỏ.
+- typecheck sạch, hai build chạy, full suite 2459/2459.
+
+### Ngoài phạm vi (chưa làm, người dùng để sau)
+
+- Auto-merge khi đăng nhập lại cùng Zalo account (khóa theo UID Zalo thật thay vì
+  id tự gõ) - thay đổi lớn, cần migrate.
+- Dọn dữ liệu mồ côi `acc-test`/`ngoc-anh` - người dùng sẽ tự bấm nút xóa.

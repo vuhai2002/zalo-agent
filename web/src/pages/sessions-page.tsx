@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { AccountInfo, ThreadItem } from "../dashboard-api-client";
 import { api } from "../dashboard-api-client";
 import { PageHeader } from "../layout/page-header";
-import { IconChat } from "../shared/dashboard-icons";
+import { IconChat, IconTrash } from "../shared/dashboard-icons";
+import { useConfirmDialog } from "../shared/confirm-dialog";
 import { AccountFilter, accountLabel } from "../shared/account-filter";
 import {
   Badge,
@@ -22,6 +23,7 @@ export function SessionsPage({ accounts }: { accounts: AccountInfo[] }) {
   const [accountFilter, setAccountFilter] = useState("");
   const [page, setPage] = useState(0);
   const [openThread, setOpenThread] = useState<ThreadItem | null>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const showAccountColumn = accounts.length > 1;
 
@@ -41,6 +43,23 @@ export function SessionsPage({ accounts }: { accounts: AccountInfo[] }) {
   async function toggleBot(t: ThreadItem) {
     await api.setBotEnabled(t.accountId, t.threadId, !t.botEnabled);
     reload();
+  }
+
+  async function xoa(t: ThreadItem) {
+    const ok = await confirm({
+      title: `Xóa cuộc trò chuyện "${t.displayName || t.threadId}"?`,
+      message: `Xóa hẳn session này và toàn bộ ${formatNumber(t.messageCount)} tin nhắn. Danh bạ vẫn được giữ. Không hoàn tác được.`,
+      confirmLabel: "Xóa session",
+    });
+    if (!ok) return;
+    try {
+      await api.xoaSession(t.accountId, t.threadId);
+    } finally {
+      if (openThread && openThread.threadId === t.threadId && openThread.accountId === t.accountId) {
+        setOpenThread(null);
+      }
+      reload();
+    }
   }
 
   return (
@@ -118,12 +137,21 @@ export function SessionsPage({ accounts }: { accounts: AccountInfo[] }) {
               </button>
             </td>
             <td className="px-4 py-3">
-              <button
-                onClick={() => setOpenThread(t)}
-                className="text-[13px] font-medium text-zalo-600 hover:underline"
-              >
-                Xem
-              </button>
+              <div className="flex items-center justify-end gap-1">
+                <button
+                  onClick={() => setOpenThread(t)}
+                  className="text-[13px] font-medium text-zalo-600 hover:underline"
+                >
+                  Xem
+                </button>
+                <button
+                  onClick={() => xoa(t)}
+                  className="rounded-lg p-1.5 text-ink-soft/60 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                  title="Xóa hẳn session này"
+                >
+                  <IconTrash className="h-4 w-4" />
+                </button>
+              </div>
             </td>
           </tr>
         ))}
@@ -136,6 +164,8 @@ export function SessionsPage({ accounts }: { accounts: AccountInfo[] }) {
           onDoiDuLieu={reload}
         />
       )}
+
+      {confirmDialog}
     </div>
   );
 }
