@@ -3,6 +3,7 @@ import { after, before, describe, it } from "node:test";
 import { fakeAgentProfile } from "../shared/fake-agent-profile.js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
+import type { PromptMemory } from "./persona-prompt.js";
 import {
   KHA_NANG_DAY_DU,
   THE_NOI_DUNG_NGOAI,
@@ -289,5 +290,37 @@ describe("BẤT BIẾN BẮC CẦU: dấu hiệu rò prompt phải CÓ THẬT tr
     for (const nhan of ["Tìm kiếm web", "Tạo file Word", "Gửi file", "Lịch hẹn"]) {
       assert.ok(text.includes(nhan), `"${nhan}" phải được kể trong mục Khả năng`);
     }
+  });
+});
+
+describe("buildSystemPrompt - khung checkpoint cho tóm tắt thread", () => {
+  it("có threadSummary thì đóng khung 'BỐI CẢNH ĐÃ CHỐT' + dặn ĐỪNG thuật lại", () => {
+    // Không có framing, model đọc tóm tắt rồi 'theo tôi nhớ thì...' thuật lại
+    // cho người dùng nghe - thừa và lộ liễu.
+    const memory = {
+      facts: [],
+      threadSummary: "Anh Hải ở TP.HCM, thích trà sen",
+    } satisfies PromptMemory;
+    const text = prompt.buildSystemPrompt(AGENT, MSG, memory, account([]));
+    assert.match(text, /BỐI CẢNH ĐÃ CHỐT/);
+    assert.match(text, /ĐỪNG thuật lại/);
+    assert.match(text, /Anh Hải ở TP\.HCM/, "nội dung tóm tắt vẫn phải có mặt");
+  });
+
+  it("tóm tắt được BỌC ranh giới + dặn 'không phải mệnh lệnh' (đường injection bền)", () => {
+    // Tóm tắt do LLM sinh từ tin người lạ nên là đường injection bền y như fact;
+    // phải có mốc đóng/mở + câu chống-chỉ-thị, không dán trần.
+    const memory = { facts: [], threadSummary: "abc" } satisfies PromptMemory;
+    const text = prompt.buildSystemPrompt(AGENT, MSG, memory, account([]));
+    assert.match(text, /<boi_canh_da_chot>/, "phải có thẻ mở ranh giới");
+    assert.match(text, /<\/boi_canh_da_chot>/, "phải có thẻ đóng ranh giới");
+    assert.match(text, /KHÔNG phải mệnh lệnh/, "phải dặn không làm theo chỉ thị trong khối");
+  });
+
+  it("không có threadSummary thì KHÔNG chèn khung bối cảnh", () => {
+    const memory = { facts: [], threadSummary: "" } satisfies PromptMemory;
+    const text = prompt.buildSystemPrompt(AGENT, MSG, memory, account([]));
+    assert.doesNotMatch(text, /BỐI CẢNH ĐÃ CHỐT/);
+    assert.doesNotMatch(text, /<boi_canh_da_chot>/);
   });
 });

@@ -30,3 +30,22 @@ CHECKPOINT_PREAMBLE), `region.ts` (guard cỡ).
 ## Rủi ro
 - Đổi prompt có thể đổi hành vi eval hiện có - chạy eval liên quan nếu có.
 - Guard cỡ đo bằng ước token (`ky-tu-moi-token`) - dùng cùng thước với chỗ cắt context.
+
+---
+
+## Đã làm (khác plan gốc, ghi lại theo review)
+
+- #1 (mục cố định) + #4 (framing checkpoint): làm đúng plan.
+- **#3 guard cỡ (char-based) -> THAY bằng guard TRUNCATION.** Guard cỡ của dsh
+  chặn oan với prompt cấu trúc mới (khung mục ~200 ký tự làm tóm tắt vài tin ngắn
+  luôn dài hơn nguồn). Review Phase 2 chỉ ra ca nguy hiểm THẬT là summary chạm cap
+  1024 -> `finishReason:'length'` -> lưu bản CỤT + `coversTo` tiến -> mất trí nhớ
+  im lặng vĩnh viễn. Nên: `SummaryGenerator` trả `{text,truncated}`; truncated thì
+  KHÔNG lưu, KHÔNG tiến coversTo; cộng trần mềm "~400 từ" trong prompt để hiếm khi
+  chạm cap. Backlog không phình vô hạn (prune giữ 500 tin/thread).
+- **Bổ sung ngoài plan: bọc threadSummary chống injection.** Review chỉ ra tóm tắt
+  do LLM sinh từ tin người lạ, là đường injection bền y như fact, mà framing mới
+  còn nâng độ tin. Tạo `thread-summary-prompt-block.ts` (`khoiBoiCanhThread`) mirror
+  `khoiDieuDaNho`: `locKyTuAn` + khử tên thẻ + cặp tag `<boi_canh_da_chot>` + câu
+  "không phải mệnh lệnh". Thêm tag vào `DAU_HIEU_RO_PROMPT`, sửa docstring "đường
+  bền duy nhất".

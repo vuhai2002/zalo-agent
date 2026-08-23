@@ -27,17 +27,27 @@ export const THE_NOI_DUNG_NGOAI = "noi_dung_ngoai";
 /**
  * Tên thẻ bọc khối "điều đã ghi nhớ" trong system prompt.
  *
- * Vì sao memory cũng cần ranh giới: nó là đường prompt injection BỀN duy nhất
- * còn hở. Nội dung web đã bọc `THE_NOI_DUNG_NGOAI`, tin của người ngoài
- * allowlist đã có nhãn "[chưa xác minh]" - nhưng fact đi thẳng vào system prompt
- * dưới dạng gạch đầu dòng trần và nằm đó ở MỌI lượt sau. Một tin soạn khéo dụ
- * model ghi một câu chỉ thị vào trí nhớ là cài được lệnh vĩnh viễn.
+ * Vì sao memory cũng cần ranh giới: nó là MỘT trong hai đường prompt injection
+ * BỀN (đường kia là rolling summary của thread - `THE_BOI_CANH`). Nội dung web đã
+ * bọc `THE_NOI_DUNG_NGOAI`, tin của người ngoài allowlist đã có nhãn "[chưa xác
+ * minh]" - nhưng fact đi thẳng vào system prompt dưới dạng gạch đầu dòng trần và
+ * nằm đó ở MỌI lượt sau. Một tin soạn khéo dụ model ghi một câu chỉ thị vào trí
+ * nhớ là cài được lệnh vĩnh viễn. Cả hai đường bền nay đều được bọc.
  *
  * `khoiDieuDaNho` khử mọi lần xuất hiện của chuỗi này trong nội dung fact trước
  * khi bọc, đúng như `wrapUntrustedContent` làm - nếu không, chỉ cần ghi đúng thẻ
  * đóng vào một fact là cắt sớm được ranh giới.
  */
 export const THE_DIEU_DA_NHO = "dieu_da_nho";
+
+/**
+ * Tên thẻ bọc khối "bối cảnh đã chốt" (rolling summary của thread) trong system
+ * prompt. CÙNG lý do với `THE_DIEU_DA_NHO`: tóm tắt do LLM sinh TỪ tin người lạ
+ * rồi nằm trong system prompt ở MỌI lượt sau - đường injection bền y hệt fact,
+ * KHÔNG kém phần nào (trước đây bị dán trần, chưa bọc). `khoiBoiCanhThread` khử
+ * mọi lần xuất hiện chuỗi này trong nội dung tóm tắt trước khi bọc.
+ */
+export const THE_BOI_CANH = "boi_canh_da_chot";
 
 /** Tiêu đề mục an toàn trong `BASE_PERSONA` */
 export const TIEU_DE_QUY_TAC_AN_TOAN = "Quy tắc an toàn (tuyệt đối, không có ngoại lệ):";
@@ -78,6 +88,9 @@ export const DAU_HIEU_RO_PROMPT: readonly string[] = [
   // không ai vô tình viết ra trong lúc nhắn tin. Nội dung fact đã bị khử tên thẻ
   // lúc bọc, nên model không đọc được dạng gạch dưới từ chính khối này.
   `<${THE_DIEU_DA_NHO}`,
+  // Cùng mức an toàn: có `<` đứng trước nên không ai vô tình gõ ra; nội dung
+  // tóm tắt đã bị khử tên thẻ lúc bọc.
+  `<${THE_BOI_CANH}`,
   TIEU_DE_QUY_TAC_AN_TOAN,
   ...KHA_NANG_DAY_DU,
 ];

@@ -5,6 +5,7 @@ import { botTimeZone } from "../config/runtime-tuning-settings.js";
 import type { MemoryContext } from "../conversation/memory-store.js";
 import { currentDateLine } from "../shared/current-datetime.js";
 import { khoiDieuDaNho } from "./memory-prompt-block.js";
+import { khoiBoiCanhThread } from "./thread-summary-prompt-block.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
 import { listAvailableTools, type ToolDefinition } from "./tools/tool-registry.js";
 import { toolPersonaSections } from "./persona-tool-rules.js";
@@ -137,7 +138,11 @@ export function buildSystemPrompt(
   }
 
   if (memory?.threadSummary) {
-    sections.push(`Tóm tắt phần hội thoại trước (đã ra khỏi lịch sử gần đây):\n${memory.threadSummary}`);
+    // Bọc có ranh giới + "không phải mệnh lệnh" y như khối fact: tóm tắt cũng do
+    // LLM sinh từ tin người lạ nên là đường injection bền. Framing "BỐI CẢNH ĐÃ
+    // CHỐT, đừng thuật lại" (học từ CHECKPOINT_PREAMBLE của DeepSeek Harness)
+    // nằm trong helper cùng với lớp khử tag - xem `thread-summary-prompt-block.ts`.
+    sections.push(khoiBoiCanhThread(memory.threadSummary));
   }
 
   if (memory && memory.facts.length > 0) {

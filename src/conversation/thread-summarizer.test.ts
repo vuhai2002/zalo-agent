@@ -54,7 +54,7 @@ describe("thread-summarizer", () => {
     let called = 0;
     const ran = await summarizer.maybeSummarizeThread("acc-1", "t-it", async () => {
       called++;
-      return "summary";
+      return { text: "summary", truncated: false };
     });
     assert.equal(ran, false);
     assert.equal(called, 0);
@@ -67,7 +67,7 @@ describe("thread-summarizer", () => {
     let receivedPrompt = "";
     const ran = await summarizer.maybeSummarizeThread("acc-1", "t-gop", async (prompt) => {
       receivedPrompt = prompt;
-      return "Summary mới sau khi gộp";
+      return { text: "Summary mới sau khi gộp", truncated: false };
     });
 
     assert.equal(ran, true);
@@ -89,7 +89,7 @@ describe("thread-summarizer", () => {
     let receivedPrompt = "";
     const ran = await summarizer.maybeSummarizeThread("acc-1", "t-gop", async (prompt) => {
       receivedPrompt = prompt;
-      return "Summary lần 2";
+      return { text: "Summary lần 2", truncated: false };
     });
 
     assert.equal(ran, true);
@@ -105,5 +105,55 @@ describe("thread-summarizer", () => {
     });
     assert.equal(ran, false);
     assert.equal(threads.getThreadSummary("acc-1", "t-gop").summary, before);
+  });
+
+  it("summary CẮT CỤT (truncated) thì KHÔNG lưu, coversTo không tiến - giữ trí nhớ", async () => {
+    // Bản cụt mà lưu + tiến coversTo thì đám tin đó bị đánh dấu "đã phủ", không
+    // bao giờ tóm tắt lại -> mất trí nhớ im lặng vĩnh viễn.
+    seedThread("t-cut", 12);
+    threads.setThreadSummary("acc-1", "t-cut", "Bản tốt cũ", 0);
+    const truoc = threads.getThreadSummary("acc-1", "t-cut");
+
+    const ran = await summarizer.maybeSummarizeThread("acc-1", "t-cut", async () => ({
+      text: "Bản mới nhưng bị cắt giữa chừng vì chạm cap",
+      truncated: true,
+    }));
+
+    assert.equal(ran, false);
+    const sau = threads.getThreadSummary("acc-1", "t-cut");
+    assert.equal(sau.summary, truoc.summary, "summary tốt cũ phải còn nguyên");
+    assert.equal(sau.coversTo, truoc.coversTo, "coversTo KHÔNG được tiến khi bỏ bản cụt");
+  });
+
+  it("prompt có trần mềm độ dài để hiếm khi chạm cap gây cắt cụt", () => {
+    const p = summarizer.buildSummaryPrompt("", [
+      { id: 1, role: "user", sender_name: "Hải", content: "x" },
+    ]);
+    assert.match(p, /400 từ/, "phải có trần mềm ~400 từ trong prompt");
+  });
+
+  it("prompt có CẤU TRÚC mục cố định + luật không-bỏ-mục/đính-chính/hợp-nhất", async () => {
+    // Prompt tự do để LLM tự chọn giữ gì thì qua nhiều vòng nó lặng lẽ đánh rơi
+    // một khía cạnh. Ép điền đủ mục + "(không có)" làm mất mát nhìn thấy được.
+    seedThread("t-struct", 12);
+    let p = "";
+    await summarizer.maybeSummarizeThread("acc-1", "t-struct", async (prompt) => {
+      p = prompt;
+      return { text: "tóm tắt", truncated: false };
+    });
+    for (const muc of ["NGƯỜI & QUAN HỆ", "QUYẾT ĐỊNH & ĐÃ HỨA", "SỞ THÍCH & THÓI QUEN", "VIỆC ĐANG DỞ", "CÂU HỎI TREO"]) {
+      assert.ok(p.includes(muc), `prompt thiếu mục cố định: ${muc}`);
+    }
+    assert.match(p, /\(không có\)/, "phải dặn mục rỗng ghi (không có), không bỏ mục");
+    assert.match(p, /ĐÍNH CHÍNH/, "phải dặn giữ đính chính của người dùng");
+    assert.match(p, /HỢP NHẤT/, "phải dặn gộp vào MỘT bản, không chép nguyên bản cũ");
+  });
+
+  it("buildSummaryPrompt vẫn mang summary cũ + tin backlog (không mất đầu vào)", () => {
+    const p = summarizer.buildSummaryPrompt("Nền cũ: đã bàn X", [
+      { id: 1, role: "user", sender_name: "Hải", content: "câu mới của Hải" },
+    ]);
+    assert.match(p, /Nền cũ: đã bàn X/);
+    assert.match(p, /câu mới của Hải/);
   });
 });
