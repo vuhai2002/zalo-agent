@@ -286,6 +286,12 @@ function runMigrations(): void {
   // Lưu danh sách TẮT thay vì BẬT để tool mới thêm vào code tự bật cho account cũ.
   addColumnIfMissing("accounts", "disabled_tools", "TEXT NOT NULL DEFAULT '[]'");
 
+  // Tab Bạn bè: tự động chấp nhận yêu cầu kết bạn. Mặc định TẮT (0) - manual là
+  // lõi. Khi bật, vòng quét accept request đã chờ quá `delay_minutes` phút (mặc
+  // định 1). Chỉ có ý nghĩa với kênh cá nhân.
+  addColumnIfMissing("accounts", "auto_accept_friends", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing("accounts", "auto_accept_friend_delay_minutes", "INTEGER NOT NULL DEFAULT 1");
+
   // Loại KÊNH của tài khoản: "ca_nhan" (zca-js, giao thức đảo ngược) hoặc
   // "bot" (Zalo Bot API chính thức). Mặc định "ca_nhan" để mọi dòng đã có từ
   // trước giữ nguyên hành vi - đây là loại duy nhất tồn tại trước cột này.

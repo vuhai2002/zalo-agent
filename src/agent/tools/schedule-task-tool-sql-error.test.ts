@@ -81,6 +81,8 @@ function makeCtx(): ToolContext {
       autoReactIcon: "heart",
       typingIndicatorEnabled: true,
       disabledTools: [],
+      autoAcceptFriends: false,
+      autoAcceptFriendDelayMinutes: 1,
     },
     agent: fakeAgentProfile(),
     message: msg(),

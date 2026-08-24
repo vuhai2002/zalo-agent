@@ -46,6 +46,8 @@ const accountConfig = (id: string): AccountConfig => ({
   autoReactIcon: "heart",
   typingIndicatorEnabled: false,
   disabledTools: [],
+  autoAcceptFriends: false,
+  autoAcceptFriendDelayMinutes: 1,
 });
 
 before(async () => {

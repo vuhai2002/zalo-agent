@@ -86,6 +86,8 @@ const config: AccountConfig = {
   autoReactIcon: "heart",
   typingIndicatorEnabled: false,
   disabledTools: [],
+  autoAcceptFriends: false,
+  autoAcceptFriendDelayMinutes: 1,
 };
 
 /** Dựng tin nhóm VÀ ghi vào lịch sử, y như router làm lúc nhận */

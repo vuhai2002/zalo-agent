@@ -23,6 +23,8 @@ function makeAccount(overrides: Partial<AccountConfig> = {}): AccountConfig {
     autoReactIcon: "heart",
     typingIndicatorEnabled: true,
     disabledTools: [],
+    autoAcceptFriends: false,
+    autoAcceptFriendDelayMinutes: 1,
     ...overrides,
   };
 }

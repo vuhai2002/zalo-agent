@@ -93,6 +93,8 @@ const account: AccountConfig = {
   autoReactIcon: "heart",
   typingIndicatorEnabled: false,
   disabledTools: [],
+  autoAcceptFriends: false,
+  autoAcceptFriendDelayMinutes: 1,
 };
 
 const tinNhan = (): ParsedMessage => ({

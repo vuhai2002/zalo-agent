@@ -76,6 +76,8 @@ const config: AccountConfig = {
   autoReactIcon: "heart",
   typingIndicatorEnabled: false,
   disabledTools: [],
+  autoAcceptFriends: false,
+  autoAcceptFriendDelayMinutes: 1,
 };
 
 const api = {

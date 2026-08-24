@@ -92,6 +92,8 @@ function makeCtx(): import("./tool-registry.js").ToolContext {
       autoReactIcon: "heart",
       typingIndicatorEnabled: true,
       disabledTools: [],
+      autoAcceptFriends: false,
+      autoAcceptFriendDelayMinutes: 1,
     },
     agent: fakeAgentProfile({ id: AGENT_ID }),
     message: msg(),

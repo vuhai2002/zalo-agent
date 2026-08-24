@@ -50,6 +50,8 @@ function makeContext(disabledTools: string[], agentDisabled: string[] = []) {
       autoReactIcon: "heart",
       typingIndicatorEnabled: true,
       disabledTools,
+      autoAcceptFriends: false,
+      autoAcceptFriendDelayMinutes: 1,
     },
     // Dùng fixture chung thay vì chép literal: thêm trường mới vào AgentProfile
     // thì chỉ sửa một chỗ, và không có file nào âm thầm thiếu trường

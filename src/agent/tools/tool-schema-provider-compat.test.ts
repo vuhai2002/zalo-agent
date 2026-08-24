@@ -77,6 +77,8 @@ function makeContext() {
       autoReactIcon: "heart",
       typingIndicatorEnabled: true,
       disabledTools: [],
+      autoAcceptFriends: false,
+      autoAcceptFriendDelayMinutes: 1,
     },
     agent: fakeAgentProfile(),
     message: { threadId: "t-1", threadType: 0 } as never,

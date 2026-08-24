@@ -47,6 +47,10 @@ export type AccountConfig = {
    * cho account cũ, không cần migration).
    */
   disabledTools: string[];
+  /** Tab Bạn bè: tự động chấp nhận yêu cầu kết bạn (mặc định TẮT) */
+  autoAcceptFriends: boolean;
+  /** Chờ bao nhiêu phút rồi mới auto-accept (mặc định 1, min 0, max 1440) */
+  autoAcceptFriendDelayMinutes: number;
 };
 
 type Row = {
@@ -65,6 +69,8 @@ type Row = {
   disabled_tools: string;
   loai: string;
   bot_token_enc: string;
+  auto_accept_friends: number;
+  auto_accept_friend_delay_minutes: number;
 };
 
 const toConfig = (r: Row): AccountConfig => ({
@@ -84,12 +90,15 @@ const toConfig = (r: Row): AccountConfig => ({
   autoReactIcon: r.auto_react_icon,
   typingIndicatorEnabled: r.typing_indicator_enabled === 1,
   disabledTools: parseDisabledTools(r.disabled_tools),
+  autoAcceptFriends: r.auto_accept_friends === 1,
+  autoAcceptFriendDelayMinutes: r.auto_accept_friend_delay_minutes,
 });
 
 const SELECT = `SELECT id, label, enabled, agent_id, allowlist_mode, allowlist_user_ids,
                        group_require_mention, respond_to_groups, group_passive_listen,
                        auto_react_enabled, auto_react_icon, typing_indicator_enabled,
-                       disabled_tools, loai, bot_token_enc
+                       disabled_tools, loai, bot_token_enc,
+                       auto_accept_friends, auto_accept_friend_delay_minutes
                 FROM accounts`;
 
 export function listAccounts(): AccountConfig[] {
@@ -133,7 +142,8 @@ export function updateAccount(
     `UPDATE accounts SET label = ?, enabled = ?, agent_id = ?, allowlist_mode = ?,
        allowlist_user_ids = ?, group_require_mention = ?, respond_to_groups = ?,
        group_passive_listen = ?, auto_react_enabled = ?, auto_react_icon = ?,
-       typing_indicator_enabled = ?, disabled_tools = ?
+       typing_indicator_enabled = ?, disabled_tools = ?,
+       auto_accept_friends = ?, auto_accept_friend_delay_minutes = ?
      WHERE id = ?`,
   ).run(
     next.label,
@@ -148,6 +158,8 @@ export function updateAccount(
     next.autoReactIcon,
     next.typingIndicatorEnabled ? 1 : 0,
     JSON.stringify(next.disabledTools),
+    next.autoAcceptFriends ? 1 : 0,
+    next.autoAcceptFriendDelayMinutes,
     id,
   );
   return getAccount(id);

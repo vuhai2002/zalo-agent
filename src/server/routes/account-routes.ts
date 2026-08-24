@@ -65,6 +65,9 @@ const patchSchema = z.object({
   typingIndicatorEnabled: z.boolean().optional(),
   // Chặn key tool lạ ngay ở API - key sai âm thầm nằm trong DB sẽ không tắt gì cả
   disabledTools: z.array(z.enum(TOOL_KEYS as [string, ...string[]])).optional(),
+  // Tab Bạn bè: tự động chấp nhận kết bạn + delay (phút). Chặn số vô lý ngay ở API.
+  autoAcceptFriends: z.boolean().optional(),
+  autoAcceptFriendDelayMinutes: z.number().int().min(0).max(1440).optional(),
 });
 
 const withStatus = (a: ReturnType<typeof listAccounts>[number]) => ({
