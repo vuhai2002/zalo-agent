@@ -1,7 +1,8 @@
-import type { API } from "zca-js";
+import type { API, FriendEvent } from "zca-js";
 import { createLogger } from "../shared/logger.js";
 
 export type RawMessageHandler = (rawMessage: unknown) => Promise<void> | void;
+export type FriendEventHandler = (event: FriendEvent) => Promise<void> | void;
 
 const MAX_RECONNECT_DELAY_MS = 60_000;
 
@@ -15,6 +16,7 @@ export function startListener(
   accountId: string,
   api: API,
   onMessage: RawMessageHandler,
+  onFriendEvent?: FriendEventHandler,
 ): () => void {
   const log = createLogger(`listener:${accountId}`);
   let stopped = false;
@@ -25,6 +27,14 @@ export function startListener(
       log.error({ err }, "Lỗi xử lý tin nhắn"),
     );
   });
+
+  if (onFriendEvent) {
+    api.listener.on("friend_event", (event) => {
+      Promise.resolve(onFriendEvent(event)).catch((err) =>
+        log.error({ err }, "Lỗi xử lý friend_event"),
+      );
+    });
+  }
 
   api.listener.onConnected(() => {
     reconnectAttempts = 0;

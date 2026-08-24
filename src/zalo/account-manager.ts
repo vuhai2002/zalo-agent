@@ -15,6 +15,7 @@ import { kenhCaNhan } from "./kenh-ca-nhan.js";
 import type { KenhLuot } from "./kenh-luot.js";
 import { loginWithStoredCredentials } from "./zalo-client.js";
 import { startListener } from "./zalo-listener.js";
+import { handleFriendEvent } from "./friend-event-handler.js";
 
 /**
  * Vòng đời của các account đang chạy. Đường đi của tin nhắn nằm ở
@@ -99,8 +100,11 @@ export function attachAccount(config: AccountConfig, api: API): void {
   }
   stopAccount(config.id);
   const selfId = String(api.getOwnId());
-  const stopListener = startListener(config.id, api, (raw) =>
-    routeIncomingMessage(config.id, api, selfId, raw),
+  const stopListener = startListener(
+    config.id,
+    api,
+    (raw) => routeIncomingMessage(config.id, api, selfId, raw),
+    (event) => handleFriendEvent(config.id, api, event),
   );
   running.set(config.id, { config, kenh: kenhCaNhan(api), selfId, stopListener });
   log.info({ accountId: config.id, label: config.label }, "Account sẵn sàng");
