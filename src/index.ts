@@ -8,6 +8,7 @@ import { startDashboardServer, stopDashboardServer } from "./server/dashboard-se
 import { createLogger } from "./shared/logger.js";
 import { startTempFileCleanupSchedule } from "./shared/temp-file-store.js";
 import { startAllAccounts, stopAllAccounts } from "./zalo/account-manager.js";
+import { startFriendAutoAcceptSweep } from "./zalo/friend-auto-accept-sweep.js";
 
 // Vòng đời tiến trình cũng cần scope: không có thì badge scope trên trang Logs
 // trống trơn và KHÔNG LỌC ĐƯỢC - đúng lúc cần nhất là khi có uncaughtException
@@ -36,11 +37,13 @@ let shuttingDown = false;
 // đó (tín hiệu tắt tới cực sớm) thì vẫn có hàm hợp lệ để gọi thay vì đọc phải
 // `undefined`.
 let stopKbIngestWorker: () => void = () => {};
+let stopFriendSweep: () => void = () => {};
 function shutdown(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, "Đang tắt zalo-agent...");
   stopScheduler();
+  stopFriendSweep();
   stopKbIngestWorker();
   stopDashboardServer();
   stopAllAccounts();
@@ -88,7 +91,12 @@ stopKbIngestWorker = batDauKbIngestWorker();
 startAllAccounts()
   // Scheduler cần account đã sẵn sàng để lấy api lúc dispatch - khởi động SAU,
   // không phải song song. SCHEDULER_ENABLED=false thì hàm này tự no-op.
-  .then(() => startScheduler())
+  .then(() => {
+    startScheduler();
+    // Vòng quét auto-accept kết bạn (tab Bạn bè). Đọc account đang chạy mỗi
+    // nhịp nên khởi động sau khi account đã lên.
+    stopFriendSweep = startFriendAutoAcceptSweep();
+  })
   .catch((err) => {
     logger.fatal({ err }, "Khởi động thất bại");
     process.exit(1);
