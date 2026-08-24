@@ -19,6 +19,7 @@ Nằm ngoài project tại `D:\source-code\zalo-agent-references\`:
 | `goclaw` | Pattern tool hệ thống (datetime, web search chain, UI Built-in Tools). **CC BY-NC 4.0: chỉ soi pattern, KHÔNG copy code** |
 | `hermes-agent` | Toolset theo kênh, webhook-safe toolset, cascade web search (MIT - dùng thoải mái) |
 | `9router` | Source của chính router đang dùng (MIT). Tra `open-sse/executors/` + `open-sse/translator/` khi cần biết router làm gì với request: khóa cache phiên, `cache_control`, `reasoning_effort`, cloaking |
+| `deepseek-harness` | Coding-agent harness chuẩn doanh nghiệp (MIT, DeepSeek). ~85% KHÔNG áp được cho chat bot phản ứng (event-sourced/plugin-DI/Cordis) - chỉ soi META-RULE, KHÔNG bê machinery. Đã nhặt: timeout-policy, compaction prompt cấu trúc, renderReminderFraming, per-step token meter (xem `plans/260824-0116-ap-dung-pattern-tu-deepseek-harness/`) |
 
 **Trước khi viết code đụng zca-js, hãy grep trong `zalo-agent-references\zca-js\src\apis\` để xác nhận chữ ký hàm thật thay vì đoán.** Đã có tiền lệ đoán sai: `loginQR` KHÔNG tự ghi file QR khi mình truyền callback - phải tự gọi `event.actions.saveToFile()`.
 

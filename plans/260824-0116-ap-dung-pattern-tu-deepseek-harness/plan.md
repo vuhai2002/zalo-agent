@@ -21,7 +21,7 @@ cầu key riêng per-agent.
 | [01](phase-01-forward-abort-signal-tool-mang.md) | Tool mạng honor abortSignal (Layer 2); gỡ `toolMs` no-op | XONG (2 vòng review Opus, sạch) |
 | [02](phase-02-chat-luong-tom-tat-thread.md) | Prompt tóm tắt cấu trúc + framing checkpoint (bọc chống injection) + guard truncation (thay guard cỡ) | XONG (2 vòng review Opus, sạch) |
 | [03](phase-03-chong-injection-prompt-job-lich.md) | Bọc payload job theo lịch (wrapUntrustedContent) chống injection có độ trễ | XONG code (review Opus sạch); LƯU Ý: rủi ro hành vi model chưa đo bằng eval |
-| [04](phase-04-hieu-chinh-char-token.md) | Ghi promptTokens per-step để hiệu chỉnh KY_TU_MOI_TOKEN | chờ làm |
+| [04](phase-04-hieu-chinh-char-token.md) | Ghi ký-tự input đủ phạm vi (system+tools+messages) so với steps[0].inputTokens; bỏ double-count cache | XONG (option B - làm chuẩn; 1 vòng review Opus phát hiện double-count cache, sửa lại; 1 vòng review Opus sạch) |
 
 Hoãn: #7 config LLM đa-route (YAGNI).
 Tùy chọn giá trị thấp: perm-bit 0o077 file cookie (đã mã hóa - lean bỏ); thông điệp
