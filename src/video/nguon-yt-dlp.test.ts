@@ -151,10 +151,13 @@ describe("yt-dlp - đọc JSON", () => {
   it("KHUNG HÌNH: không biết gì thì mặc định theo NỀN TẢNG", () => {
     const fb = mod.docStdoutYtDlp(JSON.stringify({ url: "https://cdn.test/v.mp4" }), "facebook");
     const tt = mod.docStdoutYtDlp(JSON.stringify({ url: "https://cdn.test/v.mp4" }), "tiktok");
-    assert.ok(fb.ok && tt.ok);
+    const ig = mod.docStdoutYtDlp(JSON.stringify({ url: "https://cdn.test/v.mp4" }), "instagram");
+    assert.ok(fb.ok && tt.ok && ig.ok);
     assert.ok(fb.video.width > fb.video.height, "Facebook đa số NGANG");
     assert.ok(tt.video.height > tt.video.width, "TikTok gần như luôn DỌC");
+    assert.ok(ig.video.height > ig.video.width, "Instagram (reel) gần như luôn DỌC");
     assert.equal(tt.video.width, CO_MAC_DINH.width);
+    assert.equal(ig.video.width, CO_MAC_DINH.width);
   });
 
   it("mang theo đúng nền tảng được truyền vào", () => {
@@ -247,6 +250,20 @@ describe("phanLoaiLoiYtDlp - nói ĐÚNG loại bệnh", () => {
       const r = mod.phanLoaiLoiYtDlp(loi, false);
       assert.ok(!r.ok && !r.thuLaiDuoc, loi);
       assert.ok(!r.ok && !r.canDangNhap, "đừng nhận nhầm thành 'cần đăng nhập'");
+    }
+  });
+
+  it("Instagram 'empty media response' / 'rate-limit' là ca ĐÁNG THỬ LẠI (tamThoi), KHÔNG phải cần đăng nhập", () => {
+    // yt-dlp không phân biệt được rate-limit / riêng tư / đã xóa cho IG - đều ra
+    // "empty media response". Ca hay gặp nhất (rate-limit) thì đợi vài phút là
+    // qua, nên xếp thử-lại-được để tool nói "thử lại sau" thay vì bắt bỏ cuộc.
+    for (const loi of [
+      "ERROR: [Instagram] ABC: Instagram sent an empty media response. Check if this post is accessible...",
+      "ERROR: [Instagram] Requested content is not available, rate-limit reached or login required",
+    ]) {
+      const r = mod.phanLoaiLoiYtDlp(loi, false);
+      assert.ok(!r.ok && r.thuLaiDuoc, `phải thử-lại-được: ${loi}`);
+      assert.ok(!r.ok && !r.canDangNhap, "KHÔNG dùng câu 'cần đăng nhập' kiểu Facebook cho IG");
     }
   });
 });

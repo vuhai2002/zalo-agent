@@ -29,7 +29,11 @@ export function chuoiNguonCho(nenTang: NenTangVideo): MatXich[] {
       { ten: "yt-dlp", chay: (u) => layVideoTuYtDlp(u, "tiktok") },
     ];
   }
-  return [{ ten: "yt-dlp", chay: (u) => layVideoTuYtDlp(u, "facebook") }];
+  // Facebook VÀ Instagram: chỉ yt-dlp (TikWM không nhận hai nền tảng này - đo
+  // được `Url parsing is failed`). Truyền THẲNG `nenTang` xuống, không hằng
+  // "facebook" như bản cũ - hằng đó khiến video Instagram bị đọc khung theo
+  // mặc định của Facebook.
+  return [{ ten: "yt-dlp", chay: (u) => layVideoTuYtDlp(u, nenTang) }];
 }
 
 export type TuyChonChuoi = {

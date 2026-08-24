@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { kiemNguonVideo, timUrlTrongChu } from "./whitelist-nguon-video.js";
 
 describe("kiemNguonVideo - nhận đúng nguồn hợp lệ", () => {
-  const HOP_LE: [string, "tiktok" | "facebook"][] = [
+  const HOP_LE: [string, "tiktok" | "facebook" | "instagram"][] = [
     ["https://www.tiktok.com/@ai/video/123", "tiktok"],
     ["https://vt.tiktok.com/ZSV5bEotV/", "tiktok"],
     ["https://vm.tiktok.com/ABC/", "tiktok"],
@@ -13,6 +13,12 @@ describe("kiemNguonVideo - nhận đúng nguồn hợp lệ", () => {
     ["https://fb.watch/abcdef/", "facebook"],
     ["https://m.facebook.com/reel/123", "facebook"],
     ["https://web.facebook.com/reel/123", "facebook"],
+    // Instagram: reel/post/share, cả www lẫn m. Link app ra kèm ?igsh=...
+    ["https://www.instagram.com/reel/CigMSGeD4Hd/", "instagram"],
+    ["https://www.instagram.com/reel/CigMSGeD4Hd/?igsh=abc123", "instagram"],
+    ["https://instagram.com/p/ABC123/", "instagram"],
+    ["https://www.instagram.com/share/reel/xyz/", "instagram"],
+    ["https://m.instagram.com/reel/abc/", "instagram"],
   ];
   for (const [url, nenTang] of HOP_LE) {
     it(`nhận ${url}`, () => {
@@ -36,6 +42,9 @@ describe("kiemNguonVideo - CHẶN đường tấn công", () => {
     ["ftp://tiktok.com/x", "scheme lạ dù host đúng"],
     ["https://tiktok.com.ke-tan-cong.net/x", "tên miền giả dạng bằng tiền tố"],
     ["https://faketiktok.com/x", "tên miền chứa chữ tiktok"],
+    ["https://instagram.com.ke-tan-cong.net/reel/x", "instagram giả dạng bằng tiền tố"],
+    ["https://fakeinstagram.com/reel/x", "tên miền chứa chữ instagram"],
+    ["https://www.threads.com/@a/post/x", "Threads - yt-dlp không hỗ trợ, phải chặn"],
     ["https://ke-tan-cong.net/?next=https://tiktok.com/", "host thật nằm ở query"],
     ["https://youtube.com/watch?v=1", "nền tảng ngoài phạm vi"],
     ["https://evil.com/tiktok.com/video", "tên miền đúng nằm ở đường dẫn"],
@@ -188,6 +197,20 @@ describe("chặn đường dẫn chuyển tiếp", () => {
     // không thấy gì ở `u=x` (không phải URL), nên nếu bỏ luật tên miền đi thì
     // payload này CHO LỌT trong khi bản trước đó chặn.
     for (const u of ["https://l.facebook.com/l.php?u=x", "https://L.FaceBook.CoM/l.php?u=x", "https://lm.facebook.com/?a=1"]) {
+      assert.equal(kiemNguonVideo(u).ok, false, `phải chặn: ${u}`);
+    }
+  });
+
+  it("l.instagram.com bị chặn kể cả khi query KHÔNG mang URL - nó KHỚP đuôi instagram.com", () => {
+    // Từ khi thêm instagram.com vào whitelist, `l.instagram.com` khớp đuôi
+    // `.instagram.com`. Nó CHỈ còn bị chặn vì luật chuyển-hướng chạy trước. Bỏ
+    // `l.instagram.com` khỏi HOST_CHI_DE_CHUYEN_HUONG là mở SSRF: `?u=x` không
+    // phải URL nên `mangUrlKhacTrongQuery` không thấy gì. Ca này khóa điều đó.
+    for (const u of [
+      "https://l.instagram.com/?u=x",
+      "https://L.InstaGram.CoM/?u=x",
+      "https://l.instagram.com/?u=http%3A%2F%2F127.0.0.1%3A3900%2F",
+    ]) {
       assert.equal(kiemNguonVideo(u).ok, false, `phải chặn: ${u}`);
     }
   });

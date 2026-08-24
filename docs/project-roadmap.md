@@ -6256,3 +6256,53 @@ vẫn hỏng, và bot bảo "gửi lại link đầy đủ dạng tiktok.com/@..
 Video `fptbongda` VẪN có thể không tải được kể cả sau fix - nguồn ngoài down, không
 sửa được ở code. Fix này chỉ làm bot NÓI ĐÚNG ("thử lại sau vài phút" thay vì "đổi
 link"), không làm tải được thứ nguồn đang chặn.
+
+## V3.28 - Thêm tải video Instagram (2026-08-24)
+
+Người dùng muốn tải video Instagram (và Threads). Research + đo thật trước khi làm.
+
+### Đo thật (yt-dlp 2026.08.19)
+
+- **Instagram: LÀM ĐƯỢC.** yt-dlp có extractor reel/post; từ IP dân dụng 5/5 tải được
+  reel công khai KHÔNG cần login. IG trả DASH (hình+tiếng tách, cần ffmpeg) CỘNG mp4
+  **progressive muxed** (`video_versions`, h264+aac ghép sẵn). Bộ chọn format hiện có
+  tự chọn progressive muxed -> hợp design KHÔNG-ffmpeg. Đã kiểm đầu-cuối: ffprobe xác
+  nhận video+audio; `docKhungHinhMp4` của project đọc 480x854 khớp ffprobe (không lệch
+  = không crash app điện thoại); cả hai đường byte (self-DL + flat url) ra cùng file.
+- **Threads: KHÔNG làm được.** yt-dlp 0 extractor, cả `--force-generic-extractor` ra
+  `Unsupported URL`. Chặn ở whitelist, chờ yt-dlp thêm hỗ trợ.
+- Cộng đồng 2026: IP data-center bị login-wall gắt hơn IP dân dụng. Người dùng chốt
+  tự host máy cá nhân (dân dụng) nên bỏ lo VPS.
+
+### Thay đổi
+
+- `whitelist-nguon-video.ts`: `NenTangVideo` thêm `instagram`; `HOST_CHO_PHEP` thêm
+  `instagram.com`. **`l.instagram.com` trong `HOST_CHI_DE_CHUYEN_HUONG` GIỜ LÀ LƯỚI
+  CHẶN THẬT** (khớp đuôi `.instagram.com` sau khi thêm whitelist, chỉ bị chặn nhờ luật
+  chuyển-hướng chạy trước) - có test khóa.
+- `chuoi-nguon-video.ts`: IG -> chỉ yt-dlp; sửa bug tiềm ẩn nhánh else hardcode
+  `"facebook"` (khiến IG bị đọc khung theo mặc định Facebook), giờ truyền thẳng `nenTang`.
+- `nguon-yt-dlp.ts`: khung mặc định IG dọc; lỗi IG `empty media response`/`rate-limit`
+  (yt-dlp không phân biệt rate-limit/riêng tư/đã xóa) -> thử-lại-được (`tamThoi`).
+- Câu "cần đăng nhập" bỏ hardcode Facebook (IG giờ chạm được path đó).
+- `tai-video-tool*.ts`: mô tả + schema + comment nói cả Instagram.
+
+### Kiểm chứng
+
+- Test 5 mặt: whitelist nhận IG + chặn giả dạng + chặn Threads + chặn `l.instagram.com`;
+  chain IG->yt-dlp; khung IG dọc; phân loại lỗi IG; selector IG chọn progressive muxed
+  KHÔNG chọn dash video-only (offline `--load-info-json`).
+- Phá-kiểm 4 lượt (bỏ IG khỏi whitelist / khung IG về ngang / bỏ pattern lỗi IG / bỏ
+  `l.instagram.com`) đều đỏ đúng chỗ.
+- Review Opus: 0 Critical/High; vá M1 (comment `l.instagram.com` thành lưới-chặn-thật +
+  test), L4 (câu cần-đăng-nhập trung tính), L5 (doc sót IG). typecheck sạch. Full suite
+  2527/2527.
+
+### Còn treo / đánh đổi (báo người dùng)
+
+- Ca IG chỉ có DASH (không progressive - HIẾM, đo 5/5 đều có progressive): yt-dlp thoát
+  `Requested format is not available` -> xếp vĩnh viễn -> câu "riêng tư/đã xóa" (hơi sai
+  cho video công khai nhưng thiếu luồng gửi được). Chấp nhận vì hiếm.
+- IG private/deleted thật bị nói "thử lại sau" (vì yt-dlp không phân biệt với rate-limit).
+  Đánh đổi có chủ ý, ưu tiên ca rate-limit phổ biến.
+- Threads: chờ yt-dlp hỗ trợ.

@@ -60,9 +60,10 @@ function chu(v: unknown): string | null {
  * dùng đi thử lại vô ích.
  */
 const LOI_CAN_DANG_NHAP =
-  "Nội dung này Facebook bắt đăng nhập mới xem được (story, hoặc bài trong nhóm kín) nên bot không " +
-  "tải được - bot không có tài khoản Facebook. Nói rõ với người dùng là loại link này không tải " +
-  "được, và gợi ý họ gửi link bài đăng hoặc reel công khai thay thế. Đừng bảo họ thử lại.";
+  "Nội dung này bắt đăng nhập mới xem được (story Facebook, bài trong nhóm/tài khoản kín, hoặc nội " +
+  "dung Instagram hạn chế) nên bot không tải được - bot không có tài khoản mạng xã hội để xem. Nói " +
+  "rõ với người dùng là loại link này không tải được, và gợi ý họ gửi link bài đăng hoặc reel công " +
+  "khai thay thế. Đừng bảo họ thử lại.";
 
 /** Cạnh dài sau khi chuẩn hóa - xem `chuanHoaTheoTiLe` */
 const CANH_DAI_CHUAN = 1280;
@@ -127,9 +128,11 @@ function khungHinh(d: InfoDict, nenTang: NenTangVideo): { width: number; height:
   if (tot !== null) return chuanHoaTheoTiLe(tot);
 
   // Không còn gì để đọc. Mặc định theo NỀN TẢNG chứ không dùng một hằng số
-  // chung: TikTok gần như luôn dọc, Facebook thì đa số ngang (và `sendVideo`
-  // của zca-js cũng mặc định 1280x720 khi không truyền).
-  return nenTang === "tiktok" ? { ...CO_MAC_DINH } : { ...CO_MAC_DINH_NGANG };
+  // chung: TikTok và Instagram (reel) gần như luôn dọc, Facebook thì đa số ngang
+  // (và `sendVideo` của zca-js cũng mặc định 1280x720 khi không truyền). Đằng
+  // nào tầng gửi cũng đọc lại khung từ chính buffer (`docKhungHinhMp4`) nên số
+  // này chỉ là lưới đỡ khi đọc file thất bại.
+  return nenTang === "facebook" ? { ...CO_MAC_DINH_NGANG } : { ...CO_MAC_DINH };
 }
 
 /** Cắt tên tác giả về độ dài lành mạnh - xem chú thích chỗ gọi */
@@ -158,10 +161,17 @@ export function phanLoaiLoiYtDlp(loi: string, loiCauHinh: boolean): KetQuaNguon 
   // ca chập chờn, thử lại có nghĩa (đo: 4 lần thử -> 5/6 phiên thành công).
   // "Video unavailable" / "Private" thì thử mãi cũng vậy.
   //
+  // Instagram trả "empty media response" (đo 2026-08) cho MỌI ca không lấy được:
+  // rate-limit, video riêng tư, đã xóa - yt-dlp KHÔNG phân biệt được. Xếp vào
+  // nhóm thử-lại-được: ca hay gặp nhất (rate-limit) thì đợi vài phút là qua, và
+  // câu tool ra "thử lại sau" thay vì bắt người dùng bỏ cuộc oan. Ca riêng tư
+  // thật thì họ thử lại một lần rồi thôi - đổi lại đỡ nói sai với ca phổ biến.
+  //
   // Timeout của tiến trình ra câu "đã dừng" chứ KHÔNG phải "timed out":
   // `execFile` giết tiến trình thì `err.message` chỉ ghi "Command failed",
   // không có chữ nào để mà bắt bằng regex (đã đo).
-  const chapChon = /unable to extract|unexpected response|challenge|đã dừng|HTTP Error 5/i.test(loi);
+  const chapChon =
+    /unable to extract|unexpected response|challenge|đã dừng|HTTP Error 5|empty media response|rate.?limit/i.test(loi);
   return { ok: false, loi, thuLaiDuoc: chapChon };
 }
 

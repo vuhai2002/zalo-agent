@@ -35,18 +35,35 @@ before(async () => {
 
 after(() => cleanupTestEnv(dataDir));
 
-type SpecFormat = { format_id: string; vcodec: string; width?: number; height?: number; note?: string };
+// `vcodec: "progressive"` = mp4 ghép sẵn nhưng yt-dlp KHÔNG parse được codec (đúng
+// hình dạng format progressive của Instagram, `video_versions`). `acodec: "none"`
+// = luồng chỉ-hình (DASH video-only). Hai cái này để test ca Instagram.
+type SpecFormat = {
+  format_id: string;
+  vcodec: string;
+  acodec?: string;
+  width?: number;
+  height?: number;
+  note?: string;
+};
 
 /** Dựng một format tối giản đủ để yt-dlp sắp xếp; URL là dummy (offline, không tải) */
 function dungFormat(f: SpecFormat): Record<string, unknown> {
+  const dims = {
+    ...(f.width ? { width: f.width } : {}),
+    ...(f.height ? { height: f.height } : {}),
+  };
+  // Progressive: mp4 không mang trường vcodec/acodec - yt-dlp vẫn coi là ghép sẵn.
+  if (f.vcodec === "progressive") {
+    return { format_id: f.format_id, ext: "mp4", ...dims, url: `https://example.invalid/${f.format_id}.mp4`, protocol: "https" };
+  }
   const chiTiengNoi = f.vcodec === "none";
   return {
     format_id: f.format_id,
     vcodec: f.vcodec,
-    acodec: chiTiengNoi ? "mp3" : "aac",
+    acodec: f.acodec ?? (chiTiengNoi ? "mp3" : "aac"),
     ext: chiTiengNoi ? "mp3" : "mp4",
-    ...(f.width ? { width: f.width } : {}),
-    ...(f.height ? { height: f.height } : {}),
+    ...dims,
     ...(f.note ? { format_note: f.note } : {}),
     url: `https://example.invalid/${f.format_id}.${chiTiengNoi ? "mp3" : "mp4"}`,
     protocol: "https",
@@ -160,6 +177,23 @@ describe("chon-format-video: yt-dlp chọn đúng codec (offline, tất định)
       chon.argsChonFormat(),
     );
     assert.equal(ch?.id, "bytevc1_1080p", "thà h265 sạch còn hơn h264 đóng logo");
+  });
+
+  it("Instagram DASH: chọn PROGRESSIVE muxed, KHÔNG chọn dash video-only (tránh video câm / cần ghép)", async (t) => {
+    if (!ytdlpCo) return t.skip("yt-dlp chưa cài trên máy test");
+    // IG trả DASH (hình + tiếng tách) CỘNG mp4 progressive ghép sẵn. Design cố ý
+    // không cài ffmpeg nên KHÔNG được chọn luồng chỉ-hình (sẽ câm hoặc phải ghép).
+    // `b`/best chỉ lấy luồng có sẵn cả hình+tiếng -> phải rơi vào progressive, dù
+    // dash video-only có phân giải cao hơn (720x1280). Đo thật: yt-dlp chọn đúng.
+    const ch = await chonTren(
+      [
+        { format_id: "dash-audio", vcodec: "none" },
+        { format_id: "prog", vcodec: "progressive" },
+        { format_id: "dash-video", vcodec: "avc1.64001F", acodec: "none", width: 720, height: 1280 },
+      ],
+      chon.argsChonFormat(),
+    );
+    assert.equal(ch?.id, "prog", "phải chọn progressive muxed, KHÔNG chọn dash video-only 720x1280");
   });
 });
 

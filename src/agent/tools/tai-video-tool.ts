@@ -22,9 +22,10 @@ const log = createLogger("tai-video");
  * nó (tầng chuỗi nguồn và tầng gửi) - hai bản chép tay là sớm muộn lệch nhau.
  */
 const LOI_CAN_DANG_NHAP_CHO_MODEL =
-  "Link này Facebook bắt đăng nhập mới xem được (story, hoặc bài trong nhóm kín) nên bot không tải " +
-  "được - bot không có tài khoản Facebook. Nói rõ là loại link này không tải được và gợi ý người " +
-  "dùng gửi link bài đăng hoặc reel công khai thay thế. ĐỪNG bảo họ thử lại.";
+  "Link này bắt đăng nhập mới xem được (story Facebook, bài trong nhóm/tài khoản kín, hoặc nội dung " +
+  "Instagram hạn chế) nên bot không tải được - bot không có tài khoản mạng xã hội để xem. Nói rõ là " +
+  "loại link này không tải được và gợi ý người dùng gửi link bài đăng hoặc reel công khai thay thế. " +
+  "ĐỪNG bảo họ thử lại.";
 
 const LOI_THIEU_CONG_CU =
   "Máy chủ chưa cài đủ công cụ để tải video (thiếu yt-dlp). Đây là lỗi cấu hình phía máy chủ, " +
@@ -51,7 +52,7 @@ const LOI_VINH_VIEN =
   "người dùng, ĐỪNG hứa thử lại sau và ĐỪNG bảo họ đổi dạng link (link ngắn hay đầy đủ đều như nhau).";
 
 /**
- * Tool tải video TikTok / Facebook rồi gửi thẳng vào hội thoại.
+ * Tool tải video TikTok / Facebook / Instagram rồi gửi thẳng vào hội thoại.
  *
  * ĐƯỜNG GỬI: `api.sendVideo({ videoUrl })` - bot CHỈ gửi một tin nhắn chứa đường
  * dẫn, máy người nhận mới là bên tải. Tra source zca-js (`sendVideo.ts:71`): nó
@@ -98,7 +99,7 @@ export function createTaiVideoTool(ctx: ToolContext, phuThuoc: PhuThuocTaiVideo 
   return tool({
     description: TAI_VIDEO_DESCRIPTION,
     inputSchema: z.object({
-      url: z.string().describe("Đường dẫn video TikTok hoặc Facebook người dùng gửi"),
+      url: z.string().describe("Đường dẫn video TikTok, Facebook hoặc Instagram người dùng gửi"),
     }),
     execute: async ({ url }) => {
       // Người dùng hiếm khi dán mỗi cái link. Bóc ở đây để luật whitelist luôn

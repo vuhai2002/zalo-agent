@@ -59,6 +59,13 @@ describe("chuoiNguonCho - thứ tự nguồn", () => {
       ["yt-dlp"],
     );
   });
+
+  it("Instagram: CHỈ yt-dlp - TikWM không nhận Instagram", () => {
+    assert.deepEqual(
+      chuoiNguonCho("instagram").map((m) => m.ten),
+      ["yt-dlp"],
+    );
+  });
 });
 
 describe("layVideoQuaChuoi - luật rơi tầng", () => {

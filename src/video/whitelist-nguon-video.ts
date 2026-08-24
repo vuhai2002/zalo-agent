@@ -13,7 +13,7 @@
  */
 
 /** Nền tảng nhận ra được - quyết định đi nguồn nào ở tầng trên */
-export type NenTangVideo = "tiktok" | "facebook";
+export type NenTangVideo = "tiktok" | "facebook" | "instagram";
 
 /**
  * Host được phép, kèm nền tảng tương ứng.
@@ -28,6 +28,11 @@ const HOST_CHO_PHEP: { hau: string; nenTang: NenTangVideo }[] = [
   { hau: "facebook.com", nenTang: "facebook" },
   { hau: "fb.watch", nenTang: "facebook" },
   { hau: "fb.com", nenTang: "facebook" },
+  // Instagram: reel/post/tv. Link "Sao chép liên kết" của app ra
+  // `instagram.com/reel/<mã>/?igsh=...` - khớp theo đuôi nên phủ cả `www.` và
+  // `m.instagram.com`. KHÔNG thêm `threads.net/com`: yt-dlp không có extractor
+  // cho Threads (đo 2026-08, cả force-generic ra `Unsupported URL`).
+  { hau: "instagram.com", nenTang: "instagram" },
 ];
 
 /**
@@ -42,9 +47,17 @@ const HOST_CHO_PHEP: { hau: string; nenTang: NenTangVideo }[] = [
  * "mạnh hơn" thì phải chứng minh tập bắt mới BAO tập cũ, chứ không chỉ đo chiều
  * mới. Lần này chính phép đo đó bắt được hồi quy.)
  *
- * `l.instagram.com` / `l.messenger.com` hôm nay là thừa - hai tên miền đó vốn
- * không nằm trong danh sách cho phép. Giữ lại làm bản ghi ý định phòng khi sau
- * này có ai thêm Instagram vào; chúng KHÔNG được tính vào độ phủ test.
+ * `l.instagram.com` GIỜ LÀ LƯỚI CHẶN THẬT, KHÔNG được xóa: từ khi thêm
+ * `instagram.com` vào danh sách cho phép, `l.instagram.com` KHỚP đuôi
+ * `.instagram.com` nên nó CHỈ bị chặn vì luật này chạy TRƯỚC whitelist. Bỏ nó đi
+ * thì `https://l.instagram.com/?u=<payload không phải URL>` lọt whitelist thành
+ * host instagram hợp lệ rồi đi thẳng xuống yt-dlp - đúng lỗ mà `mangUrlKhacTrongQuery`
+ * KHÔNG bịt (nó chỉ thấy URL trong query, không thấy `u=x`). `l.instagram.com` là
+ * cổng chuyển-hướng-ra-ngoài THẬT của Instagram (302). Có test khóa ở
+ * `whitelist-nguon-video.test.ts`.
+ *
+ * `l.messenger.com` thì vẫn thừa (messenger.com không nằm trong danh sách cho
+ * phép) - giữ làm bản ghi ý định phòng sau này thêm.
  */
 const HOST_CHI_DE_CHUYEN_HUONG = [
   "l.facebook.com",
@@ -173,7 +186,7 @@ export function kiemNguonVideo(urlTho: string): KetQuaWhitelist {
   if (!khop) {
     return {
       ok: false,
-      loi: "Chỉ tải được video từ TikTok và Facebook. Đường dẫn này không thuộc hai nơi đó.",
+      loi: "Chỉ tải được video từ TikTok, Facebook và Instagram. Đường dẫn này không thuộc ba nơi đó.",
     };
   }
 
