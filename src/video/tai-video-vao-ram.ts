@@ -21,19 +21,13 @@
 
 import { downloadFromPublicUrl } from "../shared/safe-remote-download.js";
 import { chayYtDlp } from "./chay-yt-dlp.js";
+import { argsChonFormat } from "./chon-format-video.js";
 
 /**
  * Trần thời gian cho lượt yt-dlp tự tải. Rộng hơn lượt đọc metadata vì đây là
  * tải thật; vẫn phải có trần, quá hạn là tiến trình bị giết.
  */
 const TRAN_TAI_MS = 5 * 60_000;
-
-/**
- * Bộ chọn format - GIỐNG HỆT `nguon-yt-dlp.ts`, và cố ý KHÔNG có nhánh ghép
- * hình+tiếng: ghép cần ffmpeg, mà image không cài ffmpeg (chạy ffmpeg trên nội
- * dung của người lạ là thứ thiết kế này tránh).
- */
-const CHON_FORMAT = "b[vcodec^=avc][ext=mp4]/b[ext=mp4]/b";
 
 export type KetQuaTai =
   | { ok: true; byte: Buffer; duong: "url" | "yt-dlp" }
@@ -70,8 +64,8 @@ export async function taiTuUrlVaoRam(
 
 /**
  * Đối số cho lượt yt-dlp TỰ TẢI, nhận qua stdout. Tách THUẦN để test được: mấy
- * cờ này quyết định có ghi ra đĩa hay không (`-o -`) và có cần ffmpeg hay không
- * (`CHON_FORMAT`), mà cả hai đều hỏng CÂM nếu viết sai.
+ * cờ này quyết định có ghi ra đĩa hay không (`-o -`) và chọn format nào
+ * (`argsChonFormat`, chung với đường metadata), mà cả hai đều hỏng CÂM nếu viết sai.
  *
  * `-o -` xuất thẳng ra stdout nên không có file tạm nào - đã kiểm: 4.549.777
  * byte, header `ftyp` đúng mp4.
@@ -84,8 +78,7 @@ export function doiSoTaiYtDlp(urlGoc: string, tranByte: number): string[] {
     // này vô hiệu - lưới đỡ thật là phép kiểm độ dài buffer trong hàm gọi nó.
     "--max-filesize",
     String(tranByte),
-    "-f",
-    CHON_FORMAT,
+    ...argsChonFormat(),
     "-o",
     "-",
     urlGoc,

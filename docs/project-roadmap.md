@@ -6149,3 +6149,69 @@ cố định cho vùng prompt-cache vs P3 nonce cho vùng message là hai tiền
 
 - Mỗi phase review Opus tới sạch + vòng review toàn cục cuối. typecheck sạch. Full
   suite 2496/2496 (560 suite).
+
+## V3.26 - Bộ chọn format yt-dlp lỗi thời gửi h265 thay vì h264 (2026-08-24)
+
+Người dùng báo một video TikTok không tải được. Điều tra bằng cách test thật URL đó
+qua cả hai nguồn.
+
+### Nguyên nhân tin gốc: nguồn NGOÀI down (không sửa được ở code)
+
+- TikWM (nguồn CHÍNH) trả `Url parsing is failed` cho đúng video này ở MỌI biến thể
+  URL (`processed_time ~3s` nên là fetch thất bại, không phải chê định dạng); video
+  TikTok khác thì `code:0` bình thường. Video bóng đá VN/FPT nhiều khả năng khóa vùng
+  / chặn IP data-center của TikWM.
+- yt-dlp (dự phòng) chập chờn: đo 15+ lần, khi 3/5 được, khi 3-4 lần HỎNG LIÊN TIẾP
+  (lỗi `Unable to extract universal data for rehydration` = trang chống bot). 4 lần
+  thử cách nhau 1,5s nằm cùng cửa sổ TikTok gắn cờ -> chùm lỗi -> cả 4 cùng trượt.
+- Câu bot trả ("có thể riêng tư/đã xóa/nguồn chặn tạm") LÀ ĐÚNG khi cả hai nguồn down.
+  Không đụng logic retry (rủi ro cao, lợi ích mỏng; đã có thể chỉnh `VIDEO_SOURCE_RETRIES`
+  trên dashboard).
+
+### Bug THẬT phát hiện khi soi (Issue B, hỏng CÂM)
+
+Bộ chọn cũ `b[vcodec^=avc][ext=mp4]/b[ext=mp4]/b`: yt-dlp bản nay khai h264 của TikTok
+là `vcodec="h264"` chứ KHÔNG `"avc1.*"`, nên `^=avc` khớp RỖNG, lặng lẽ rơi xuống
+`b[ext=mp4]` rồi lấy phân giải cao nhất = **h265**. Đo tất định qua `--load-info-json`:
+selector cũ ra `bytevc1_1080p|h265`, đúng codec cần tránh. Mỗi khi TikWM down và yt-dlp
+cứu (tức cả lớp video khóa-vùng như cái này), bot gửi h265 - máy cũ không phát, cùng
+họ với ca crash app điện thoại ở V3.22. Không test nào canh vì selection nằm TRONG
+yt-dlp.
+
+### Fix
+
+- Module mới `chon-format-video.ts` (nguồn chân lý duy nhất):
+  `-f "b[ext=mp4][format_id!=download]/b[ext=mp4]/b" -S "vcodec:h264"`.
+  - `-S vcodec:h264` thay cho `[vcodec^=avc]`: đi qua chuẩn hóa codec NỘI BỘ của
+    yt-dlp (gom `avc1.*`/`h264`/`H264` một rọ, không phân biệt hoa thường) -> miễn
+    nhiễm đổi nhãn; và chỉ SẮP XẾP nên không còn cửa "khớp rỗng câm". Đo: regex
+    `^(avc|h264)` chết với chữ HOA, `-S` thì không.
+  - `[format_id!=download]`: yt-dlp gắn `format_note:"watermarked"` cho format
+    `download`; loại khi còn bản sạch. Ca "chỉ h264 là download + h265 sạch" -> chọn
+    h265 sạch.
+- Cả HAI đường yt-dlp dùng chung `argsChonFormat()`: đường metadata (tách hàm thuần
+  `doiSoMetadataYtDlp`) và đường tải (`doiSoTaiYtDlp`). Lệch bộ chọn = khai kích thước
+  format này nhưng gửi byte format khác = crash - nên chung là ràng buộc ĐÚNG ĐẮN.
+- Đánh đổi (người dùng duyệt): ưu tiên h264 nghĩa là có video còn 540p trong khi h265
+  lên 1080p. Tương thích máy cũ > nét.
+
+### Test
+
+- `chon-format-video.test.ts`: chạy yt-dlp THẬT nhưng OFFLINE qua `--load-info-json`
+  (tất định, không mạng, không dính chống bot) - cách DUY NHẤT canh được selector nằm
+  ngoài code ta (hàm thuần chép lại sẽ không đỏ khi yt-dlp đổi hành vi). 5 ca: ưu tiên
+  h264 dù h265 nét hơn, nhận `avc1.*`, chỉ-h265 lùi mềm, tránh watermark, và pin bộ
+  chọn CŨ ra h265 (canary). Tự `skip` khi máy chưa cài yt-dlp.
+- Sàn kiểm bất biến hằng số (chuỗi thuần, chạy MỌI máy kể cả không yt-dlp): vá điểm mù
+  M1 review chỉ ra - CI tối giản không có yt-dlp thì 5 ca kia skip, đổi hằng sai vẫn
+  lọt; sàn này bắt được.
+- Guard "chở nguyên bộ chọn chung" ở cả hai call site - chống ai đó gỡ `-S` khỏi một
+  đường.
+
+### Kiểm chứng
+
+- Phá-kiểm 3 lượt: đổi `CHON_SORT="res"` -> ca hành vi + ca bất biến đều đỏ; gỡ
+  `argsChonFormat()` khỏi từng call site -> đúng guard đỏ.
+- Review Opus độc lập: 0 lỗi correctness; xác nhận top-level `--dump-single-json` phản
+  ánh đúng format đã chọn với `-f`+`-S`, không hồi quy Facebook/TikWM. M1 đã vá.
+- typecheck sạch. Full suite 2506/2506 (563 suite), 0 skip (máy có yt-dlp).

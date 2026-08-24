@@ -50,6 +50,18 @@ describe("đối số yt-dlp - hai cờ hỏng câm", () => {
     assert.ok(f.includes("mp4"), "phải ưu tiên mp4 để Zalo phát được");
   });
 
+  it("chở NGUYÊN bộ chọn chung (gồm -S ưu tiên h264) - hai đường yt-dlp phải khớp", async () => {
+    // Đường tải và đường metadata là hai lời gọi yt-dlp RIÊNG. Lệch bộ chọn thì
+    // bot khai kích thước của format này nhưng gửi byte format khác - đã làm
+    // crash app Zalo trên điện thoại. Cả hai lấy đối số từ `argsChonFormat`.
+    const chon = await import("./chon-format-video.js");
+    const d = mod.doiSoTaiYtDlp("https://x", TRAN);
+    assert.ok(
+      d.join(" ").includes(chon.argsChonFormat().join(" ")),
+      `thiếu bộ chọn chung: ${chon.argsChonFormat().join(" ")}`,
+    );
+  });
+
   it("chở trần dung lượng xuống yt-dlp để nó chặn TRƯỚC khi tải", () => {
     const d = mod.doiSoTaiYtDlp("https://x", 12_345);
     assert.equal(d[d.indexOf("--max-filesize") + 1], "12345");

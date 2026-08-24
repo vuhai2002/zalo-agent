@@ -18,6 +18,7 @@
  */
 
 import { chayYtDlp } from "./chay-yt-dlp.js";
+import { argsChonFormat } from "./chon-format-video.js";
 import { CO_MAC_DINH, CO_MAC_DINH_NGANG, type KetQuaNguon } from "./thong-tin-video.js";
 import type { NenTangVideo } from "./whitelist-nguon-video.js";
 
@@ -27,27 +28,6 @@ import type { NenTangVideo } from "./whitelist-nguon-video.js";
  * trong hai suất song song.
  */
 const TRAN_MS = 45_000;
-
-/**
- * CHỌN FORMAT THEO CODEC, KHÔNG THEO MÃ FORMAT.
- *
- * TikTok mặc định trả `bytevc1_*` là **h265**, mà h265 không phát được trên
- * nhiều máy cũ. Có bản h264 nhưng mã của nó (`h264_540p_1071120`) là con số
- * sinh theo bitrate - nó đổi giữa các video và biến mất bất cứ lúc nào. Chọn
- * theo thuộc tính `vcodec^=avc` thì không phụ thuộc mã.
- *
- * TUYỆT ĐỐI TRÁNH format tên `download`: chính yt-dlp đánh dấu nó
- * "Untested, watermarked". Bộ chọn này không bao giờ trúng nó vì nó chỉ khớp
- * theo codec, còn `download` thì yt-dlp xếp hạng thấp.
- *
- * KHÔNG CÓ nhánh ghép hình+tiếng (`bv*+ba`) - bản trước có, và đó là lỗi:
- * ghép cần ffmpeg, mà image CỐ Ý không cài ffmpeg (chạy ffmpeg trên nội dung
- * của người lạ là đúng thứ thiết kế này tránh). Để nhánh đó lại thì yt-dlp chọn
- * xong mới chết vì thiếu ffmpeg, và lỗi hạ tầng đó rơi vào câu chung "video có
- * thể ở chế độ riêng tư" - dắt người vận hành đi sai hướng. Chỉ nhận luồng đã
- * có sẵn cả hình lẫn tiếng.
- */
-const CHON_FORMAT = "b[vcodec^=avc][ext=mp4]/b[ext=mp4]/b";
 
 type InfoDict = Record<string, unknown>;
 
@@ -185,13 +165,19 @@ export function phanLoaiLoiYtDlp(loi: string, loiCauHinh: boolean): KetQuaNguon 
   return { ok: false, loi, thuLaiDuoc: chapChon };
 }
 
+/**
+ * Đối số đọc metadata. Tách THUẦN để test canh được bộ chọn format CHUNG
+ * (`argsChonFormat`) đúng như đường tải (`doiSoTaiYtDlp`) - hai lời gọi yt-dlp
+ * riêng, lệch bộ chọn thì khai kích thước một format nhưng gửi byte format khác.
+ */
+export function doiSoMetadataYtDlp(url: string): string[] {
+  return ["--dump-single-json", "--skip-download", "--no-warnings", "--no-playlist", ...argsChonFormat(), url];
+}
+
 export async function layVideoTuYtDlp(url: string, nenTang: NenTangVideo): Promise<KetQuaNguon> {
   // Cờ siết bảo mật (`--ignore-config`, `--no-plugin-dirs`) nằm trong `chayYtDlp`
   // để mọi đường chạy yt-dlp cùng nhận - xem khối chú thích ở `chay-yt-dlp.ts`.
-  const ket = await chayYtDlp(
-    ["--dump-single-json", "--skip-download", "--no-warnings", "--no-playlist", "-f", CHON_FORMAT, url],
-    TRAN_MS,
-  );
+  const ket = await chayYtDlp(doiSoMetadataYtDlp(url), TRAN_MS);
 
   if (!ket.ok) return phanLoaiLoiYtDlp(ket.loi, ket.loiCauHinh === true);
 

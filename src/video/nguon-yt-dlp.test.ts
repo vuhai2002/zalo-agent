@@ -250,3 +250,21 @@ describe("phanLoaiLoiYtDlp - nói ĐÚNG loại bệnh", () => {
     }
   });
 });
+
+describe("doiSoMetadataYtDlp - đối số đọc metadata", () => {
+  it("chở NGUYÊN bộ chọn chung (gồm -S ưu tiên h264) - khớp đường tải", async () => {
+    // Đường metadata và đường tải là hai lời gọi yt-dlp riêng; lệch bộ chọn thì
+    // khai kích thước một format nhưng gửi byte format khác - đã crash app Zalo.
+    const chon = await import("./chon-format-video.js");
+    const d = mod.doiSoMetadataYtDlp("https://x");
+    assert.ok(
+      d.join(" ").includes(chon.argsChonFormat().join(" ")),
+      `thiếu bộ chọn chung: ${chon.argsChonFormat().join(" ")}`,
+    );
+  });
+
+  it("URL đứng CUỐI, sau mọi cờ", () => {
+    const d = mod.doiSoMetadataYtDlp("https://vt.tiktok.com/ABC/");
+    assert.equal(d[d.length - 1], "https://vt.tiktok.com/ABC/");
+  });
+});
