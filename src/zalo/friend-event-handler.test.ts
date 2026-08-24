@@ -89,6 +89,24 @@ describe("handleFriendEvent", () => {
     }
   });
 
+  it("ĐUA: dòng bị xóa TRONG lúc enrich -> KHÔNG dựng lại dòng ma", async () => {
+    // Mô phỏng ADD/accept chen vào giữa upsert và enrich: layUser xóa dòng rồi
+    // mới trả profile. upsert-TRƯỚC + capNhat UPDATE-only -> capNhat no-op ->
+    // không dòng ma. Nếu revert về enrich-TRƯỚC-ghi-SAU (bug gốc) thì dòng ma
+    // xuất hiện -> ca này ĐỎ. Đây là guard trực tiếp cho fix upsert-first.
+    const layUserXoaGiuaChung: import("./friend-event-handler.js").LayUser = async () => {
+      store.xoaFriendRequest("acc-race", "u-race");
+      return { changed_profiles: { u_0: { displayName: "Ma", avatar: "x" } } };
+    };
+    await handler.handleFriendEvent("acc-race", apiStub, evRequest("u-race"), {
+      layUser: layUserXoaGiuaChung,
+    });
+    assert.ok(
+      !store.listFriendRequests("acc-race").some((x) => x.fromUid === "u-race"),
+      "dòng đã bị xóa trong lúc enrich thì KHÔNG được dựng lại",
+    );
+  });
+
   it("REQUEST fromUid RỖNG -> không lưu, không ném", async () => {
     await handler.handleFriendEvent("acc-empty", apiStub, evRequest("", false), {
       layUser: layUserGia("X", "y"),

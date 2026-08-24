@@ -60,6 +60,8 @@ export function FriendsPage({ accounts }: { accounts: AccountInfo[] }) {
 
   useEffect(reloadRequests, [reloadRequests]);
   useEffect(reloadFriends, [reloadFriends]);
+  // Đổi account thì bỏ banner lỗi hành động của account trước (đừng để dính).
+  useEffect(() => setActionError(null), [accountId]);
 
   // Poll request mới (chỉ đọc DB nên rẻ). Danh sách bạn KHÔNG poll (gọi mạng).
   useEffect(() => {
@@ -74,7 +76,8 @@ export function FriendsPage({ accounts }: { accounts: AccountInfo[] }) {
     setActionError(null);
     try {
       await api.acceptFriend(r.accountId, r.fromUid);
-    } catch {
+    } catch (err) {
+      console.error(err);
       setActionError(`Không chấp nhận được "${r.senderName || r.fromUid}" - nguồn có thể đang giới hạn, thử lại sau.`);
     } finally {
       reloadRequests();
@@ -91,7 +94,8 @@ export function FriendsPage({ accounts }: { accounts: AccountInfo[] }) {
     setActionError(null);
     try {
       await api.rejectFriend(r.accountId, r.fromUid);
-    } catch {
+    } catch (err) {
+      console.error(err);
       setActionError(`Không từ chối được "${r.senderName || r.fromUid}" - thử lại sau.`);
     } finally {
       reloadRequests();
