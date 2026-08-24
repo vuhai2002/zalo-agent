@@ -6306,3 +6306,22 @@ Người dùng muốn tải video Instagram (và Threads). Research + đo thật
 - IG private/deleted thật bị nói "thử lại sau" (vì yt-dlp không phân biệt với rate-limit).
   Đánh đổi có chủ ý, ưu tiên ca rate-limit phổ biến.
 - Threads: chờ yt-dlp hỗ trợ.
+
+## V3.29 - Đọc thời lượng video từ file mp4 (2026-08-24)
+
+Instagram (yt-dlp) trả `duration: null` -> bot gửi `duration: 0` -> thẻ video Zalo
+hiện 0:00. Thời lượng nằm sẵn trong hộp `mvhd` của file mp4.
+
+- `doc-khung-hinh-mp4.ts`: thêm `docThongTinMp4` đọc CẢ khung hình (`tkhd`) lẫn thời
+  lượng (`mvhd`) trong MỘT lượt duyệt cây hộp (buffer đã ở RAM -> gần như 0 chi phí
+  thêm; không giải mã khung nào). `docKhungHinhMp4` giữ nguyên chữ ký làm wrapper.
+  Offset mvhd (v0 timescale@12/duration@16, v1 @20/@24 8-byte) ĐO THẬT trên 3 file
+  IG khớp ffprobe (67196/29371/51360 ms). Trần 24h chặn sentinel `0xFFFFFFFF`.
+- `gui-video-qua-zalo.ts`: thời lượng gửi = `video.durationMs || thoiLuongMs || 0`
+  (NGUỒN trước, file lấp chỗ trống). CỐ Ý ngược với khung hình (file luôn thắng):
+  khai sai khung -> crash, còn khai sai thời lượng chỉ là nhãn hiển thị.
+- Test: builder `mvhd` + ca v0/v1/null/timescale-0/sentinel; ca fallback ở gui-video.
+  Phá-kiểm sai offset / bỏ fallback đều đỏ. Đầu-cuối (harness code thật) xác nhận
+  sendVideo nhận đúng 67196/29371/51360 ms thay vì 0.
+- Review Opus: 0 lỗi (offset đúng ISO 14496-12, lượt duyệt gộp không phá đọc khung
+  cũ, an toàn byte lạ). typecheck sạch, full suite 2537/2537.

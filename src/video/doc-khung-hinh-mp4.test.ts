@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { docKhungHinhMp4 } from "./doc-khung-hinh-mp4.js";
+import { docKhungHinhMp4, docThongTinMp4 } from "./doc-khung-hinh-mp4.js";
 
 /**
  * Bộ đọc khung hình từ file MP4.
@@ -36,6 +36,25 @@ function tkhd(
   b.writeInt32BE(bb, than + 44 + dich);
   b.writeUInt32BE(Math.round(width * 65536), than + 76 + dich);
   b.writeUInt32BE(Math.round(height * 65536), than + 80 + dich);
+  return b;
+}
+
+/** Dựng hộp `mvhd` với timescale + duration cho trước (v0 hoặc v1) */
+function mvhd(timescale: number, duration: number, ver: 0 | 1 = 0): Buffer {
+  // v0 thân: version(1)+flags(3)+ctime(4)+mtime(4)+timescale(4)+duration(4) = 20
+  // v1 thân: version(1)+flags(3)+ctime(8)+mtime(8)+timescale(4)+duration(8) = 32
+  const than = ver === 1 ? 32 : 20;
+  const b = Buffer.alloc(8 + than);
+  b.writeUInt32BE(8 + than, 0);
+  b.write("mvhd", 4, "latin1");
+  b[8] = ver;
+  if (ver === 1) {
+    b.writeUInt32BE(timescale, 8 + 20);
+    b.writeBigUInt64BE(BigInt(duration), 8 + 24);
+  } else {
+    b.writeUInt32BE(timescale, 8 + 12);
+    b.writeUInt32BE(duration, 8 + 16);
+  }
   return b;
 }
 
@@ -145,5 +164,49 @@ describe("byte của người lạ thì không được làm hỏng lượt gử
   it("tkhd khai kích thước 0 ở mọi track thì trả null", () => {
     const b = Buffer.concat([FTYP, hop("moov", hop("trak", tkhd(0, 0)))]);
     assert.equal(docKhungHinhMp4(b), null);
+  });
+});
+
+describe("đọc THỜI LƯỢNG từ mvhd - CÙNG lượt duyệt với khung hình", () => {
+  it("v0: duration/timescale ra mili giây, VÀ lấy khung hình cùng một lượt", () => {
+    // 3000/1000 = 3s = 3000ms. mvhd (con của moov) + tkhd (trong trak) cùng file.
+    const b = Buffer.concat([FTYP, hop("moov", mvhd(1000, 3000), hop("trak", tkhd(720, 1280)))]);
+    const r = docThongTinMp4(b);
+    assert.equal(r.thoiLuongMs, 3000);
+    assert.deepEqual(r.khung, { width: 720, height: 1280 }, "một lượt lấy cả hai");
+  });
+
+  it("v1 (mốc + duration 8 byte): đọc đúng", () => {
+    const b = Buffer.concat([FTYP, hop("moov", mvhd(600, 90_000, 1))]); // 90000/600 = 150s
+    assert.equal(docThongTinMp4(b).thoiLuongMs, 150_000);
+  });
+
+  it("khớp số đo trên file THẬT (offset mvhd) - reel IG 67,196ms", () => {
+    // Offset đọc từ file IG thật rồi đối chiếu ffprobe (67.195692s -> 67196ms).
+    const b = Buffer.concat([FTYP, hop("moov", mvhd(1000, 67_196))]);
+    assert.equal(docThongTinMp4(b).thoiLuongMs, 67_196);
+  });
+
+  it("KHÔNG có mvhd -> thoiLuongMs null, vẫn đọc được khung (ca TikTok/FB cũ)", () => {
+    const b = Buffer.concat([FTYP, hop("moov", hop("trak", tkhd(576, 1024)))]);
+    const r = docThongTinMp4(b);
+    assert.equal(r.thoiLuongMs, null);
+    assert.deepEqual(r.khung, { width: 576, height: 1024 });
+  });
+
+  it("timescale = 0 -> null, KHÔNG chia cho 0", () => {
+    const b = Buffer.concat([FTYP, hop("moov", mvhd(0, 3000))]);
+    assert.equal(docThongTinMp4(b).thoiLuongMs, null);
+  });
+
+  it("duration sentinel 0xFFFFFFFF ('không biết') -> null, không ra số khổng lồ", () => {
+    // 0xFFFFFFFF/1000 ~ 49,7 ngày, vượt trần -> null thay vì gửi Zalo một nhãn rác.
+    const b = Buffer.concat([FTYP, hop("moov", mvhd(1000, 0xffffffff))]);
+    assert.equal(docThongTinMp4(b).thoiLuongMs, null);
+  });
+
+  it("docKhungHinhMp4 vẫn trả CHỈ khung hình - chữ ký cũ nguyên vẹn", () => {
+    const b = Buffer.concat([FTYP, hop("moov", mvhd(1000, 5000), hop("trak", tkhd(100, 200)))]);
+    assert.deepEqual(docKhungHinhMp4(b), { width: 100, height: 200 });
   });
 });

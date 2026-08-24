@@ -32,8 +32,11 @@ after(() => {
   cleanupTestEnv(dataDir);
 });
 
-/** Dựng một MP4 tối thiểu có `tkhd` khai đúng khung hình. */
-function dungMp4(width: number, height: number): Buffer {
+/**
+ * Dựng một MP4 tối thiểu có `tkhd` khai đúng khung hình. Truyền `thoiLuongMs` thì
+ * thêm hộp `mvhd` (timescale 1000) để test đọc thời lượng.
+ */
+function dungMp4(width: number, height: number, thoiLuongMs?: number): Buffer {
   const tkhd = Buffer.alloc(92);
   tkhd.writeUInt32BE(92, 0);
   tkhd.write("tkhd", 4, "latin1");
@@ -42,16 +45,25 @@ function dungMp4(width: number, height: number): Buffer {
   tkhd.writeUInt32BE(Math.round(width * 65536), than + 76);
   tkhd.writeUInt32BE(Math.round(height * 65536), than + 80);
 
+  let mvhd = Buffer.alloc(0);
+  if (thoiLuongMs !== undefined) {
+    mvhd = Buffer.alloc(28); // 8 header + 20 thân (v0)
+    mvhd.writeUInt32BE(28, 0);
+    mvhd.write("mvhd", 4, "latin1");
+    mvhd.writeUInt32BE(1000, 8 + 12); // timescale
+    mvhd.writeUInt32BE(thoiLuongMs, 8 + 16); // duration (timescale 1000 -> ms)
+  }
+
   const trak = Buffer.alloc(8);
   trak.writeUInt32BE(8 + tkhd.length, 0);
   trak.write("trak", 4, "latin1");
   const moov = Buffer.alloc(8);
-  moov.writeUInt32BE(8 + trak.length + tkhd.length, 0);
+  moov.writeUInt32BE(8 + mvhd.length + trak.length + tkhd.length, 0);
   moov.write("moov", 4, "latin1");
   const ftyp = Buffer.alloc(16);
   ftyp.writeUInt32BE(16, 0);
   ftyp.write("ftypisom", 4, "latin1");
-  return Buffer.concat([ftyp, moov, trak, tkhd]);
+  return Buffer.concat([ftyp, moov, mvhd, trak, tkhd]);
 }
 
 const VIDEO: ThongTinVideo = {
@@ -78,7 +90,7 @@ type Viec =
   | { k: "taiYtDlp"; url: string }
   | { k: "poster"; thumb: string }
   | { k: "upload"; byte: number; ten: string }
-  | { k: "sendVideo"; url: string; thumb: string; w: number; h: number }
+  | { k: "sendVideo"; url: string; thumb: string; w: number; h: number; d: number }
   | { k: "sendFile"; byte: number; ten: string };
 let daLam: Viec[] = [];
 let demCa = 0;
@@ -105,8 +117,8 @@ function dich() {
         daLam.push({ k: "upload", byte: ds[0]!.data.length, ten: ds[0]!.filename });
         return ketUpload;
       },
-      sendVideo: async (o: { videoUrl: string; thumbnailUrl: string; width: number; height: number }) => {
-        daLam.push({ k: "sendVideo", url: o.videoUrl, thumb: o.thumbnailUrl, w: o.width, h: o.height });
+      sendVideo: async (o: { videoUrl: string; thumbnailUrl: string; width: number; height: number; duration: number }) => {
+        daLam.push({ k: "sendVideo", url: o.videoUrl, thumb: o.thumbnailUrl, w: o.width, h: o.height, d: o.duration });
         return {};
       },
       sendMessage: async (c: { attachments: { data: Buffer; filename: string }[] }) => {
@@ -288,5 +300,29 @@ describe("trần dung lượng", () => {
     ketDo = { ...ketDo, soByte: null } as typeof ketDo;
     await chay();
     assert.equal(daLam.filter((v) => v.k === "sendVideo").length, 1);
+  });
+});
+
+describe("thời lượng: nguồn TRƯỚC, file LẤP CHỖ TRỐNG", () => {
+  it("nguồn CÓ thời lượng -> dùng của nguồn (TikTok/FB), không lật sang file", async () => {
+    // VIDEO.durationMs = 20000; file khai 9999 -> vẫn phải là 20000 của nguồn.
+    // Khác khung hình (file luôn thắng): thời lượng khai sai chỉ là nhãn, không crash.
+    byteTai = dungMp4(1002, 576, 9_999);
+    await chay();
+    assert.equal(tinGui().d, 20_000);
+  });
+
+  it("nguồn THIẾU thời lượng (Instagram, durationMs=0) -> lấy từ FILE", async () => {
+    byteTai = dungMp4(1002, 576, 51_360);
+    const videoIG: ThongTinVideo = { ...VIDEO, durationMs: 0, nenTang: "instagram", nguon: "yt-dlp" };
+    await mod.guiVideoQuaZalo(dich(), videoIG, URL_GOC, TRAN, phuThuoc());
+    assert.equal(tinGui().d, 51_360);
+  });
+
+  it("nguồn thiếu VÀ file không có mvhd -> 0, không bịa số", async () => {
+    byteTai = dungMp4(1002, 576); // không mvhd
+    const videoIG: ThongTinVideo = { ...VIDEO, durationMs: 0 };
+    await mod.guiVideoQuaZalo(dich(), videoIG, URL_GOC, TRAN, phuThuoc());
+    assert.equal(tinGui().d, 0);
   });
 });

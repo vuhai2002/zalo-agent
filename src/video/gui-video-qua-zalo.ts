@@ -32,7 +32,7 @@ import type { API, ThreadType } from "zca-js";
 
 import { createLogger } from "../shared/logger.js";
 import { chuanBiAnhBiaVideo } from "./chuan-bi-anh-bia-video.js";
-import { docKhungHinhMp4 } from "./doc-khung-hinh-mp4.js";
+import { docThongTinMp4 } from "./doc-khung-hinh-mp4.js";
 import { kiemUrlVideoConSong } from "./kiem-url-video-truoc-khi-gui.js";
 import { taiBangYtDlpVaoRam, taiTuUrlVaoRam } from "./tai-video-vao-ram.js";
 import type { ThongTinVideo } from "./thong-tin-video.js";
@@ -202,8 +202,9 @@ export async function guiVideoQuaZalo(
     });
   }
 
-  // 3. Khung hình đọc từ CHÍNH buffer sắp gửi - không tin nguồn khai gì
-  const khung = docKhungHinhMp4(tai.byte);
+  // 3. Khung hình + thời lượng đọc từ CHÍNH buffer sắp gửi - MỘT lượt duyệt cây
+  // hộp mp4, không tin nguồn khai gì.
+  const { khung, thoiLuongMs } = docThongTinMp4(tai.byte);
   if (khung === null) {
     // Không đọc được thì dùng số của nguồn. Ghi log vì đây là đường dẫn tới
     // đúng lớp lỗi đã làm crash máy người dùng.
@@ -213,6 +214,11 @@ export async function guiVideoQuaZalo(
     );
   }
   const co = khung ?? { width: video.width, height: video.height };
+  // Thời lượng: LẤY CỦA NGUỒN TRƯỚC (TikTok/Facebook trả sẵn, tin cậy), file chỉ
+  // LẤP CHỖ TRỐNG khi nguồn không có (Instagram trả `duration: null` -> durationMs
+  // = 0). Khác với khung hình (file LUÔN thắng vì khai sai khung làm crash); thời
+  // lượng khai sai chỉ là nhãn hiển thị sai, không crash, nên không cần lật nguồn.
+  const durationMs = video.durationMs || thoiLuongMs || 0;
 
   // 4. Poster: tải ảnh bìa nguồn rồi upload lên Zalo. Không dựng được thì `null`.
   const poster = await phuThuoc.chuanBiAnhBia(
@@ -234,7 +240,7 @@ export async function guiVideoQuaZalo(
       {
         videoUrl: urlZalo,
         thumbnailUrl: poster,
-        duration: video.durationMs,
+        duration: durationMs,
         width: co.width,
         height: co.height,
       },
