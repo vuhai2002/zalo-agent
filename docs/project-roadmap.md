@@ -6325,3 +6325,41 @@ hiện 0:00. Thời lượng nằm sẵn trong hộp `mvhd` của file mp4.
   sendVideo nhận đúng 67196/29371/51360 ms thay vì 0.
 - Review Opus: 0 lỗi (offset đúng ISO 14496-12, lượt duyệt gộp không phá đọc khung
   cũ, an toàn byte lạ). typecheck sạch, full suite 2537/2537.
+
+## V3.30 - Tab Bạn bè: duyệt/tự-động kết bạn + xem danh sách bạn (2026-08-25, plan: plans/260825-0125-tab-ban-be/)
+
+Thêm tab dashboard quản lý kết bạn cho tài khoản CÁ NHÂN (zca-js). Brainstorm +
+spec + kế hoạch 7 Task, mỗi Task TDD + phá-kiểm + review Opus theo chặng.
+
+### Ràng buộc định hình thiết kế
+
+- **Zalo KHÔNG có API liệt kê yêu cầu kết bạn ĐẾN đang chờ** (chỉ có `getAllFriends`
+  + `getSentFriendRequest` = request mình GỬI). Request đến chỉ tới qua sự kiện
+  listener `friend_event` type REQUEST -> phải LƯU vào bảng `friend_requests` mới,
+  xóa khi ADD/REJECT/UNDO hoặc accept/reject. **Không backfill được request cũ.**
+- **Chỉ kênh cá nhân**: kênh Zalo Bot chính thức `api = null`, không có kết bạn.
+
+### Thành phần
+
+- DB `friend_requests` (`friend-schema.ts` + `friend-request-store.ts`).
+- Handler `friend-event-handler.ts` (wire vào `zalo-listener`/`account-manager`):
+  REQUEST(!isSelf) upsert-TRƯỚC rồi enrich `getUserInfo` UPDATE-SAU (đóng cửa sổ
+  dòng-ma); ADD/REJECT/UNDO xóa; không ném ra listener.
+- Auto-accept opt-in per-account (mặc định TẮT), delay chỉnh được (mặc định 1
+  phút): vòng quét toàn cục 30s (`friend-auto-accept-sweep.ts`), đọc config từ DB
+  mỗi lượt (đổi toggle không cần restart), restart-safe, một dòng hỏng không chặn dòng khác.
+- API `/api/friends` (requests/list/accept/reject), 409 nếu chưa chạy/bot.
+- Frontend: tab "Bạn bè" (mục Chờ duyệt poll 7s + Danh sách bạn live), section
+  "Kết bạn" trong drawer account. Accept KHÔNG tự thêm allowlist (tách bạch).
+- `deleteAccount` dọn luôn `friend_requests` (chống mồ côi/hồi sinh như scheduled_jobs).
+
+### Kiểm chứng
+
+- Mỗi Task TDD + phá-kiểm. Review Opus backend: 1 High (deleteAccount bỏ sót dọn)
+  + Medium (dòng-ma enrich, đua sweep/thủ công) - đã vá/ghi chú. Review frontend.
+- typecheck sạch (server + web), web build OK, full suite 2568/2568.
+
+### Ngoài phạm vi (đã chốt)
+
+- Unfriend/Block/gửi lời mời từ dashboard; cache danh sách bạn; tự thêm allowlist
+  khi accept; **Threads** (yt-dlp không hỗ trợ - ghi ở V3.28).
