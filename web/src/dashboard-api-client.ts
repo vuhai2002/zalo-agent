@@ -149,6 +149,24 @@ export type ContactItem = {
   messageCount: number;
 };
 
+/** Yêu cầu kết bạn ĐẾN đang chờ - `GET /api/friends/:accountId/requests` */
+export type FriendRequestItem = {
+  accountId: string;
+  fromUid: string;
+  message: string;
+  senderName: string | null;
+  avatarUrl: string | null;
+  receivedAt: number;
+};
+
+/** Một người bạn từ getAllFriends() - chỉ dùng tên + avatar để hiển thị */
+export type FriendItem = {
+  userId: string;
+  displayName?: string;
+  zaloName?: string;
+  avatar?: string;
+};
+
 // ===== API calls =====
 
 export const api = {
@@ -209,6 +227,26 @@ export const api = {
       `/api/contacts/${encodeURIComponent(userId)}?accountId=${encodeURIComponent(accountId)}`,
       { method: "DELETE" },
     ),
+
+  // ----- Tab Bạn bè (chỉ kênh cá nhân) -----
+  /** Yêu cầu kết bạn ĐẾN đang chờ (từ DB) */
+  friendRequests: (accountId: string) =>
+    request<{ requests: FriendRequestItem[] }>(
+      `/api/friends/${encodeURIComponent(accountId)}/requests`,
+    ),
+  /** Danh sách bạn bè - lấy trực tiếp (live), có thể 409 nếu account chưa chạy/là bot */
+  friendList: (accountId: string) =>
+    request<{ friends: FriendItem[] }>(`/api/friends/${encodeURIComponent(accountId)}/list`),
+  acceptFriend: (accountId: string, fromUid: string) =>
+    request<{ ok: true }>(`/api/friends/${encodeURIComponent(accountId)}/accept`, {
+      method: "POST",
+      body: JSON.stringify({ fromUid }),
+    }),
+  rejectFriend: (accountId: string, fromUid: string) =>
+    request<{ ok: true }>(`/api/friends/${encodeURIComponent(accountId)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ fromUid }),
+    }),
 
   accountsAdmin: {
     list: () => request<{ items: ManagedAccount[] }>("/api/accounts"),
@@ -514,6 +552,9 @@ export type ManagedAccount = {
   autoReactIcon: string;
   typingIndicatorEnabled: boolean;
   disabledTools: string[];
+  /** Tab Bạn bè: tự động chấp nhận kết bạn + delay (phút) */
+  autoAcceptFriends: boolean;
+  autoAcceptFriendDelayMinutes: number;
   /** Loại kênh - chốt lúc tạo, không đổi được sau đó */
   loai: "ca_nhan" | "bot";
   /**

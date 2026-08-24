@@ -45,6 +45,8 @@ export function AccountEditDrawer({
     autoReactEnabled: account?.autoReactEnabled ?? true,
     autoReactIcon: account?.autoReactIcon ?? "heart",
     typingIndicatorEnabled: account?.typingIndicatorEnabled ?? true,
+    autoAcceptFriends: account?.autoAcceptFriends ?? false,
+    autoAcceptFriendDelayMinutes: account?.autoAcceptFriendDelayMinutes ?? 1,
     allowlistMode: account?.allowlist.mode ?? "all",
     allowlistIds: (account?.allowlist.userIds ?? []).join("\n"),
     /** Chốt LÚC TẠO, không đổi được sau đó - xem `createSchema` ở account-routes */
@@ -104,6 +106,8 @@ export function AccountEditDrawer({
       autoReactEnabled: form.autoReactEnabled,
       autoReactIcon: form.autoReactIcon,
       typingIndicatorEnabled: form.typingIndicatorEnabled,
+      autoAcceptFriends: form.autoAcceptFriends,
+      autoAcceptFriendDelayMinutes: form.autoAcceptFriendDelayMinutes,
       allowlist: {
         mode: form.allowlistMode as "all" | "list",
         userIds: form.allowlistIds.split("\n").map((s) => s.trim()).filter(Boolean),
@@ -291,6 +295,37 @@ export function AccountEditDrawer({
             </>
             )}
           </div>
+
+          {form.loai === "ca_nhan" && (
+            <div className="space-y-2 rounded-xl border border-line p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Kết bạn</div>
+              <Toggle
+                value={form.autoAcceptFriends}
+                onChange={(v) => setForm({ ...form, autoAcceptFriends: v })}
+                label="Tự động chấp nhận yêu cầu kết bạn"
+                hint="Bot tự accept sau khoảng chờ dưới đây. Tắt thì bạn tự duyệt ở tab Bạn bè."
+              />
+              {form.autoAcceptFriends && (
+                <label className="flex items-center gap-2 pt-1 text-[13px] text-ink-soft">
+                  Chờ
+                  <input
+                    type="number"
+                    min={0}
+                    max={1440}
+                    value={form.autoAcceptFriendDelayMinutes}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        autoAcceptFriendDelayMinutes: Math.max(0, Math.min(1440, Number(e.target.value) || 0)),
+                      })
+                    }
+                    className="w-20 rounded-lg border border-line bg-surface px-2 py-1 text-ink"
+                  />
+                  phút rồi mới accept
+                </label>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2 rounded-xl border border-line p-4">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Allowlist</div>

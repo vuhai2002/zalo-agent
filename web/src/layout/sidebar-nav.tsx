@@ -12,6 +12,7 @@ import {
   IconFileText,
   IconGear,
   IconGrid,
+  IconHeart,
   IconLogout,
   IconMoon,
   IconSignal,
@@ -45,6 +46,7 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
     items: [
       { to: "/sessions", label: "Sessions", icon: IconChat },
       { to: "/contacts", label: "Contacts", icon: IconUsers },
+      { to: "/friends", label: "Bạn bè", icon: IconHeart },
       { to: "/schedule", label: "Lịch hẹn", icon: IconClock },
     ],
   },
