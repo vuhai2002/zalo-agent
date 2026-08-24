@@ -21,6 +21,7 @@ import { setStoredPassword } from "./dashboard-password-store.js";
 import { accountRoutes } from "./routes/account-routes.js";
 import { agentRoutes } from "./routes/agent-routes.js";
 import { contactRoutes } from "./routes/contact-routes.js";
+import { friendRoutes } from "./routes/friend-routes.js";
 import { logRoutes } from "./routes/log-routes.js";
 import { memoryRoutes } from "./routes/memory-routes.js";
 import { overviewRoutes } from "./routes/overview-routes.js";
@@ -160,6 +161,7 @@ export function buildDashboardApp(): Hono {
   app.route("/api/overview", overviewRoutes);
   app.route("/api/threads", threadRoutes);
   app.route("/api/contacts", contactRoutes);
+  app.route("/api/friends", friendRoutes);
   app.route("/api/provider", providerRoutes);
   app.route("/api/memories", memoryRoutes);
   app.route("/api/accounts", accountRoutes);
