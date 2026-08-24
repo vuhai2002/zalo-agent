@@ -680,8 +680,13 @@ export async function runAgentTurn({
       //
       // `kyTuInput` phủ ĐÚNG phạm vi `that` (system + tools schema + messages) vì
       // `system:`/`tools:` gửi tách khỏi `messages` - chỉ đếm messages thì tử số
-      // hụt. Trên lượt KHÔNG ảnh + soTinChen=0, `kyTuInput / uocLuong.that` là tỉ
-      // lệ ký-tự/token đo được để chỉnh `KY_TU_MOI_TOKEN`.
+      // hụt. Trên lượt KHÔNG ảnh + soTinChen=0, `kyTuInput / that` (lấy `that` từ
+      // `uocLuong.that`) là tỉ lệ ký-tự/token đo được để chỉnh `KY_TU_MOI_TOKEN`.
+      //
+      // CẢNH BÁO khi hiệu chỉnh: DÙNG `kyTuInput / uocLuong.that`, KHÔNG dùng
+      // `uocLuong.lechPhanTram`. Trường `uocLuong` so TOKEN ước lượng CHỈ TỪ
+      // messages với `that` phủ đủ system+tools -> `lechPhanTram` lệch thấp có hệ
+      // thống (chỉ để đọc nhanh cạnh số thật, không phải mẫu số hiệu chỉnh).
       kyTuInput: demKyTuInputDayDu(heThongDaGui, toolSetDaGui, messages),
       uocLuong: doLechUocLuong,
     },

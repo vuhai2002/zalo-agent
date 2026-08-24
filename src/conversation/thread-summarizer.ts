@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { streamText, type LanguageModel } from "ai";
 import { chayStream } from "../agent/stream-text-result.js";
 import { createLogger } from "../shared/logger.js";
 import { db } from "./database.js";
@@ -61,30 +61,36 @@ export function collectSummaryBacklog(
 export type SummaryResult = { text: string; truncated: boolean };
 export type SummaryGenerator = (prompt: string) => Promise<SummaryResult>;
 
-const defaultGenerator: SummaryGenerator = async (prompt) => {
-  // Import động để tránh vòng import (llm-provider -> ... -> thread-store)
-  const { resolveLanguageModel } = await import("../agent/llm-provider.js");
-  // Streaming vì cùng lý do với lượt agent: router nằm sau Cloudflare, mà
-  // Cloudflare cắt bằng 524 khi byte đầu chưa tới trong 100 giây (xem
-  // `stream-text-result.ts`). Ở đây 1024 token nên hiếm khi chạm mốc đó, nhưng
-  // hỏng ở đây là hỏng CÂM: `maybeSummarizeThread` nuốt lỗi, summary lặng lẽ
-  // ngừng cập nhật và trí nhớ dài hạn của bot mòn dần mà không ai thấy. Giữ
-  // đúng một bất biến "không còn lời gọi LLM non-stream nào" dễ hơn nhiều so
-  // với việc nhớ chỗ nào được miễn.
+/**
+ * Gọi model tóm tắt rồi ánh xạ `finishReason` -> `truncated`. Tách khỏi
+ * `defaultGenerator` để test được CỬA PHÁT HIỆN bản cụt bằng model giả
+ * (`MockLanguageModelV4`) mà không cần `resolveLanguageModel` thật - cùng idiom
+ * điểm-tiêm-model của `agent-loop.ts`. Không tách thì cửa `=== "length"` này chỉ
+ * chạy được qua `resolveLanguageModel` (dựng provider thật), nên đổi nhầm literal
+ * là hồi quy CÂM: mọi test hiện có tiêm sẵn `truncated` nên không chạm tới nó.
+ *
+ * Streaming vì cùng lý do với lượt agent: router nằm sau Cloudflare, mà
+ * Cloudflare cắt bằng 524 khi byte đầu chưa tới trong 100 giây (xem
+ * `stream-text-result.ts`). Ở đây 1024 token nên hiếm khi chạm mốc đó, nhưng
+ * hỏng ở đây là hỏng CÂM: `maybeSummarizeThread` nuốt lỗi, summary lặng lẽ
+ * ngừng cập nhật và trí nhớ dài hạn của bot mòn dần mà không ai thấy. Giữ
+ * đúng một bất biến "không còn lời gọi LLM non-stream nào" dễ hơn nhiều so
+ * với việc nhớ chỗ nào được miễn.
+ */
+export async function chayTomTat(model: LanguageModel, prompt: string): Promise<SummaryResult> {
   const result = await chayStream(
-    (onError) =>
-      streamText({
-        model: resolveLanguageModel(),
-        prompt,
-        maxOutputTokens: 1024,
-        maxRetries: 1,
-        onError,
-      }),
+    (onError) => streamText({ model, prompt, maxOutputTokens: 1024, maxRetries: 1, onError }),
     (loi) => log.warn({ err: loi }, "streamText phát lỗi khi tóm tắt thread"),
   );
   // `finishReason === "length"` = chạm cap 1024 -> bản cụt. Báo lên để caller
   // KHÔNG lưu (giữ summary cũ còn nguyên vẹn).
   return { text: result.text.trim(), truncated: result.finishReason === "length" };
+}
+
+const defaultGenerator: SummaryGenerator = async (prompt) => {
+  // Import động để tránh vòng import (llm-provider -> ... -> thread-store)
+  const { resolveLanguageModel } = await import("../agent/llm-provider.js");
+  return chayTomTat(resolveLanguageModel(), prompt);
 };
 
 /**

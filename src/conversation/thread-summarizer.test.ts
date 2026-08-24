@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
+import { MockLanguageModelV4, convertArrayToReadableStream } from "ai/test";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
 
 // window = 5, trigger = 6 để test không phải bơm hàng chục tin
@@ -155,5 +156,48 @@ describe("thread-summarizer", () => {
     ]);
     assert.match(p, /Nền cũ: đã bàn X/);
     assert.match(p, /câu mới của Hải/);
+  });
+});
+
+/**
+ * Cửa PHÁT HIỆN bản cụt (`finishReason === "length"` -> `truncated`). Mọi test ở
+ * trên TIÊM sẵn `truncated` qua generator giả nên KHÔNG chạm cửa này - đổi nhầm
+ * literal thành "stop" là hồi quy CÂM. `chayTomTat` được tách riêng chính để đo
+ * cửa này bằng model giả, chạy qua đúng đường `streamText` + `chayStream` thật.
+ */
+describe("chayTomTat - cửa phát hiện bản cụt", () => {
+  // Dựng stream mock TRỰC TIẾP, KHÔNG qua `thanhKetQuaStream`: helper đó nhận
+  // `finishReason` dạng CHUỖI (đúng kiểu fixture doGenerate), nhưng MockLanguageModelV4
+  // là spec v4 nên `result.finishReason` chỉ plumb qua khi part mang shape
+  // `{unified, raw}` - chuỗi trần rơi về "other", che mất "length". Shape này đo
+  // THẬT (probe) mới lên đúng tới cửa phát hiện. Kiểu part suy từ chính mock (như
+  // `streaming-model-test-helper.ts`); part finish phải cast vì type v4 siết
+  // `usage` dạng lồng còn runtime nhận phẳng - sai shape thì hai ca dưới đỏ TO.
+  type PhanStream =
+    Awaited<ReturnType<MockLanguageModelV4["doStream"]>>["stream"] extends ReadableStream<infer P> ? P : never;
+  function modelVoiFinish(unified: string, text: string): MockLanguageModelV4 {
+    const phan: PhanStream[] = [
+      { type: "stream-start", warnings: [] },
+      { type: "text-start", id: "t1" },
+      { type: "text-delta", id: "t1", delta: text },
+      { type: "text-end", id: "t1" },
+      {
+        type: "finish",
+        finishReason: { unified, raw: unified },
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      } as unknown as PhanStream,
+    ];
+    return new MockLanguageModelV4({ doStream: async () => ({ stream: convertArrayToReadableStream(phan) }) });
+  }
+
+  it("finishReason 'length' -> truncated:true (bản cụt, caller phải giữ bản cũ)", async () => {
+    const r = await summarizer.chayTomTat(modelVoiFinish("length", "tóm tắt cụt giữa chừng"), "prompt");
+    assert.equal(r.truncated, true);
+  });
+
+  it("finishReason 'stop' -> truncated:false, và text đã trim", async () => {
+    const r = await summarizer.chayTomTat(modelVoiFinish("stop", "  tóm tắt trọn vẹn  "), "prompt");
+    assert.equal(r.truncated, false);
+    assert.equal(r.text, "tóm tắt trọn vẹn");
   });
 });
