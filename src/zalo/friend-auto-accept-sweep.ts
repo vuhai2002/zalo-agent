@@ -40,6 +40,12 @@ export async function quetMotLuot(now: number, deps: QuetDeps): Promise<void> {
     if (!cfg || !cfg.autoAcceptFriends) continue;
 
     const moc = now - cfg.autoAcceptFriendDelayMinutes * 60_000;
+    // ĐUA hiếm với nút thủ công: nếu người dùng bấm Accept/Reject đúng một dòng
+    // trong 30s cửa sổ này, cả hai đường có thể cùng gọi Zalo (một bên nhận lỗi
+    // "đã là bạn" -> tự lành). Không dựng lớp khóa: xác suất thấp (cần auto BẬT +
+    // thao tác tay trong 30s), node:sqlite đồng bộ nên không xé ghi DB, và claim
+    // bằng cột trạng thái là quá nặng cho ca này. Xóa-sau-khi-accept giữ đúng
+    // ngữ nghĩa thử-lại nên chấp nhận cửa sổ đua.
     for (const row of deps.layQuaHan(id, moc)) {
       try {
         await deps.accept(api, row.fromUid);

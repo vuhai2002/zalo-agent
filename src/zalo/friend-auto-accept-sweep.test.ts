@@ -78,6 +78,26 @@ describe("quetMotLuot", () => {
     assert.deepEqual(t.xoaed, ["u-ok"], "chỉ xóa dòng accept THÀNH CÔNG; dòng lỗi giữ lại để thử lượt sau");
   });
 
+  it("nhiều account một lượt: chỉ account BẬT + có api mới accept (isolation)", async () => {
+    const accepted: string[] = [];
+    const deps: Deps = {
+      dsAccount: () => [
+        { id: "on", api: apiGia },
+        { id: "off", api: apiGia },
+        { id: "bot", api: null },
+      ],
+      getConfig: (id) => ({
+        autoAcceptFriends: id !== "off",
+        autoAcceptFriendDelayMinutes: 2,
+      }),
+      layQuaHan: (id) => [{ fromUid: `u-${id}` }],
+      xoa: () => {},
+      accept: async (_api, uid) => void accepted.push(uid),
+    };
+    await sweep.quetMotLuot(1_000_000, deps);
+    assert.deepEqual(accepted, ["u-on"], "off (tắt) và bot (api null) đều bị bỏ; chỉ on được accept");
+  });
+
   it("api null (kênh bot / chưa chạy) -> bỏ qua, không hỏi config/accept", async () => {
     let goiConfig = 0;
     const t = dungDeps({

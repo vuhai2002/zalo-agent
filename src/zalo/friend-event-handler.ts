@@ -1,6 +1,10 @@
 import { type API, type FriendEvent, FriendEventType } from "zca-js";
 
-import { upsertFriendRequest, xoaFriendRequest } from "../conversation/friend-request-store.js";
+import {
+  capNhatHoSoFriendRequest,
+  upsertFriendRequest,
+  xoaFriendRequest,
+} from "../conversation/friend-request-store.js";
 import { createLogger } from "../shared/logger.js";
 
 const log = createLogger("friend-event");
@@ -61,23 +65,26 @@ export async function handleFriendEvent(
       const fromUid = event.data.fromUid;
       if (!fromUid) return;
 
-      let senderName: string | null = null;
-      let avatarUrl: string | null = null;
-      const layUser = deps.layUser ?? ((uid: string) => api.getUserInfo(uid));
-      try {
-        ({ senderName, avatarUrl } = docHoSo(await layUser(fromUid)));
-      } catch (err) {
-        log.warn({ err, accountId, fromUid }, "enrich getUserInfo hỏng - lưu mỗi UID");
-      }
-
+      // Upsert TRƯỚC (chưa enrich) để dòng tồn tại NGAY. `getUserInfo` có thể mất
+      // vài giây; nếu enrich xong mới ghi thì một ADD/accept chen vào giữa sẽ xóa
+      // hụt (dòng chưa có) rồi ta chèn lại một dòng "ma" cho người đã thành bạn.
       upsertFriendRequest({
         accountId,
         fromUid,
         message: event.data.message ?? "",
-        senderName,
-        avatarUrl,
+        senderName: null,
+        avatarUrl: null,
         receivedAt: (deps.now ?? Date.now)(),
       });
+
+      // Enrich SAU bằng UPDATE-only: dòng vừa bị ADD xóa thì đây là no-op.
+      const layUser = deps.layUser ?? ((uid: string) => api.getUserInfo(uid));
+      try {
+        const { senderName, avatarUrl } = docHoSo(await layUser(fromUid));
+        if (senderName || avatarUrl) capNhatHoSoFriendRequest(accountId, fromUid, senderName, avatarUrl);
+      } catch (err) {
+        log.warn({ err, accountId, fromUid }, "enrich getUserInfo hỏng - giữ mỗi UID");
+      }
       log.info({ accountId, fromUid }, "yêu cầu kết bạn mới");
       return;
     }

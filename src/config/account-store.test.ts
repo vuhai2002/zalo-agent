@@ -49,4 +49,12 @@ describe("account-store: config auto-accept kết bạn", () => {
     store.updateAccount("acc-off", { autoAcceptFriends: false });
     assert.equal(store.getAccount("acc-off")?.autoAcceptFriends, false);
   });
+
+  it("deleteAccount DỌN luôn friend_requests (không để mồ côi -> hồi sinh khi tạo lại cùng id)", async () => {
+    const friends = await import("../conversation/friend-request-store.js");
+    store.createAccount({ id: "acc-del", label: "Nick" });
+    friends.upsertFriendRequest({ accountId: "acc-del", fromUid: "u", message: "", senderName: null, avatarUrl: null, receivedAt: 1 });
+    store.deleteAccount("acc-del");
+    assert.equal(friends.listFriendRequests("acc-del").length, 0, "xóa account phải xóa cả pending của nó");
+  });
 });

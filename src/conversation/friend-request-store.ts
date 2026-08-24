@@ -39,6 +39,24 @@ export function upsertFriendRequest(row: FriendRequestRow): void {
   );
 }
 
+const capNhatHoSoStmt = db.prepare(
+  "UPDATE friend_requests SET sender_name = ?, avatar_url = ? WHERE account_id = ? AND from_uid = ?",
+);
+
+/**
+ * Cập nhật tên/avatar SAU khi đã upsert (enrich getUserInfo chậm, chạy sau).
+ * UPDATE-only, KHÔNG chèn: nếu dòng vừa bị ADD/accept xóa trong lúc enrich thì
+ * đây là no-op - tránh dựng lại một dòng "ma" cho người đã thành bạn.
+ */
+export function capNhatHoSoFriendRequest(
+  accountId: string,
+  fromUid: string,
+  senderName: string | null,
+  avatarUrl: string | null,
+): void {
+  capNhatHoSoStmt.run(senderName, avatarUrl, accountId, fromUid);
+}
+
 const xoaStmt = db.prepare("DELETE FROM friend_requests WHERE account_id = ? AND from_uid = ?");
 
 /** Xóa dòng khi ADD/REJECT/UNDO hoặc accept/reject xong. Idempotent (xóa dòng đã mất vô hại). */

@@ -173,6 +173,10 @@ export function deleteAccount(id: string): boolean {
     // của bất biến "`loai` chốt lúc tạo": ba lớp chặn đều canh tầng UPDATE,
     // không tầng xóa-rồi-tạo-lại.
     db.prepare("DELETE FROM scheduled_jobs WHERE account_id = ?").run(id);
+    // Dọn yêu cầu kết bạn đang chờ - cùng lý do MỒ CÔI như scheduled_jobs: tạo
+    // lại account CÙNG ID mà auto-accept bật thì vòng quét accept những UID cũ
+    // rích. friend-schema tự hứa "mọi nơi xóa tự dọn tường minh" nên phải làm ở đây.
+    db.prepare("DELETE FROM friend_requests WHERE account_id = ?").run(id);
     return db.prepare("DELETE FROM accounts WHERE id = ?").run(id).changes > 0;
   });
 }

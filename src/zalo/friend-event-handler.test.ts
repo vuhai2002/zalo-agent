@@ -89,6 +89,13 @@ describe("handleFriendEvent", () => {
     }
   });
 
+  it("REQUEST fromUid RỖNG -> không lưu, không ném", async () => {
+    await handler.handleFriendEvent("acc-empty", apiStub, evRequest("", false), {
+      layUser: layUserGia("X", "y"),
+    });
+    assert.equal(store.listFriendRequests("acc-empty").length, 0);
+  });
+
   it("REMOVE -> không đụng bảng pending, không ném", async () => {
     store.upsertFriendRequest({ accountId: "acc-4", fromUid: "u-keep", message: "", senderName: null, avatarUrl: null, receivedAt: 1 });
     const ev = { type: FriendEventType.REMOVE, data: "u-keep", threadId: "u-keep", isSelf: false } as FriendEvent;

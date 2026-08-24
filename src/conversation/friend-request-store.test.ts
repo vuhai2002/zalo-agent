@@ -86,4 +86,18 @@ describe("friend-request-store", () => {
     assert.equal(r!.senderName, null);
     assert.equal(r!.avatarUrl, null);
   });
+
+  it("capNhatHoSo cập nhật tên/avatar của dòng đã có", () => {
+    store.upsertFriendRequest(req({ accountId: "acc-cap", fromUid: "u", senderName: null, avatarUrl: null }));
+    store.capNhatHoSoFriendRequest("acc-cap", "u", "Hoa", "av");
+    const r = store.listFriendRequests("acc-cap")[0]!;
+    assert.equal(r.senderName, "Hoa");
+    assert.equal(r.avatarUrl, "av");
+  });
+
+  it("capNhatHoSo là UPDATE-only: dòng không tồn tại -> KHÔNG tạo dòng ma", () => {
+    // Chống ca enrich chậm rồi ADD xóa dòng trong lúc chờ: update-only nên no-op.
+    store.capNhatHoSoFriendRequest("acc-ma", "u-ma", "X", "y");
+    assert.equal(store.listFriendRequests("acc-ma").length, 0, "update dòng đã mất phải là no-op");
+  });
 });
