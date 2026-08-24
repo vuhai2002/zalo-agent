@@ -312,11 +312,13 @@ export function AccountEditDrawer({
                     type="number"
                     min={0}
                     max={1440}
+                    step={1}
                     value={form.autoAcceptFriendDelayMinutes}
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        autoAcceptFriendDelayMinutes: Math.max(0, Math.min(1440, Number(e.target.value) || 0)),
+                        // Math.round: server validate .int(), số thập phân -> 400.
+                        autoAcceptFriendDelayMinutes: Math.max(0, Math.min(1440, Math.round(Number(e.target.value) || 0))),
                       })
                     }
                     className="w-20 rounded-lg border border-line bg-surface px-2 py-1 text-ink"

@@ -25,6 +25,7 @@ export function FriendsPage({ accounts }: { accounts: AccountInfo[] }) {
   const [friends, setFriends] = useState<FriendItem[]>([]);
   const [friendsError, setFriendsError] = useState<string | null>(null);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const { confirm, confirmDialog } = useConfirmDialog();
 
   const reloadRequests = useCallback(() => {
@@ -67,9 +68,14 @@ export function FriendsPage({ accounts }: { accounts: AccountInfo[] }) {
     return () => clearInterval(t);
   }, [accountId, reloadRequests]);
 
+  // Dùng r.accountId (không phải accountId của state) - dòng luôn thuộc account
+  // đang chọn, nhưng lấy từ chính dòng thì không bao giờ lệch nếu state đổi giữa chừng.
   async function accept(r: FriendRequestItem) {
+    setActionError(null);
     try {
-      await api.acceptFriend(accountId, r.fromUid);
+      await api.acceptFriend(r.accountId, r.fromUid);
+    } catch {
+      setActionError(`Không chấp nhận được "${r.senderName || r.fromUid}" - nguồn có thể đang giới hạn, thử lại sau.`);
     } finally {
       reloadRequests();
     }
@@ -82,8 +88,11 @@ export function FriendsPage({ accounts }: { accounts: AccountInfo[] }) {
       confirmLabel: "Từ chối",
     });
     if (!ok) return;
+    setActionError(null);
     try {
-      await api.rejectFriend(accountId, r.fromUid);
+      await api.rejectFriend(r.accountId, r.fromUid);
+    } catch {
+      setActionError(`Không từ chối được "${r.senderName || r.fromUid}" - thử lại sau.`);
     } finally {
       reloadRequests();
     }
@@ -115,6 +124,7 @@ export function FriendsPage({ accounts }: { accounts: AccountInfo[] }) {
       </p>
 
       <h2 className="mb-2 text-sm font-semibold text-ink">Chờ duyệt ({requests.length})</h2>
+      {actionError && <p className="mb-2 text-sm text-red-500">{actionError}</p>}
       <TableShell headers={["", "Tên", "Lời nhắn", "Nhận lúc", ""]} minWidth={700}>
         {requests.length === 0 && <EmptyRow colSpan={5} text="Không có yêu cầu nào đang chờ" />}
         {requests.map((r) => (

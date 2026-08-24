@@ -36,7 +36,8 @@ function fakeApi(): API {
     rejectFriendRequest: async (uid: string) => void rejected.push(uid),
     getAllFriends: async () => {
       if (getAllFriendsNem) throw new Error("rate limit");
-      return [{ userId: "f1" }];
+      // Trả cả PII để test khẳng định server ĐÃ lược bỏ.
+      return [{ userId: "f1", displayName: "F One", zaloName: "z1", phoneNumber: "0900", dob: "1990" }];
     },
   } as unknown as API;
 }
@@ -107,7 +108,10 @@ describe("friend-routes", () => {
   it("GET list -> getAllFriends; api null -> 409; getAllFriends ném -> 502", async () => {
     const ok = await app().request("/acc-a/list");
     assert.equal(ok.status, 200);
-    assert.deepEqual((await ok.json()) as { friends: unknown[] }, { friends: [{ userId: "f1" }] });
+    // Chỉ userId/displayName/zaloName - phoneNumber/dob PHẢI bị lược bỏ.
+    assert.deepEqual((await ok.json()) as { friends: unknown[] }, {
+      friends: [{ userId: "f1", displayName: "F One", zaloName: "z1" }],
+    });
 
     apiGia = null;
     assert.equal((await app().request("/acc-a/list")).status, 409);

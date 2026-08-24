@@ -55,7 +55,15 @@ export function createFriendRoutes(deps: FriendRoutesDeps) {
       const api = deps.getApi(c.req.param("accountId"));
       if (!api) return c.json(CHUA_CHAY, 409);
       try {
-        return c.json({ friends: await api.getAllFriends() });
+        // CHỈ trả field UI cần. getAllFriends() trả User đầy đủ (có cả phoneNumber,
+        // dob...) - đẩy nguyên ra dashboard là lộ PII của bạn bè không cần thiết.
+        const ds = (await api.getAllFriends()) as { userId: string; displayName?: string; zaloName?: string }[];
+        const friends = (Array.isArray(ds) ? ds : []).map((f) => ({
+          userId: f.userId,
+          displayName: f.displayName,
+          zaloName: f.zaloName,
+        }));
+        return c.json({ friends });
       } catch (err) {
         log.warn({ err }, "getAllFriends lỗi");
         return c.json({ error: "Không lấy được danh sách bạn" }, 502);
