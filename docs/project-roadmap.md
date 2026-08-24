@@ -6215,3 +6215,44 @@ yt-dlp.
 - Review Opus độc lập: 0 lỗi correctness; xác nhận top-level `--dump-single-json` phản
   ánh đúng format đã chọn với `-f`+`-S`, không hồi quy Facebook/TikWM. M1 đã vá.
 - typecheck sạch. Full suite 2506/2506 (563 suite), 0 skip (máy có yt-dlp).
+
+## V3.27 - Câu lỗi tải video phân biệt tạm thời vs vĩnh viễn (2026-08-24)
+
+Người dùng gửi lại đúng video V3.26 nhưng bằng SHORT link từ app (`vt.tiktok.com/...`),
+vẫn hỏng, và bot bảo "gửi lại link đầy đủ dạng tiktok.com/@.../video/...".
+
+### Chẩn đoán
+
+- Short link resolve (301) về ĐÚNG video `7675774236564262145` lần trước. Whitelist
+  CHẤP NHẬN `vt.tiktok.com` (khớp `.tiktok.com`), yt-dlp tự resolve short link -> không
+  bug ở đường xử lý. Dạng link (short/full, app/desktop) KHÔNG liên quan.
+- Hỏng cùng lý do V3.26: TikWM khóa vùng (100% fail) + yt-dlp chống bot chập chờn.
+- Bug THẬT ở THÔNG ĐIỆP: câu generic cũ gộp "riêng tư/đã xóa" (vĩnh viễn) với "nguồn
+  chặn tạm thời" rồi kết "đừng hứa thử lại sau". Nhưng ca chống bot thì THỬ LẠI SAU
+  vài phút LẠI ĐƯỢC (ngược hẳn). Model đọc câu mơ hồ rồi tự bịa "đổi dạng link" - dắt
+  người dùng đi vòng (link họ đã gửi cũng hỏng, đổi qua lại vô ích).
+
+### Fix
+
+- `chuoi-nguon-video.ts`: thêm cờ `tamThoi` vào kết quả `ok:false`, bật khi CÓ nguồn
+  hỏng `thuLaiDuoc:true` (OR tích lũy qua cả chuỗi, không last-wins). `loiCauHinh` và
+  `canDangNhap` mang `thuLaiDuoc:false` nên không bật `tamThoi` oan.
+- `tai-video-tool.ts`: tách hai câu, chọn theo cờ. Thứ tự `loiCauHinh` -> `canDangNhap`
+  -> `tamThoi` -> vĩnh viễn (lỗi cấu hình/đăng nhập THẮNG tạm thời). CẢ HAI câu dặn
+  model đừng bảo đổi dạng link; ca tạm thời khuyên thử lại sau, ca vĩnh viễn thì không.
+
+### Kiểm chứng
+
+- Test: 4 ca chuỗi (cả hai chiều mixed vĩnh viễn/thử-lại-được để khóa OR tích lũy) +
+  5 ca tool (chọn câu + `loiCauHinh`/`canDangNhap` thắng `tamThoi`).
+- Phá-kiểm: chuỗi không bật `tamThoi` -> ca tamThoi đỏ; tool bỏ qua cờ -> ca chọn câu
+  đỏ; đảo thứ tự check -> ca "thắng" đỏ; đổi OR thành last-wins -> ca chiều-ngược đỏ.
+- Review Opus: 0 lỗi correctness; vá thêm 3 điểm review chỉ ra (khóa thứ tự ưu tiên,
+  khóa OR tích lũy chiều ngược, câu tạm thời bỏ hardcode "TikTok" vì Facebook cũng bắn).
+- typecheck sạch. Full suite 2515/2515 (565 suite).
+
+### Còn treo (báo người dùng)
+
+Video `fptbongda` VẪN có thể không tải được kể cả sau fix - nguồn ngoài down, không
+sửa được ở code. Fix này chỉ làm bot NÓI ĐÚNG ("thử lại sau vài phút" thay vì "đổi
+link"), không làm tải được thứ nguồn đang chặn.

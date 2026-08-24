@@ -84,6 +84,19 @@ export type KetQuaChuoi =
       loiCauHinh: boolean;
       /** Có mắt xích nào báo nội dung đòi đăng nhập không - xem `KetQuaNguon.canDangNhap` */
       canDangNhap: boolean;
+      /**
+       * Có mắt xích nào hỏng theo kiểu THỬ LẠI ĐƯỢC không (`KetQuaNguon.thuLaiDuoc`).
+       *
+       * Bật khi ít nhất một lần thử trả lỗi tạm thời - điển hình là TikTok trả
+       * trang chống bot (yt-dlp "Unable to extract"), hoặc nguồn trả 5xx. Khác hẳn
+       * lỗi VĨNH VIỄN (riêng tư / đã xóa / url sai) vốn thử mãi cũng vậy.
+       *
+       * Tool đọc cờ này để nói ĐÚNG lời khuyên: ca tạm thời thì "thử lại sau vài
+       * phút thường được", ca vĩnh viễn thì "đừng hứa thử lại". Gộp hai ca là dắt
+       * người dùng đi vòng (đổi link, thử lại vô ích - hoặc bỏ cuộc oan khi thật ra
+       * chỉ cần đợi nguồn hết chặn).
+       */
+      tamThoi: boolean;
     };
 
 /**
@@ -103,6 +116,7 @@ export async function layVideoQuaChuoi(
 
   let loiCauHinh = false;
   let canDangNhap = false;
+  let tamThoi = false;
 
   for (const mat of tuyChon.chuoi ?? chuoiNguonCho(nenTang)) {
     let loiCuoi = "không rõ";
@@ -113,6 +127,7 @@ export async function layVideoQuaChuoi(
       loiCuoi = ket.loi;
       if (ket.loiCauHinh) loiCauHinh = true;
       if (ket.canDangNhap) canDangNhap = true;
+      if (ket.thuLaiDuoc) tamThoi = true;
       if (!ket.thuLaiDuoc) break;
       // Không nghỉ sau lần thử CUỐI - nghỉ xong rồi bỏ đi là phí thời gian của
       // người đang đợi, và nó chiếm suất trong hàng đợi song song.
@@ -127,5 +142,6 @@ export async function layVideoQuaChuoi(
     daThu,
     loiCauHinh,
     canDangNhap,
+    tamThoi,
   };
 }

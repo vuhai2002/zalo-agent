@@ -32,6 +32,25 @@ const LOI_THIEU_CONG_CU =
   "đừng đổ cho video.";
 
 /**
+ * Ca TẠM THỜI: có nguồn hỏng kiểu thử-lại-được (TikTok trả trang chống bot, nguồn
+ * 5xx). Đợi vài phút rồi thử lại thường ĐƯỢC. Câu này CỐ Ý dặn model đừng bảo
+ * người dùng đổi dạng link: ca thật là short link app và full link desktop cùng
+ * trỏ một video, đổi qua lại vô ích - chuỗi nguồn đã tự resolve short link.
+ */
+const LOI_TAM_THOI =
+  "Nguồn tải video đang chặn tạm thời (hay gặp: trang chặn máy tự động, hoặc lỗi mạng nhất thời). " +
+  "Bảo người dùng CỨ THỬ LẠI sau vài phút, thường là được. Nói rõ đây là do NGUỒN chặn tạm thời chứ " +
+  "KHÔNG phải link sai; ĐỪNG bảo họ gửi lại link hay đổi dạng link (link ngắn hay link đầy đủ đều như nhau).";
+
+/**
+ * Ca VĨNH VIỄN: không nguồn nào còn cửa thử lại - nhiều khả năng riêng tư/đã xóa.
+ * Đừng hứa thử lại (vô ích), và vẫn đừng bảo đổi dạng link (không phải nguyên nhân).
+ */
+const LOI_VINH_VIEN =
+  "Không tải được video này - nhiều khả năng video ở chế độ riêng tư hoặc đã bị xóa. Nói thật với " +
+  "người dùng, ĐỪNG hứa thử lại sau và ĐỪNG bảo họ đổi dạng link (link ngắn hay đầy đủ đều như nhau).";
+
+/**
  * Tool tải video TikTok / Facebook rồi gửi thẳng vào hội thoại.
  *
  * ĐƯỜNG GỬI: `api.sendVideo({ videoUrl })` - bot CHỈ gửi một tin nhắn chứa đường
@@ -116,10 +135,10 @@ export function createTaiVideoTool(ctx: ToolContext, phuThuoc: PhuThuocTaiVideo 
             // hẳn "nguồn đang chặn tạm thời". Nói chung chung là người dùng đi
             // thử lại vô ích.
             if (ket.canDangNhap) return ketQuaLoi(LOI_CAN_DANG_NHAP_CHO_MODEL);
-            return ketQuaLoi(
-              "Không tải được video này. Có thể video ở chế độ riêng tư, đã bị xóa, hoặc nguồn " +
-                "đang chặn tạm thời. Nói thật với người dùng, đừng hứa thử lại sau.",
-            );
+            // Tạm thời (chống bot) và vĩnh viễn (riêng tư/đã xóa) cần lời khuyên
+            // NGƯỢC nhau: ca tạm thời thì thử lại sau là được, ca vĩnh viễn thì
+            // đừng hứa. Gộp một câu là dắt người dùng đi vòng.
+            return ketQuaLoi(ket.tamThoi ? LOI_TAM_THOI : LOI_VINH_VIEN);
           }
 
           const video = ket.video;

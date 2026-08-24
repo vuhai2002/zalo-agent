@@ -230,7 +230,7 @@ describe("tai_video - thứ tự kiểm tra rẻ trước đắt", () => {
 
 describe("tai_video - hoàn suất khi không gửi được", () => {
   it("nguồn hỏng thì KHÔNG trừ suất", async () => {
-    ketLay = { ok: false, loiChoLog: "hỏng", daThu: [], loiCauHinh: false, canDangNhap: false };
+    ketLay = { ok: false, loiChoLog: "hỏng", daThu: [], loiCauHinh: false, canDangNhap: false, tamThoi: false };
     await chay({ url: "https://www.tiktok.com/@a/video/1" });
     await chay({ url: "https://www.tiktok.com/@a/video/2" });
     await chay({ url: "https://www.tiktok.com/@a/video/3" });
@@ -282,7 +282,7 @@ describe("tai_video - hoàn suất khi không gửi được", () => {
 
 describe("tai_video - mọi nhánh hỏng đều qua ketQuaLoi", () => {
   it("nguồn hỏng: báo lỗi có dấu hiệu, KHÔNG ghi lịch sử", async () => {
-    ketLay = { ok: false, loiChoLog: "yt-dlp: gì đó", daThu: [], loiCauHinh: false, canDangNhap: false };
+    ketLay = { ok: false, loiChoLog: "yt-dlp: gì đó", daThu: [], loiCauHinh: false, canDangNhap: false, tamThoi: false };
     const ra = await chay({ url: "https://www.tiktok.com/@a/video/1" });
 
     assert.ok(loiCuaTool(ra).length > 0, "trả chuỗi trơn là tool-loop-guard không thấy lượt hỏng");
@@ -341,13 +341,62 @@ describe("tai_video - lý do CÓ KIỂU từ đường gửi không bị nuốt"
   });
 });
 
+describe("tai_video - ca TẠM THỜI vs VĨNH VIỄN nói lời khuyên NGƯỢC nhau", () => {
+  /**
+   * Ca thật (fptbongda): short link app và full link desktop cùng trỏ một video,
+   * TikWM khóa vùng + yt-dlp chống bot. Bot cũ bảo "gửi lại link đầy đủ" -> dắt
+   * người dùng đi vòng. Giờ ca tạm thời phải nói "thử lại sau", ca vĩnh viễn phải
+   * nói "đừng hứa thử lại", và CẢ HAI đừng bảo đổi dạng link.
+   */
+  it("tamThoi:true -> khuyên thử lại sau, KHÔNG bảo đổi dạng link", async () => {
+    ketLay = { ok: false, loiChoLog: "chống bot", daThu: [], loiCauHinh: false, canDangNhap: false, tamThoi: true };
+    const ra = loiCuaTool(await chay({ url: "https://vt.tiktok.com/ZSV9ocum9/" }));
+    assert.match(ra, /tạm thời/i);
+    assert.match(ra, /cứ thử lại/i, "ca chống bot: thử lại sau vài phút thường được");
+    assert.match(ra, /đều như nhau/i, "phải dặn đừng đổi dạng link - short/full cùng một video");
+  });
+
+  it("tamThoi:false -> KHÔNG hứa thử lại, cũng không bảo đổi dạng link", async () => {
+    ketLay = { ok: false, loiChoLog: "riêng tư", daThu: [], loiCauHinh: false, canDangNhap: false, tamThoi: false };
+    const ra = loiCuaTool(await chay({ url: "https://www.tiktok.com/@a/video/1" }));
+    assert.match(ra, /riêng tư|đã bị xóa/i);
+    assert.match(ra, /đừng hứa thử lại/i);
+    assert.match(ra, /đều như nhau/i, "vẫn phải dặn đừng đổi dạng link");
+  });
+
+  it("hai ca ra câu KHÁC nhau - gộp một câu là dắt người dùng đi vòng", async () => {
+    ketLay = { ok: false, loiChoLog: "x", daThu: [], loiCauHinh: false, canDangNhap: false, tamThoi: true };
+    const raTam = loiCuaTool(await chay({ url: "https://www.tiktok.com/@a/video/1" }));
+    rateLimit.resetVideoRateLimit();
+    ketLay = { ok: false, loiChoLog: "x", daThu: [], loiCauHinh: false, canDangNhap: false, tamThoi: false };
+    const raVinhVien = loiCuaTool(await chay({ url: "https://www.tiktok.com/@a/video/2" }));
+    assert.notEqual(raTam, raVinhVien, "tạm thời và vĩnh viễn cần lời khuyên ngược nhau");
+  });
+
+  it("loiCauHinh THẮNG tamThoi - thiếu yt-dlp mà kèm nguồn chặn tạm thì phải bảo CÀI, không 'thử lại'", async () => {
+    // Ca thật đồng thời: TikWM rate-limit (tamThoi:true) + máy thiếu yt-dlp
+    // (loiCauHinh:true). Người vận hành cần "cài yt-dlp", không phải "thử lại sau".
+    ketLay = { ok: false, loiChoLog: "x", daThu: [], loiCauHinh: true, canDangNhap: false, tamThoi: true };
+    const ra = loiCuaTool(await chay({ url: "https://www.tiktok.com/@a/video/1" }));
+    assert.match(ra, /yt-dlp|công cụ|cấu hình/i);
+    assert.doesNotMatch(ra, /cứ thử lại/i, "đảo thứ tự check là bệnh cấu hình bị nuốt thành 'thử lại sau'");
+  });
+
+  it("canDangNhap THẮNG tamThoi - story Facebook không tải được, đừng bảo thử lại", async () => {
+    ketLay = { ok: false, loiChoLog: "x", daThu: [], loiCauHinh: false, canDangNhap: true, tamThoi: true };
+    const ra = loiCuaTool(await chay({ url: "https://www.facebook.com/x/videos/1" }));
+    assert.match(ra, /đăng nhập|Facebook/i);
+    assert.doesNotMatch(ra, /cứ thử lại/i);
+  });
+});
+
 describe("tai_video - thiếu công cụ trên máy chủ nói KHÁC lỗi về video", () => {
   it("cờ loiCauHinh đổi hẳn câu trả lời", async () => {
-    ketLay = { ok: false, loiChoLog: "yt-dlp: thiếu", daThu: [], loiCauHinh: true, canDangNhap: false };
+    ketLay = { ok: false, loiChoLog: "yt-dlp: thiếu", daThu: [], loiCauHinh: true, canDangNhap: false, tamThoi: false };
     const raCauHinh = loiCuaTool(await chay({ url: "https://www.tiktok.com/@a/video/1" }));
 
     rateLimit.resetVideoRateLimit();
-    ketLay = { ok: false, loiChoLog: "yt-dlp: video bị xóa", daThu: [], loiCauHinh: false, canDangNhap: false };
+    ketLay = { ok: false, loiChoLog: "yt-dlp: video bị xóa", daThu: [], loiCauHinh: false, canDangNhap: false, tamThoi: false };
     const raVideo = loiCuaTool(await chay({ url: "https://www.tiktok.com/@a/video/2" }));
 
     assert.notEqual(raCauHinh, raVideo, "gộp hai ca là dắt người vận hành đi kiểm quyền riêng tư của video");

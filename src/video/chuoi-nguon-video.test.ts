@@ -167,6 +167,67 @@ describe("layVideoQuaChuoi - luật rơi tầng", () => {
   });
 });
 
+describe("layVideoQuaChuoi - cờ tamThoi phân biệt tạm thời vs vĩnh viễn", () => {
+  it("có nguồn hỏng THỬ-LẠI-ĐƯỢC -> tamThoi:true (nguồn chặn tạm, đợi là được)", async () => {
+    const a = matGia("tikwm", [HONG_THU_LAI]);
+    const b = matGia("yt-dlp", [HONG_THU_LAI]);
+    const k = await layVideoQuaChuoi("u", "tiktok", {
+      soLanThu: 2,
+      nghiMs: 0,
+      doi: KHONG_NGHI,
+      chuoi: [a.mat, b.mat],
+    });
+    assert.equal(k.ok, false);
+    if (!k.ok) assert.equal(k.tamThoi, true);
+  });
+
+  it("tất cả hỏng VĨNH VIỄN -> tamThoi:false (riêng tư/đã xóa, thử lại vô ích)", async () => {
+    const a = matGia("tikwm", [HONG_VINH_VIEN]);
+    const b = matGia("yt-dlp", [HONG_VINH_VIEN]);
+    const k = await layVideoQuaChuoi("u", "tiktok", {
+      soLanThu: 2,
+      nghiMs: 0,
+      doi: KHONG_NGHI,
+      chuoi: [a.mat, b.mat],
+    });
+    assert.equal(k.ok, false);
+    if (!k.ok) assert.equal(k.tamThoi, false);
+  });
+
+  it("MỘT nguồn vĩnh viễn + MỘT nguồn thử-lại-được -> tamThoi:true (đúng ca fptbongda thật)", async () => {
+    // Ca thật: TikWM trả "Url parsing failed" (vĩnh viễn, khóa vùng) còn yt-dlp
+    // trả "Unable to extract" (chống bot, thử-lại-được). Chỉ cần MỘT nguồn còn
+    // cửa thử lại là phải nói với người dùng "đợi rồi thử lại", không bảo bỏ cuộc.
+    const a = matGia("tikwm", [HONG_VINH_VIEN]);
+    const b = matGia("yt-dlp", [HONG_THU_LAI]);
+    const k = await layVideoQuaChuoi("u", "tiktok", {
+      soLanThu: 2,
+      nghiMs: 0,
+      doi: KHONG_NGHI,
+      chuoi: [a.mat, b.mat],
+    });
+    assert.equal(k.ok, false);
+    if (!k.ok) assert.equal(k.tamThoi, true);
+  });
+
+  it("thử-lại-được TRƯỚC + vĩnh viễn SAU -> vẫn tamThoi:true (OR tích lũy, KHÔNG last-wins)", async () => {
+    // Chiều NGƯỢC của ca trên, cố ý để khóa OR tích lũy: TikWM 5xx/rate-limit
+    // (thử-lại-được) rồi yt-dlp "Private" (vĩnh viễn). Nếu ai đổi thành gán
+    // last-wins (`tamThoi = ket.thuLaiDuoc`) thì ca này ra false SAI - còn ca
+    // fptbongda ở trên vẫn xanh, nên thiếu chiều này là lọt đúng đột biến đó.
+    const a = matGia("tikwm", [HONG_THU_LAI]);
+    const b = matGia("yt-dlp", [HONG_VINH_VIEN]);
+    const k = await layVideoQuaChuoi("u", "tiktok", {
+      soLanThu: 2,
+      nghiMs: 0,
+      doi: KHONG_NGHI,
+      chuoi: [a.mat, b.mat],
+    });
+    assert.equal(k.ok, false);
+    if (!k.ok) assert.equal(k.tamThoi, true);
+  });
+});
+
 describe("nhịp nghỉ - TikWM giới hạn 1 request/giây", () => {
   it("KHÔNG nghỉ sau lần thử CUỐI của một nguồn", async () => {
     // Nghỉ xong rồi bỏ nguồn đó đi là phí thời gian của người đang đợi, và nó
