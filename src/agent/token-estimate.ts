@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai";
+import { asSchema, type ModelMessage } from "ai";
 
 import { KY_TU_MOI_TOKEN } from "../shared/ky-tu-moi-token.js";
 
@@ -10,18 +10,22 @@ import { KY_TU_MOI_TOKEN } from "../shared/ky-tu-moi-token.js";
  * route sang model khác nữa). Kéo một tokenizer vào chỉ để rồi sai kiểu khác là
  * không đáng - xem `docs/` và ghi chú "không thêm dependency cho thứ đo được".
  *
- * Vì sao KHÔNG hiệu chỉnh được từ dữ liệu sẵn có (đã thử ngày 02/08/2026 trên
- * DB thật, 78 lượt):
- * - `agent_turns.input_tokens` là `totalUsage` - TỔNG qua mọi step của lượt,
- *   không phải kích thước context của một lần gọi.
- * - Prompt cache đang bật mặc định nên số đó có thể không gồm phần prefix đã
- *   được cache.
- * - Bảng không lưu số ký tự đầu vào nên không có vế còn lại của tỉ lệ.
+ * Vì sao BẢNG `agent_turns` không đủ để hiệu chỉnh (đã thử 02/08/2026, 78 lượt):
+ * `agent_turns.input_tokens` là `totalUsage` - TỔNG qua mọi step, không phải kích
+ * thước một lần gọi; và bảng không lưu số ký tự -> thiếu vế còn lại của tỉ lệ.
  *
- * `agent-loop.ts` ghi ước lượng cạnh số thật (`soSanhUocLuong`, dòng log "Hoàn
- * thành lượt agent", trường `uocLuong`) ở MỌI lượt - đó là đường hiệu chỉnh.
+ * ĐƯỜNG HIỆU CHỈNH (log "Hoàn thành lượt agent" ở MỌI lượt, `agent-loop.ts`):
+ * - `uocLuong.that` = `steps[0].usage.inputTokens` - trên ai@7.0.37 đây ĐÃ là
+ *   TỔNG token input (gồm cả phần đọc cache; `inputTokenDetails.{noCacheTokens,
+ *   cacheReadTokens}` chỉ là phần rã ra), nên KHÔNG cộng thêm cacheRead.
+ * - `kyTuInput` = `demKyTuInputDayDu(system, tools, messages)` - vế ký tự phủ
+ *   ĐÚNG phạm vi của `that` (system + tools schema + messages), vì `system:` và
+ *   `tools:` gửi TÁCH khỏi `messages`.
+ * Trên lượt KHÔNG ảnh (`imageMode` khác native/hybrid) và `soTinChen=0`, tỉ lệ
+ * `kyTuInput / uocLuong.that` là số ĐO ĐƯỢC để chỉnh `KY_TU_MOI_TOKEN`. Ảnh cộng
+ * token vào `that` mà không có ký tự đối ứng nên phải loại lượt có ảnh.
  *
- * Số đo tham chiếu cùng ngày: system prompt thật 5.858 ký tự; lượt nặng nhất
+ * Số đo tham chiếu 02/08/2026: system prompt thật 5.858 ký tự; lượt nặng nhất
  * từng ghi 184.835 token cộng dồn qua 8 step.
  */
 
@@ -99,6 +103,73 @@ export function uocLuongTokenTinNhan(
   let tong = 0;
   for (const t of tins) tong += uocLuongTokenTin(t, tokenMoiAnh);
   return tong;
+}
+
+/** Số ký tự văn bản của một phần nội dung (ảnh trả 0 - ảnh không phải ký tự) */
+function kyTuCuaPhan(part: unknown): number {
+  if (typeof part === "string") return part.length;
+  if (!part || typeof part !== "object") return 0;
+  const p = part as { type?: string; text?: string };
+  if (p.type === "text" && typeof p.text === "string") return p.text.length;
+  if (p.type === "file" || p.type === "image") return 0;
+  try {
+    return JSON.stringify(part)?.length ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Đếm số KÝ TỰ văn bản của cả mảng tin (ảnh trả 0). Xem `demKyTuInputDayDu`. */
+export function demKyTuTinNhan(tins: ModelMessage[]): number {
+  let tong = 0;
+  for (const t of tins) {
+    const c = t.content;
+    if (typeof c === "string") {
+      tong += c.length;
+      continue;
+    }
+    if (!Array.isArray(c)) continue;
+    for (const phan of c) tong += kyTuCuaPhan(phan);
+  }
+  return tong;
+}
+
+/**
+ * Đếm ký tự schema tools như provider NHẬN: mỗi tool = tên + mô tả + JSON schema
+ * của `inputSchema` (zod -> JSON qua `asSchema`, đúng bộ chuyển AI SDK dùng khi
+ * gửi). Đây là phần CỐ ĐỊNH lớn của input mà `messages` không có.
+ */
+export function demKyTuTools(
+  tools: Record<string, { description?: string; inputSchema?: unknown }> | null | undefined,
+): number {
+  if (!tools) return 0;
+  let tong = 0;
+  for (const [ten, t] of Object.entries(tools)) {
+    tong += ten.length + (t.description?.length ?? 0);
+    try {
+      tong += JSON.stringify(asSchema(t.inputSchema as never).jsonSchema).length;
+    } catch {
+      // schema lạ (không zod/không JSON schema) - bỏ phần schema, tên+mô tả vẫn tính
+    }
+  }
+  return tong;
+}
+
+/**
+ * Vế "ký tự" phủ ĐÚNG phạm vi mà `steps[0].usage.inputTokens` đếm: system prompt
+ * + tools schema + messages. Chia cho số token thật (`that`) trên lượt KHÔNG ảnh
+ * + `soTinChen=0` ra tỉ lệ ký-tự/token SẠCH để chỉnh `KY_TU_MOI_TOKEN`.
+ *
+ * Vì sao phải gộp cả ba: `system:` và `tools:` gửi TÁCH khỏi `messages`
+ * (`agent-loop.ts`), nên chỉ đếm `messages` thì tử số hụt hẳn system (~vài nghìn
+ * ký tự) + tools -> tỉ lệ lệch thấp một cách hệ thống.
+ */
+export function demKyTuInputDayDu(
+  systemPrompt: string,
+  tools: Record<string, { description?: string; inputSchema?: unknown }> | null | undefined,
+  messages: ModelMessage[],
+): number {
+  return systemPrompt.length + demKyTuTools(tools) + demKyTuTinNhan(messages);
 }
 
 /**

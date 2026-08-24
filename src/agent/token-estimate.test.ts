@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ModelMessage } from "ai";
+import { asSchema, type ModelMessage } from "ai";
+import { z } from "zod";
 import {
   KY_TU_MOI_TOKEN,
   TOKEN_MOI_ANH_THEO_CO,
+  demKyTuInputDayDu,
+  demKyTuTinNhan,
+  demKyTuTools,
   nganSachAnToan,
   soSanhUocLuong,
   uocLuongTokenTinNhan,
@@ -105,5 +109,67 @@ describe("soSanhUocLuong - đường hiệu chỉnh", () => {
   it("thiếu usage thật (provider không trả) thì trả null, không đoán bừa", () => {
     assert.equal(soSanhUocLuong(1_000, undefined), null);
     assert.equal(soSanhUocLuong(1_000, 0), null);
+  });
+});
+
+describe("demKyTuTinNhan - vế ký tự của messages", () => {
+  it("đếm ký tự tin dạng chuỗi", () => {
+    assert.equal(
+      demKyTuTinNhan([
+        { role: "user", content: "abcde" },
+        { role: "assistant", content: "xy" },
+      ]),
+      7,
+    );
+  });
+
+  it("tin nhiều phần: cộng text, ẢNH trả 0 (không phải ký tự)", () => {
+    const tins = [
+      { role: "user", content: [{ type: "text", text: "1234" }, { type: "image", image: "data:..." }] },
+    ] as unknown as ModelMessage[];
+    assert.equal(demKyTuTinNhan(tins), 4);
+  });
+
+  it("tool-result đếm theo độ dài JSON (tin nặng nhất không bị coi là 0)", () => {
+    const part = { type: "tool-result", toolName: "web_fetch", output: chu(100) };
+    assert.ok(demKyTuTinNhan([{ role: "assistant", content: [part] }] as unknown as ModelMessage[]) >= 100);
+  });
+});
+
+describe("demKyTuTools - ký tự schema tools (phần fixed mà messages không có)", () => {
+  const toolSet = {
+    web_fetch: { description: "Đọc trang web", inputSchema: z.object({ url: z.string() }) },
+  };
+
+  it("gộp tên + mô tả + ĐÚNG độ dài JSON schema của inputSchema", () => {
+    const n = demKyTuTools(toolSet);
+    const chiTenMoTa = "web_fetch".length + "Đọc trang web".length;
+    // Đo THẲNG schema thật rồi khẳng định ĐẲNG THỨC, không chỉ "lớn hơn tên+mô
+    // tả": ca schema hỏng thành "{}" (2 ký tự) vẫn qua được phép so `>`, nên
+    // phải chốt n = tên+mô tả + đúng độ dài schema thật thì mới bắt được.
+    const schemaThat = JSON.stringify(asSchema(toolSet.web_fetch.inputSchema).jsonSchema);
+    assert.ok(schemaThat.includes("properties") && schemaThat.includes("url"), schemaThat);
+    assert.equal(n, chiTenMoTa + schemaThat.length);
+  });
+
+  it("null/undefined tools -> 0, không ném", () => {
+    assert.equal(demKyTuTools(null), 0);
+    assert.equal(demKyTuTools(undefined), 0);
+  });
+
+  it("inputSchema lạ (không zod) vẫn tính tên+mô tả, không ném", () => {
+    const n = demKyTuTools({ x: { description: "mo ta", inputSchema: 12345 as unknown } });
+    assert.ok(n >= "x".length + "mo ta".length);
+  });
+});
+
+describe("demKyTuInputDayDu - tử số khớp phạm vi that (system + tools + messages)", () => {
+  it("bằng tổng ba vế", () => {
+    const system = chu(500);
+    const tools = { t: { description: "d", inputSchema: z.object({ a: z.string() }) } };
+    const messages: ModelMessage[] = [{ role: "user", content: "hello" }];
+    const tong = demKyTuInputDayDu(system, tools, messages);
+    assert.equal(tong, system.length + demKyTuTools(tools) + demKyTuTinNhan(messages));
+    assert.ok(tong > 500, "phải gồm cả system (500) + tools + messages");
   });
 });

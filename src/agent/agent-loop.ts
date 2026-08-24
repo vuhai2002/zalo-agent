@@ -20,6 +20,7 @@ import { nguongTheoTranStep, ToolLoopGuard } from "./tool-loop-guard.js";
 import { hasImageParts, isImageRejectionError } from "./vision-rejection-fallback.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import {
+  demKyTuInputDayDu,
   nganSachAnToan,
   soSanhUocLuong,
   TOKEN_MOI_ANH_THEO_CO,
@@ -344,6 +345,11 @@ export async function runAgentTurn({
       ? goc
       : [...goc, await dungTinChenTrongNganSach(tinChenDaKeo, imageMode, tranToken)];
 
+  // System prompt + tools ĐÃ GỬI ở lần gọi chính, bắt lại để đo ký-tự/token cuối
+  // lượt (đường hiệu chỉnh `KY_TU_MOI_TOKEN` - xem `token-estimate.ts`).
+  let heThongDaGui = "";
+  let toolSetDaGui: ReturnType<typeof buildAgentTools> | null = null;
+
   // `streamText` chứ không phải `generateText`: request non-stream buộc router
   // gom trọn câu trả lời rồi mới gửi byte đầu, mà Cloudflare trước 9Router cắt
   // bằng 524 khi byte đầu chưa tới trong 100 giây - mọi lượt sinh dài đều chết.
@@ -355,6 +361,16 @@ export async function runAgentTurn({
     // `ganTinChenVao`. `prepareStep` chỉ chèn phần tin MỚI kéo được, còn bản
     // này gom cả `tinChenDaKeo`, nên hai đường không chồng lên nhau.
     const nguCanh = await ganTinChenVao(messages);
+    // Tách `system` + `tools` ra biến để BẮT LẠI đúng thứ đã gửi, phục vụ dòng
+    // hiệu chỉnh ký-tự/token ở cuối lượt (đếm ký tự sau khi trả lời, không chặn).
+    const heThong = buildSystemPrompt(agent, latest, memory, account, isolated);
+    // Hai lớp lọc tool giao nhau: agent khai năng lực, account áp chính sách.
+    // Thêm `isolated` lọc bớt tool không hợp với lượt theo lịch (add_reaction
+    // không có msgId thật, read_image không có ảnh, save_memory chặn injection
+    // từ job) - xem runsInScheduledTurn ở tool-registry.ts
+    const toolSet = buildAgentTools({ api, account, agent, message: latest, batch, isolated, ghiNhanDaGui });
+    heThongDaGui = heThong;
+    toolSetDaGui = toolSet;
     return chayStream(
       (onError) =>
         streamText({
@@ -363,13 +379,9 @@ export async function runAgentTurn({
             threadId: latest.threadId,
             contextEpoch,
           }),
-          system: buildSystemPrompt(agent, latest, memory, account, isolated),
+          system: heThong,
           messages: nguCanh,
-          // Hai lớp lọc tool giao nhau: agent khai năng lực, account áp chính sách.
-          // Thêm `isolated` lọc bớt tool không hợp với lượt theo lịch (add_reaction
-          // không có msgId thật, read_image không có ảnh, save_memory chặn injection
-          // từ job) - xem runsInScheduledTurn ở tool-registry.ts
-          tools: buildAgentTools({ api, account, agent, message: latest, batch, isolated, ghiNhanDaGui }),
+          tools: toolSet,
           // Hai điều kiện dừng. `stepCountIs` chặn số VÒNG; điều kiện token chặn
           // KÍCH THƯỚC - kết quả tool cộng dồn qua từng step (web_fetch một mình đã
           // tới WEB_FETCH_MAX_CHARS ký tự), nên một lượt ít step vẫn phình được.
@@ -661,11 +673,16 @@ export async function runAgentTurn({
       usage: result.totalUsage,
       // Ước lượng cạnh SỐ THẬT, ghi ở MỌI lượt chứ không chỉ lượt bị cắt.
       //
-      // Đây là đường hiệu chỉnh duy nhất cho hai hằng số trong `token-estimate.ts`
-      // (ký tự/token và token mỗi ảnh): không đo được từ bảng `agent_turns` vì
-      // cột ở đó là TỔNG qua mọi step. So với `steps[0].usage.inputTokens` -
-      // step ĐẦU là lần gọi duy nhất mà input đúng bằng thứ mình vừa ước lượng,
-      // các step sau đã cộng thêm tool result mà ước lượng không thấy.
+      // Đây là đường hiệu chỉnh cho hai hằng số trong `token-estimate.ts` (ký
+      // tự/token và token mỗi ảnh): không đo được từ bảng `agent_turns` vì cột ở
+      // đó là TỔNG qua mọi step. So với step ĐẦU - lần gọi duy nhất mà input đúng
+      // bằng system + tools + messages vừa gửi (step sau đã cộng tool result).
+      //
+      // `kyTuInput` phủ ĐÚNG phạm vi `that` (system + tools schema + messages) vì
+      // `system:`/`tools:` gửi tách khỏi `messages` - chỉ đếm messages thì tử số
+      // hụt. Trên lượt KHÔNG ảnh + soTinChen=0, `kyTuInput / uocLuong.that` là tỉ
+      // lệ ký-tự/token đo được để chỉnh `KY_TU_MOI_TOKEN`.
+      kyTuInput: demKyTuInputDayDu(heThongDaGui, toolSetDaGui, messages),
       uocLuong: doLechUocLuong,
     },
     "Hoàn thành lượt agent",
