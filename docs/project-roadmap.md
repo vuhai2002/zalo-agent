@@ -6363,3 +6363,40 @@ spec + kế hoạch 7 Task, mỗi Task TDD + phá-kiểm + review Opus theo ch�
 
 - Unfriend/Block/gửi lời mời từ dashboard; cache danh sách bạn; tự thêm allowlist
   khi accept; **Threads** (yt-dlp không hỗ trợ - ghi ở V3.28).
+
+## V3.31 - Gia cố reconnect listener: chặn bão khi phiên bị thu hồi (2026-08-25)
+
+Ca thật: người dùng deploy lại, đổi mật khẩu Zalo -> Zalo thu hồi MỌI phiên ->
+cookie web của bot chết -> listener nối websocket được nhưng bị từ chối phiên
+ngay (~2ms) -> đóng -> reconnect bằng cookie chết -> **bão reconnect vô tận
+~1.8s/lần**. Đăng nhập lại thì hết. Root cause: code cũ `onConnected` reset backoff
+kể cả khi vừa nối 2ms nên bão không bao giờ lùi, và không có tín hiệu nào cho
+người vận hành biết cần re-login. KHÔNG phải lỗi tính năng Bạn bè (V3.30).
+
+### Đã làm
+
+- **File mới `reconnect-planner.ts`** - class thuần `KeHoachKetNoiLai` (tách khỏi
+  I/O để test tất định): CHỈ reset backoff khi kết nối ĐỨNG đủ lâu (`ON_DINH_MS=5s`);
+  nối chớp-tắt tính là thất bại -> backoff leo `1s->2s->...->60s` (trần). Đếm
+  chớp-tắt LIÊN TIẾP; `>=5` lần (`NGUONG_NGHI_NGO`) bật cờ `nghiNgoPhienChet`.
+- **`zalo-listener.ts`**: `onConnected` đánh dấu mốc nối; `onClosed` tính kế hoạch,
+  log cảnh báo re-login (nêu cả khả năng "phiên bị thu hồi" lẫn "dueling Zalo Web")
+  khi nghi phiên chết. Bắt `code`/`reason` của close chỉ để LOG (chưa cổng ngưỡng
+  theo mã vì chưa biết Zalo gửi mã nào khi thu hồi phiên). Timer reconnect được
+  lưu + `clearTimeout` khi stop (không treo shutdown/toggle tới 60s). Tự lên lịch
+  lại + đếm-leo-backoff nếu `start()` ném (chống vòng reconnect chết câm).
+
+### Kiểm chứng
+
+- 13 test planner, phá-kiểm gồm phép phá tái tạo ĐÚNG bug gốc (`onDinh = ketNoiLuc
+  !== null`) -> 2 test đỏ (lỗ hổng review vòng 1 chỉ ra: suite ban đầu không khóa
+  được bản sửa cốt lõi). Review Opus 3 vòng: vòng 1 (1 High test-gap + 3 Medium
+  wiring) -> vòng 2 (3 Low) -> vòng 3 SẠCH.
+- typecheck sạch, full suite 2582/2582.
+
+### Ngoài phạm vi / còn treo
+
+- `onError` vẫn log nguyên object (code cũ) - rủi ro lộ URL phiên nếu đổi log
+  serializer; chưa siết.
+- Chưa biết mã close khi thu hồi phiên vs bị web đá (3000/3003) - đã log `code`/
+  `reason` để lần sự cố tới có số, rồi mới cân nhắc cổng ngưỡng theo mã.
