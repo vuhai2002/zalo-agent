@@ -56,8 +56,17 @@ export function datKetNoiServerChoTest(fn: typeof ketNoiServer): void {
   ketNoiFn = fn;
 }
 
-/** Tool của server ĐÃ NỐI (có trong `dangNoi`) VÀ ĐÃ GÁN cho agent này. */
+/**
+ * Tool của server ĐÃ NỐI (có trong `dangNoi`) VÀ ĐÃ GÁN cho agent này.
+ *
+ * Gate `MCP_ENABLED` NGAY Ở ĐÂY, không chỉ ở `startMcpManager()`: hàm này
+ * được registry gọi MỖI LƯỢT, đọc thẳng cache RAM. Tắt công tắc qua dashboard
+ * lúc manager ĐANG chạy (đã có kết nối sẵn trong `dangNoi`) phải chặn NGAY -
+ * không gate ở đây thì kill-switch chỉ có tác dụng lúc boot, còn giữa hai lần
+ * restart nó vô dụng với đúng cái nó sinh ra để chặn.
+ */
 export function mcpToolDefinitions(agentId: string): ToolDefinition[] {
+  if (!getTuning("MCP_ENABLED")) return [];
   const daGan = new Set(serversCuaAgent(agentId));
   const ra: ToolDefinition[] = [];
   for (const [id, s] of dangNoi) if (daGan.has(id)) ra.push(...s.defs);
@@ -86,6 +95,16 @@ export function trangThaiCacServer(): { serverId: string; trangThai: TrangThaiSe
 export async function nap(id: string, luuMoc: boolean): Promise<void> {
   const cfg = layServerNoiBo(id);
   if (!cfg) return;
+  // Server TẮT: caller (`ketNoiLaiServer`/`duyetLaiDrift`) luôn `ngatServer`
+  // TRƯỚC khi gọi `nap`, mà `ngatServer` không tự đổi `trang_thai` - thiếu
+  // chặn ở đây thì PATCH tắt một server đang chạy vẫn NỐI LẠI y hệt lúc bật
+  // (đúng bug "ngắt-rồi-nối-lại"), và server tạo sẵn `enabled:false` cũng bị
+  // nối ngay dù chưa từng bật. Đặt lại `cho_ket_noi` để dashboard không hiển
+  // thị "đã kết nối" cho một server vừa bị ngắt và ở nguyên ngắt.
+  if (!cfg.enabled) {
+    datTrangThaiServer(id, "cho_ket_noi");
+    return;
+  }
   const ketNoi = await ketNoiFn({
     url: cfg.url,
     headers: cfg.headers,

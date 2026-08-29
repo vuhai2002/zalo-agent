@@ -31,20 +31,37 @@ import { wrapUntrustedContent } from "../agent/tools/wrap-untrusted-content.js";
  * CÙNG một `key`, và tool của server nối sau sẽ ÂM THẦM ĐÈ tool của server
  * nối trước trong object tools gửi model (key trùng trong `Record<string,Tool>`)
  * - một tool bị vô hiệu mà không lỗi nào báo, đúng lớp lỗi nguy hiểm nhất vì
- * im lặng. Khi chuẩn hóa có mất mát (hoặc rơi hết về rỗng), nối thêm 8 ký tự
- * đầu của `sha256(serverId)` - `serverId` luôn DUY NHẤT (`randomBytes(8).hex`,
- * xem `mcp-server-store.ts`) nên hậu tố này tách được 2 server dù tên hiển thị
- * giống hệt nhau. Tên SẠCH (chuẩn hóa không đổi gì) thì KHÔNG hash - 2 server
- * trùng tên SẠCH (vd cùng đặt "Notion") là dư số chấp nhận được ở V1, tự
- * người vận hành nhìn tên là biết trùng, không phải lớp lỗi ÂM THẦM như trên.
+ * im lặng. Tên SẠCH (chuẩn hóa không đổi gì, key không vượt trần) thì KHÔNG
+ * hash - 2 server trùng tên SẠCH (vd cùng đặt "Notion") là dư số chấp nhận
+ * được ở V1, tự người vận hành nhìn tên là biết trùng, không phải lớp lỗi ÂM
+ * THẦM như trên.
+ *
+ * `toolTen` do SERVER NGOÀI tự đặt (không phải người vận hành nhập), nên
+ * KHÔNG có gì đảm bảo nó khớp charset tên hàm mà API model chấp nhận
+ * (thường chỉ `[A-Za-z0-9_-]`, có trần độ dài quanh 64 ký tự) - thiếu lọc thì
+ * một server thật gửi tool tên có dấu cách/unicode/quá dài sẽ làm request gọi
+ * model bị provider từ chối thẳng, hỏng CẢ LƯỢT chứ không riêng tool đó. Nên
+ * `toolTen` cũng qua cùng vòng chuẩn hóa + CẮT TRẦN CẢ KEY về 64 ký tự.
+ *
+ * Khi có mất mát (server HOẶC tool) hoặc key vượt trần, nối thêm 8 ký tự đầu
+ * của `sha256(serverId + toolTen gốc)` - băm cả hai vì hai tool CÙNG serverId
+ * nhưng khác `toolTen` (vd 2 tool dài trùng tiền tố, khác đuôi) vẫn phải ra
+ * key khác nhau sau khi bị cắt cùng một tiền tố. `serverId` luôn DUY NHẤT
+ * (`randomBytes(8).hex`, xem `mcp-server-store.ts`).
  */
 export function tenToolMcp(serverTen: string, toolTen: string, serverId: string): string {
   const tenThuong = serverTen.toLowerCase();
   const slug = tenThuong.replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
-  const matMat = slug === "" || slug !== tenThuong;
   const base = slug || "server";
-  const hauTo = matMat ? `_${createHash("sha256").update(serverId).digest("hex").slice(0, 8)}` : "";
-  return `mcp__${base}${hauTo}__${toolTen}`;
+  const toolSach = toolTen.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "tool";
+  const matMat = slug === "" || slug !== tenThuong || toolSach !== toolTen;
+  let key = `mcp__${base}__${toolSach}`;
+  if (matMat || key.length > 64) {
+    const hauTo = `_${createHash("sha256").update(`${serverId}\u0000${toolTen}`).digest("hex").slice(0, 8)}`;
+    const doDaiToiDaGoc = 64 - hauTo.length;
+    key = (key.length > doDaiToiDaGoc ? key.slice(0, doDaiToiDaGoc) : key) + hauTo;
+  }
+  return key;
 }
 
 /**

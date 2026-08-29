@@ -315,6 +315,20 @@ Dashboard tab MCP --CRUD--> mcp_servers + agent_mcp_servers  (2 bảng riêng, k
 | `loi` | Lần nối gần nhất hỏng (cột `loi` chứa thông điệp) - vòng health định kỳ (`MCP_HEALTH_INTERVAL_MS`) tự thử lại |
 | `can_duyet_lai` | Bộ tool đổi so với mốc đã duyệt (drift) - KHÔNG tự nối lại, tool CŨ vẫn không được nạp cho tới khi người vận hành duyệt |
 
+### Rủi ro còn lại chưa xử (residual risk V1)
+
+- **Schema tool ngoài KHÔNG bị bọc.** `description` + `inputSchema` của mỗi
+  tool khám phá được đi thẳng vào schema gửi model (bản chất cơ chế tool -
+  không có chỗ nào để bọc như `wrapUntrustedContent` bọc KẾT QUẢ chạy tool).
+  Giảm thiểu bằng operator-trust (chỉ người vận hành tự thêm server) + drift
+  check (bắt server đổi mô tả/schema SAU khi đã duyệt), không loại được rủi ro
+  hoàn toàn.
+- **Lần nối ĐẦU TIÊN không có cổng người-duyệt.** Server mới thêm, gọi
+  `ketNoiLaiServer` lần đầu -> chưa có mốc fingerprint -> nạp tool NGAY, không
+  chờ ai xác nhận bộ tool khám phá được là đúng ý muốn. Drift check chỉ bắt
+  được THAY ĐỔI so với mốc đã duyệt, không bắt được nội dung độc hại ngay từ
+  lần khám phá đầu.
+
 ### Vì sao KHÔNG đi đường tắt
 
 Tool ngoài không có pipeline riêng - nó CHẢY QUA đúng `listAvailableTools` như

@@ -52,6 +52,17 @@ describe("mcp-routes", () => {
     assert.ok(managerGia.goi.some((g) => g.startsWith("noi:")));
   });
 
+  it("POST / enabled:false -> KHÔNG gọi ketNoiLaiServer (server tạo sẵn TẮT)", async () => {
+    const res = await app().request("/", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ten: "svr", url: "https://x/mcp", enabled: false }),
+    });
+    assert.equal(res.status, 201);
+    assert.equal(store.danhSachServer().length, 1);
+    assert.equal(managerGia.goi.length, 0);
+  });
+
   it("POST / url rỗng -> 400", async () => {
     const res = await app().request("/", {
       method: "POST",

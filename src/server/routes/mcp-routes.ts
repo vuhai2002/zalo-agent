@@ -43,14 +43,19 @@ export function createMcpRoutes(deps: McpRoutesDeps) {
       const p = taoServerSchema.safeParse(await c.req.json().catch(() => null));
       if (!p.success) return c.json({ error: "Dữ liệu không hợp lệ", issues: p.error.issues }, 400);
       const svr = taoServer(p.data);
-      void deps.manager.ketNoiLaiServer(svr.id); // nối nền, không chặn response
+      // Chỉ nối khi tạo ở trạng thái BẬT - server tạo sẵn `enabled:false` nối
+      // ngay rồi lại bị guard trong `nap()` đẩy về `cho_ket_noi` là churn thừa.
+      if (svr.enabled) void deps.manager.ketNoiLaiServer(svr.id); // nối nền, không chặn response
       return c.json({ server: svr }, 201);
     })
     .patch("/:id", async (c) => {
       const p = suaServerSchema.safeParse(await c.req.json().catch(() => null));
       if (!p.success) return c.json({ error: "Dữ liệu không hợp lệ", issues: p.error.issues }, 400);
       capNhatServer(c.req.param("id"), p.data);
-      void deps.manager.ketNoiLaiServer(c.req.param("id")); // đổi url/headers/enabled -> nối nền lại
+      // Giữ nguyên gọi vô điều kiện: đổi url/headers/enabled đều cần nối lại,
+      // và ca tắt (`enabled:false`) đã được guard trong `nap()` tự xử (ngắt rồi
+      // KHÔNG nối lại) - route này không cần biết server vừa tắt hay chưa.
+      void deps.manager.ketNoiLaiServer(c.req.param("id"));
       return c.json({ ok: true });
     })
     .delete("/:id", async (c) => {

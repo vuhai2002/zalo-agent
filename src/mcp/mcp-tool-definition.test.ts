@@ -39,6 +39,26 @@ describe("mcp-tool-definition", () => {
     assert.notEqual(k1, k2);
   });
 
+  it("toolTen có dấu cách/unicode -> key chỉ [A-Za-z0-9_-], <= 64 ký tự", () => {
+    const key = tenToolMcp("Notion", "tra cứu dữ liệu!", "s1");
+    assert.match(key, /^[A-Za-z0-9_-]+$/);
+    assert.ok(key.length <= 64);
+  });
+
+  it("toolTen rất dài -> key CẮT TRẦN <= 64 ký tự", () => {
+    const key = tenToolMcp("Notion", "a".repeat(100), "s1");
+    assert.ok(key.length <= 64, `key dài ${key.length}`);
+    assert.match(key, /^[A-Za-z0-9_-]+$/);
+  });
+
+  it("2 toolTen dài trùng 60 ký tự đầu, khác đuôi -> key KHÁC NHAU (hash phân biệt sau khi cắt)", () => {
+    const tienTo = "x".repeat(60);
+    const k1 = tenToolMcp("Notion", `${tienTo}AAAA`, "s1");
+    const k2 = tenToolMcp("Notion", `${tienTo}BBBB`, "s1");
+    assert.notEqual(k1, k2);
+    assert.ok(k1.length <= 64 && k2.length <= 64);
+  });
+
   it("trichVanBanKetQuaMcp xử 3 dạng + null/undefined -> rỗng", () => {
     assert.equal(trichVanBanKetQuaMcp("x"), "x");
     assert.equal(trichVanBanKetQuaMcp({ content: [{ type: "text", text: "a" }] }), "a");

@@ -52,6 +52,27 @@ describe("mcp-manager", () => {
     assert.equal(store.danhSachServer().find((x) => x.id === s.id)?.trangThai, "da_ket_noi");
   });
 
+  it("server enabled:false -> ketNoiLaiServer KHÔNG nạp tool, trạng thái cho_ket_noi", async () => {
+    mgr.datKetNoiServerChoTest(connectGia(["tra_cuu"]) as never);
+    const s = store.taoServer({ ten: "tat", url: "https://x/mcp", enabled: false });
+    binding.datServerChoAgent("a1", [s.id]);
+    await mgr.ketNoiLaiServer(s.id);
+    assert.deepEqual(mgr.mcpToolDefinitions("a1"), []);
+    assert.equal(store.danhSachServer().find((x) => x.id === s.id)?.trangThai, "cho_ket_noi");
+  });
+
+  it("server đang nối -> capNhatServer tắt -> ketNoiLaiServer -> NGẮT, không tự nối lại", async () => {
+    mgr.datKetNoiServerChoTest(connectGia(["tra_cuu"]) as never);
+    const s = store.taoServer({ ten: "svr", url: "https://x/mcp" });
+    binding.datServerChoAgent("a1", [s.id]);
+    await mgr.ketNoiLaiServer(s.id);
+    assert.equal(mgr.mcpToolDefinitions("a1").length, 1, "phải nối được trước khi tắt");
+    store.capNhatServer(s.id, { enabled: false });
+    await mgr.ketNoiLaiServer(s.id); // mirror route PATCH: đổi enabled -> gọi lại
+    assert.deepEqual(mgr.mcpToolDefinitions("a1"), [], "PATCH tắt không được ngắt-rồi-nối-lại");
+    assert.equal(store.danhSachServer().find((x) => x.id === s.id)?.trangThai, "cho_ket_noi");
+  });
+
   it("drift so mốc -> can_duyet_lai, KHÔNG nạp tool", async () => {
     mgr.datKetNoiServerChoTest(connectGia(["tra_cuu"]) as never);
     const s = store.taoServer({ ten: "svr", url: "https://x/mcp" });
@@ -116,6 +137,20 @@ describe("mcp-manager", () => {
       assert.equal(typeof stop, "function");
       assert.doesNotThrow(() => stop());
       assert.equal(store.danhSachServer().find((x) => x.id === s.id)?.trangThai, "cho_ket_noi");
+    } finally {
+      tuning.setTuning("MCP_ENABLED", null);
+    }
+  });
+
+  it("MCP_ENABLED=false LÚC ĐỌC (không chỉ lúc boot) -> mcpToolDefinitions rỗng dù đã nối", async () => {
+    mgr.datKetNoiServerChoTest(connectGia(["tra_cuu"]) as never);
+    const s = store.taoServer({ ten: "svr", url: "https://x/mcp" });
+    binding.datServerChoAgent("a1", [s.id]);
+    await mgr.ketNoiLaiServer(s.id);
+    assert.equal(mgr.mcpToolDefinitions("a1").length, 1, "phải nối được trước khi tắt công tắc");
+    tuning.setTuning("MCP_ENABLED", false);
+    try {
+      assert.deepEqual(mgr.mcpToolDefinitions("a1"), [], "kill-switch phải chặn NGAY, không cần restart");
     } finally {
       tuning.setTuning("MCP_ENABLED", null);
     }
