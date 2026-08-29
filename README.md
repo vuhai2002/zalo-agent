@@ -147,6 +147,26 @@ nội bộ, FAQ.
   cứng event loop **38,09 giây** trên một bom XML 1,7 KB nén (ReDoS bậc hai). Số đó nằm trong test
   hồi quy
 
+### MCP client (cắm server ngoài)
+
+Bot làm MCP **client**: cắm các server MCP bên ngoài (chỉ transport HTTP, không stdio - VPS hạn
+chế chạy lệnh tùy ý) để agent tự khám phá và gọi tool của chúng, xếp chồng lên 15 công cụ built-in.
+
+- **Gán theo từng agent, mặc định TẮT** (default-deny): phải gán server cho agent cụ thể trên
+  dashboard, agent chưa gán không thấy tool ngoài nào - người lạ chat với agent chưa cấu hình
+  không chạm được tool ngoài
+- Kết quả tool ngoài bọc như **nội dung không tin cậy**, cùng hàng rào với `web_fetch`; nhánh hỏng
+  không ném lỗi ra ngoài
+- Header xác thực (token, API key server MCP) mã hóa **AES-256-GCM** như mọi secret khác trong dự án
+- **Fingerprint drift**: chụp "dấu vân tay" bộ tool lúc người vận hành duyệt - server đổi tool
+  ngầm sau đó thì rơi về trạng thái "chờ duyệt lại", không nạp tool cho tới khi duyệt lại
+- Mọi tool ngoài xếp nhóm `action` (không tin annotation server tự khai) và bị loại khỏi lượt chạy
+  theo lịch
+- `MCP_ENABLED` là kill-switch runtime - tắt trên dashboard là chặn ngay, không cần xóa từng gán
+
+Quản lý ở tab **MCP** trên dashboard. Sơ đồ kiến trúc đầy đủ:
+[`docs/mcp-client-architecture.html`](docs/mcp-client-architecture.html).
+
 ### Lịch hẹn (agent tự nhắn)
 
 Ba loại lịch: `once`, `every`, `cron`. Đặt bằng lời ngay trong chat hoặc trên dashboard.
@@ -182,13 +202,14 @@ Hono + React + Tailwind, phục vụ ngay từ chính tiến trình agent tại 
 | Kho tri thức | Nạp tài liệu (upload hoặc gõ tay), xem đoạn đã cắt, gán nguồn cho từng agent để `kb_search` tra |
 | Lịch hẹn | Danh sách lịch, chạy thử ngay, lịch sử từng lần chạy |
 | Tools | Bật/tắt 15 công cụ theo account, cấu hình vẽ ảnh và model vision. Chọn một account bot thì công cụ nền tảng không hỗ trợ hiện rõ lý do |
-| Cấu hình | **66 tham số** vận hành chỉnh nóng, không cần khởi động lại, chia 12 nhóm |
+| MCP | Thêm/sửa/xóa MCP server ngoài (chỉ HTTP), gán server cho từng agent (mặc định tắt), duyệt lại khi bộ tool đổi (drift) |
+| Cấu hình | **70 tham số** vận hành chỉnh nóng, không cần khởi động lại, chia 13 nhóm |
 | Trace | Xem lại từng bước của một lượt agent: model nghĩ gì, gọi tool nào, tham số ra sao |
 | Logs | Nhật ký hệ thống |
 
-12 nhóm cấu hình: Nhà cung cấp LLM, Chung, Lượt trả lời (9), Ngữ cảnh & Trí nhớ (6), Tra cứu web
+13 nhóm cấu hình: Nhà cung cấp LLM, Chung, Lượt trả lời (9), Ngữ cảnh & Trí nhớ (6), Tra cứu web
 (2), Tạo file Word/Excel (5), Tải video (6), Vẽ ảnh (4), Gửi tin trên Zalo (11), Trace và dọn dẹp (4), Lịch hẹn
-(9), Kho tri thức (9).
+(9), Kho tri thức (9), MCP server ngoài (4).
 
 Thứ tự ưu tiên cấu hình ở mọi nơi: **dashboard (DB) > `.env` > mặc định trong schema**. Thiếu cấu
 hình LLM không chặn boot - phải vào được dashboard mới nhập được.
@@ -313,7 +334,7 @@ TRÙM code cũ.
 
 ```
 src/
-├── config/        env (Zod), account store, agent store, 66 tham số chỉnh nóng
+├── config/        env (Zod), account store, agent store, 70 tham số chỉnh nóng
 ├── zalo/          [kênh CÁ NHÂN] login QR, credential mã hóa, listener + reconnect, parse tin,
 │                  lớp làm sạch + dịch markdown sang định dạng Zalo, cắt tin theo byte,
 │                  trừu tượng hóa năng lực kênh (KenhLuot)
@@ -326,6 +347,8 @@ src/
 ├── documents/     dựng .docx / .xlsx
 ├── knowledge/     Kho tri thức - đọc docx/xlsx/pdf/txt/md an toàn (SAX + trần
 │                  chống zip bomb), cắt đoạn, FTS5+RRF, worker thread trích xuất
+├── mcp/           MCP client: cắm MCP server ngoài (chỉ HTTP), gán theo agent (default-deny),
+│                  fingerprint drift khi server đổi tool ngầm
 ├── images/        vẽ ảnh, model vision phụ
 └── server/        dashboard API (Hono)
 web/               dashboard UI (React + Vite + Tailwind)
@@ -337,6 +360,8 @@ docs/              kiến trúc, roadmap, hướng dẫn phát hành
 
 - [Kiến trúc hệ thống](docs/system-architecture.md) - thiết kế và lý do từng quyết định kỹ thuật,
   gồm cả bảng đo thật của Zalo Bot API (hình dạng lỗi, giới hạn, method nào tồn tại)
+- [Kiến trúc MCP client](docs/mcp-client-architecture.html) - sơ đồ dashboard -> model, 2 cửa
+  default-deny, fingerprint drift. Mở bằng trình duyệt
 - [Triển khai lên máy chủ](docs/deployment-guide.md) - Docker, reverse proxy, backup, gỡ rối
 - [Dựng máy chủ lần đầu](docs/vps-setup-checklist.md) - user, tường lửa, cron, backup
 - [Roadmap](docs/project-roadmap.md) - toàn bộ lịch sử: lỗi đã gặp, cách đo, quyết định đã chốt và

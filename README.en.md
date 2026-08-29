@@ -157,6 +157,30 @@ lists, internal guides, FAQs.
   blocking the event loop for **38.09 seconds** on a 1.7 KB compressed XML bomb (quadratic ReDoS).
   That number is pinned in a regression test
 
+### MCP client (plug in external servers)
+
+The bot is an MCP **client**: it connects to external MCP servers (HTTP transport only, no stdio -
+the VPS restricts running arbitrary commands) so the agent can discover and call their tools,
+stacked on top of the 15 built-in tools.
+
+- **Assigned per agent, default OFF** (default-deny): a server must be explicitly assigned to an
+  agent from the dashboard; an unassigned agent sees no external tools at all - a stranger chatting
+  with an unconfigured agent never reaches an external tool
+- External tool output is wrapped as **untrusted content**, the same guard as `web_fetch`; a failed
+  call never throws
+- Auth headers (tokens, API keys for the MCP server) are encrypted with **AES-256-GCM**, like every
+  other secret in the project
+- **Fingerprint drift**: a fingerprint of the tool set is captured when the operator approves a
+  server - if it silently changes its tools afterward, the server drops into a "needs re-approval"
+  state and no tool loads until the operator re-approves
+- Every external tool is treated as the `action` group (the server's own annotations are not
+  trusted) and excluded from scheduled turns
+- `MCP_ENABLED` is a runtime kill switch - disabling it in the dashboard blocks everything
+  immediately, no need to remove each assignment
+
+Managed from the **MCP** tab in the dashboard. Full architecture diagram:
+[`docs/mcp-client-architecture.html`](docs/mcp-client-architecture.html).
+
 ### Scheduling (the agent messages you)
 
 Three kinds: `once`, `every`, `cron`. Created from chat in plain language, or from the dashboard.
@@ -192,7 +216,8 @@ Hono + React + Tailwind, served by the agent process itself at `http://127.0.0.1
 | Knowledge base | Upload documents or type them in, inspect the chunks, assign sources per agent for `kb_search` |
 | Schedule | All jobs, dry-run now, per-run history |
 | Tools | Toggle the 15 tools per account; configure image generation and the vision sidecar. Picking a bot account shows exactly why a platform-blocked tool is unavailable |
-| Tuning | **66 runtime parameters** in 12 groups, applied live with no restart |
+| MCP | Add/edit/remove external MCP servers (HTTP only), assign servers per agent (default off), re-approve when the tool set drifts |
+| Tuning | **70 runtime parameters** in 13 groups, applied live with no restart |
 | Trace | Step-by-step replay of an agent turn: reasoning, tool calls, arguments |
 | Logs | System log viewer |
 
@@ -315,7 +340,7 @@ that it *covers* the old one.
 
 ```
 src/
-├── config/        env (Zod), account store, agent store, 60 live-tunable parameters
+├── config/        env (Zod), account store, agent store, 70 live-tunable parameters
 ├── zalo/          [PERSONAL channel] QR login, encrypted credentials, listener + reconnect,
 │                  message parsing, sanitizer, markdown -> Zalo styles, byte-budget splitting,
 │                  channel capability abstraction (KenhLuot)
@@ -328,6 +353,8 @@ src/
 ├── documents/     .docx / .xlsx generation
 ├── knowledge/     Knowledge base - safe docx/xlsx/pdf/txt/md reading (streaming SAX +
 │                  zip-bomb caps), chunking, FTS5+RRF search, worker-thread extraction
+├── mcp/           MCP client: connect external MCP servers (HTTP only), per-agent default-deny,
+│                  fingerprint drift detection
 ├── images/        image generation, vision sidecar
 └── server/        dashboard API (Hono)
 web/               dashboard UI (React + Vite + Tailwind)
@@ -339,6 +366,8 @@ docs/              architecture, roadmap, release guide
 
 - [System architecture](docs/system-architecture.md) - including the measured Zalo Bot API tables
   (error shape, limits, which methods actually exist)
+- [MCP client architecture](docs/mcp-client-architecture.html) - dashboard-to-model flow, 2-gate
+  default-deny, fingerprint drift. Open in a browser
 - [Deployment guide](docs/deployment-guide.md) - Docker, reverse proxy, backup, troubleshooting
 - [First-time VPS setup](docs/vps-setup-checklist.md) - user, firewall, cron, backup
 - [Roadmap](docs/project-roadmap.md) - the full history: bugs hit, how they were measured,

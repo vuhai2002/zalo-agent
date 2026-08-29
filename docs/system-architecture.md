@@ -18,7 +18,7 @@ Zalo Bot API <--long polling--> src/zalo-bot/                  [kênh BOT]
                                 |                  lời gọi LLM đi qua chayStream, KHÔNG còn
                                 |                  generateText ở đâu cả; provider theo cấu
                                 |                  hình: openai-compatible / Anthropic / Google)
-              tools: 14 cái; kênh bot chặn 7 (xem "Kênh thứ hai")
+              tools: 15 built-in + tool từ MCP ngoài (theo agent); kênh bot chặn 8 (xem "Kênh thứ hai")
                                 |
               middleware: rate-limiter (queue per thread + delay ngẫu nhiên) -> sendMessage
                                 |
@@ -281,7 +281,7 @@ Dashboard tab MCP --CRUD--> mcp_servers + agent_mcp_servers  (2 bảng riêng, k
                                 |                      tránh vòng import + mở SQLite sớm)
               tool-registry.ts: listAvailableTools GỘP [...TOOL_DEFINITIONS, ...tool ngoài]
                                 |                      (KHÔNG đường tắt - thừa hưởng MỌI bộ lọc)
-                    agent-loop.ts   (model tự gọi tool ngoài y như 14 tool nội bộ)
+                    agent-loop.ts   (model tự gọi tool ngoài y như 15 tool nội bộ)
 ```
 
 ### Bảo mật (2 cửa default-deny + không tin nội dung trả về)
@@ -332,7 +332,7 @@ Dashboard tab MCP --CRUD--> mcp_servers + agent_mcp_servers  (2 bảng riêng, k
 ### Vì sao KHÔNG đi đường tắt
 
 Tool ngoài không có pipeline riêng - nó CHẢY QUA đúng `listAvailableTools` như
-14 tool nội bộ khác, nên tự động thừa hưởng mọi hàng rào sẵn có: tắt theo
+15 tool nội bộ khác, nên tự động thừa hưởng mọi hàng rào sẵn có: tắt theo
 agent/account, loại khỏi lượt chạy theo lịch hẹn, giới hạn theo loại kênh (bot
 chính thức). Đổi lại, `tool-registry.ts` **KHÔNG được import thẳng**
 `mcp-manager.ts` (chỉ qua provider thuần `mcp-tool-provider.ts`) - import thẳng
@@ -396,8 +396,8 @@ Found","error_code":404}`. Không có `sendDocument`/`sendFile`/`sendVideo`/
 `sendAudio`, cũng không có `editMessageText`/`deleteMessage`/
 `setMessageReaction`/`forwardMessage`/`getChat`/`getChatMember`.
 
-Bị chặn (7): `send_file`, `create_word_document`, `create_excel_file`,
-`create_image`, `add_reaction`, `tag_member`, `get_group_info`.
+Bị chặn (8): `send_file`, `create_word_document`, `create_excel_file`,
+`create_image`, `tai_video`, `add_reaction`, `tag_member`, `get_group_info`.
 
 Chạy được (7): `get_datetime`, `web_search`, `web_fetch`, `kb_search`,
 `save_memory`, `read_image`, `schedule_task`.

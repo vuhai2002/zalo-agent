@@ -2,7 +2,7 @@
   "name": "zalo-agent",
   "version": "0.1.0",
   "private": true,
-  "description": "Bot AI thường trú trên Zalo cá nhân, đa tài khoản: agent loop tự gọi tool, dashboard web, lịch hẹn, trí nhớ bền, tin nhắn có định dạng. Self-hosted, provider-agnostic.",
+  "description": "Bot AI thường trú trên Zalo cá nhân, đa tài khoản: agent loop tự gọi tool (kể cả tool từ MCP server ngoài), dashboard web, lịch hẹn, trí nhớ bền, tin nhắn có định dạng. Self-hosted, provider-agnostic.",
   "keywords": [
     "zalo",
     "zalo-bot",
@@ -14,6 +14,8 @@
     "vietnamese",
     "tool-calling",
     "function-calling",
+    "mcp",
+    "model-context-protocol",
     "vercel-ai-sdk",
     "openai-compatible",
     "anthropic",
