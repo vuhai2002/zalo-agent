@@ -3,6 +3,7 @@ import { getEffectiveLlmSettings } from "./config/runtime-llm-settings.js";
 import { closeHistoryStore } from "./conversation/history-store.js";
 import { startMediaCleanupSchedule } from "./conversation/media-store.js";
 import { batDauWorker as batDauKbIngestWorker } from "./knowledge/kb-ingest-worker.js";
+import { startMcpManager } from "./mcp/mcp-manager.js";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler-loop.js";
 import { startDashboardServer, stopDashboardServer } from "./server/dashboard-server.js";
 import { createLogger } from "./shared/logger.js";
@@ -38,6 +39,7 @@ let shuttingDown = false;
 // `undefined`.
 let stopKbIngestWorker: () => void = () => {};
 let stopFriendSweep: () => void = () => {};
+let stopMcpManager: () => void = () => {};
 function shutdown(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -45,6 +47,7 @@ function shutdown(signal: string): void {
   stopScheduler();
   stopFriendSweep();
   stopKbIngestWorker();
+  stopMcpManager();
   stopDashboardServer();
   stopAllAccounts();
   closeHistoryStore();
@@ -82,6 +85,11 @@ startTempFileCleanupSchedule();
 // thì người vận hành vẫn phải vào được dashboard để xóa nó. Đảo lại thứ tự là
 // tự khoá đường chữa của chính mình.
 startDashboardServer();
+
+// MCP manager cùng nhóm quản trị với dashboard (nối server ngoài do người vận
+// hành khai trên trang Cấu hình) - server MCP hỏng KHÔNG chặn boot vì
+// startMcpManager() tự bọc lỗi từng server bên trong, không ném ra ngoài.
+stopMcpManager = startMcpManager();
 
 // Vòng xử lý nền Kho tri thức: cắt đoạn tài liệu vừa nạp, KHÔNG chặn request
 // upload (xem đầu file kb-ingest-worker.ts). Tự gỡ mọi nguồn kẹt ở dang_xu_ly

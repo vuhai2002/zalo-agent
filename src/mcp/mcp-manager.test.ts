@@ -126,4 +126,21 @@ describe("mcp-manager", () => {
     assert.equal(typeof stop, "function");
     assert.doesNotThrow(() => stop());
   });
+
+  it("duyetLaiDrift gọi đồng thời 2 lần cùng id không mở 2 kết nối", async () => {
+    let soLanNoi = 0;
+    mgr.datKetNoiServerChoTest((async () => {
+      soLanNoi += 1;
+      return connectGia(["tra_cuu"])();
+    }) as never);
+    const s = store.taoServer({ ten: "svr", url: "https://x/mcp" });
+    await mgr.ketNoiLaiServer(s.id); // nối lần đầu để có handle đang mở
+    soLanNoi = 0; // chỉ đếm từ đây, không tính lần nối ban đầu ở trên
+    // Gọi 2 lần KHÔNG await riêng lẻ - cả hai chạy đồng bộ tới await đầu tiên
+    // trước khi microtask nào kịp chạy, đúng hình dạng double-click nút "Duyệt
+    // lại" trên dashboard.
+    await Promise.all([mgr.duyetLaiDrift(s.id), mgr.duyetLaiDrift(s.id)]);
+    assert.equal(soLanNoi, 1, "chốt dangNap phải chặn lượt gọi đồng thời thứ 2, không mở 2 handle");
+    assert.equal(store.danhSachServer().find((x) => x.id === s.id)?.trangThai, "da_ket_noi");
+  });
 });

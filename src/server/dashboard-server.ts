@@ -30,6 +30,7 @@ import { scheduleRoutes } from "./routes/schedule-routes.js";
 import { threadRoutes } from "./routes/thread-routes.js";
 import { imageRoutes } from "./routes/image-routes.js";
 import { kbRoutes } from "./routes/kb-routes.js";
+import { mcpRoutes } from "./routes/mcp-routes.js";
 import { toolRoutes } from "./routes/tool-routes.js";
 import { traceRoutes } from "./routes/trace-routes.js";
 import { tuningRoutes } from "./routes/tuning-routes.js";
@@ -174,6 +175,7 @@ export function buildDashboardApp(): Hono {
   app.route("/api/logs", logRoutes);
   app.route("/api/schedule", scheduleRoutes);
   app.route("/api/kb", kbRoutes);
+  app.route("/api/mcp", mcpRoutes);
 
   // API không khớp route nào phải trả JSON 404, không được rơi xuống SPA
   // fallback bên dưới (client fetch JSON mà nhận HTML thì lỗi rất khó đọc)
