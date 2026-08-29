@@ -4,6 +4,16 @@ import { IconTrash } from "../shared/dashboard-icons";
 export type HeaderRow = { key: string; value: string };
 
 /**
+ * Ví dụ placeholder xoay theo từng dòng: dòng đầu cho thấy kiểu Bearer token
+ * (hay gặp nhất), dòng sau cho thấy kiểu header API key tự đặt - để người dùng
+ * hiểu ngay đây là cặp tên/giá trị và có nhiều kiểu, không phải chỉ Authorization.
+ */
+const VI_DU_HEADER: HeaderRow[] = [
+  { key: "Authorization", value: "Bearer sk-abc123def456..." },
+  { key: "X-API-Key", value: "key_live_xxxxxxxxxxxx" },
+];
+
+/**
  * Danh sách header xác thực (Authorization, X-Api-Key...) dạng nhiều dòng
  * key/value, dùng trong `mcp-server-form-modal.tsx`.
  *
@@ -65,26 +75,32 @@ export function McpHeaderFields({
 
       {rows.length === 0 && !hasSavedHeaders && (
         <p className="text-[12px] text-ink-soft">
-          Không bắt buộc - chỉ cần nếu server yêu cầu xác thực (vd Authorization)
+          Không bắt buộc - chỉ điền nếu server yêu cầu xác thực. Ví dụ token:{" "}
+          <code className="rounded bg-tile px-1 py-0.5 text-[11px]">Authorization: Bearer sk-abc123def456...</code>
         </p>
       )}
 
       {rows.length > 0 && (
         <div className="space-y-2">
-          {rows.map((r, i) => (
+          <p className="text-[12px] text-ink-soft">
+            Ô trái là tên header, ô phải là giá trị (token/khóa) - server cần header gì thì ghi trong tài liệu của nó.
+          </p>
+          {rows.map((r, i) => {
+            const viDu = VI_DU_HEADER[i % VI_DU_HEADER.length]!;
+            return (
             <div key={i} className="flex items-center gap-2">
               <input
                 className="gc-input w-32 shrink-0"
                 value={r.key}
                 onChange={(e) => setRow(i, { key: e.target.value })}
-                placeholder="Authorization"
+                placeholder={viDu.key}
                 maxLength={200}
               />
               <SecretInput
                 className="min-w-0 flex-1"
                 value={r.value}
                 onChange={(value) => setRow(i, { value })}
-                placeholder="Bearer ..."
+                placeholder={viDu.value}
               />
               <button
                 type="button"
@@ -95,7 +111,8 @@ export function McpHeaderFields({
                 <IconTrash size={15} />
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
