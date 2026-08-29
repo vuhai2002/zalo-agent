@@ -27,13 +27,13 @@
 
 | # | Phase | Deliverable kiểm được | Trạng thái |
 |---|---|---|---|
-| 01 | [Phụ thuộc + config + lược đồ DB](phase-01-phu-thuoc-va-luoc-do.md) | `@ai-sdk/mcp` cài xong, typecheck sạch; config `MCP_*` (env+tuning); hai bảng `mcp_servers`+`agent_mcp_servers` tạo được | [ ] Chưa làm |
-| 02 | [Store + gán per-agent](phase-02-store-va-binding.md) | CRUD server (header mã hóa) + gán/dọn theo agent (default-deny) | [ ] Chưa làm |
-| 03 | [ToolDefinition + drift](phase-03-tool-definition-va-drift.md) | 1 tool MCP thành ToolDefinition có canh: namespace, available theo gán, bọc kết quả, ketQuaLoi, recheck; fingerprint drift | [ ] Chưa làm |
-| 04 | [Kết nối + manager](phase-04-ket-noi-va-manager.md) | Nối 1 server HTTP giả, khám phá tool, dựng def qua Phase 03, health/reconnect, cache | [ ] Chưa làm |
-| 05 | [Ghép vào agent loop](phase-05-ghep-agent-loop.md) | `buildAgentTools` gộp tool ngoài; chỉ hiện cho agent được gán; tôn trọng disable/isolated | [ ] Chưa làm |
-| 06 | [Dashboard backend + lifecycle](phase-06-dashboard-backend.md) | `/api/mcp` (CRUD, gán, trạng thái, test-connect, duyệt-lại drift); manager start ở boot; dọn khi xóa agent/account | [ ] Chưa làm |
-| 07 | [Dashboard frontend + docs](phase-07-frontend-va-docs.md) | Tab React quản server + gán agent + duyệt-lại drift; cập nhật docs | [ ] Chưa làm |
+| 01 | [Phụ thuộc + config + lược đồ DB](phase-01-phu-thuoc-va-luoc-do.md) | `@ai-sdk/mcp` cài xong, typecheck sạch; config `MCP_*` (env+tuning); hai bảng `mcp_servers`+`agent_mcp_servers` tạo được | [x] Xong (e1dfc50) |
+| 02 | [Store + gán per-agent](phase-02-store-va-binding.md) | CRUD server (header mã hóa) + gán/dọn theo agent (default-deny) | [x] Xong (d6d7581) |
+| 03 | [ToolDefinition + drift](phase-03-tool-definition-va-drift.md) | 1 tool MCP thành ToolDefinition có canh: namespace, available theo gán, bọc kết quả, ketQuaLoi, recheck; fingerprint drift | [x] Xong (2b749ae) |
+| 04 | [Kết nối + manager](phase-04-ket-noi-va-manager.md) | Nối 1 server HTTP giả, khám phá tool, dựng def qua Phase 03, health/reconnect, cache | [x] Xong (54315c9) |
+| 05 | [Ghép vào agent loop](phase-05-ghep-agent-loop.md) | `buildAgentTools` gộp tool ngoài; chỉ hiện cho agent được gán; tôn trọng disable/isolated | [x] Xong (215d4c8) |
+| 06 | [Dashboard backend + lifecycle](phase-06-dashboard-backend.md) | `/api/mcp` (CRUD, gán, trạng thái, test-connect, duyệt-lại drift); manager start ở boot; dọn khi xóa agent/account | [x] Xong (4abf20d) |
+| 07 | [Dashboard frontend + docs](phase-07-frontend-va-docs.md) | Tab React quản server + gán agent + duyệt-lại drift; cập nhật docs | [x] Xong (fd4f126) |
 
 ## Thứ tự phụ thuộc
 
