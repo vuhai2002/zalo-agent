@@ -13,6 +13,7 @@ import { ContactsPage } from "./pages/contacts-page";
 import { FriendsPage } from "./pages/friends-page";
 import { KnowledgePage } from "./pages/knowledge-page";
 import { LoginPage } from "./pages/login-page";
+import { McpPage } from "./pages/mcp-page";
 import { MemoryPage } from "./pages/memory-page";
 import { OverviewPage } from "./pages/overview-page";
 import { SchedulePage } from "./pages/schedule-page";
@@ -128,6 +129,7 @@ function DashboardShell() {
             <Route path={DUONG_DAN_TAO} element={<AgentCreatePage />} />
             <Route path="/agents/:id" element={<AgentDetailPage />} />
             <Route path="/tools" element={<ToolsPage />} />
+            <Route path="/mcp" element={<McpPage />} />
             <Route path="/trace" element={<TracePage />} />
             {/* Nhóm nằm trên URL để link thẳng vào được (banner "Chưa cấu hình
                 LLM" ở Overview trỏ tới /tuning/providers). Không có :nhom thì

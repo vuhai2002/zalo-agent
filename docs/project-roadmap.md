@@ -1335,7 +1335,7 @@ Rà 29 tham số: tất cả đều đọc LẠI mỗi lần dùng (trong hàm h
 - [ ] `src/knowledge/` - RAG/knowledge base trả lời theo tài liệu riêng
 - [ ] Lệnh điều khiển trong chat (/bot off, /clear) - thêm file trong middleware/
 - [ ] Voice message STT - thêm bước trong zalo-message-parser
-- [ ] `src/mcp/` - MCP client: cắm MCP server ngoài vào cho agent tự dùng tool của chúng (HTTP-only, gán per-agent default-deny, bọc kết quả không tin cậy, fingerprint drift). Thiết kế: `docs/mcp-client-architecture.html`
+- [x] ~~`src/mcp/` - MCP client: cắm MCP server ngoài vào cho agent tự dùng tool của chúng (HTTP-only, gán per-agent default-deny, bọc kết quả không tin cậy, fingerprint drift). Thiết kế: `docs/mcp-client-architecture.html`~~ - xem mục V3.32: code + tab dashboard xong, typecheck/build sạch, CHƯA nghiệm thu tool ngoài thật trên Zalo
 - [ ] Deploy VPS (Docker + Caddy theo pattern ship-to-vps) - dashboard đứng sau Caddy
 
 ## V3 - Không làm (quyết định có chủ đích)
@@ -6400,3 +6400,73 @@ người vận hành biết cần re-login. KHÔNG phải lỗi tính năng Bạ
   serializer; chưa siết.
 - Chưa biết mã close khi thu hồi phiên vs bị web đá (3000/3003) - đã log `code`/
   `reason` để lần sự cố tới có số, rồi mới cân nhắc cổng ngưỡng theo mã.
+
+## V3.32 - MCP client: cắm MCP server ngoài, agent tự dùng tool (2026-08-29, plan: plans/260829-0726-mcp-client-cam-mcp-ngoai/)
+
+Bot làm MCP **client** (không phải server) - nối RA các server MCP bên ngoài,
+cho agent dùng tool của chúng như tool nội bộ. 7 phase (subagent-driven
+development: mỗi phase implementer TDD + phá-kiểm rồi review Opus theo chặng,
+ít nhất 1 vòng fix trước khi commit sạch - trừ P05). Spec khóa quyết định + chữ
+ký hàm: `plans/260829-0726-mcp-client-cam-mcp-ngoai/reports/thiet-ke-va-interface.md`.
+Sơ đồ kiến trúc: `docs/mcp-client-architecture.html`.
+
+### Ràng buộc định hình thiết kế
+
+- Chỉ transport HTTP (Streamable HTTP) - KHÔNG stdio, bot hạn chế chạy lệnh trên VPS.
+- Default-deny theo agent, 2 cửa (`available()` lúc dựng schema + recheck
+  fail-closed ngay trong `execute`), mirror `agent_kb_sources` của Kho tri thức.
+- Tool ngoài KHÔNG đi đường tắt - CHẢY QUA `listAvailableTools` như tool nội
+  bộ, thừa hưởng mọi bộ lọc (tắt theo agent/account, loại khỏi lượt lịch hẹn).
+- Kết quả tool ngoài bọc `wrapUntrustedContent`; nhánh hỏng `ketQuaLoi`, không ném.
+- Mọi tool ngoài mặc định `group:"action"` + `runsInScheduledTurn:false`
+  (annotation `readOnlyHint` do server ngoài tự khai, không đáng tin cho quyết
+  định bảo mật).
+- Fingerprint drift (`fingerprintTools`/`detectToolDrift` có sẵn của `ai` SDK) -
+  server đổi tool ngầm ("rug pull") thì rơi về `can_duyet_lai`, không tự nạp
+  tool cho tới khi người vận hành duyệt lại.
+
+### Thành phần (7 phase, commit theo `plan.md`)
+
+- **P01** (e1dfc50): `@ai-sdk/mcp` + nâng `ai` lên 7.0.83; config `MCP_*` (env +
+  tuning); 2 bảng `mcp_servers`/`agent_mcp_servers` (không FK, dọn tay trong
+  giao dịch); type dùng chung `src/mcp/mcp-types.ts`.
+- **P02** (d6d7581): `mcp-server-store.ts` (CRUD, header mã hóa AES-256-GCM,
+  đường xóa header riêng) + `mcp-agent-binding.ts` (gán per-agent default-deny);
+  `deleteAgent` dọn luôn gán MCP (chống mồ côi như `agent_kb_sources`).
+- **P03** (2b749ae): `taoToolDefinitionMcp` - 1 tool MCP thành `ToolDefinition`
+  có 2 cửa default-deny + bọc `wrapUntrustedContent` + `ketQuaLoi`, KHÔNG BAO
+  GIỜ ném; `mcp-tool-drift.ts` (fingerprint/so sánh).
+- **P04** (54315c9): `mcp-client-connect.ts` (bọc `@ai-sdk/mcp`, trần connect
+  chống SSRF-qua-redirect) + `mcp-connection-pool.ts`/`mcp-manager.ts`
+  (nối/health/cache 1 client sống/server, trần cho bước khám phá tool chống rò
+  kết nối khi treo).
+- **P05** (215d4c8): `mcp-tool-provider.ts` (provider THUẦN) ghép tool ngoài
+  vào `tool-registry.ts` - registry KHÔNG import thẳng manager (tránh vòng
+  import + mở SQLite ở module scope).
+- **P06** (4abf20d): `/api/mcp` (CRUD, gán agent, `duyet-lai` drift), mount SAU
+  middleware auth; lifecycle start/stop ở `index.ts`; tách
+  `mcp-connection-pool.ts` khỏi `mcp-manager.ts` (giữ cả hai dưới 200 dòng).
+- **P07** (phiên này): tab dashboard "MCP" (`web/src/pages/mcp-*.tsx`) - danh
+  sách server (badge trạng thái, số tool, số agent gán) + form thêm/sửa (header
+  qua `secret-input.tsx`, "trống = giữ key cũ" + đường xóa riêng) + modal gán
+  agent (mặc định KHÔNG tick - default-deny) + nút "Duyệt lại" khi
+  `can_duyet_lai`; cập nhật tài liệu.
+
+### Kiểm chứng
+
+- P01-06: mỗi phase implementer TDD + ít nhất 1 vòng phá-kiểm (test đỏ đúng
+  chỗ định phá rồi khôi phục) + review Opus riêng, sạch trước khi commit;
+  toàn bộ 6 phase đều [x] Xong trong `plan.md`. Số ca xanh CUỐI mỗi phase (test
+  của riêng phase đó, không phải tổng dồn toàn repo): P01 4/4, P02 10/10, P03
+  14/14, P04 9/9, P05 51/51 (gồm cả hồi quy `tool-registry`/persona), P06 51/51
+  (sau khi tách `mcp-connection-pool.ts`). typecheck sạch mỗi phase.
+- P07: `pnpm typecheck` (root + web) sạch; `pnpm build:web` sạch (bundle JS
+  457 KB, gzip 128,74 KB); `mcp-status-label.test.ts` xanh (hàm nhãn trạng
+  thái thuần, TDD đỏ->xanh). Frontend còn lại KHÔNG TDD được (UI) - nghiệm thu
+  thủ công theo checklist trong báo cáo phase, CHƯA chạy trên Zalo thật.
+
+### Ngoài phạm vi (V1, đã chốt)
+
+- Không có nút "Test kết nối" riêng trên dashboard - Lưu xong POST/PATCH tự nối
+  lại NỀN, trạng thái hiện qua badge sau khi trang tự làm mới (poll 4s).
+- stdio transport, tự động khám phá server công khai, marketplace server.

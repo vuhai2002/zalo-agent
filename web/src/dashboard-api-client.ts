@@ -7,6 +7,17 @@
  */
 export type LlmProviderKind = "openai-compatible" | "anthropic" | "google";
 
+/**
+ * KHÁC với `LlmProviderKind` ở trên: hai type MCP dưới đây IMPORT xuyên biên
+ * từ `src/mcp/mcp-types.ts` thay vì khai lại tay. `mcp-types.ts` là file THUẦN
+ * (không import gì, không DB/env) - cùng dạng "file thuần, browser nạp thẳng"
+ * đã có tiền lệ ở `src/config/tuning-number-presets.ts` /
+ * `src/shared/ky-tu-moi-token.ts` (đang được `web/src/pages/*.tsx` import
+ * thật). `import type` bị xóa hoàn toàn lúc biên dịch nên không lọt byte nào
+ * vào bundle - an toàn hơn cả hai file THUẦN kia (chúng còn export cả hàm).
+ */
+import type { McpToolInfo, TrangThaiServer } from "../../src/mcp/mcp-types.js";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -537,6 +548,32 @@ export const api = {
     request<{ ok: boolean; reply?: string; error?: string }>("/api/provider/test", {
       method: "POST",
     }),
+
+  mcp: {
+    list: () => request<{ servers: McpServerListItem[] }>("/api/mcp"),
+    create: (input: { ten: string; url: string; headers?: Record<string, string>; enabled?: boolean }) =>
+      request<{ server: McpServerRecord }>("/api/mcp", { method: "POST", body: JSON.stringify(input) }),
+    // `headers === undefined` (bỏ trường, không phải mảng rỗng) => giữ nguyên
+    // header cũ - khớp `capNhatServer` phía server ("ô trống = giữ key cũ").
+    update: (
+      id: string,
+      patch: { ten?: string; url?: string; headers?: Record<string, string>; enabled?: boolean },
+    ) => request<{ ok: true }>(`/api/mcp/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
+    remove: (id: string) => request<{ ok: true }>(`/api/mcp/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    // Đường XÓA header riêng - tách khỏi `update` vì "ô trống = giữ nguyên"
+    // (gửi headers rỗng qua `update` KHÔNG xóa được, chỉ đường này mới xóa).
+    removeHeaders: (id: string) =>
+      request<{ ok: true }>(`/api/mcp/${encodeURIComponent(id)}/headers`, { method: "DELETE" }),
+    // Người vận hành đã xem bộ tool đổi (drift) và đồng ý - lấy bộ hiện tại làm mốc mới.
+    reapprove: (id: string) =>
+      request<{ ok: true }>(`/api/mcp/${encodeURIComponent(id)}/duyet-lai`, { method: "POST" }),
+    serverAgents: (id: string) => request<{ agentIds: string[] }>(`/api/mcp/${encodeURIComponent(id)}/agents`),
+    setServerAgents: (id: string, agentIds: string[]) =>
+      request<{ ok: true }>(`/api/mcp/${encodeURIComponent(id)}/agents`, {
+        method: "PUT",
+        body: JSON.stringify({ agentIds }),
+      }),
+  },
 };
 
 export type ManagedAccount = {
@@ -810,4 +847,30 @@ export type ScheduledJobRunItem = {
   deliveredChars: number;
   startedAt: string;
   finishedAt: string | null;
+};
+
+// ===== MCP client =====
+
+/** Khớp `McpServer` (backend) - trả về từ POST tạo server. KHÔNG kèm headers (secret). */
+export type McpServerRecord = {
+  id: string;
+  ten: string;
+  url: string;
+  enabled: boolean;
+  trangThai: TrangThaiServer;
+  loi: string;
+  toolsSnapshot: McpToolInfo[];
+  hasHeaders: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Dòng của `GET /api/mcp` - `McpServerRecord` + `soAgentGan` (ghép từ GROUP BY)
+ * + `runtime` (trạng thái cache RAM của manager, `null` khi server chưa từng
+ * qua vòng nối nào - vd manager tắt hẳn qua `MCP_ENABLED=false`).
+ */
+export type McpServerListItem = McpServerRecord & {
+  soAgentGan: number;
+  runtime: { serverId: string; trangThai: string; soTool: number; loi: string } | null;
 };

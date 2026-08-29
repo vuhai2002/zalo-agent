@@ -261,6 +261,70 @@ trên dashboard sẽ không ai nhận ra - luật chỉ áp khi người dùng �
 trong các tham số liên quan, để một cấu hình sẵn có lệch (đặt tay trong `.env`)
 không khóa cứng cả trang Cấu hình.
 
+## MCP client
+
+Bot là MCP **client** - nối RA các server MCP ngoài (chỉ HTTP/Streamable HTTP,
+KHÔNG stdio - VPS hạn chế chạy lệnh tùy ý) để agent dùng tool của chúng. Sơ đồ
+đầy đủ: `docs/mcp-client-architecture.html`. Spec khóa quyết định + chữ ký hàm:
+`plans/260829-0726-mcp-client-cam-mcp-ngoai/reports/thiet-ke-va-interface.md`.
+
+### Đường đi: từ dashboard tới model
+
+```
+Dashboard tab MCP --CRUD--> mcp_servers + agent_mcp_servers  (2 bảng riêng, không FK -
+                                |                              dọn tay trong 1 giao dịch)
+                    src/mcp/mcp-manager.ts   (nối/health/cache, 1 client sống mỗi server)
+                                |
+              mỗi tool khám phá được -> taoToolDefinitionMcp() -> ToolDefinition có canh
+                                |
+              src/agent/tools/mcp-tool-provider.ts   (provider THUẦN, không chạm DB -
+                                |                      tránh vòng import + mở SQLite sớm)
+              tool-registry.ts: listAvailableTools GỘP [...TOOL_DEFINITIONS, ...tool ngoài]
+                                |                      (KHÔNG đường tắt - thừa hưởng MỌI bộ lọc)
+                    agent-loop.ts   (model tự gọi tool ngoài y như 14 tool nội bộ)
+```
+
+### Bảo mật (2 cửa default-deny + không tin nội dung trả về)
+
+1. **Default-deny per-agent, 2 cửa.** Cửa 1 `available()` lúc dựng schema tool
+   (agent chưa được gán server -> tool không lọt vào lượt); cửa 2 recheck
+   NGAY TRONG `execute` (fail-closed, phòng bị gỡ quyền giữa lượt agent đang
+   chạy dở). Bảng `agent_mcp_servers` mirror `agent_kb_sources` của Kho tri thức.
+2. **Kết quả không tin cậy.** Output của tool ngoài luôn qua
+   `wrapUntrustedContent(text, "MCP <serverTen>/<toolTen>")` trước khi vào
+   context model - cùng hàng rào với nội dung web `web_fetch`. Nhánh hỏng trả
+   `ketQuaLoi(...)` (object `{ok:false}`), KHÔNG BAO GIỜ ném ra ngoài `execute`.
+3. **Mọi tool ngoài mặc định `group:"action"` + `runsInScheduledTurn:false`** -
+   kể cả khi server tự khai tool là `readOnlyHint` (annotation của giao thức
+   MCP): annotation do BÊN NGOÀI khai không đáng tin để quyết định bảo mật.
+4. **Fingerprint drift.** `fingerprintTools`/`detectToolDrift` (hàm sẵn có của
+   Vercel AI SDK) băm mô tả + input schema của bộ tool lúc người vận hành duyệt,
+   so lại mỗi lần nối lại - server đổi tool ngầm ("rug pull": đổi mô tả/schema
+   một tool đã duyệt mà giữ nguyên tên) thì server rơi về `can_duyet_lai`,
+   KHÔNG nạp tool cho tới khi người vận hành bấm "Duyệt lại" trên dashboard.
+5. **Header xác thực mã hóa AES-256-GCM** như mọi secret khác trong repo (key
+   LLM, Brave API key); API dashboard chỉ trả cờ `hasHeaders`, không bao giờ
+   trả giá trị thật - đường xóa header tách riêng ("ô trống = giữ key cũ").
+
+### Trạng thái 1 server (`mcp_servers.trang_thai`)
+
+| Trạng thái | Nghĩa |
+|---|---|
+| `cho_ket_noi` | Mới tạo, chưa từng nối lần nào |
+| `da_ket_noi` | Đang nối tốt, tool đã nạp vào cache RAM của manager |
+| `loi` | Lần nối gần nhất hỏng (cột `loi` chứa thông điệp) - vòng health định kỳ (`MCP_HEALTH_INTERVAL_MS`) tự thử lại |
+| `can_duyet_lai` | Bộ tool đổi so với mốc đã duyệt (drift) - KHÔNG tự nối lại, tool CŨ vẫn không được nạp cho tới khi người vận hành duyệt |
+
+### Vì sao KHÔNG đi đường tắt
+
+Tool ngoài không có pipeline riêng - nó CHẢY QUA đúng `listAvailableTools` như
+14 tool nội bộ khác, nên tự động thừa hưởng mọi hàng rào sẵn có: tắt theo
+agent/account, loại khỏi lượt chạy theo lịch hẹn, giới hạn theo loại kênh (bot
+chính thức). Đổi lại, `tool-registry.ts` **KHÔNG được import thẳng**
+`mcp-manager.ts` (chỉ qua provider thuần `mcp-tool-provider.ts`) - import thẳng
+sẽ kéo `database.ts` mở SQLite ở module scope, vỡ đúng bẫy test đã ghi ở mục
+"Bẫy khi viết test" trong `CLAUDE.md`.
+
 ## Repo tham khảo
 
 Clone shallow (chỉ đọc, không build, không sửa) tại `D:\source-code\zalo-agent-references\` - đặt ngoài project để không dính vào git/pnpm/tsc:

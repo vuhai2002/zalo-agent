@@ -11,6 +11,7 @@ import {
   IconClose,
   IconFileText,
   IconGear,
+  IconGlobe,
   IconGrid,
   IconHeart,
   IconLogout,
@@ -63,6 +64,7 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
       { to: "/accounts", label: "Accounts", icon: IconSignal },
       { to: "/agents", label: "Agents", icon: IconBot },
       { to: "/tools", label: "Tools", icon: IconBolt },
+      { to: "/mcp", label: "MCP", icon: IconGlobe },
       { to: "/trace", label: "Trace agent", icon: IconCpu },
       { to: "/logs", label: "Logs", icon: IconDatabase },
       // Nhà cung cấp LLM KHÔNG còn là mục riêng: nó là một nhóm trong trang
