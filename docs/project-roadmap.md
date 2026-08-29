@@ -1335,7 +1335,7 @@ Rà 29 tham số: tất cả đều đọc LẠI mỗi lần dùng (trong hàm h
 - [ ] `src/knowledge/` - RAG/knowledge base trả lời theo tài liệu riêng
 - [ ] Lệnh điều khiển trong chat (/bot off, /clear) - thêm file trong middleware/
 - [ ] Voice message STT - thêm bước trong zalo-message-parser
-- [ ] `src/mcp/` - expose MCP server cho Claude Code điều khiển bot
+- [ ] `src/mcp/` - MCP client: cắm MCP server ngoài vào cho agent tự dùng tool của chúng (HTTP-only, gán per-agent default-deny, bọc kết quả không tin cậy, fingerprint drift). Thiết kế: `docs/mcp-client-architecture.html`
 - [ ] Deploy VPS (Docker + Caddy theo pattern ship-to-vps) - dashboard đứng sau Caddy
 
 ## V3 - Không làm (quyết định có chủ đích)

@@ -24,3 +24,6 @@ qr*.png
 # Repo này công khai nên hạ tầng cá nhân KHÔNG lên GitHub. Tài liệu triển khai
 # chung (dùng chỗ trống thay cho giá trị thật) nằm ở docs/deployment-guide.md.
 *.local.md
+
+# Scratch của quy trình thực thi kế hoạch (ledger, review package) - không phải mã nguồn
+.superpowers/
