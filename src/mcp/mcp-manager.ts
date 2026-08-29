@@ -1,3 +1,4 @@
+import { datNguonToolMcp } from "../agent/tools/mcp-tool-provider.js";
 import type { ToolDefinition } from "../agent/tools/tool-catalog-types.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { serversCuaAgent } from "./mcp-agent-binding.js";
@@ -187,6 +188,10 @@ export async function duyetLaiDrift(id: string): Promise<void> {
  */
 export function startMcpManager(): () => void {
   if (!getTuning("MCP_ENABLED")) return () => {};
+  // Đăng ký nguồn NGAY để registry (qua lớp provider thuần) đọc được cache
+  // của manager này - làm trước vòng nối để không có khe hở nào giữa lúc
+  // manager đã "bật" và lúc registry còn thấy nguồn mặc định rỗng.
+  datNguonToolMcp(mcpToolDefinitions);
   for (const s of danhSachServer()) if (s.enabled) void ketNoiLaiServer(s.id);
   const timer = setInterval(() => {
     for (const s of danhSachServer()) if (s.enabled && s.trangThai === "loi") void ketNoiLaiServer(s.id);

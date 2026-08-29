@@ -1,5 +1,6 @@
 import type { Tool } from "ai";
 import { TOOL_KHONG_CHAY_TREN_BOT } from "../../zalo-bot/nang-luc-kenh-bot.js";
+import { layToolMcpChoAgent } from "./mcp-tool-provider.js";
 import { TOOL_DEFINITIONS, type ToolContext, type ToolDefinition } from "./tool-catalog.js";
 import type { ToolScope } from "./tool-catalog-types.js";
 
@@ -66,7 +67,11 @@ export function listAvailableTools(
   // bên nào tắt nó. Đây chính là phép giao của hai tập BẬT, viết theo chiều
   // danh sách tắt cho khớp cách lưu ở DB.
   const disabled = new Set([...scope.agent.disabledTools, ...scope.account.disabledTools]);
-  return TOOL_DEFINITIONS.filter((def) => {
+  // Tool nội (catalog tĩnh) + tool ngoài từ MCP server đã gán cho agent này
+  // (qua lớp provider thuần - xem mcp-tool-provider.ts). Gộp Ở ĐÂY để tool
+  // ngoài thừa hưởng nguyên bộ lọc bên dưới, không đi đường tắt nào.
+  const tatCa = [...TOOL_DEFINITIONS, ...layToolMcpChoAgent(scope.agent.id)];
+  return tatCa.filter((def) => {
     if (disabled.has(def.key)) return false;
     if (context.isolated && def.runsInScheduledTurn === false) return false;
     return kiemTraKhaDung(def, scope).khaDung;
