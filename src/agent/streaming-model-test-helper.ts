@@ -52,6 +52,16 @@ export function thanhKetQuaStream(ketQua: KetQuaGenerate): KetQuaStream {
     phan.push(khoi as PhanStream);
   }
 
-  phan.push({ type: "finish", finishReason: ketQua.finishReason, usage: ketQua.usage });
+  // Part `finish` phải mang `finishReason` dạng object {unified, raw}: từ ai@7.0.70
+  // SDK chỉ cho tool execute (và chỉ plumb finishReason) khi shape là object - chuỗi
+  // trần rơi về "other", chặn execute tool nên mọi test có tool call sẽ hỏng. Adapter
+  // thật (openai-compatible/anthropic/google) đã phát object nên production không ảnh
+  // hưởng. Cast vì type v4 siết shape còn fixture doGenerate mang chuỗi - cùng idiom
+  // thread-summarizer.test.ts.
+  phan.push({
+    type: "finish",
+    finishReason: { unified: ketQua.finishReason, raw: ketQua.finishReason },
+    usage: ketQua.usage,
+  } as unknown as PhanStream);
   return { stream: convertArrayToReadableStream(phan) };
 }
