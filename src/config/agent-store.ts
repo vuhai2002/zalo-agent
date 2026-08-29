@@ -1,6 +1,7 @@
 import { db } from "../conversation/database.js";
 import type { ReasoningEffort } from "../agent/reasoning-options.js";
 import { xoaGanNguonCuaAgent } from "../knowledge/kb-agent-binding.js";
+import { xoaGanServerCuaAgent } from "../mcp/mcp-agent-binding.js";
 import { trongGiaoDich } from "../shared/db-transaction.js";
 import { parseDisabledTools } from "./parse-disabled-tools.js";
 import type { LlmProviderKind } from "./llm-provider-kind.js";
@@ -170,6 +171,8 @@ export function deleteAgent(id: string): { ok: boolean; reason?: string } {
     // Dọn luôn gán Kho tri thức - id agent là slug tất định từ tên, xóa rồi
     // tạo lại CÙNG TÊN sẽ ra đúng id cũ. Xem lý do đầy đủ ở kb-agent-binding.ts.
     xoaGanNguonCuaAgent(id);
+    // Cùng lý do, cùng lớp mồ côi/hồi sinh: dọn luôn gán server MCP.
+    xoaGanServerCuaAgent(id);
   });
   return { ok: true };
 }
