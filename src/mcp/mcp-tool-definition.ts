@@ -86,8 +86,12 @@ export function trichVanBanKetQuaMcp(raw: unknown): string {
  * promise) - promise gốc vẫn chạy ngầm tới khi tự xong/tự ném, chỉ là kết quả
  * của nó không còn ai đợi. Chấp nhận được: cùng đánh đổi với các chỗ
  * `Promise.race` timeout khác trong repo (`gui-video-qua-zalo.ts`).
+ *
+ * EXPORT (không chỉ dùng nội bộ file này): `mcp-manager.ts` tái dùng để bọc
+ * `ketNoi.tools()` lúc khám phá tool - cùng một rủi ro treo vô hạn, không lý
+ * do gì viết lại một bản thứ hai.
  */
-async function goiCoTimeout<T>(fn: () => Promise<T>, ms: number): Promise<T> {
+export async function goiCoTimeout<T>(fn: () => Promise<T>, ms: number): Promise<T> {
   let t: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
