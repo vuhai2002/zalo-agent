@@ -404,6 +404,31 @@ const envSchema = z.object({
   // nếu không cookie không bao giờ được gửi và không đăng nhập được.
   DASHBOARD_BEHIND_PROXY: z.preprocess(emptyToUndefined, z.stringbool().default(false)),
 
+  // ===== MCP client: cắm MCP server ngoài (chỉ HTTP) làm nguồn tool =====
+  // Công tắc tổng. Tắt thì startMcpManager() không nối server nào, và
+  // mcpToolDefinitions() luôn trả rỗng - agent không thấy tool ngoài nào dù
+  // đã gán, không cần xóa từng gán một để tắt tạm thời.
+  //
+  // z.stringbool() qua emptyToUndefined, KHÔNG z.coerce.boolean(): coerce
+  // boolean của Zod chỉ xét chuỗi RỖNG hay KHÔNG ("false" là chuỗi không rỗng
+  // -> true), nên `MCP_ENABLED=false` trong .env bị NUỐT LẶNG thành bật - kill
+  // switch bảo mật mà không tắt được qua env là lỗi nghiêm trọng. Đúng nếp 8
+  // biến boolean khác trong file này (SCHEDULER_ENABLED, LOG_FILE_ENABLED...).
+  MCP_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
+  // Trần thời gian NỐI tới 1 server (bắt tay + khám phá tool). Server ngoài do
+  // người vận hành tự thêm, có thể chậm hoặc offline - không có trần thì một
+  // server treo làm startMcpManager() (chạy lúc boot) đứng chờ vô hạn.
+  // min/max khớp `tuning-definitions.ts` - lệch nhau là dashboard cho nhập giá
+  // trị mà env từ chối, hoặc chặn oan giá trị hợp lệ.
+  MCP_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(15000),
+  // Trần 1 LẦN GỌI tool ngoài trong lúc agent đang chạy. Tool ngoài không nằm
+  // trong tầm kiểm soát của bot nên phải có trần riêng, độc lập với
+  // LLM_TURN_TIMEOUT_MS - một tool treo không được phép giữ cả lượt.
+  MCP_TOOL_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300_000).default(60000),
+  // Chu kỳ vòng health: dò lại server đang lỗi/mất kết nối để tự phục hồi mà
+  // không cần khởi động lại bot.
+  MCP_HEALTH_INTERVAL_MS: z.coerce.number().int().min(5000).max(600_000).default(30000),
+
   // Khóa AES-256 mã hóa cookie Zalo trên đĩa
   CREDENTIALS_ENCRYPTION_KEY: z
     .string()

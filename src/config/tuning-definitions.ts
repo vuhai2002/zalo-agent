@@ -155,6 +155,12 @@ export const TUNING_GROUPS: TuningGroup[] = [
     navHint: "Cắt đoạn tài liệu",
     hint: "Tài liệu nạp lên được cắt thành đoạn thế nào trước khi lưu để bot tra cứu.",
   },
+  {
+    id: "mcp",
+    title: "MCP server ngoài",
+    navHint: "Tool từ server ngoài",
+    hint: "Cho agent dùng tool từ các MCP server bên ngoài (chỉ HTTP), gán riêng theo từng agent.",
+  },
 ];
 
 const TUNING_BY_KEY = {
@@ -755,6 +761,41 @@ const TUNING_BY_KEY = {
     hint: "Nguồn làm tiến trình phụ treo/dừng bất thường lặp lại quá số lần này bị đánh dấu Hỏng và ngừng thử tiếp, tránh treo lặp lại vô hạn qua các lần khởi động lại.",
     min: 1,
     max: 5,
+  },
+
+  // --- MCP server ngoài ---
+  MCP_ENABLED: {
+    kind: "boolean",
+    group: "mcp",
+    label: "Bật MCP client",
+    hint: "Cho agent dùng tool từ các MCP server bên ngoài đã gán. Tắt thì bot không nối server nào và không tool ngoài nào xuất hiện, dù đã gán sẵn - không cần xóa từng gán để tắt tạm thời.",
+  },
+  MCP_CONNECT_TIMEOUT_MS: {
+    kind: "number",
+    group: "mcp",
+    label: "Trần thời gian nối server",
+    hint: "Chặn trên cho một lần bắt tay + khám phá tool với 1 server ngoài. Server chậm hoặc offline mà không có trần này sẽ làm bot treo lúc khởi động.",
+    min: 1000,
+    max: 120_000,
+    unit: "ms",
+  },
+  MCP_TOOL_TIMEOUT_MS: {
+    kind: "number",
+    group: "mcp",
+    label: "Trần một lần gọi tool ngoài",
+    hint: "Tool từ server ngoài nằm ngoài tầm kiểm soát của bot nên có trần riêng, độc lập với Trần thời gian mỗi lượt - một tool treo không được giữ cả lượt trả lời.",
+    min: 1000,
+    max: 300_000,
+    unit: "ms",
+  },
+  MCP_HEALTH_INTERVAL_MS: {
+    kind: "number",
+    group: "mcp",
+    label: "Chu kỳ kiểm tra / nối lại",
+    hint: "Bot tự dò lại các server đang lỗi hoặc mất kết nối theo chu kỳ này để phục hồi mà không cần khởi động lại.",
+    min: 5000,
+    max: 600_000,
+    unit: "ms",
   },
 } as const satisfies Record<string, TuningDef>;
 
