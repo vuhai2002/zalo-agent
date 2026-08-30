@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 
 /**
@@ -32,22 +34,46 @@ let dangChay: Promise<ThongTinBanMoi> | null = null; // single-flight: nhiều t
 let ownerRepoCache: OwnerRepo | null | undefined; // undefined = chưa đọc, null = đọc hỏng
 
 /**
- * Đọc owner/repo từ `package.json` MỘT LẦN. Không hardcode "vuhai2002/zalo-agent"
- * (một nguồn sự thật, theo được nếu repo đổi chủ). Dùng đúng kỹ thuật của
- * `web/vite.config.ts`: `new URL("../../package.json", import.meta.url)` -> repo
- * root khi chạy dev (src/server/) và app root khi chạy bản biên dịch (dist/server/).
+ * Tìm package.json bằng cách đi NGƯỢC từ `startDir` lên thư mục cha tới khi gặp,
+ * KHÔNG cứng hoá số cấp `../`. Đây là chỗ đã trả giá thật: layout dev
+ * (`src/server/update-check.ts`) và layout BIÊN DỊCH chạy trong Docker
+ * (`dist/src/server/update-check.js`, package.json ở `/app`) lệch nhau một cấp
+ * thư mục. Đường dẫn cứng `../../package.json` đúng ở dev nhưng trong Docker trỏ
+ * vào `/app/dist/package.json` KHÔNG tồn tại -> readFileSync ném -> nuốt lặng ->
+ * không biết owner/repo -> KHÔNG BAO GIỜ hỏi GitHub (`latest` mãi null, không
+ * hiện nút). Test cũ chạy bằng tsx (layout dev) nên mù; test mới dựng thư mục giả
+ * cả hai layout. Hàm THUẦN để test được.
+ */
+export function timDuongPackageJson(startDir: string): string | null {
+  let dir = startDir;
+  for (let i = 0; i < 8; i++) {
+    const p = join(dir, "package.json");
+    if (existsSync(p)) return p;
+    const cha = dirname(dir);
+    if (cha === dir) break; // chạm gốc hệ thống file
+    dir = cha;
+  }
+  return null;
+}
+
+/**
+ * Đọc owner/repo từ package.json MỘT LẦN. Không hardcode "vuhai2002/zalo-agent"
+ * (một nguồn sự thật, theo được nếu repo đổi chủ). Fail-soft: đọc/parse không
+ * được thì tính năng tự tắt (không có nút), không ném.
  */
 function docOwnerRepo(): OwnerRepo | null {
   if (ownerRepoCache !== undefined) return ownerRepoCache;
   ownerRepoCache = null;
   try {
-    const noiDung = readFileSync(new URL("../../package.json", import.meta.url), "utf8");
-    const pkg = JSON.parse(noiDung) as { repository?: { url?: string } | string };
-    const url = typeof pkg.repository === "string" ? pkg.repository : pkg.repository?.url;
-    const khop = url?.match(/github\.com[/:]([^/]+)\/([^/.]+)/i);
-    if (khop) ownerRepoCache = { owner: khop[1], repo: khop[2] };
+    const duong = timDuongPackageJson(dirname(fileURLToPath(import.meta.url)));
+    if (duong) {
+      const pkg = JSON.parse(readFileSync(duong, "utf8")) as { repository?: { url?: string } | string };
+      const url = typeof pkg.repository === "string" ? pkg.repository : pkg.repository?.url;
+      const khop = url?.match(/github\.com[/:]([^/]+)\/([^/.]+)/i);
+      if (khop) ownerRepoCache = { owner: khop[1], repo: khop[2] };
+    }
   } catch {
-    // fail-soft: đọc không được thì tính năng tự tắt (không có nút), không ném
+    // fail-soft
   }
   return ownerRepoCache;
 }

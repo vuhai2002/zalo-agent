@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { setupTestEnv } from "../shared/test-env-setup.js";
 
 // database.ts / runtime-tuning-settings.ts mở SQLite ở module scope - phải
 // setupTestEnv() TRƯỚC rồi mới import động (bẫy test ghi trong CLAUDE.md).
+// Top-level `before` để cả hai describe dùng chung `mod`.
 let mod: typeof import("./update-check.js");
 let tuning: typeof import("../config/runtime-tuning-settings.js");
+
+before(async () => {
+  setupTestEnv();
+  mod = await import("./update-check.js");
+  tuning = await import("../config/runtime-tuning-settings.js");
+});
 
 const OR = { owner: "vuhai2002", repo: "zalo-agent" };
 
@@ -15,11 +25,6 @@ function fetchGia(body: unknown, status = 200): typeof fetch {
 }
 
 describe("layBanMoiNhat", () => {
-  before(async () => {
-    setupTestEnv();
-    mod = await import("./update-check.js");
-    tuning = await import("../config/runtime-tuning-settings.js");
-  });
   beforeEach(() => {
     mod._resetCacheChoTest();
     tuning.setTuning("UPDATE_CHECK_ENABLED", null);
@@ -113,5 +118,34 @@ describe("layBanMoiNhat", () => {
   it("không tiêm ownerRepo -> đọc owner/repo thật từ package.json", async () => {
     const kq = await mod.layBanMoiNhat({ fetchFn: fetchGia({ tag_name: "v9.9.9" }) });
     assert.equal(kq.releaseUrl, "https://github.com/vuhai2002/zalo-agent/releases/tag/v9.9.9");
+  });
+});
+
+describe("timDuongPackageJson (đường dẫn không phụ thuộc độ sâu layout)", () => {
+  it("tìm được package.json ở layout Docker (dist/src/server, lùi 3) lẫn dev (src/server, lùi 2)", () => {
+    const goc = mkdtempSync(join(tmpdir(), "verpkg-"));
+    try {
+      // Layout DOCKER: package.json ở /app, module biên dịch ở app/dist/src/server.
+      // Đường dẫn cứng `../../` cũ sẽ trỏ vào app/dist/package.json (không có) và
+      // trượt - đây chính là ca đã làm nút không hiện trên VPS.
+      const app = join(goc, "app");
+      mkdirSync(join(app, "dist", "src", "server"), { recursive: true });
+      writeFileSync(join(app, "package.json"), "{}");
+      assert.equal(
+        mod.timDuongPackageJson(join(app, "dist", "src", "server")),
+        join(app, "package.json"),
+      );
+
+      // Layout DEV: package.json ở repo root, module ở repo/src/server.
+      const repo = join(goc, "repo");
+      mkdirSync(join(repo, "src", "server"), { recursive: true });
+      writeFileSync(join(repo, "package.json"), "{}");
+      assert.equal(
+        mod.timDuongPackageJson(join(repo, "src", "server")),
+        join(repo, "package.json"),
+      );
+    } finally {
+      rmSync(goc, { recursive: true, force: true });
+    }
   });
 });

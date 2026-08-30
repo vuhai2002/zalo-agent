@@ -16,6 +16,16 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   được, không cần khởi động lại. Trần rate limit của GitHub (60 lần/giờ) vẫn
   không đụng tới nhờ nhớ đệm + gộp lời gọi.
 
+### Sửa
+
+- **Nút cập nhật không bao giờ hiện trong bản Docker.** `update-check.ts` đọc
+  `package.json` bằng đường dẫn cứng `../../` - đúng ở dev (`src/server/`) nhưng
+  bản biên dịch chạy trong Docker ở `dist/src/server/` (package.json ở `/app`)
+  thì lệch một cấp, trỏ vào `/app/dist/package.json` không tồn tại nên nuốt lặng,
+  không đọc được owner/repo, không bao giờ hỏi GitHub (`/api/version` trả
+  `latest: null`). Nay đi ngược tìm `package.json` theo thư mục cha, đúng ở mọi
+  độ sâu layout; kèm test dựng thư mục giả cả hai layout để không tái diễn.
+
 ## [0.3.0] - 2026-08-30
 
 ### Thêm
