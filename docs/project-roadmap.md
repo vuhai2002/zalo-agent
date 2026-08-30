@@ -6470,3 +6470,29 @@ Sơ đồ kiến trúc: `docs/mcp-client-architecture.html`.
 - Không có nút "Test kết nối" riêng trên dashboard - Lưu xong POST/PATCH tự nối
   lại NỀN, trạng thái hiện qua badge sau khi trang tự làm mới (poll 4s).
 - stdio transport, tự động khám phá server công khai, marketplace server.
+
+## Release v0.2.0 - bản git tag / GitHub Release đầu tiên thật sự (2026-08-30)
+
+KHÔNG phải mốc tính năng mới - là lần đầu cắt release thật (git tag + GitHub
+Release) cho những gì V1 -> V3.32 đã làm. Ghi lại để tách rõ HAI hệ đánh số:
+
+- **Mốc "V3.xx" trong file này** = nhật ký phát triển nội bộ, mỗi đợt làm/sửa một
+  mảng. KHÔNG phải phiên bản phát hành.
+- **Semver `0.x` trong `CHANGELOG.md`** = phiên bản phát hành, số hiện ở chân
+  sidebar dashboard; người theo dõi repo nhận thông báo GitHub Release.
+
+Phát hiện lúc cắt bản: `0.1.0` trước đây chỉ tồn tại trên giấy (`CHANGELOG.md` có
+link nhưng `git ls-remote --tags` rỗng - chưa từng có tag thật). Nên `v0.2.0` là
+tag git đầu tiên; `v0.1.0` được tag HỒI TỐ tại `931b9cb` (2026-08-02, commit dựng
+CHANGELOG) để link lịch sử không 404.
+
+- [x] `v0.2.0` (810301b) - MINOR: gộp Zalo Bot API, Kho tri thức, Google Gemini
+  hạng nhất, tải video (V3.21-29), Tab Bạn bè (V3.30), MCP client (V3.32)...
+- [x] `v0.1.0` (931b9cb) - tag hồi tố cho bản đầu tiên
+- [x] Verify trước khi cắt: typecheck + `pnpm test` (2641 pass) + `build:web` xanh
+- [x] CHANGELOG bổ sung 3 feature suýt lọt (tải video / Tab Bạn bè / MCP client)
+
+Bài học đã ghi vào `docs/release-guide.md` + mục "Phát hành" của `CLAUDE.md`:
+CHANGELOG `[Chưa phát hành]` bị bỏ trống nhiều đợt nên 3 feature lớn suýt không
+vào release notes. Kỷ luật từ nay: **thêm/sửa/xóa gì thì cập nhật `[Chưa phát
+hành]` NGAY trong đợt đó**, đừng để dồn.

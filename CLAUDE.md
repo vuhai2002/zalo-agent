@@ -110,6 +110,14 @@ Nằm ngoài project tại `D:\source-code\zalo-agent-references\`:
 - **Fingerprint drift** (`fingerprintTools`/`detectToolDrift` của `ai`): chụp mốc lúc người vận hành duyệt server; server đổi bộ tool ngầm sau đó -> `can_duyet_lai`, KHÔNG nạp tool tới khi duyệt lại. Chống tool poisoning/rug-pull. Mọi tool ngoài `group:"action"` + `runsInScheduledTurn:false` (`readOnlyHint` của server chỉ HIỂN THỊ, KHÔNG dùng quyết định bảo mật). `MCP_ENABLED` là kill-switch RUNTIME (gate trong `mcpToolDefinitions`, tắt dashboard là chặn ngay). Header (secret) mã hóa AES-256-GCM; `src/mcp` KHÔNG có dòng log nào (không rò header).
 - Residual risk V1 (ghi ở `docs/system-architecture.md`): mô tả + inputSchema của tool ngoài vào schema model KHÔNG bọc được như kết quả (bản chất cơ chế tool); lần nối ĐẦU (chưa có mốc) nạp tool ngay, không cổng người-duyệt; 2 server tên SẠCH trùng y hệt -> tool che nhau (bounded, hiếm). Chấp nhận theo threat model "server do người vận hành tự thêm".
 
+## Phát hành (release)
+
+Quy trình đầy đủ + bài học: `docs/release-guide.md`. Ba điều BẮT BUỘC nhớ:
+
+- **Thêm/sửa/xóa feature hay sửa lỗi đáng kể nào thì cập nhật `CHANGELOG.md` mục `[Chưa phát hành]` NGAY trong đợt đó**, đừng để dồn. Lần cắt `v0.2.0` (2026-08-30) suýt bỏ sót 3 feature lớn (tải video, Tab Bạn bè, MCP client) khỏi release notes vì mục này bị trống nhiều đợt - phải dò lại git log mới thấy.
+- **`v0.x` ở chân sidebar là semver PHÁT HÀNH, đọc từ `package.json` lúc BUILD** (`web/vite.config.ts` -> `__APP_VERSION__`), KHÔNG tự đổi theo deploy. Đổi số = bump `package.json` RỒI `pnpm build:web` (web/dist là artifact, đã gitignore). Mốc "V3.xx" trong `docs/project-roadmap.md` là nhật ký nội bộ, KHÁC hệ semver này.
+- Cắt bản (từ `main` sạch, verify xanh): bump `package.json` -> cuộn `[Chưa phát hành]` thành `[x.y.z] - <ngày>` + thêm mục rỗng mới + sửa link cuối CHANGELOG -> commit `chore(release): x.y.z` -> `git tag -a vx.y.z` -> `git push --follow-tags` -> `gh release create`. `chore(release):` là quy ước của repo cho commit này. KHÔNG tự chạy git - push + GitHub Release ra ngoài công khai, hỏi user trước.
+
 ## Lệnh hay dùng
 
 ```bash

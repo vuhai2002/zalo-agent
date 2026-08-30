@@ -16,9 +16,31 @@ Khi bản mới cần thao tác tay của người dùng (thêm biến môi trư
 login...), viết rõ trong CHANGELOG mục **Nâng cấp** - người ta đọc release notes
 để biết có phải làm gì không, không ai đọc diff.
 
+## Cập nhật CHANGELOG khi có thay đổi (đừng để dồn)
+
+Mỗi khi **thêm / sửa / xóa** một tính năng hoặc sửa lỗi đáng kể, thêm NGAY một
+dòng vào mục `## [Chưa phát hành]` của `CHANGELOG.md`, đúng nhóm: `### Thêm` (mới),
+`### Sửa` (vá lỗi), `### Đổi` (đổi hành vi/cấu hình đã có), `### Bỏ` (gỡ tính năng).
+
+Vì sao phải làm NGAY: lần cắt `v0.2.0` (2026-08-30) mục này bị bỏ trống nhiều đợt
+nên 3 tính năng lớn (tải video, Tab Bạn bè, MCP client) suýt không vào release
+notes - phải dò lại `git log` mới phát hiện. Ghi lúc còn nhớ rẻ hơn dò lại.
+
+Mốc "V3.xx" trong `docs/project-roadmap.md` là nhật ký phát triển nội bộ, KHÁC
+semver `0.x` của release - đừng lẫn hai hệ.
+
 ## Các bước phát hành
 
-Từ nhánh `main` đã sạch và `pnpm test` xanh:
+### Trước khi cắt bản: verify (đừng release trên code đỏ)
+
+- `git status` sạch, đang ở `main`.
+- `pnpm typecheck` (root + web) xanh.
+- `pnpm test` xanh - đây là LẦN chạy full suite được phép (một lần, cuối cùng).
+- `pnpm build:web` xanh (bundle production biên dịch được).
+- Rà mục `[Chưa phát hành]` đã đủ mọi thay đổi từ tag gần nhất chưa - đối chiếu
+  `git log --oneline <tag-gần-nhất>..HEAD`.
+
+Xong hết mới chạy:
 
 ```bash
 # 1. Nâng số trong package.json (web tự đọc số này, không phải sửa thêm chỗ nào)
@@ -73,3 +95,20 @@ pnpm build:web             # dashboard: bắt buộc build lại, nếu không v
 
 Dữ liệu trong `data/` giữ nguyên - migration của SQLite chạy tự động lúc khởi
 động và đều idempotent, không phải làm gì thêm.
+
+## Bài học từ lần cắt bản đầu (v0.2.0, 2026-08-30)
+
+- **Kiểm `git ls-remote --tags origin` TRƯỚC khi giả định baseline.** `0.1.0`
+  từng chỉ tồn tại trên giấy: CHANGELOG có link `v0.1.0` nhưng chưa hề có tag git
+  thật (link 404). `v0.2.0` mới là tag đầu tiên; `v0.1.0` được tag HỒI TỐ tại
+  commit dựng CHANGELOG (`931b9cb`, 2026-08-02): `git tag -a v0.1.0 <commit> -m "v0.1.0"`.
+- **Chọn mốc tag hồi tố bằng commit thật + xác minh là tổ tiên của HEAD**:
+  `git merge-base --is-ancestor <commit> HEAD`.
+- **Link ở cuối CHANGELOG phải khớp tag CÓ THẬT.** Sau khi có cả hai tag, dạng
+  chuẩn: `[Chưa phát hành]` so sánh `vMax...HEAD`; mỗi bản so sánh `vTruoc...vNay`;
+  bản gốc trỏ `releases/tag/v...`.
+- **Số phiên bản nhúng lúc BUILD.** Bump `package.json` xong, dashboard chỉ hiện
+  số mới khi chạy lại `pnpm build:web` (web/dist là artifact, đã gitignore, không
+  nằm trong commit release). Deploy phải build lại web.
+- **push + GitHub Release là bước ra ngoài công khai** - báo tới người theo dõi
+  repo, không rút lại gọn được. Hỏi user trước, đừng tự chạy.
