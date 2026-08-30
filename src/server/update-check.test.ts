@@ -23,9 +23,11 @@ describe("layBanMoiNhat", () => {
   beforeEach(() => {
     mod._resetCacheChoTest();
     tuning.setTuning("UPDATE_CHECK_ENABLED", null);
+    tuning.setTuning("UPDATE_CHECK_INTERVAL_MINUTES", null);
   });
   after(() => {
     tuning.setTuning("UPDATE_CHECK_ENABLED", null);
+    tuning.setTuning("UPDATE_CHECK_INTERVAL_MINUTES", null);
   });
 
   it("toggle tắt -> {enabled:false} và KHÔNG gọi mạng", async () => {
@@ -80,6 +82,21 @@ describe("layBanMoiNhat", () => {
     await mod.layBanMoiNhat({ fetchFn, ownerRepo: OR });
     await mod.layBanMoiNhat({ fetchFn, ownerRepo: OR });
     assert.equal(dem, 1);
+  });
+
+  it("hết nhịp UPDATE_CHECK_INTERVAL_MINUTES -> fetch lại", async () => {
+    tuning.setTuning("UPDATE_CHECK_INTERVAL_MINUTES", 10);
+    let dem = 0;
+    let t = 1000;
+    const fetchFn = (async () => {
+      dem++;
+      return new Response(JSON.stringify({ tag_name: "v0.3.0" }));
+    }) as unknown as typeof fetch;
+    const now = () => t;
+    await mod.layBanMoiNhat({ fetchFn, ownerRepo: OR, now });
+    t += 11 * 60 * 1000; // qua 11 phút > nhịp 10 phút -> cache hết hạn
+    await mod.layBanMoiNhat({ fetchFn, ownerRepo: OR, now });
+    assert.equal(dem, 2);
   });
 
   it("ownerRepo null -> latest null, không fetch", async () => {

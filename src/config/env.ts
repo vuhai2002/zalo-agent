@@ -409,6 +409,11 @@ const envSchema = z.object({
   // có nhớ đệm), tắt được cho ai không muốn máy chủ gọi ra ngoài. Cùng nếp
   // z.stringbool() qua emptyToUndefined như 8 biến boolean khác trong file này.
   UPDATE_CHECK_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
+  // Bao lâu mới hỏi GitHub một lần rồi nhớ đệm kết quả. Trần rate limit của
+  // GitHub (60/giờ không token) KHÔNG phải chỗ nghẽn nhờ single-flight + cache;
+  // con số này chỉ đổi "bản mới hiện nhanh hay chậm". min/max khớp
+  // tuning-definitions.ts. Mặc định 60 phút.
+  UPDATE_CHECK_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
 
   // ===== MCP client: cắm MCP server ngoài (chỉ HTTP) làm nguồn tool =====
   // Công tắc tổng. Tắt thì startMcpManager() không nối server nào, và

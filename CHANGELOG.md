@@ -8,6 +8,14 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ## [Chưa phát hành]
 
+### Thêm
+
+- **Chỉnh được nhịp kiểm tra bản mới trên dashboard** (`UPDATE_CHECK_INTERVAL_MINUTES`,
+  trang Cấu hình -> Chung, mặc định 60 phút). Trước đây cố định 6 tiếng nên bản
+  mới ra phải chờ tối đa 6h mới hiện nút; giờ hạ mặc định còn 1 tiếng và đổi nóng
+  được, không cần khởi động lại. Trần rate limit của GitHub (60 lần/giờ) vẫn
+  không đụng tới nhờ nhớ đệm + gộp lời gọi.
+
 ## [0.3.0] - 2026-08-30
 
 ### Thêm

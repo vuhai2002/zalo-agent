@@ -175,7 +175,16 @@ const TUNING_BY_KEY = {
     kind: "boolean",
     group: "general",
     label: "Kiểm tra bản cập nhật",
-    hint: "Định kỳ hỏi GitHub xem có bản phát hành mới hơn bản đang chạy không, rồi hiện nút cập nhật ở chân sidebar. Chỉ là một lời gọi ra GitHub (có nhớ đệm 6 tiếng nên không đụng giới hạn), tắt nếu bạn không muốn máy chủ gọi ra ngoài.",
+    hint: "Định kỳ hỏi GitHub xem có bản phát hành mới hơn bản đang chạy không, rồi hiện nút cập nhật ở chân sidebar. Chỉ là một lời gọi ra GitHub (có nhớ đệm nên không đụng giới hạn), tắt nếu bạn không muốn máy chủ gọi ra ngoài.",
+  },
+  UPDATE_CHECK_INTERVAL_MINUTES: {
+    kind: "number",
+    group: "general",
+    label: "Nhịp kiểm tra bản mới",
+    hint: "Bao lâu mới hỏi GitHub một lần rồi nhớ đệm kết quả. Thấp thì bản mới hiện nhanh hơn nhưng gọi ra GitHub nhiều hơn; cao thì ngược lại. 60 phút là cân bằng tốt (GitHub cho 60 lần/giờ mà có nhớ đệm + gộp lời gọi nên không bao giờ chạm trần). Chỉ có tác dụng khi 'Kiểm tra bản cập nhật' đang bật.",
+    min: 5,
+    max: 1440,
+    unit: "phút",
   },
 
   // --- Lượt trả lời ---

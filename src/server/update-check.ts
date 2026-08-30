@@ -22,8 +22,10 @@ type OwnerRepo = { owner: string; repo: string };
 const GITHUB_API = "https://api.github.com";
 const USER_AGENT = "zalo-agent-update-check";
 const FETCH_TIMEOUT_MS = 5000;
-const TTL_THANH_CONG_MS = 6 * 60 * 60 * 1000; // 6h: bản phát hành cả tuần mới đổi
-const TTL_LOI_MS = 30 * 60 * 1000; // hỏng thì thử lại sớm hơn, nhưng không dồn dập
+// Trần thời gian chờ khi lần fetch HỎNG: thử lại sớm hơn (không đợi trọn nhịp),
+// nhưng không dồn dập. Nhịp lúc THÀNH CÔNG đọc từ tuning
+// UPDATE_CHECK_INTERVAL_MINUTES (chỉnh nóng trên trang Cấu hình).
+const TTL_LOI_MS = 30 * 60 * 1000;
 
 let cache: { luc: number; ttl: number; kq: ThongTinBanMoi } | null = null;
 let dangChay: Promise<ThongTinBanMoi> | null = null; // single-flight: nhiều tab không gọi song song
@@ -74,8 +76,10 @@ export async function layBanMoiNhat(opts: LayBanMoiOpts = {}): Promise<ThongTinB
 async function timNguoi(opts: LayBanMoiOpts, now: () => number): Promise<ThongTinBanMoi> {
   const or = opts.ownerRepo !== undefined ? opts.ownerRepo : docOwnerRepo();
   const kq = await goiGitHub(opts.fetchFn ?? fetch, or);
-  // Hỏng thì cache ngắn (thử lại sớm), thành công thì cache dài (đỡ rate limit)
-  cache = { luc: now(), ttl: kq.latest ? TTL_THANH_CONG_MS : TTL_LOI_MS, kq };
+  const intervalMs = getTuning("UPDATE_CHECK_INTERVAL_MINUTES") * 60_000;
+  // Thành công thì cache trọn nhịp; hỏng thì cache ngắn hơn (thử lại sớm), và
+  // không bao giờ dài hơn nhịp - phòng khi người dùng đặt nhịp dưới 30 phút.
+  cache = { luc: now(), ttl: kq.latest ? intervalMs : Math.min(intervalMs, TTL_LOI_MS), kq };
   return kq;
 }
 
