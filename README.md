@@ -1,4 +1,6 @@
-<p align="center"><strong>zalo-agent</strong></p>
+<p align="center">
+  <img src="web/public/zalo-agent-logo.webp" alt="Zalo Agent" width="240" />
+</p>
 
 <p align="center">
 Agent AI thường trú trên Zalo. Chạy được trên <strong>hai loại kênh</strong>: tài khoản Zalo <strong>cá nhân</strong> (qua zca-js)<br/>

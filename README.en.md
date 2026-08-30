@@ -1,4 +1,6 @@
-<p align="center"><strong>zalo-agent</strong></p>
+<p align="center">
+  <img src="web/public/zalo-agent-logo.webp" alt="Zalo Agent" width="240" />
+</p>
 
 <p align="center">
 A self-hosted AI agent that lives inside <strong>Zalo</strong>. Runs on <strong>two channel types</strong>:<br/>
