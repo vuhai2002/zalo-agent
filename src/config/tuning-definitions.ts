@@ -171,6 +171,12 @@ const TUNING_BY_KEY = {
     label: "Múi giờ của bot",
     hint: 'Bot sẽ hiểu "hôm nay", "3 giờ chiều" theo múi giờ bạn chọn. Sai múi giờ có thể dẫn đến nhắc lịch sai thời gian.',
   },
+  UPDATE_CHECK_ENABLED: {
+    kind: "boolean",
+    group: "general",
+    label: "Kiểm tra bản cập nhật",
+    hint: "Định kỳ hỏi GitHub xem có bản phát hành mới hơn bản đang chạy không, rồi hiện nút cập nhật ở chân sidebar. Chỉ là một lời gọi ra GitHub (có nhớ đệm 6 tiếng nên không đụng giới hạn), tắt nếu bạn không muốn máy chủ gọi ra ngoài.",
+  },
 
   // --- Lượt trả lời ---
   LLM_MAX_STEPS: {

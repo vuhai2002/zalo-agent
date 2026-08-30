@@ -7,6 +7,9 @@
  */
 export type LlmProviderKind = "openai-compatible" | "anthropic" | "google";
 
+/** Trạng thái kiểm tra bản mới cho chân sidebar (xem `/api/version`) */
+export type VersionInfo = { enabled: boolean; latest: string | null; releaseUrl: string | null };
+
 /**
  * KHÁC với `LlmProviderKind` ở trên: hai type MCP dưới đây IMPORT xuyên biên
  * từ `src/mcp/mcp-types.ts` thay vì khai lại tay. `mcp-types.ts` là file THUẦN
@@ -194,6 +197,8 @@ export const api = {
 
   overview: (days?: number) =>
     request<OverviewData>(`/api/overview${days ? `?days=${days}` : ""}`),
+
+  version: () => request<VersionInfo>("/api/version"),
 
   threads: (accountId: string, q: string, page: number) =>
     request<{ items: ThreadItem[]; hasMore: boolean }>(

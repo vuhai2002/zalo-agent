@@ -33,6 +33,12 @@ export const IconChat = (p: IconProps) => (
   </svg>
 );
 
+export const IconArrowUp = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 19V5M6 11l6-6 6 6" />
+  </svg>
+);
+
 export const IconUsers = (p: IconProps) => (
   <svg {...base(p)}>
     <circle cx="9" cy="8.5" r="3.2" />

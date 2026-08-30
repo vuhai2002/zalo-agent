@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import type { AccountInfo } from "./dashboard-api-client";
+import type { AccountInfo, VersionInfo } from "./dashboard-api-client";
 import { api } from "./dashboard-api-client";
 import { coCanHoiTruocKhiRoi, xinPhepRoiTrang } from "./shared/unsaved-changes-guard";
 import { SidebarNav } from "./layout/sidebar-nav";
@@ -36,6 +36,7 @@ function DashboardShell() {
   const [accounts, setAccounts] = useState<AccountInfo[]>([]);
   const [checked, setChecked] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<VersionInfo | null>(null);
   // Chỉ cần ĐỌC theme ở đây để chọn ảnh nền - nút chuyển nằm trong SidebarNav
   const { theme } = useTheme();
 
@@ -48,6 +49,12 @@ function DashboardShell() {
       })
       .catch(() => navigate("/login"));
   }, [navigate]);
+
+  // Kiểm tra bản mới - KHÔNG chặn render (không gate `checked`): có thì hiện nút
+  // ở chân sidebar, GitHub lỗi/tắt thì thôi, không ảnh hưởng dashboard.
+  useEffect(() => {
+    api.version().then(setUpdateInfo).catch(() => setUpdateInfo(null));
+  }, []);
 
   const logout = useCallback(async () => {
     // Đăng xuất cũng là RỜI TRANG - trước đó nó lách qua chốt "chưa lưu", nên
@@ -63,6 +70,7 @@ function DashboardShell() {
     <div className="flex min-h-[100dvh] bg-canvas">
       <SidebarNav
         online={accounts.some((a) => a.online)}
+        updateInfo={updateInfo}
         onLogout={logout}
         mobileOpen={menuOpen}
         onCloseMobile={() => setMenuOpen(false)}

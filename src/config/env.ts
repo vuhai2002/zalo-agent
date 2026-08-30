@@ -404,6 +404,12 @@ const envSchema = z.object({
   // nếu không cookie không bao giờ được gửi và không đăng nhập được.
   DASHBOARD_BEHIND_PROXY: z.preprocess(emptyToUndefined, z.stringbool().default(false)),
 
+  // Kiểm tra GitHub Releases xem có bản mới hơn bản đang chạy không, rồi hiện
+  // nút "Cập nhật" ở chân sidebar. Chỉ là một lời gọi ra GitHub (host cố định,
+  // có nhớ đệm), tắt được cho ai không muốn máy chủ gọi ra ngoài. Cùng nếp
+  // z.stringbool() qua emptyToUndefined như 8 biến boolean khác trong file này.
+  UPDATE_CHECK_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
+
   // ===== MCP client: cắm MCP server ngoài (chỉ HTTP) làm nguồn tool =====
   // Công tắc tổng. Tắt thì startMcpManager() không nối server nào, và
   // mcpToolDefinitions() luôn trả rỗng - agent không thấy tool ngoài nào dù

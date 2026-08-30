@@ -8,6 +8,17 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ## [Chưa phát hành]
 
+### Thêm
+
+- **Chỉ báo bản mới ở chân sidebar.** Dashboard hỏi GitHub Releases xem có bản
+  phát hành mới hơn bản đang chạy không; có thì hiện nút "Cập nhật lên vX.Y.Z",
+  bấm mở trang release. Chỉ là một lời gọi ra GitHub (host cố định, nhớ đệm 6
+  tiếng nên không đụng giới hạn 60 lần/giờ), fail-soft hoàn toàn - GitHub
+  lỗi/timeout thì không hiện gì, không bao giờ chặn dashboard. Tắt được ở trang
+  Cấu hình (`UPDATE_CHECK_ENABLED`, mặc định bật) cho ai không muốn máy chủ gọi
+  ra ngoài. Việc so sánh phiên bản nằm ở phía trình duyệt (đã có sẵn số bản đang
+  chạy), URL trang release tự dựng chứ không tin dữ liệu GitHub trả về.
+
 ## [0.2.0] - 2026-08-30
 
 ### Thêm

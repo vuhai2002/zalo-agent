@@ -34,6 +34,7 @@ import { mcpRoutes } from "./routes/mcp-routes.js";
 import { toolRoutes } from "./routes/tool-routes.js";
 import { traceRoutes } from "./routes/trace-routes.js";
 import { tuningRoutes } from "./routes/tuning-routes.js";
+import { versionRoutes } from "./routes/version-routes.js";
 import { visionRoutes } from "./routes/vision-routes.js";
 
 const log = createLogger("dashboard-server");
@@ -160,6 +161,7 @@ export function buildDashboardApp(): Hono {
     return c.json({ ok: true });
   });
   app.route("/api/overview", overviewRoutes);
+  app.route("/api/version", versionRoutes);
   app.route("/api/threads", threadRoutes);
   app.route("/api/contacts", contactRoutes);
   app.route("/api/friends", friendRoutes);

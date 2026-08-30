@@ -1,6 +1,7 @@
 import type { MouseEvent, ReactNode, SVGProps } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
+  IconArrowUp,
   IconBolt,
   IconClock,
   IconCpu,
@@ -22,6 +23,8 @@ import {
 } from "../shared/dashboard-icons";
 import { coCanHoiTruocKhiRoi, xinPhepRoiTrang } from "../shared/unsaved-changes-guard";
 import { useTheme } from "../shared/use-theme";
+import { coBanMoiHon } from "../shared/so-sanh-phien-ban";
+import type { VersionInfo } from "../dashboard-api-client";
 
 /**
  * Sidebar theo mẫu GoClaw. Từ lg trở lên: cột cố định trong layout.
@@ -77,12 +80,15 @@ const SECTIONS: { title: string; items: { to: string; label: string; icon: IconF
 
 export function SidebarNav({
   online,
+  updateInfo,
   onLogout,
   mobileOpen,
   onCloseMobile,
 }: {
   /** Có ít nhất 1 account Zalo đang chạy - cho chấm trạng thái ở footer */
   online: boolean;
+  /** Kết quả kiểm tra bản mới; null khi chưa có/không lấy được */
+  updateInfo?: VersionInfo | null;
   onLogout: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
@@ -205,6 +211,21 @@ export function SidebarNav({
             </button>
           </div>
         </div>
+
+        {/* Nút cập nhật: chỉ hiện khi GitHub có bản phát hành mới hơn bản đang
+            chạy (`__APP_VERSION__` nhúng lúc build). Bấm mở trang release. */}
+        {updateInfo?.releaseUrl && coBanMoiHon(__APP_VERSION__, updateInfo.latest) && (
+          <a
+            href={updateInfo.releaseUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            title={`Có bản mới v${updateInfo.latest} - mở trang phát hành trên GitHub`}
+            className="mx-3 mb-3 flex items-center justify-center gap-1.5 rounded-lg bg-zalo-500 px-3 py-2 text-[13px] font-medium text-white transition-[filter] hover:brightness-105"
+          >
+            <IconArrowUp size={14} />
+            Cập nhật lên v{updateInfo.latest}
+          </a>
+        )}
       </aside>
     </>
   );
