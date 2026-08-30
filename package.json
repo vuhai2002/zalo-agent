@@ -1,6 +1,6 @@
 {
   "name": "zalo-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Bot AI thường trú trên Zalo cá nhân, đa tài khoản: agent loop tự gọi tool (kể cả tool từ MCP server ngoài), dashboard web, lịch hẹn, trí nhớ bền, tin nhắn có định dạng. Self-hosted, provider-agnostic.",
   "keywords": [

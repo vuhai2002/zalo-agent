@@ -8,8 +8,38 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ## [Chưa phát hành]
 
+## [0.2.0] - 2026-08-30
+
 ### Thêm
 
+- **MCP client - agent cắm được công cụ từ MCP server ngoài.** Bot làm CLIENT
+  (không phải server): thêm địa chỉ MCP server ở tab "MCP" trên dashboard, agent
+  gọi được công cụ của server đó. **Chỉ transport HTTP, không stdio** - stdio bắt
+  bot chạy lệnh trên máy chủ, mà bot đọc tin người lạ nên đó là đường RCE qua cấu
+  hình. Phân quyền default-deny theo từng agent: agent chưa được gán server nào
+  thì KHÔNG chạm được công cụ ngoài, nên người lạ chat một agent chưa cấu hình
+  không với tới đâu. Công cụ ngoài đi chung đường với công cụ nội bộ nên thừa
+  hưởng mọi bộ lọc (tắt theo agent/account, loại khỏi lượt chạy theo lịch), kết
+  quả luôn bọc trong khối đánh dấu DỮ LIỆU chống prompt injection. Chống server
+  đổi bộ công cụ ngầm (tool poisoning): chụp vân tay bộ công cụ lúc duyệt, server
+  đổi sau đó thì phải duyệt lại mới nạp. Header bí mật (khóa API của server) mã
+  hóa AES-256-GCM; `MCP_ENABLED` là công tắc tắt toàn cục tức thì.
+- **Tab Bạn bè trên dashboard** (chỉ tài khoản cá nhân): xem các yêu cầu kết bạn
+  ĐẾN rồi chấp nhận hoặc từ chối. Zalo không có API liệt kê yêu cầu kết bạn nên
+  bot bắt qua sự kiện listener rồi lưu lại - yêu cầu cũ trước khi chạy bản này
+  không lấy lại được. Bật được **auto-accept** riêng cho từng account (mặc định
+  TẮT), có độ trễ chỉnh được; một vòng quét nền xử lý, sống sót qua restart. Nội
+  dung lời nhắn của người lạ chỉ HIỂN THỊ trên dashboard, không đưa vào prompt.
+  Chấp nhận kết bạn KHÔNG tự cho phép chat (tách bạch kết bạn với allowlist).
+- **Công cụ tải video** (`tai_video`): gửi link TikTok, Facebook hoặc Instagram
+  (reel/post), bot tải video rồi gửi thẳng vào Zalo. TikTok ưu tiên nguồn nhanh
+  không dính watermark, có nguồn dự phòng; Facebook và Instagram tải qua yt-dlp.
+  Byte video KHÔNG chạm đĩa (giữ trong RAM rồi upload) để không bào SSD. Đọc kích
+  thước và thời lượng thật TỪ FILE mp4 - khai sai làm ứng dụng Zalo trên điện
+  thoại crash. Có trần chạy song song và trần theo giờ để không cạn RAM hay spam.
+  Story Facebook và link Threads chưa tải được (giới hạn nền tảng, không phải lỗi
+  bot) - bot nói rõ lý do thay vì đoán "video riêng tư". URL do người lạ gửi nên
+  có whitelist host và chặn SSRF.
 - **Kênh thứ hai: tài khoản Zalo Bot chính thức.** Ngoài tài khoản Zalo cá
   nhân (qua `zca-js`), agent chạy được trên tài khoản bot chính thức của Zalo
   qua **Zalo Bot API** (`bot-api.zaloplatforms.com`) - **không có rủi ro bị
@@ -351,5 +381,6 @@ Bản đầu tiên được đánh số. Gom toàn bộ những gì đã làm t�
   mệnh lệnh; tin của người ngoài danh sách cho phép có nhãn riêng
 - Rate limit đăng nhập dashboard, phiên lưu trong DB nên đăng xuất thu hồi được thật
 
-[Chưa phát hành]: https://github.com/vuhai2002/zalo-agent/compare/v0.1.0...HEAD
+[Chưa phát hành]: https://github.com/vuhai2002/zalo-agent/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/vuhai2002/zalo-agent/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/vuhai2002/zalo-agent/releases/tag/v0.1.0
