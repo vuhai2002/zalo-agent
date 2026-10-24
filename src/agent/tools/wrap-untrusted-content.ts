@@ -152,3 +152,22 @@ export function trichTheDongThuc(daBoc: string): string {
   const khop = new RegExp(`^<${THE}(_[0-9a-f]+)?\\b`).exec(daBoc);
   return `</${THE}${khop?.[1] ?? ""}>`;
 }
+
+/**
+ * Đưa nonce trong thẻ ranh giới về một giá trị CỐ ĐỊNH - CHỈ để so sánh hai kết
+ * quả tool với nhau, KHÔNG BAO GIỜ dùng cho chuỗi gửi model (gửi model mà bỏ
+ * nonce là gỡ đúng hàng rào của file này).
+ *
+ * Vì sao cần: `tool-loop-guard` băm kết quả để nhận ra "cùng một kết quả N lần".
+ * Nonce đổi MỖI lần bọc, nên hai lần `web_search` trả về y hệt nhau vẫn ra hai
+ * hash khác nhau - luật "không tiến triển" không bao giờ bắn cho mọi tool đọc
+ * có bọc (web_search, web_fetch, kb_search). Cùng lớp lỗi hermes-agent vá ở
+ * 0cc43227d9 (metadata riêng của từng lần gọi phá hash kết quả).
+ *
+ * An toàn để khớp theo mẫu: nội dung bên trong khối không thể chứa tên thẻ gốc
+ * (`TEN_THE_RE` đã đổi nó thành `DANG_KHU` lúc bọc), nên mẫu này chỉ trúng đúng
+ * thẻ ranh giới thật.
+ */
+export function chuanHoaNonceDeSoSanh(chuoi: string): string {
+  return chuoi.replace(new RegExp(`(</?${THE})_[0-9a-f]+\\b`, "g"), "$1_nonce");
+}

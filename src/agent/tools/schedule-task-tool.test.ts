@@ -452,6 +452,16 @@ describe("schedule_task - schema đầu vào (đi qua inputSchema thật)", () =
       false,
     );
   });
+
+  it("biểu thức cron quá dài bị chặn ở schema kèm lý do tiếng Việt, cron thật vẫn qua", () => {
+    const voiCron = (expr: string) =>
+      parse({ action: "create", name: "x", kind: "message", payload: "y", schedule: { kind: "cron", expr } });
+    assert.equal(voiCron("0 7 * * *").success, true);
+    assert.equal(voiCron("*".repeat(256)).success, true, "đúng trần vẫn nhận");
+    const dai = voiCron(`0 7 * * * ${"x".repeat(300)}`);
+    assert.equal(dai.success, false);
+    assert.match(JSON.stringify(dai.error.issues), /Biểu thức cron tối đa 256 ký tự/);
+  });
 });
 
 /**

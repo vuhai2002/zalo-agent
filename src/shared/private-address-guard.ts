@@ -94,22 +94,53 @@ function ipv6ToBytes(address: string): Uint8Array | null {
 const startsWithBytes = (bytes: Uint8Array, prefix: number[]): boolean =>
   prefix.every((value, index) => bytes[index] === value);
 
+/** IPv4 nằm ở 4 byte bắt đầu từ `tu` của địa chỉ IPv6 */
+const v4Tai = (bytes: Uint8Array, tu: number): string => [...bytes.slice(tu, tu + 4)].join(".");
+
+/**
+ * Các dạng IPv6 "bọc" một IPv4 bên trong. Bỏ sót dạng nào là `::ffff:0:a9fe:a9fe`
+ * kiểu đó đi lọt mọi luật IPv6 bên dưới (không phải loopback, không phải
+ * link-local...) trong khi trên đường đi thật nó tới đúng IPv4 bên trong.
+ *
+ * Trả `true`/`false` khi đã quyết được, `null` khi không phải dạng bọc.
+ */
+function xetDangBocIpv4(bytes: Uint8Array): boolean | null {
+  const dau = (prefix: number[]) => startsWithBytes(bytes, prefix);
+  const muoiHaiByteDau = (b10: number, b11: number) => dau([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, b10, b11]);
+
+  // IPv4-mapped ::ffff:0:0/96 và NAT64 well-known 64:ff9b::/96: xét theo IPv4
+  // bên trong, nếu không thì "::ffff:127.0.0.1" lọt.
+  if (muoiHaiByteDau(0xff, 0xff)) return isPublicV4(v4Tai(bytes, 12));
+  if (dau([0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0])) return isPublicV4(v4Tai(bytes, 12));
+  // IPv4-translated ::ffff:0:0:0/96 (RFC 2765/SIIT): cùng ý với mapped, lệch 2 byte
+  if (dau([0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0, 0])) return isPublicV4(v4Tai(bytes, 12));
+  // 6to4 2002::/16 (RFC 3056): IPv4 ở byte 2-5, relay chuyển thẳng tới IPv4 đó
+  if (dau([0x20, 0x02])) return isPublicV4(v4Tai(bytes, 2));
+
+  // Ba dạng dưới CHẶN HẲN chứ không xét IPv4 bên trong:
+  // - ::/96 IPv4-compatible (`::127.0.0.1`): đã bỏ từ RFC 4291, không ai dùng
+  //   thật; dải này cũng chứa sẵn `::` và `::1`.
+  // - NAT64 local-use 64:ff9b:1::/48 (RFC 8215): vị trí IPv4 phụ thuộc độ dài
+  //   prefix mà nhà mạng tự chọn (RFC 6052 cho 6 kiểu), đoán sai một kiểu là
+  //   lọt; và đây là dải nội bộ của một mạng, không phải đích công khai.
+  // - Teredo 2001::/32 (RFC 4380): IPv4 của client bị XOR che đi, dạng đường hầm
+  //   không có lý do gì xuất hiện như đích tải của bot.
+  if (muoiHaiByteDau(0, 0)) return false;
+  if (dau([0, 0x64, 0xff, 0x9b, 0, 0x01])) return false;
+  if (dau([0x20, 0x01, 0, 0])) return false;
+  return null;
+}
+
 function isPublicV6(address: string): boolean {
   const bytes = ipv6ToBytes(address);
   if (!bytes) return false;
 
-  // IPv4-mapped (::ffff:0:0/96) và NAT64 (64:ff9b::/96): xét theo IPv4 bên trong,
-  // nếu không thì "::ffff:127.0.0.1" lọt qua mọi luật IPv6 bên dưới
-  const mappedV4 = startsWithBytes(bytes, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff]);
-  const nat64 = startsWithBytes(bytes, [0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0]);
-  if (mappedV4 || nat64) {
-    return isPublicV4([...bytes.slice(12)].join("."));
-  }
+  const bocIpv4 = xetDangBocIpv4(bytes);
+  if (bocIpv4 !== null) return bocIpv4;
 
-  if (bytes.every((b) => b === 0)) return false; // :: unspecified
-  if (startsWithBytes(bytes, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])) return false; // ::1
   if ((bytes[0]! & 0xfe) === 0xfc) return false; // fc00::/7 unique-local
   if (bytes[0] === 0xfe && (bytes[1]! & 0xc0) === 0x80) return false; // fe80::/10 link-local
+  if (bytes[0] === 0xfe && (bytes[1]! & 0xc0) === 0xc0) return false; // fec0::/10 site-local (đã bỏ, vẫn có mạng nội bộ dùng)
   if (bytes[0] === 0xff) return false; // ff00::/8 multicast
   if (startsWithBytes(bytes, [0x20, 0x01, 0x0d, 0xb8])) return false; // 2001:db8::/32 documentation
   if (startsWithBytes(bytes, [0x01, 0, 0, 0, 0, 0, 0, 0])) return false; // 100::/64 discard

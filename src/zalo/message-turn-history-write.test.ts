@@ -274,6 +274,33 @@ describe("ghi lịch sử ngay lúc nhận - đúng một dòng, không mất kh
     const vai = lichSu().map((m) => m.role);
     assert.deepEqual(vai, ["user", "assistant"]);
   });
+  it("câu DỰ PHÒNG (router rỗng hai lần) vẫn gửi cho người nhắn nhưng KHÔNG vào lịch sử", async () => {
+    // Chữ ký glitch của 9Router: 200 rỗng, 0 token -> agent-loop thử lại rồi
+    // trả câu dự phòng kèm cờ `duPhong`. Ghi nó vào lịch sử là lượt sau model
+    // đọc thấy chính mình từng "trục trặc kỹ thuật" và neo vào tiền lệ đó.
+    const modelRong = new MockLanguageModelV4({
+      doStream: async () =>
+        thanhKetQuaStream({
+          content: [],
+          finishReason: "stop",
+          usage: {
+            inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+            outputTokens: { total: 0, text: 0, reasoning: 0 },
+          },
+          warnings: [],
+        } as unknown as KetQuaGenerate),
+    });
+    await processor.processBatch(config, kenhMod.kenhCaNhan(api), [tinDaNhan("hỏi lúc router rỗng", "m1")], {
+      resolveModel: () => modelRong,
+    });
+
+    assert.equal(daGui.length, 1, "người nhắn vẫn phải được báo, không bị bỏ treo");
+    assert.deepEqual(
+      lichSu().map((m) => m.role),
+      ["user"],
+      "câu dự phòng là thông báo hệ thống, không phải lượt trả lời của bot",
+    );
+  });
 });
 
 describe("ganAnhVaoHistory", () => {

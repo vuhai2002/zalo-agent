@@ -12,6 +12,7 @@ import type { DocumentBlock } from "./document-content-schema.js";
 import { parseTextRuns } from "./docx-text-runs.js";
 import { DOCX_STYLES, PAGE_MARGINS } from "./render-docx-styles.js";
 import { buildTable, buildTwoColumns } from "./render-docx-tables.js";
+import { lamSachChuTaiLieu } from "./xml-safe-text.js";
 
 /**
  * Dựng file .docx từ nội dung model cung cấp.
@@ -102,7 +103,13 @@ function blockToElements(block: DocumentBlock): (Paragraph | Table)[] {
 
 export type DocxMeta = { title?: string };
 
-export async function renderDocx(blocks: DocumentBlock[], meta: DocxMeta = {}): Promise<Buffer> {
+export async function renderDocx(
+  blocksTho: DocumentBlock[],
+  metaTho: DocxMeta = {},
+): Promise<Buffer> {
+  // Cửa vào DUY NHẤT của chữ model: lọc ký tự XML cấm ở đây (xem xml-safe-text.ts)
+  const blocks = lamSachChuTaiLieu(blocksTho);
+  const meta = lamSachChuTaiLieu(metaTho);
   const children: (Paragraph | Table)[] = [];
   if (meta.title?.trim()) {
     children.push(new Paragraph({ text: meta.title.trim(), heading: HeadingLevel.TITLE }));

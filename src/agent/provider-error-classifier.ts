@@ -71,6 +71,16 @@ const DAU_HIEU_TRAN_CONTEXT = [
   "prompt is too long",
   "reduce the length",
   "exceeds the maximum",
+  // Gom thêm từ bảng phân loại của goclaw (`internal/providers/error_classify.go`):
+  // llama.cpp ("exceeds the available context size"), Ollama
+  // ("exceed_context_size"), GLM ("prompt exceeds max length") và các gateway
+  // trả 413 dạng JSON. Thiếu chúng thì lỗi rơi vào `unknown` và đường cắt sâu
+  // rồi thử lại không bao giờ chạy.
+  "context size",
+  "exceed_context_size",
+  "exceeds max length",
+  "token limit",
+  "request_too_large",
 ];
 
 /** Lỗi TẦNG MẠNG - chưa tới được provider, hoặc đứt giữa chừng */
@@ -136,6 +146,12 @@ export function phanLoaiLoiProvider(raw: unknown): LoaiLoiProvider {
   // Mã HTTP trước, chuỗi sau: mã là dữ liệu có cấu trúc do provider gửi, còn
   // chuỗi thì mỗi nơi viết một kiểu và đổi bất cứ lúc nào.
   if (ma === 429) return "rate_limit";
+  // 9Router từ v0.5.x trả 503 KÈM `Retry-After` khi MỌI tài khoản upstream đều
+  // đang bị siết nhịp (trước đây phần lớn là 429). Về bản chất đó vẫn là siết
+  // nhịp: chờ đúng số giây đó rồi thử lại có ích, còn xử như `transient` thì
+  // ném luôn và người nhắn nhận câu lỗi. 503 KHÔNG có header thì vẫn là sự cố
+  // máy chủ như cũ.
+  if (ma === 503 && giayChoLai(err) !== undefined) return "rate_limit";
   if (ma === 401 || ma === 403) return "auth";
 
   // Context tràn LUÔN là 400 chung với lỗi tham số khác, nên chỉ nhận ra được

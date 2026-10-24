@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
-import { APICallError } from "ai";
+import { APICallError, InvalidResponseDataError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { ThreadType, type API } from "zca-js";
 import { cleanupTestEnv, setupTestEnv } from "../shared/test-env-setup.js";
@@ -209,6 +209,12 @@ describe("runAgentTurn - router trả completion rỗng", () => {
     assert.equal(soLanGoi(), 2, "thử lại đúng 1 lần rồi thôi, không lặp vô hạn");
     assert.ok(ket.text.length > 0, "phải nói gì đó cho người nhắn");
     assert.equal(ket.usage.totalTokens, 0);
+    assert.equal(ket.duPhong, "router-rong", "caller phải biết đây là câu dự phòng, không phải câu trả lời");
+  });
+
+  it("lượt bình thường KHÔNG mang cờ dự phòng - đối chứng", async () => {
+    const { ket } = await chayLuot([() => traLoi("Hôm nay thứ tư.")]);
+    assert.equal(ket.duPhong, undefined);
   });
 
   it("trace của CẢ hai lần chạy nối vào nhau - lúc hỏng mới cần nhìn đủ", async () => {
@@ -572,6 +578,12 @@ describe("runAgentTurn - chạm trần step", () => {
   it("lượt chốt cũng lỗi thì vẫn trả lời được, không ném ra ngoài", async () => {
     const { ket } = await chayLuot([goiTool, goiTool, () => new Error("chốt cũng chết")]);
     assert.ok(ket.text.includes("hỏi lại"), "phải là câu mời hỏi lại, không phải câu tường thuật nội bộ");
+    assert.equal(ket.duPhong, "het-step");
+  });
+
+  it("lượt chốt RA CHỮ thì không phải câu dự phòng", async () => {
+    const { ket } = await chayLuot([goiTool, goiTool, () => traLoi("Chốt lại: thứ tư.")]);
+    assert.equal(ket.duPhong, undefined);
   });
 });
 
@@ -1079,5 +1091,57 @@ describe("runAgentTurn - tiêm tin giữa lượt", () => {
     // hàm này ở đường chạy thật. Nếu sau này có ai truyền vào thì phải quyết
     // định có chặn ở agent-loop hay không - test này sẽ đỏ và bắt đọc lại chỗ đó.
     assert.ok(soLanLay > 0, "hiện tại agent-loop KHÔNG tự chặn theo isolated - chặn nằm ở call site");
+  });
+});
+
+/**
+ * Hai thay đổi hành vi của AI SDK mà không test giả nào dựng ra được tự nhiên
+ * (`stream-cut-recovery.test.ts` đo chúng trên SDK thật). Ở đây chỉ dựng đúng
+ * HÌNH DẠNG lỗi mà SDK thật ném để canh DÂY NỐI trong agent-loop.
+ */
+describe("runAgentTurn - stream bị cắt (ai >= 7.0.130, openai-compatible >= 3.0.33)", () => {
+  const hetGio = () => new DOMException("The operation was aborted due to timeout", "TimeoutError");
+  const thieuFinish = () =>
+    new InvalidResponseDataError({ data: {}, message: "Response stream ended without a finish reason." });
+
+  it("hết giờ ở step 2 sau khi step 1 gọi tool: vẫn vào LƯỢT CHỐT như bản SDK cũ, không báo lỗi", async () => {
+    const { ket, calls } = await chayLuot([goiTool, hetGio, () => traLoi("Theo kết quả đã tra: thứ tư.")]);
+    assert.equal(calls.length, 3, "step 1 + step 2 hết giờ + lượt chốt");
+    assert.equal(calls[2]!.tools?.length ?? 0, 0, "lượt chốt không cấp tool");
+    assert.ok(promptText(calls[2]!).includes("get_datetime"), "lượt chốt phải thấy tool call của step đã xong");
+    assert.equal(ket.text, "Theo kết quả đã tra: thứ tư.");
+    assert.equal(ket.duPhong, undefined);
+  });
+
+  it("hết giờ ngay step 1 (chưa xong step nào) thì ném - không có gì để cứu", async () => {
+    await assert.rejects(chayLuot([hetGio]), (e: unknown) => e instanceof Error && e.name === "TimeoutError");
+  });
+
+  it("stream không có finish_reason ở lần đầu: thử lại 1 lần như glitch '200 rỗng'", async () => {
+    const { ket, soLanGoi } = await chayLuot([thieuFinish, () => traLoi("lần hai có chữ")]);
+    assert.equal(soLanGoi(), 2);
+    assert.equal(ket.text, "lần hai có chữ");
+  });
+
+  it("thiếu finish cả hai lần thì ném ra cho caller báo lỗi, không lặp", async () => {
+    let lan = 0;
+    await assert.rejects(
+      chayLuot([
+        () => {
+          lan++;
+          return thieuFinish();
+        },
+      ]),
+      /without a finish reason/,
+    );
+    assert.equal(lan, 2, "đúng 1 lần thử lại");
+  });
+
+  it("thiếu finish SAU khi đã xong step: KHÔNG chạy lại cả lượt mà cứu vào lượt chốt", async () => {
+    const { ket, calls } = await chayLuot([goiTool, thieuFinish, () => traLoi("Chốt từ kết quả đã tra.")]);
+    assert.equal(calls.length, 3, "step 1 + step 2 bị cắt + lượt chốt - chạy lại cả lượt sẽ là 4+ lần gọi");
+    assert.equal(calls[2]!.tools?.length ?? 0, 0, "lượt chốt không cấp tool");
+    assert.equal(calls.filter((c) => (c.tools?.length ?? 0) > 0).length, 2, "tool step 1 không bị gọi lại");
+    assert.equal(ket.text, "Chốt từ kết quả đã tra.");
   });
 });

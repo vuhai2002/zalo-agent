@@ -1,4 +1,4 @@
-import { stepCountIs, streamText, type ModelMessage } from "ai";
+import { stepCountIs, streamText, type ModelMessage, type StepResult } from "ai";
 import type { API } from "zca-js";
 import type { AccountConfig } from "../config/account-store.js";
 import { getAgentForAccount } from "../config/agent-store.js";
@@ -29,6 +29,7 @@ import {
 import { catNguCanhTheoNganSach } from "./trim-context-to-budget.js";
 import { giayChoLai, maHttpCua, phanLoaiLoiProvider } from "./provider-error-classifier.js";
 import { chayStream } from "./stream-text-result.js";
+import { ketQuaTuStepDaXong, laLoiHetGio, laStreamThieuFinish } from "./stream-cut-recovery.js";
 import { dungTinChenTrongNganSach, taoBoChenTin } from "./mid-turn-injection.js";
 import {
   canLuotChot,
@@ -157,6 +158,14 @@ export type AgentTurnParams = {
 export type AgentTurnResult = {
   text: string;
   usage: { inputTokens: number; outputTokens: number; totalTokens: number; steps: number };
+  /**
+   * Có mặt khi `text` là câu DỰ PHÒNG của hệ thống chứ không phải câu trả lời
+   * của model: router trả rỗng hai lần, hoặc hết step mà lượt chốt cũng không
+   * ra chữ. Caller PHẢI đọc cờ này thay vì so chữ: lịch hẹn không được gửi câu
+   * báo lỗi như một lời nhắc (job hỏng thì im), còn chat không được ghi nó vào
+   * history (lượt sau model neo vào tiền lệ hỏng).
+   */
+  duPhong?: "router-rong" | "het-step";
 };
 
 /**
@@ -349,6 +358,9 @@ export async function runAgentTurn({
   // lượt (đường hiệu chỉnh `KY_TU_MOI_TOKEN` - xem `token-estimate.ts`).
   let heThongDaGui = "";
   let toolSetDaGui: ReturnType<typeof buildAgentTools> | null = null;
+  // Số step ĐÃ XONG của lần `runOnce` gần nhất - nhánh "stream thiếu finish"
+  // chỉ được chạy lại khi bằng 0 (xem chỗ dùng).
+  let soStepXongLanCuoi = 0;
 
   // `streamText` chứ không phải `generateText`: request non-stream buộc router
   // gom trọn câu trả lời rồi mới gửi byte đầu, mà Cloudflare trước 9Router cắt
@@ -371,6 +383,10 @@ export async function runAgentTurn({
     const toolSet = buildAgentTools({ api, account, agent, message: latest, batch, isolated, ghiNhanDaGui });
     heThongDaGui = heThong;
     toolSetDaGui = toolSet;
+    // Step ĐÃ XONG của riêng lần chạy này - nguyên liệu để cứu lượt khi hết giờ
+    // (xem `stream-cut-recovery.ts`). Dựng mới mỗi lần chạy như bộ bắt lỗi.
+    const stepsXong: StepResult<typeof toolSet>[] = [];
+    soStepXongLanCuoi = 0;
     return chayStream(
       (onError) =>
         streamText({
@@ -422,7 +438,11 @@ export async function runAgentTurn({
           // Log từng tool call kèm input + đầu output: khi bot trả lời kém phải đọc
           // được ngay nó fetch trang nào và thấy gì (vụ dò vé số chỉ có số steps,
           // toàn bộ chẩn đoán phải đi đường vòng qua DB + tái hiện tay)
-          onStepFinish: quanSatStep,
+          onStepFinish: (step) => {
+            stepsXong.push(step);
+            soStepXongLanCuoi = stepsXong.length;
+            return quanSatStep(step);
+          },
           onError,
           // Ranh giới step: sau khi có kết quả tool, TRƯỚC lần gọi LLM kế -
           // đúng điểm chèn goclaw dùng. Bản ghi đè `messages` được AI SDK mang
@@ -430,7 +450,23 @@ export async function runAgentTurn({
           prepareStep: ({ messages: tinHienTai }) => chenTinGiuaLuot(tinHienTai),
         }),
       ghiLoiStream,
-    );
+    ).catch((err: unknown) => {
+      // Hết `totalMs` giữa lượt: từ ai@7.0.130 mọi promise kết quả REJECT thay
+      // vì trả kết quả cụt như trước. Có step đã xong thì dựng lại kết quả từ
+      // chúng để lượt đi vào lượt chốt y như cũ - người dùng nhận câu trả lời
+      // từ những gì đã tra được, không phải câu báo lỗi kỹ thuật. Chưa xong
+      // step nào thì không có gì để cứu: ném như mọi lỗi khác.
+      //
+      // Stream đóng không có `finish_reason` SAU khi đã xong step cũng cứu như
+      // vậy: tool của các step trước ĐÃ chạy (có khi đã gửi file), báo "trục
+      // trặc kỹ thuật" là nói sai với người nhắn; còn tool của step đang dở thì
+      // chưa chạy (SDK chỉ execute khi có finish) nên lượt chốt không lặp gì.
+      if ((laLoiHetGio(err) || laStreamThieuFinish(err)) && stepsXong.length > 0) {
+        log.warn({ steps: stepsXong.length, err: forLog(err, 120) }, "Lượt bị cắt giữa chừng - cứu bằng các step đã xong");
+        return ketQuaTuStepDaXong(stepsXong);
+      }
+      throw err;
+    });
   };
 
   /**
@@ -613,19 +649,36 @@ export async function runAgentTurn({
   try {
     result = await runOnce();
   } catch (err) {
-    // Reactive fallback: lượt đang đính pixel mà provider từ chối bằng 4xx
-    // (endpoint ngoài 9Router không khai capability, detect đoán lạc quan) ->
-    // ghi nhớ model mù + dựng lại input không pixel rồi thử lại 1 lần.
-    // Combo qua 9Router không rơi vào đây - router lột ảnh êm, không lỗi.
-    const pixelModes: ImageContextMode[] = ["native", "hybrid"];
-    if (!pixelModes.includes(imageMode) || !hasImageParts(messages) || !isImageRejectionError(err)) {
-      // KHÔNG phải lỗi ảnh: phân loại rồi chữa đúng bệnh. Nhánh này phải nằm
-      // SAU nhánh ảnh ở trên - lỗi ảnh cũng là 400, để bộ phân loại chạy trước
-      // thì nó ra "unknown" và đường bỏ pixel không bao giờ chạy.
-      result = await chuaLoiProvider(err);
+    if (laStreamThieuFinish(err) && soStepXongLanCuoi === 0) {
+      // Glitch "200 rỗng" của 9Router mang hình dạng mới từ
+      // @ai-sdk/openai-compatible@3.0.33: stream đóng không có `finish_reason`
+      // giờ là LỖI chứ không còn là kết quả rỗng 0 token, nên nhánh `isGlitch`
+      // bên dưới không bao giờ thấy nó. Thử lại đúng 1 lần như nhánh đó.
+      //
+      // CHỈ khi chưa xong step nào: không có finish thì SDK không execute tool
+      // của step đang dở (cổng finishReason 'stop'/'tool-calls'), nên chạy lại
+      // không gửi trùng file/ảnh. Đã xong step thì `runOnce` tự cứu bằng các
+      // step đó (đi vào lượt chốt) - KHÔNG chạy lại cả lượt, vì tool của step
+      // trước đã chạy và chạy lại là làm lại tác dụng phụ.
+      log.warn("Router đóng stream không có finish_reason - thử lại 1 lần");
+      lanChay++;
+      guard.datLai();
+      result = await runOnce();
     } else {
-      markModelNoVision(agent);
-      result = await thuLaiKhongPixel(err);
+      // Reactive fallback: lượt đang đính pixel mà provider từ chối bằng 4xx
+      // (endpoint ngoài 9Router không khai capability, detect đoán lạc quan) ->
+      // ghi nhớ model mù + dựng lại input không pixel rồi thử lại 1 lần.
+      // Combo qua 9Router không rơi vào đây - router lột ảnh êm, không lỗi.
+      const pixelModes: ImageContextMode[] = ["native", "hybrid"];
+      if (!pixelModes.includes(imageMode) || !hasImageParts(messages) || !isImageRejectionError(err)) {
+        // KHÔNG phải lỗi ảnh: phân loại rồi chữa đúng bệnh. Nhánh này phải nằm
+        // SAU nhánh ảnh ở trên - lỗi ảnh cũng là 400, để bộ phân loại chạy trước
+        // thì nó ra "unknown" và đường bỏ pixel không bao giờ chạy.
+        result = await chuaLoiProvider(err);
+      } else {
+        markModelNoVision(agent);
+        result = await thuLaiKhongPixel(err);
+      }
     }
   }
 
@@ -702,6 +755,7 @@ export async function runAgentTurn({
     return {
       text: ROUTER_DOWN_REPLY,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: result.steps.length },
+      duPhong: "router-rong",
     };
   }
 
@@ -744,8 +798,10 @@ export async function runAgentTurn({
       log.error({ err }, "Lượt chốt cũng lỗi");
       return null;
     });
+    const cauChot = chot?.trim();
     return {
-      text: chot?.trim() || STEP_LIMIT_REPLY,
+      text: cauChot || STEP_LIMIT_REPLY,
+      ...(cauChot ? {} : { duPhong: "het-step" as const }),
       usage: {
         inputTokens: result.totalUsage.inputTokens ?? 0,
         outputTokens: result.totalUsage.outputTokens ?? 0,

@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** Trần ký tự biểu thức cron - xem chú thích ở trường `expr` bên dưới */
+export const MAX_CRON_EXPR_CHARS = 256;
+
 /**
  * Lịch chạy - union RỜI theo `kind`, KHÔNG dùng `z.discriminatedUnion`: 'once'
  * có 2 dạng ({date,time} và {inMinutes}) cùng chia sẻ discriminant "once", mà
@@ -35,9 +38,13 @@ export const scheduleInputSchema = z
     }),
     z.object({
       kind: z.literal("cron"),
+      // Trần độ dài: cron-parser 5.10 tự ném khi quá 1024 ký tự, nhưng chuỗi
+      // dài cỡ đó không bao giờ là cron 5 trường thật - chặn sớm ở schema để
+      // route POST /api/schedule trả 400 có lý do và model nhận câu tự sửa được.
       expr: z
         .string()
         .min(1)
+        .max(MAX_CRON_EXPR_CHARS, `Biểu thức cron tối đa ${MAX_CRON_EXPR_CHARS} ký tự - cron 5 trường thật chỉ vài chục ký tự.`)
         .describe('Biểu thức cron 5 trường theo giờ Việt Nam, vd "0 7 * * *" = 7h sáng mỗi ngày'),
     }),
   ])

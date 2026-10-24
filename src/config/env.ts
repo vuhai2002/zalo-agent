@@ -439,6 +439,11 @@ const envSchema = z.object({
   // Chu kỳ vòng health: dò lại server đang lỗi/mất kết nối để tự phục hồi mà
   // không cần khởi động lại bot.
   MCP_HEALTH_INTERVAL_MS: z.coerce.number().int().min(5000).max(600_000).default(30000),
+  // Trần ký tự kết quả MỘT lần gọi tool ngoài đưa model (cắt đầu, kèm câu báo
+  // đã cắt - cùng nếp WEB_FETCH_MAX_CHARS, cùng mặc định 15000). Không có trần
+  // thì một server trả vài MB làm provider từ chối request (400), chết CẢ LƯỢT
+  // chứ không riêng tool đó. min/max khớp `tuning-definitions.ts`.
+  MCP_MAX_RESULT_CHARS: z.coerce.number().int().min(2000).max(100_000).default(15_000),
 
   // Khóa AES-256 mã hóa cookie Zalo trên đĩa
   CREDENTIALS_ENCRYPTION_KEY: z

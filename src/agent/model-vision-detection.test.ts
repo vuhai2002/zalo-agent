@@ -87,6 +87,24 @@ describe("classifyModelVision", () => {
     );
   });
 
+  it("9Router >= v0.5.109 gắn capabilities cho combo (vision = HỢP các thành viên): combo vẫn là combo", async () => {
+    // Đúng hình dạng `aggregateComboCapabilities`: một thành viên đọc ảnh là
+    // combo báo vision:true. Coi đó là "vision" thì mất chế độ hybrid và ảnh
+    // history rơi vào thành viên mù bị lột câm.
+    const fetcher = async () => ({
+      data: [
+        { id: "gpt-combo", object: "model", owned_by: "combo", capabilities: { vision: true } },
+        { id: "combo-mu", object: "model", owned_by: "combo", capabilities: { vision: false } },
+      ],
+    });
+    assert.equal(await detection.classifyModelVision({ modelName: "gpt-combo" }, fetcher), "combo");
+    assert.equal(
+      await detection.classifyModelVision({ modelName: "combo-mu" }, fetcher),
+      "no-vision",
+      "hợp mà ra false = không thành viên nào đọc được ảnh",
+    );
+  });
+
   it("auto: /models lỗi thì unknown và có cache (không đập router)", async () => {
     let calls = 0;
     const fetcher = async () => {

@@ -209,8 +209,10 @@ async function xuLyLuot(
     // đặt ở tầng caller chứ không trong `sendReplyInParts`: hàm đó còn phục vụ
     // scheduler, mà lượt theo lịch có luật `[SILENT]` riêng - lọc chung sẽ phá
     // logic đó.
-    const giao = await deliverChatReply(replyTarget, config.id, latest.threadId, result.text);
+    const giao = await deliverChatReply(replyTarget, config.id, latest.threadId, result.text, !result.duPhong);
     if (giao.hong) return;
+    // Câu dự phòng không phải hội thoại thật - không có gì mới để tóm tắt
+    if (result.duPhong) return;
 
     // Memory lớp 2: gộp tin cũ vào summary - fire-and-forget sau khi đã trả lời,
     // maybeSummarizeThread tự nuốt lỗi nên không cần catch thêm

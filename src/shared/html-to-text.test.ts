@@ -195,6 +195,43 @@ describe("boMoiTheKhongNoiDung - tuyến tính, không ReDoS", () => {
   });
 });
 
+describe("htmlToReadableText - các regex bắt thẻ không chạy bậc hai", () => {
+  // Bản `[^>]*` đo được (rà độc lập 2026-10-24): `"<a x".repeat(N)` 40 KB = 160 ms,
+  // 80 KB = 656 ms, 160 KB = 2,6 s - gấp bốn mỗi lần gấp đôi, 3 MB ước ~15 phút.
+  const mau: Record<string, string> = {
+    "thẻ mở không có '>'": "<a x",
+    "list mở không có '>'": "<ul x",
+    "li/br/td không có '>'": "<li <br <td ",
+    "list có link không đóng": "<ul><a href=x>chữ ",
+  };
+
+  for (const [ten, don] of Object.entries(mau)) {
+    it(`${ten}: gấp đôi đầu vào thì KHÔNG gấp bốn thời gian`, () => {
+      const do1 = (n: number) => {
+        const html = don.repeat(Math.floor(n / don.length));
+        const t0 = process.hrtime.bigint();
+        htmlToReadableText(html);
+        return Number(process.hrtime.bigint() - t0) / 1e6;
+      };
+      // Loạt NGẮN + min của nhiều loạt (xem "Bẫy khi viết test" trong CLAUDE.md):
+      // nhiễu lập lịch chỉ cộng thêm thời gian, min là số đo sạch nhất.
+      const minCua = (n: number) => Math.min(...Array.from({ length: 5 }, () => do1(n)));
+      do1(20_000);
+      const nho = minCua(80_000);
+      const to = minCua(160_000);
+      assert.ok(to / nho < 3, `gấp đôi đầu vào -> gấp ${(to / nho).toFixed(1)} lần thời gian`);
+    });
+  }
+
+  it("trang 3 MB toàn '<a x' xong dưới 2 giây", () => {
+    const html = "<a x".repeat(Math.floor((3 * 1024 * 1024) / 4));
+    const t0 = process.hrtime.bigint();
+    htmlToReadableText(html);
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    assert.ok(ms < 2000, `${ms.toFixed(0)}ms - đang chạy bậc hai`);
+  });
+});
+
 describe("boMoiTheKhongNoiDung - hành vi giữ nguyên như bản regex", () => {
   it("bỏ thẻ và toàn bộ nội dung bên trong", () => {
     const ra = htmlToReadableText("<p>Giữ lại</p><script>var x = 1;</script><p>Cũng giữ</p>");

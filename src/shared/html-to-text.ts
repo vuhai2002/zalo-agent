@@ -1,4 +1,5 @@
 import { decodeHtmlEntities } from "./html-entities.js";
+import { boPhanTuAn, ketThucTenThe } from "./html-hidden-elements.js";
 
 /**
  * Rút text đọc được từ HTML cho tool web_fetch - không thêm dependency
@@ -28,13 +29,11 @@ const THE_KHONG_NOI_DUNG = [
   "select",
   "iframe",
   "template",
+  // Nội dung dự phòng của plugin: trình duyệt không hiển thị khi plugin chạy,
+  // trang tin gần như không dùng nó cho chữ thật
+  "object",
+  "embed",
 ];
-
-/** Ký tự ngay sau tên thẻ phải KHÔNG phải chữ/số - thay cho `\b` của regex */
-function ketThucTenThe(html: string, sau: number): boolean {
-  const c = html[sau];
-  return c === undefined || !/[A-Za-z0-9]/.test(c);
-}
 
 /**
  * Bỏ một loại thẻ và toàn bộ nội dung bên trong, QUÉT TUYẾN TÍNH.
@@ -111,8 +110,15 @@ function boMoiTheKhongNoiDung(html: string): string {
  * `html-to-text` (vốn thuần) kéo theo cả logger, và logger đọc `DATA_DIR` lúc
  * nạp module - đủ để test của file thuần này đẻ ra file log trong `data/` thật.
  */
+//
+// MỌI regex bắt thẻ trong file này dùng `[^<>]` chứ không `[^>]`: với `[^>]` một
+// trang toàn `<a x` không có `>` nào làm MỖI dấu `<` quét tới cuối chuỗi rồi
+// hỏng - bậc hai (đo: 40 KB 160 ms, 160 KB 2,6 s, ước 3 MB ~15 phút khóa event
+// loop). Dừng ở dấu `<` kế tiếp thì mỗi lần thử chỉ chạy tới thẻ sau, tổng tuyến
+// tính. Đổi lại thuộc tính chứa `<` thô (`title="a<b"`, vốn sai chuẩn HTML) bị
+// tách đôi - chấp nhận.
 export function stripHtmlTags(html: string): string {
-  return decodeHtmlEntities(html.replace(/<[^>]+>/g, ""))
+  return decodeHtmlEntities(html.replace(/<[^<>]+>/g, ""))
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -133,7 +139,7 @@ const MENU_MIN_LINKS = 3;
  * thiên về giữ nhầm hơn xóa nhầm, đúng hướng an toàn.
  */
 function removeLinkDenseLists(html: string): string {
-  const listBlock = /<(ul|ol|menu)\b[^>]*>(?:(?!<(?:ul|ol|menu)\b)[\s\S])*?<\/\1\s*>/gi;
+  const listBlock = /<(ul|ol|menu)\b[^<>]*>(?:(?!<(?:ul|ol|menu)\b)[\s\S])*?<\/\1\s*>/gi;
   let current = html;
   for (let pass = 0; pass < 5; pass++) {
     let removedAny = false;
@@ -143,7 +149,7 @@ function removeLinkDenseLists(html: string): string {
         removedAny = true;
         return " ";
       }
-      const anchors = [...block.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)];
+      const anchors = [...block.matchAll(/<a\b[^<>]*>((?:(?!<a\b)[\s\S])*?)<\/a>/gi)];
       const anchorText = anchors.map((m) => stripHtmlTags(m[1]!)).join(" ");
       const isMenu =
         anchors.length >= MENU_MIN_LINKS &&
@@ -171,12 +177,28 @@ function removeLinkDenseLists(html: string): string {
  * nhầm là thẻ mở.
  */
 function collapseMultilineTags(html: string): string {
-  return html.replace(/<[a-zA-Z/!][^>]*>/g, (tag) => tag.replace(/\s+/g, " "));
+  return html.replace(/<[a-zA-Z/!][^<>]*>/g, (tag) => tag.replace(/\s+/g, " "));
 }
 
+/**
+ * Hỏng giữa chừng thì trả chuỗi RỖNG, TUYỆT ĐỐI không trả HTML gốc: markup thô
+ * chở nguyên phần bị ẩn (`hidden`, `display:none`, chú thích) mà các bước dưới
+ * vừa gỡ. Chuỗi rỗng thì `web_fetch` coi là "ra quá ít chữ" và tự rơi xuống
+ * Jina Reader.
+ */
 export function htmlToReadableText(html: string): string {
+  try {
+    return htmlToReadableTextKhongBat(html);
+  } catch {
+    return "";
+  }
+}
+
+function htmlToReadableTextKhongBat(html: string): string {
+  // Bỏ phần tử ẩn SAU khi đã gỡ script/style: chuỗi "<div hidden>" nằm trong
+  // mã JS không phải phần tử thật, quét nó là xóa nhầm nội dung phía sau.
   const withoutBlocks = removeLinkDenseLists(
-    boMoiTheKhongNoiDung(collapseMultilineTags(html)),
+    boPhanTuAn(boMoiTheKhongNoiDung(collapseMultilineTags(html))),
   );
 
   // Giữ cấu trúc đoạn: thẻ block phổ biến thành xuống dòng trước khi bóc thẻ
@@ -190,11 +212,11 @@ export function htmlToReadableText(html: string): string {
     // </td></tr> và xoso.com.vn viết đúng kiểu đó - bám thẻ đóng là cả bảng
     // kết quả dính thành 1 dòng "836791064644...". Thẻ đóng </tr> vẫn giữ cho
     // site viết đủ; dòng rỗng sinh thêm bị filter(Boolean) nuốt.
-    .replace(/<(br|\/p|\/div|\/h[1-6]|\/li|\/tr|tr\b|\/section|\/article)[^>]*>/gi, "\n")
-    .replace(/<li[^>]*>/gi, "\n- ")
+    .replace(/<(br|\/p|\/div|\/h[1-6]|\/li|\/tr|tr\b|\/section|\/article)[^<>]*>/gi, "\n")
+    .replace(/<li[^<>]*>/gi, "\n- ")
     // Ranh giới ô trong bảng: bảng kết quả (xổ số, giá) mà dính chữ liền nhau
     // là model đọc sai cột
-    .replace(/<t[dh]\b[^>]*>/gi, " | ");
+    .replace(/<t[dh]\b[^<>]*>/gi, " | ");
 
   // stripHtmlTags nuốt cả \n (collapse \s+) nên tách dòng trước, bóc thẻ từng dòng
   return withBreaks

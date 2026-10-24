@@ -486,6 +486,27 @@ describe("runScheduledJob - kind=agent", () => {
     assert.equal(lastRunOf(job.id).status, "silent");
   });
 
+  it("router trả rỗng hai lần: KHÔNG gửi câu báo lỗi dự phòng như một lời nhắc, không chốt 'ok'", async () => {
+    const sent = attachOnline();
+    const job = makeJob({ kind: "agent", payload: "Tóm tắt tin công nghệ hôm nay" });
+    // Chữ ký glitch của 9Router: 200 rỗng, 0 token - agent-loop thử lại 1 lần
+    // rồi trả câu DỰ PHÒNG kèm cờ `duPhong`
+    const { model } = mockModel(() => ({
+      content: [],
+      finishReason: "stop" as const,
+      usage: usage(0, 0),
+      warnings: [],
+    }));
+
+    await runJob.runScheduledJob(job, { late: false, scheduledFor: job.nextRunAt!, resolveModel: () => model, now: new Date() });
+
+    assert.equal(sent.length, 0, "câu 'trục trặc kỹ thuật' không được nhắn chủ động cho người ta");
+    const run = lastRunOf(job.id);
+    assert.equal(run.status, "error");
+    assert.match(run.detail, /router-rong/);
+    assert.equal(jobStore.getJobUnscoped(job.id)!.runCount, 0, "đếm là lần chưa gửi được, còn lượt thử lại");
+  });
+
   it("payload của job kind='message' cũng qua lớp định dạng", async () => {
     // `payload` là chữ MODEL viết lúc đặt lịch qua tool schedule_task, gửi
     // nguyên văn lúc tới giờ - trước đây nó đi vòng qua lớp làm sạch hoàn toàn

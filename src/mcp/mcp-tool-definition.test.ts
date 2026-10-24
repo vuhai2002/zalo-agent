@@ -22,6 +22,7 @@ const dungDef = (over: Partial<Parameters<typeof taoToolDefinitionMcp>[0]> = {})
     moTa: "tra cuu",
     aiTool: aiToolThat,
     toolCallTimeoutMs: 1000,
+    maxResultChars: 2000,
     kiemGan: () => true,
     ...over,
   });

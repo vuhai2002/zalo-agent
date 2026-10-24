@@ -71,8 +71,20 @@ ENV DASHBOARD_HOST=0.0.0.0
 # `python3` chứ không phải `python`: Alpine chỉ có `python3` trong PATH, nên
 # `PYTHON_PATH` phải đặt tường minh (mặc định trong code là `python`).
 #
-# Python >= 3.11 theo Changelog yt-dlp 2026.07.04. Alpine của node:24 hiện cấp
-# 3.12, nhưng ghi lại đây để lần nâng base image biết cần kiểm gì.
+# Python >= 3.10 theo `requires_python` của yt-dlp 2026.10.21 (master đã nâng lên
+# 3.11 cho bản kế). node:24-alpine hiện là alpine3.24 cấp Python 3.14.8 - ghi lại
+# để lần nâng base image biết cần kiểm gì.
+#
+# GHIM phiên bản + hash, không `pip install yt-dlp` trần. Bản trần trông như
+# "luôn mới nhất" nhưng thật ra ngược lại: dòng RUN không đổi chữ nào nên luôn
+# trúng cache của Docker, và `deploy.sh` build có cache - máy chủ cứ thế giữ bản
+# của lần build ĐẦU mà không ai hay. Ghim số thì đổi số là vỡ cache có chủ đích,
+# mọi máy cùng một bản, và hash chặn được tarball bị tráo trên đường tải (cùng ý
+# `minimumReleaseAge` của pnpm). Nâng: đọc Changelog yt-dlp mục TikTok/Facebook/
+# Instagram, đổi HAI ARG dưới (hash lấy ở https://pypi.org/pypi/yt-dlp/<bản>/json,
+# file `.whl`), chạy `npx tsx --test src/video/chon-format-video.test.ts`.
+# Core yt-dlp không có dependency nào (`--no-deps` an toàn, `--only-binary`
+# buộc lấy đúng file wheel đã băm).
 #
 # `--break-system-packages`: Alpine đánh dấu môi trường Python là "externally
 # managed" (PEP 668). Đây là container dùng một việc, không có gì để vỡ.
@@ -83,8 +95,12 @@ ENV DASHBOARD_HOST=0.0.0.0
 # đường mà runtime dùng (xem `lenhYtDlp`). Kiểm bằng console script thì một image
 # có script nhưng hỏng module vẫn build xanh. Bước kiểm nằm SAU `apk del` trong
 # CÙNG một RUN, nên nếu gỡ pip có làm hỏng gì thì build đỏ ngay tại đây.
+ARG YTDLP_VERSION=2026.10.21
+ARG YTDLP_WHEEL_SHA256=94a3a3e2c423129d0bbd2f1be000c4171fa1226c29e251c84aff868f2851c247
 RUN apk add --no-cache python3 py3-pip \
-    && pip3 install --no-cache-dir --break-system-packages yt-dlp \
+    && printf 'yt-dlp==%s --hash=sha256:%s\n' "$YTDLP_VERSION" "$YTDLP_WHEEL_SHA256" > /tmp/yt-dlp-req.txt \
+    && pip3 install --no-cache-dir --break-system-packages --require-hashes --no-deps --only-binary=:all: -r /tmp/yt-dlp-req.txt \
+    && rm /tmp/yt-dlp-req.txt \
     && apk del py3-pip \
     && python3 -m yt_dlp --version
 ENV PYTHON_PATH=python3

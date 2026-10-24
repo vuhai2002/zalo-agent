@@ -3,6 +3,14 @@ import { tool, type Tool } from "ai";
 import { ketQuaLoi } from "../agent/tools/tool-failure-result.js";
 import type { ToolDefinition } from "../agent/tools/tool-catalog-types.js";
 import { wrapUntrustedContent } from "../agent/tools/wrap-untrusted-content.js";
+import {
+  TRAN_CAU_LOI_SERVER,
+  catTranVanBanMcp,
+  cauLoiKemNoiDungServer,
+  laKetQuaBaoLoiMcp,
+  trichVanBanKetQuaMcp,
+} from "./mcp-tool-result-text.js";
+import { laLoiMatKetNoiMcp } from "./mcp-transport-failure.js";
 
 /**
  * Đổi MỘT tool lấy từ `client.tools()` của một MCP server ngoài thành
@@ -64,35 +72,8 @@ export function tenToolMcp(serverTen: string, toolTen: string, serverId: string)
   return key;
 }
 
-/**
- * Kết quả `aiTool.execute` của `@ai-sdk/mcp` có thể ở 3 dạng tùy server:
- * chuỗi trần, `{content:[{type:'text',text}]}` (dạng chuẩn MCP content block),
- * hoặc bất kỳ giá trị JSON nào khác (server không tuân thủ chuẩn) - dạng cuối
- * hạ về `JSON.stringify` để không đánh rơi dữ liệu.
- *
- * `null`/`undefined` (tool chạy xong nhưng không trả gì) hạ về chuỗi RỖNG
- * tường minh - KHÔNG để lọt xuống `JSON.stringify(undefined)`, vì hàm đó trả
- * đúng giá trị `undefined` (không phải chuỗi `"undefined"`) dù kiểu khai báo
- * của `JSON.stringify` nói là `string`. Sai kiểu ngầm đó, nếu không chặn ở
- * đây, sẽ làm caller (`taoToolDefinitionMcp`) gọi `.length` trên `undefined`
- * rồi ném - biến một kết quả RỖNG HỢP LỆ thành một "lỗi giả".
- */
-export function trichVanBanKetQuaMcp(raw: unknown): string {
-  if (raw === null || raw === undefined) return "";
-  if (typeof raw === "string") return raw;
-  if (raw && typeof raw === "object" && Array.isArray((raw as { content?: unknown }).content)) {
-    const parts = (raw as { content: unknown[] }).content
-      .filter(
-        (c): c is { type: string; text: string } =>
-          !!c && typeof c === "object" && (c as { type?: unknown }).type === "text" && typeof (c as { text?: unknown }).text === "string",
-      )
-      .map((c) => c.text);
-    if (parts.length) return parts.join("\n");
-  }
-  // Lưới cuối: giá trị nào cũng khiến JSON.stringify trả `undefined` (hàm,
-  // symbol...) thì vẫn phải ra CHUỖI - cùng lý do ở đoạn docstring trên.
-  return JSON.stringify(raw) ?? "";
-}
+/** Giữ đường import cũ (test, caller) - phần hạ chuỗi kết quả sống ở `mcp-tool-result-text.ts`. */
+export { trichVanBanKetQuaMcp };
 
 /**
  * Ép một promise phải xong trong `ms`, ném nếu không. Server MCP ngoài không
@@ -130,10 +111,18 @@ export function taoToolDefinitionMcp(p: {
   /** Tool gốc lấy từ `client.tools()[toolTen]` của `@ai-sdk/mcp`. */
   aiTool: Tool;
   toolCallTimeoutMs: number;
+  /** Trần ký tự kết quả đưa model (`MCP_MAX_RESULT_CHARS`), áp TRƯỚC khi bọc. */
+  maxResultChars: number;
   /** Cửa bảo mật: agent này CÒN được cấp server này không. Xem docstring đầu file. */
   kiemGan: (agentId: string) => boolean;
+  /**
+   * Báo pool rằng kết nối của server này đã chết (xem `laLoiMatKetNoiMcp`) để
+   * vòng health nối lại. Tiêm vì cùng lý do với `kiemGan`: lõi này không chạm DB.
+   */
+  baoMatKetNoi?: () => void;
 }): ToolDefinition {
-  const { serverId, serverTen, toolTen, moTa, aiTool, toolCallTimeoutMs, kiemGan } = p;
+  const { serverId, serverTen, toolTen, moTa, aiTool, toolCallTimeoutMs, maxResultChars, kiemGan, baoMatKetNoi } = p;
+  const nguon = `MCP ${serverTen}/${toolTen}`;
   return {
     key: tenToolMcp(serverTen, toolTen, serverId),
     label: `${serverTen}: ${toolTen}`,
@@ -163,16 +152,46 @@ export function taoToolDefinitionMcp(p: {
           }
           try {
             const raw = await goiCoTimeout(() => aiTool.execute!(args, opts), toolCallTimeoutMs);
+            // `isError: true` là server BÁO HỎNG mà không ném (lib trả nguyên
+            // object) - phải đổi thành `ketQuaLoi` để model không tưởng tool đã
+            // chạy xong và `tool-loop-guard` đếm được. KHÔNG đánh `loi` cho
+            // server: tool hỏng không có nghĩa kết nối chết.
+            if (laKetQuaBaoLoiMcp(raw)) {
+              return ketQuaLoi(
+                cauLoiKemNoiDungServer(`Tool ngoài "${toolTen}" báo lỗi.`, trichVanBanKetQuaMcp(raw), maxResultChars, nguon),
+              );
+            }
             // Nội dung KHÔNG tin cậy - server ngoài không do mình kiểm soát.
+            // Lọc Tags + cắt trần TRƯỚC khi bọc (xem `catTranVanBanMcp`): kết
+            // quả vài MB đi thẳng vào request model là provider trả 400, chết
+            // CẢ LƯỢT chứ không riêng tool này.
+            //
             // Rỗng/undefined KHÔNG phải lỗi (tool chạy xong, chỉ là không có
             // gì để nói) - nhưng `wrapUntrustedContent("")` trả nguyên chuỗi
             // rỗng KHÔNG BỌC (xem lưới an toàn đầu file đó), nên phải lấp
             // placeholder TRƯỚC khi bọc để nhánh này vẫn có ranh giới, thay vì
             // âm thầm rơi vào catch bên dưới rồi biến thành "lỗi giả".
-            const text = trichVanBanKetQuaMcp(raw);
-            return wrapUntrustedContent(text || "(tool ngoài không trả nội dung)", `MCP ${serverTen}/${toolTen}`);
+            const text = catTranVanBanMcp(trichVanBanKetQuaMcp(raw), maxResultChars);
+            return wrapUntrustedContent(text || "(tool ngoài không trả nội dung)", nguon);
           } catch (e) {
-            return ketQuaLoi(`Tool ngoài "${toolTen}" lỗi: ${e instanceof Error ? e.message : String(e)}`);
+            if (laLoiMatKetNoiMcp(e)) {
+              // Báo hỏng (vd ghi DB lỗi) không được biến thành ngoại lệ ra agent loop.
+              try {
+                baoMatKetNoi?.();
+              } catch {
+                /* vòng health sẽ không biết - chấp nhận, lời gọi này vẫn trả ketQuaLoi */
+              }
+            }
+            // `e.message` là chữ của SERVER (câu lỗi JSON-RPC, hoặc nguyên thân
+            // HTTP lỗi mà lib nhét vào message) - cùng hàng rào như kết quả.
+            return ketQuaLoi(
+              cauLoiKemNoiDungServer(
+                `Tool ngoài "${toolTen}" lỗi.`,
+                e instanceof Error ? e.message : String(e),
+                TRAN_CAU_LOI_SERVER,
+                nguon,
+              ),
+            );
           }
         },
       }),

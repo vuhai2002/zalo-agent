@@ -8,6 +8,61 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ## [Chưa phát hành]
 
+### Bảo mật
+
+- **Ảnh giả làm treo cả bot.** `image-size` 2.0.2 lặp vô hạn trên ICNS/JXL/HEIF
+  dựng khéo (GHSA-w3rx-r6r6-pgpr, GHSA-5p2g-fcmc-qvqq): một link `.jpg` trả byte
+  ICNS qua `send_file` là đóng băng event loop, đơ mọi account. Nâng lên 2.0.4 và
+  thêm cổng magic byte: chỉ JPEG/PNG/GIF/WebP mới tới được parser.
+- **Tên hiển thị của người gửi không còn chèn được vào prompt.** Tên được làm sạch
+  (xuống dòng, ký tự điều khiển, ký tự Tags vô hình, trần 100 ký tự) và đặt trong
+  ngoặc JSON ở system prompt; dòng thứ hai trở đi của một tin bị thụt vào, nên
+  thành viên chưa xác minh không giả được một dòng `[dd/mm hh:mm] Tên:` trông như
+  tin thật.
+- **web_fetch bỏ nội dung ẩn** (`hidden`, `aria-hidden`, `display:none`,
+  `visibility:hidden`, `input type=hidden`, `object`/`embed`, chú thích HTML) - chỗ
+  hay giấu chỉ thị mà người xem trang không thấy. Bộ quét tuyến tính.
+- **Chặn SSRF qua IPv6 bọc IPv4** (`::ffff:0:a.b.c.d`, `::a.b.c.d`, 6to4
+  `2002::/16`, NAT64 local-use `64:ff9b:1::/48`, Teredo, site-local `fec0::/10`).
+- **Kết quả tool MCP**: `isError: true` nay là kết quả hỏng (trước bị coi là
+  thành công, chống lặp không thấy); lỗi của server được lọc Tags, cắt 1000 ký tự
+  và bọc như nội dung ngoài; mô tả tool cũng lọc Tags; kết quả có trần
+  `MCP_MAX_RESULT_CHARS` (mặc định 15000, chỉnh trên trang Cấu hình); bỏ tool có
+  `inputSchema` không phải object và giới hạn 128 tool mỗi server.
+- **Nâng deps có advisory**: hono 4.13, @hono/node-server 2.1, zod 4.6, unpdf 1.9
+  (pdf.js 6.4), vite 8.3 (chuỗi launch-editor trên Windows), react-router 7.18.4,
+  pnpm 11.28.7. `pnpm audit` từ 41 advisory xuống còn 1 (uuid qua exceljs, không
+  có đường tới).
+
+### Sửa
+
+- **Combo bị đoán nhầm là "đọc được ảnh"** từ khi 9Router v0.5.109 gắn
+  `capabilities.vision` (phép hợp các thành viên) cho combo: bot bỏ chế độ hybrid
+  và ảnh lịch sử rơi vào thành viên mù bị lột câm. Nay combo luôn xét trước.
+- **Câu báo lỗi dự phòng không còn đi như câu trả lời thật**: lịch hẹn không nhắn
+  chủ động câu "trục trặc kỹ thuật" (đếm là lần chưa gửi được, có thử lại), chat
+  vẫn báo người nhắn nhưng không ghi câu đó vào lịch sử.
+- **Chống lặp tool mù với tool đọc**: nonce của khối nội dung ngoài đổi mỗi lần nên
+  luật "cùng kết quả N lần" chưa bao giờ bắn cho web_search/web_fetch/kb_search.
+- **Lịch sử nhóm không còn bị xóa trước khi kịp tóm tắt**: tin chưa vào bản tóm
+  tắt được giữ thêm tới tối đa gấp đôi `HISTORY_MAX_MESSAGES_PER_THREAD`.
+- **MCP tự hồi phục khi server khởi động lại** (session hết hạn, mất kết nối thì
+  đánh dấu để vòng health nối lại) và không còn rò kết nối khi nối quá giờ.
+- Bộ phân loại lỗi provider nhận thêm các cách báo tràn ngữ cảnh (llama.cpp,
+  Ollama, GLM, 413) và coi 503 kèm `Retry-After` là siết nhịp.
+- File docx/xlsx không còn hỏng khi nội dung có ký tự điều khiển cấm trong XML.
+
+### Thay đổi
+
+- **AI SDK** `ai` 7.0.150 cùng các provider. Bản mới đổi hai hành vi stream, bot
+  giữ nguyên trải nghiệm cũ: hết giờ giữa lượt vẫn vào lượt chốt từ các bước đã
+  xong; stream đóng không có `finish_reason` (glitch rỗng của router) thử lại 1 lần.
+- **zca-js 2.2.0** (gửi `zpw_ver` mới; các API bot dùng không đổi).
+- **yt-dlp ghim phiên bản + hash trong Dockerfile** (2026.10.21). Bản cài trần
+  trúng cache Docker nên máy chủ có thể giữ mãi bản của lần build đầu.
+- `@types/node` hạ về 24 cho khớp runtime (Node 24); `schedule_task` giới hạn biểu
+  thức cron 256 ký tự.
+
 ## [0.3.1] - 2026-08-30
 
 ### Thêm

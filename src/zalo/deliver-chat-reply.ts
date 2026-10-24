@@ -30,6 +30,12 @@ export async function deliverChatReply(
   accountId: string,
   threadId: string,
   text: string,
+  /**
+   * `false` khi `text` là câu dự phòng của hệ thống (`AgentTurnResult.duPhong`):
+   * vẫn gửi cho người nhắn khỏi bị bỏ treo, nhưng KHÔNG ghi history - cùng lý
+   * do `notifyTechnicalError` không ghi: lượt sau model đọc lại và neo vào nó.
+   */
+  ghiLichSu = true,
 ): Promise<KetQuaGiao> {
   // Lớp làm sạch CUỐI trước khi chữ ra Zalo. Hai đường khác nhau ở chỗ dấu
   // markdown bị XÓA hay được DỊCH thành định dạng thật của Zalo; lá chắn rò
@@ -67,7 +73,7 @@ export async function deliverChatReply(
   // Chỉ ghi phần ĐÃ gửi được: history phải khớp cái người dùng nhìn thấy. Ghi
   // chữ ĐÃ LÀM SẠCH chứ không phải chữ gốc - lệch thì lượt sau model đọc lại
   // history, thấy chính nó từng viết markdown và tưởng thế là được.
-  if (reply.deliveredText) {
+  if (ghiLichSu && reply.deliveredText) {
     appendMessage(accountId, threadId, { role: "assistant", content: reply.deliveredText });
   }
 

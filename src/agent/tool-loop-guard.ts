@@ -1,6 +1,7 @@
 import { bamNgan, chuanHoaJson, chuKyLenhGoi } from "./tool-call-signature.js";
 import { canhBaoTu, type NguongGuard } from "./tool-loop-guard-thresholds.js";
 import { laKetQuaLoi } from "./tools/tool-failure-result.js";
+import { chuanHoaNonceDeSoSanh } from "./tools/wrap-untrusted-content.js";
 
 /**
  * Chặn vòng lặp tool vô ích trong MỘT lượt agent.
@@ -178,7 +179,10 @@ export class ToolLoopGuard {
     if (!this.laToolChiDoc(tenTool)) return CHO_QUA;
 
     const chuKy = chuKyLenhGoi(tenTool, args);
-    const bamKq = bamNgan(chuanHoaJson(ketQua ?? null));
+    // Bỏ nonce của thẻ ranh giới TRƯỚC khi băm: tool đọc nào cũng trả kết quả
+    // đã `wrapUntrustedContent`, nonce đổi mỗi lần nên không chuẩn hóa thì hai
+    // kết quả giống hệt nhau luôn ra hai hash khác - luật này thành code chết.
+    const bamKq = bamNgan(chuanHoaNonceDeSoSanh(chuanHoaJson(ketQua ?? null)));
     const truoc = this.demKhongTienTrien.get(chuKy);
     const n = truoc && truoc[0] === bamKq ? truoc[1] + 1 : 1;
     this.demKhongTienTrien.set(chuKy, [bamKq, n]);

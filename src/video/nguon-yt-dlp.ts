@@ -1,20 +1,21 @@
 /**
- * Nguồn yt-dlp: DỰ PHÒNG cho TikTok, DUY NHẤT cho Facebook.
+ * Nguồn yt-dlp: DỰ PHÒNG cho TikTok, DUY NHẤT cho Facebook và Instagram.
  *
  * Chỉ chạy `--dump-single-json --skip-download` - lấy metadata, KHÔNG tải video.
- * Đo thật: 3,94 giây, 72,8 MB RAM đỉnh, 1,44 giây CPU. RAM gần như không đổi
- * khi tải thật (75,6 MB) vì yt-dlp ghi thẳng ra đĩa - tức ~73 MB là bản thân
- * Python, và chi phí đó CỐ ĐỊNH mỗi tiến trình chứ không theo cỡ video. Đó là
- * lý do trần song song đặt ở 2.
+ * Đo thật: 3,94 giây, 72,8 MB RAM đỉnh, 1,44 giây CPU. RAM của bản thân tiến
+ * trình gần như không đổi khi tải thật (75,6 MB) vì yt-dlp xuất thẳng ra luồng
+ * (`-o -`) - tức ~73 MB là bản thân Python, CỐ ĐỊNH mỗi tiến trình. Byte video
+ * thì nằm trong RAM của bot (xem `tai-video-vao-ram.ts`), nên trần song song
+ * (mặc định 1) và luật chéo `kiemRamVideo` phải tính cả cỡ video.
  *
  * VÌ SAO KHÔNG DÙNG THƯ VIỆN JS: yt-dlp là tiến trình con, chạy xong thoát hẳn
  * và trả lại RAM. Không có server nào phải nuôi, không có cổng nào phải mở.
  *
- * CẬP NHẬT: `pip install -U yt-dlp` là đủ, KHÔNG phải sửa code. Đọc Changelog
- * chính thức 2025-2026: mọi breaking change đều về phiên bản Python/Node tối
- * thiểu, cú pháp `--exec`, aria2c, `--netrc-cmd` - KHÔNG cái nào đụng schema
- * JSON của `--dump-single-json`. Các trường dùng ở đây là phần lõi kế thừa từ
- * youtube-dl, ổn định nhiều năm.
+ * CẬP NHẬT: thường KHÔNG phải sửa code - Changelog 2025-2026 không có breaking
+ * change nào đụng schema JSON của `--dump-single-json` (các trường dùng ở đây là
+ * phần lõi kế thừa từ youtube-dl). Nhưng trong Docker thì `pip install -U` KHÔNG
+ * làm được (pip đã gỡ, user non-root, rootfs chỉ đọc): phiên bản ghim bằng
+ * `ARG YTDLP_VERSION` trong Dockerfile, nâng là đổi số + hash rồi build lại.
  */
 
 import { chayYtDlp } from "./chay-yt-dlp.js";
@@ -25,7 +26,7 @@ import type { NenTangVideo } from "./whitelist-nguon-video.js";
 /**
  * Trần thời gian. Đo 3,94 giây; đặt 45 giây vì Facebook có lúc phải qua vài
  * chặng chuyển hướng. Vượt là GIẾT tiến trình - để nó treo thì nó giữ luôn một
- * trong hai suất song song.
+ * suất song song (mặc định chỉ có 1).
  */
 const TRAN_MS = 45_000;
 

@@ -162,6 +162,64 @@ describe("mcp-manager", () => {
     assert.doesNotThrow(() => stop());
   });
 
+  it("phiên hết hạn (onMatPhien) -> server thành loi để health nối lại; handle CŨ bắn thì không đánh", async () => {
+    const baoCuaHandle: (() => void)[] = [];
+    mgr.datKetNoiServerChoTest((async (cfg: { onMatPhien?: () => void }) => {
+      if (cfg.onMatPhien) baoCuaHandle.push(cfg.onMatPhien);
+      return connectGia(["tra_cuu"])();
+    }) as never);
+    const s = store.taoServer({ ten: "svr", url: "https://x/mcp" });
+    const trangThai = () => store.danhSachServer().find((x) => x.id === s.id)?.trangThai;
+    await mgr.ketNoiLaiServer(s.id);
+    await mgr.ketNoiLaiServer(s.id); // nối lại: handle 1 đã rời pool
+    assert.equal(baoCuaHandle.length, 2);
+    baoCuaHandle[0]!();
+    assert.equal(trangThai(), "da_ket_noi", "handle cũ đã đóng không được đánh loi oan cho kết nối mới");
+    baoCuaHandle[1]!();
+    assert.equal(trangThai(), "loi");
+  });
+
+  it("gọi tool gặp lỗi tầng HTTP -> server thành loi", async () => {
+    const { MCPClientError } = await import("@ai-sdk/mcp");
+    mgr.datKetNoiServerChoTest((async () => ({
+      tools: async () => ({
+        hong: tool({
+          description: "x",
+          inputSchema: z.object({}),
+          execute: async (): Promise<string> => {
+            throw new MCPClientError({ message: "HTTP 404 session expired", statusCode: 404 });
+          },
+        }),
+      }),
+      close: async () => {},
+    })) as never);
+    const s = store.taoServer({ ten: "svr", url: "https://x/mcp" });
+    binding.datServerChoAgent("a1", [s.id]);
+    await mgr.ketNoiLaiServer(s.id);
+    const def = mgr.mcpToolDefinitions("a1")[0]!;
+    const ctx = { agent: { id: "a1" } } as never;
+    await def.build(ctx).execute!({}, {} as never);
+    assert.equal(store.danhSachServer().find((x) => x.id === s.id)?.trangThai, "loi");
+  });
+
+  it("server khai tool schema không phải object -> bỏ tool đó, vẫn nối", async () => {
+    const { jsonSchema } = await import("ai");
+    mgr.datKetNoiServerChoTest((async () => ({
+      tools: async () => ({
+        tot: tool({ description: "x", inputSchema: z.object({}), execute: async () => "ok" }),
+        hong: tool({ description: "x", inputSchema: jsonSchema({ type: "string" }), execute: async () => "ok" }),
+      }),
+      close: async () => {},
+    })) as never);
+    const s = store.taoServer({ ten: "svr", url: "https://x/mcp" });
+    binding.datServerChoAgent("a1", [s.id]);
+    await mgr.ketNoiLaiServer(s.id);
+    assert.deepEqual(mgr.mcpToolDefinitions("a1").map((d) => d.key), ["mcp__svr__tot"]);
+    const sv = store.danhSachServer().find((x) => x.id === s.id);
+    assert.equal(sv?.trangThai, "da_ket_noi");
+    assert.match(sv?.loi ?? "", /1 tool có tham số không phải object/);
+  });
+
   it("duyetLaiDrift gọi đồng thời 2 lần cùng id không mở 2 kết nối", async () => {
     let soLanNoi = 0;
     mgr.datKetNoiServerChoTest((async () => {

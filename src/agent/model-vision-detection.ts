@@ -162,6 +162,16 @@ export async function classifyModelVision(
 
   const { visionByModel, comboIds } = await lookupFromRouter(base.baseUrl, base.apiKey, fetcher);
   const vision = visionByModel.get(model);
+
+  // Combo phải xét TRƯỚC `vision === true`. Từ 9Router v0.5.109, `/models` gắn
+  // `capabilities` cho cả combo, với `vision` là phép HỢP: chỉ cần MỘT thành
+  // viên đọc được ảnh là combo báo `true` (`aggregateComboCapabilities`,
+  // `open-sse/providers/capabilities.js`). Xét theo thứ tự cũ thì combo trộn
+  // có/không vision bị coi là "vision", bỏ chế độ hybrid, và ảnh HISTORY rơi
+  // vào thành viên mù bị lột câm - đúng lỗ mà hybrid sinh ra để vá. `false` thì
+  // vẫn tin được: hợp mà ra false nghĩa là KHÔNG thành viên nào đọc được ảnh.
+  if (comboIds.has(model)) return vision === false ? "no-vision" : "combo";
+
   if (vision === true) return "vision";
   if (vision === false) {
     log.info({ model }, "Router báo model không đọc được ảnh - bỏ ảnh khỏi request");

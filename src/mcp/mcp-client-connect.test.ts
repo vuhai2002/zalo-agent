@@ -23,4 +23,35 @@ describe("ketNoiServer", () => {
       (e: unknown) => (e as { loaiLoi?: string }).loaiLoi === "ket_noi",
     );
   });
+
+  it("hết giờ rồi client mới nối xong -> client về muộn bị ĐÓNG, signal đã hủy", async () => {
+    let daDong = false;
+    let tinHieu: AbortSignal | undefined;
+    let traVe!: () => void;
+    const veMuon = new Promise<void>((r) => (traVe = r));
+    await assert.rejects(
+      ketNoiServer(
+        { url: "https://x/mcp", headers: {}, connectTimeoutMs: 10 },
+        depsGia(async ({ signal }) => {
+          tinHieu = signal;
+          await veMuon;
+          return { tools: async () => ({}), close: async () => void (daDong = true) };
+        }),
+      ),
+    );
+    assert.equal(tinHieu?.aborted, true, "phải bảo lib hủy bắt tay");
+    traVe();
+    await new Promise((r) => setImmediate(r));
+    assert.equal(daDong, true, "client về muộn không ai giữ - phải tự đóng, không thì rò");
+  });
+
+  it("nối kịp giờ -> KHÔNG bị đóng", async () => {
+    let daDong = false;
+    await ketNoiServer(
+      { url: "https://x/mcp", headers: {}, connectTimeoutMs: 1000 },
+      depsGia(async () => ({ tools: async () => ({}), close: async () => void (daDong = true) })),
+    );
+    await new Promise((r) => setImmediate(r));
+    assert.equal(daDong, false);
+  });
 });

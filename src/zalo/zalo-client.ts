@@ -1,23 +1,9 @@
-import fs from "node:fs";
 import { LoginQRCallbackEventType, Zalo, type API, type Credentials } from "zca-js";
-import type { ImageMetadataGetter } from "zca-js";
-import { imageSize } from "image-size";
 import { createLogger } from "../shared/logger.js";
+import { imageMetadataGetter } from "./image-metadata-getter.js";
 import { loadCredentials, saveCredentials } from "./zalo-credential-store.js";
 
 const log = createLogger("zalo-client");
-
-// zca-js v2 bỏ sharp - phải tự cung cấp hàm đọc metadata ảnh khi gửi ảnh
-const imageMetadataGetter: ImageMetadataGetter = async (filePath) => {
-  try {
-    const buffer = fs.readFileSync(filePath);
-    const { width, height } = imageSize(buffer);
-    if (!width || !height) return null;
-    return { width, height, size: buffer.byteLength };
-  } catch {
-    return null;
-  }
-};
 
 function createZaloInstance(): Zalo {
   return new Zalo({

@@ -8,6 +8,7 @@ const MAX_PER_THREAD = 25;
 
 let dataDir: string;
 let store: typeof import("./history-store.js");
+let database: typeof import("./database.js");
 
 before(async () => {
   dataDir = setupTestEnv({
@@ -15,7 +16,22 @@ before(async () => {
     HISTORY_CONTEXT_LIMIT: "20",
   });
   store = await import("./history-store.js");
+  database = await import("./database.js");
 });
+
+/**
+ * Đánh dấu bản tóm tắt đã phủ TỚI HẾT tin hiện có - prune chỉ được xóa phần đã
+ * phủ, nên các ca đo "giữ đúng cap" phải tóm tắt xong trước đã.
+ */
+function daTomTatHet(accountId: string, threadId: string): void {
+  database.db
+    .prepare(
+      `INSERT INTO threads (account_id, thread_id, thread_type, summary_covers_to_message_id)
+       VALUES (?, ?, 0, (SELECT COALESCE(MAX(id), 0) FROM messages WHERE account_id = ? AND thread_id = ?))
+       ON CONFLICT(account_id, thread_id) DO UPDATE SET summary_covers_to_message_id = excluded.summary_covers_to_message_id`,
+    )
+    .run(accountId, threadId, accountId, threadId);
+}
 
 after(() => {
   store.closeHistoryStore();
@@ -56,17 +72,39 @@ describe("history-store", () => {
     assert.deepEqual(rows.map((r) => r.content), ["tin-8", "tin-9", "tin-10"]);
   });
 
-  it("prune giữ đúng cap tin mới nhất khi thread vượt giới hạn", () => {
+  it("prune giữ đúng cap tin mới nhất khi thread vượt giới hạn (phần cũ đã được tóm tắt)", () => {
     const total = MAX_PER_THREAD + 15;
-    for (let i = 1; i <= total; i++) {
+    for (let i = 1; i < total; i++) {
       store.appendMessage("acc-1", "t-prune", { role: "user", content: `tin-${i}` });
     }
+    daTomTatHet("acc-1", "t-prune");
+    store.appendMessage("acc-1", "t-prune", { role: "user", content: `tin-${total}` });
 
     const rows = readAll("acc-1", "t-prune");
     assert.equal(rows.length, MAX_PER_THREAD);
     // Phần bị xóa phải là phần cũ nhất
     assert.equal(rows[0]!.content, `tin-${total - MAX_PER_THREAD + 1}`);
     assert.equal(rows[rows.length - 1]!.content, `tin-${total}`);
+  });
+
+  it("tin bản tóm tắt CHƯA phủ thì không bị xóa dù vượt cap - nhóm nói nhiều giữa hai lần bot trả lời", () => {
+    // Phủ tới tin thứ 5, rồi nhóm nói thêm 30 tin (> cap 25) khi bot im
+    for (let i = 1; i <= 5; i++) store.appendMessage("acc-1", "t-chua-phu", { role: "user", content: `tin-${i}` });
+    daTomTatHet("acc-1", "t-chua-phu");
+    for (let i = 6; i <= 35; i++) store.appendMessage("acc-1", "t-chua-phu", { role: "user", content: `tin-${i}` });
+
+    const rows = readAll("acc-1", "t-chua-phu");
+    assert.equal(rows[0]!.content, "tin-6", "chỉ phần đã phủ (tin 1-5) được xóa, tin chưa phủ còn đủ để tóm tắt");
+    assert.equal(rows.length, 30);
+  });
+
+  it("vẫn có trần cứng 2x cap - thread bot không bao giờ trả lời không phình vô hạn", () => {
+    for (let i = 1; i <= MAX_PER_THREAD * 3; i++) {
+      store.appendMessage("acc-1", "t-tran-cung", { role: "user", content: `tin-${i}` });
+    }
+    const rows = readAll("acc-1", "t-tran-cung");
+    assert.equal(rows.length, MAX_PER_THREAD * 2);
+    assert.equal(rows.at(-1)!.content, `tin-${MAX_PER_THREAD * 3}`);
   });
 
   it("thread chưa đủ cap thì không bị xóa gì", () => {
@@ -80,9 +118,11 @@ describe("history-store", () => {
   it("prune chỉ đụng thread vừa ghi, không đụng thread khác", () => {
     store.appendMessage("acc-1", "t-yen", { role: "user", content: "để yên" });
 
-    for (let i = 1; i <= MAX_PER_THREAD + 10; i++) {
+    for (let i = 1; i < MAX_PER_THREAD + 10; i++) {
       store.appendMessage("acc-1", "t-on", { role: "user", content: `tin-${i}` });
     }
+    daTomTatHet("acc-1", "t-on");
+    store.appendMessage("acc-1", "t-on", { role: "user", content: "tin cuối" });
 
     assert.equal(readAll("acc-1", "t-yen").length, 1);
     assert.equal(readAll("acc-1", "t-on").length, MAX_PER_THREAD);

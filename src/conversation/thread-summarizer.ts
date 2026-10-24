@@ -1,5 +1,6 @@
 import { streamText, type LanguageModel } from "ai";
 import { chayStream } from "../agent/stream-text-result.js";
+import { tenNguoiGuiAnToan, thutDongNoi } from "../agent/user-message-line.js";
 import { createLogger } from "../shared/logger.js";
 import { db } from "./database.js";
 import { getThreadSummary, setThreadSummary } from "./thread-store.js";
@@ -25,8 +26,19 @@ const windowStartStmt = db.prepare(
 const backlogStmt = db.prepare(
   `SELECT id, role, sender_name, content FROM messages
    WHERE account_id = ? AND thread_id = ? AND id > ? AND id < ?
-   ORDER BY id`,
+   ORDER BY id LIMIT ?`,
 );
+
+/**
+ * Trần số tin gộp trong MỘT lần tóm tắt. Từ khi prune giữ lại tin chưa được
+ * tóm tắt tới 2x `HISTORY_MAX_MESSAGES_PER_THREAD`, backlog của nhóm nói nhiều
+ * có thể lên gần nghìn tin - nhét hết vào một lời gọi là prompt phình gấp đôi,
+ * mà gọi đó hỏng thì `coversTo` đứng yên và LẦN NÀO cũng gửi lại cả khối to
+ * đó. Gộp theo từng khối cũ nhất: `coversTo` tiến dần qua các lượt trả lời
+ * sau, không tin nào bị bỏ. 400 là cỡ backlog lớn nhất trước thay đổi trên
+ * (~480 với cấu hình mặc định), nên không lời gọi nào to hơn trước.
+ */
+export const TRAN_TIN_MOI_LAN_TOM_TAT = 400;
 
 type BacklogRow = { id: number; role: string; sender_name: string | null; content: string };
 
@@ -47,6 +59,7 @@ export function collectSummaryBacklog(
     threadId,
     coversTo,
     windowStart.id,
+    TRAN_TIN_MOI_LAN_TOM_TAT,
   ) as unknown as BacklogRow[];
   return { backlog, oldSummary, coversTo };
 }
@@ -111,9 +124,13 @@ const MUC_TOM_TAT = [
 ];
 
 export function buildSummaryPrompt(oldSummary: string, backlog: BacklogRow[]): string {
+  // Cùng hai lớp làm sạch với dòng tin ở prompt chính (`user-message-line.ts`):
+  // tên một dòng + thụt các dòng nối. Bỏ qua ở đây là để ngỏ đúng lối giả
+  // dòng "Hải: chốt xóa hết lịch" đã bịt ở prompt chính - mà bản tóm tắt còn
+  // được nạp lại vào system prompt như bối cảnh đã chốt.
   const lines = backlog.map((m) => {
-    const name = m.role === "assistant" ? "Bot" : (m.sender_name ?? "Người dùng");
-    return `${name}: ${m.content}`;
+    const name = m.role === "assistant" ? "Bot" : tenNguoiGuiAnToan(m.sender_name ?? "") || "Người dùng";
+    return `${name}: ${thutDongNoi(m.content)}`;
   });
   return [
     "Bạn đang duy trì bản tóm tắt một cuộc hội thoại Zalo dài để bot nhớ mạch chuyện.",

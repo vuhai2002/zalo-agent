@@ -9,6 +9,7 @@ import {
   type NguongGuard,
 } from "./tool-loop-guard.js";
 import { ketQuaLoi } from "./tools/tool-failure-result.js";
+import { wrapUntrustedContent } from "./tools/wrap-untrusted-content.js";
 
 /**
  * Module thuần nên test không cần setupTestEnv, không cần import động - ngoại
@@ -147,6 +148,25 @@ describe("ToolLoopGuard - tool đọc không tiến triển", () => {
     const q = guard.ghiNhan(b);
     assert.equal(q.muc, "chan");
     assert.equal(q.ma, "khong-tien-trien");
+  });
+
+  it("kết quả THẬT của tool đọc (đã bọc nonce mỗi lần) giống nhau 5 lần vẫn chặn", () => {
+    // Test ở trên đưa chuỗi trơn nên xanh cả khi luật này chết trong production:
+    // web_search/web_fetch/kb_search đều trả `wrapUntrustedContent(...)`, nonce
+    // đổi mỗi lần bọc -> hash khác mỗi lần -> không bao giờ đếm tới ngưỡng.
+    const buoc = () => buocXong("web_search", { q: "giá vàng" }, wrapUntrustedContent("kết quả y hệt", "web_search"));
+    assert.notEqual(buoc().toolResults?.[0]?.output, buoc().toolResults?.[0]?.output, "tiền đề: hai lần bọc khác chuỗi");
+    for (let i = 1; i <= 4; i++) assert.notEqual(guard.ghiNhan(buoc()).muc, "chan");
+    const q = guard.ghiNhan(buoc());
+    assert.equal(q.muc, "chan");
+    assert.equal(q.ma, "khong-tien-trien");
+  });
+
+  it("nội dung đã bọc KHÁC nhau thì vẫn là tiến triển - chuẩn hóa nonce không gộp nhầm", () => {
+    const args = { q: "tin mới" };
+    for (let i = 0; i < 4; i++) guard.ghiNhan(buocXong("web_search", args, wrapUntrustedContent("cũ", "s")));
+    guard.ghiNhan(buocXong("web_search", args, wrapUntrustedContent("MỚI", "s")));
+    assert.equal(guard.daChan(), false);
   });
 
   it("tool GHI trả cùng kết quả 5 lần thì KHÔNG chặn - ghi lặp là hợp lệ", () => {

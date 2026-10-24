@@ -9,6 +9,7 @@ import {
   layServerNoiBo,
   luuSnapshotFingerprint,
 } from "./mcp-server-store.js";
+import { ghiChuToolBiBo, locToolKhamPha, moTaAnToan } from "./mcp-tool-discovery-filter.js";
 import { goiCoTimeout, taoToolDefinitionMcp } from "./mcp-tool-definition.js";
 import { chupFingerprint, soDrift } from "./mcp-tool-drift.js";
 import type { McpToolInfo, TrangThaiServer } from "./mcp-types.js";
@@ -35,19 +36,6 @@ const dangNoi = new Map<string, ServerDangNoi>();
 /** Seam test: Map cấp module không tự dọn theo `beforeEach` xóa bảng DB. */
 export function resetPoolChoTest(): void {
   dangNoi.clear();
-}
-
-/**
- * `Tool.description` của `ai` SDK cho phép mô tả ĐỘNG - một hàm nhận context
- * runtime (của LƯỢT AGENT đang chạy) để sinh mô tả theo tình huống. Lúc khám
- * phá tool (nối server, CHƯA có lượt nào đang chạy) không có context đó để
- * gọi hàm, nên chỉ lấy được nhánh mô tả TĨNH (chuỗi) - đúng dạng mọi MCP
- * server thật sự trả về (`tools/list` của giao thức MCP chỉ có description
- * dạng chuỗi; nhánh hàm chỉ tồn tại ở KIỂU của `ai` SDK, không xuất hiện lúc
- * chạy với tool khám phá qua `@ai-sdk/mcp`).
- */
-function moTaAnToan(d: unknown): string {
-  return typeof d === "string" ? d : "";
 }
 
 let ketNoiFn: typeof ketNoiServer = ketNoiServer;
@@ -105,10 +93,26 @@ export async function nap(id: string, luuMoc: boolean): Promise<void> {
     datTrangThaiServer(id, "cho_ket_noi");
     return;
   }
-  const ketNoi = await ketNoiFn({
+  // Kết nối chết (phiên hết hạn vì server khởi động lại, mất mạng) không tự
+  // đổi trạng thái - vòng health chỉ nối lại server `loi`, nên phải có người
+  // đánh dấu. So DANH TÍNH handle: handle cũ đang được đóng (đã rời `dangNoi`)
+  // mà còn bắn sự kiện thì không được đánh `loi` oan cho kết nối mới.
+  let ketNoi: KetNoiMcp | undefined;
+  const baoMatKetNoi = (): void => {
+    if (!ketNoi || dangNoi.get(id)?.ketNoi !== ketNoi) return;
+    // Hàm này còn được gọi từ BÊN TRONG transport của lib (`onSessionExpired`)
+    // - ghi DB hỏng (vd lúc tắt máy đã đóng DB) không được ném vào code của lib.
+    try {
+      datTrangThaiServer(id, "loi", "Mất phiên với server (server khởi động lại hoặc mất mạng) - đang chờ nối lại");
+    } catch {
+      /* lần hỏng kế tiếp sẽ thử đánh dấu lại */
+    }
+  };
+  ketNoi = await ketNoiFn({
     url: cfg.url,
     headers: cfg.headers,
     connectTimeoutMs: getTuning("MCP_CONNECT_TIMEOUT_MS"),
+    onMatPhien: baoMatKetNoi,
   });
   try {
     // `ketNoiFn` chỉ bọc trần cho BẮT TAY (`createMCPClient`) - khám phá tool
@@ -117,7 +121,8 @@ export async function nap(id: string, luuMoc: boolean): Promise<void> {
     // tay rồi treo lúc liệt kê tool giữ `nap` sống vô hạn; vì trạng thái
     // KHÔNG kịp đổi, mỗi nhịp health lại gọi `nap` thêm lần nữa, GHI ĐÈ
     // `dangNoi` mà không đóng handle cũ -> rò kết nối tích lũy.
-    const tools = await goiCoTimeout(() => ketNoi.tools(), getTuning("MCP_CONNECT_TIMEOUT_MS"));
+    const daLoc = await locToolKhamPha(await goiCoTimeout(() => ketNoi!.tools(), getTuning("MCP_CONNECT_TIMEOUT_MS")));
+    const tools = daLoc.hopLe;
     if (!luuMoc) {
       const kq = await soDrift(tools, layFingerprint(id));
       if (kq.drift) {
@@ -134,8 +139,10 @@ export async function nap(id: string, luuMoc: boolean): Promise<void> {
         moTa: moTaAnToan(aiTool.description),
         aiTool,
         toolCallTimeoutMs: getTuning("MCP_TOOL_TIMEOUT_MS"),
+        maxResultChars: getTuning("MCP_MAX_RESULT_CHARS"),
         // Cửa gán (Phase 03 nhận tiêm để lõi tool-definition không phải chạm DB).
         kiemGan: (agentId) => serversCuaAgent(agentId).includes(id),
+        baoMatKetNoi,
       }),
     );
     if (luuMoc || layFingerprint(id) === "") {
@@ -143,7 +150,9 @@ export async function nap(id: string, luuMoc: boolean): Promise<void> {
       luuSnapshotFingerprint(id, snapshot, await chupFingerprint(tools));
     }
     dangNoi.set(id, { ketNoi, defs });
-    datTrangThaiServer(id, "da_ket_noi");
+    // Ghi chú tool bị bỏ nằm ở cột `loi` dù trạng thái là đã nối: API dashboard
+    // trả kèm, rỗng khi không bỏ gì (xem `mcp-tool-discovery-filter.ts`).
+    datTrangThaiServer(id, "da_ket_noi", ghiChuToolBiBo(daLoc));
   } catch (e) {
     // Bất kỳ lỗi nào SAU khi đã có handle (kể cả tools() hết giờ) phải đóng
     // nó trước khi ném tiếp, không thì `dangNoi` (nơi duy nhất `ngatServer`

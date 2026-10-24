@@ -37,6 +37,14 @@ describe("phanLoaiLoiProvider - theo mã HTTP", () => {
     assert.equal(phanLoaiLoiProvider(loiApi(503, "Upstream unavailable")), "transient");
   });
 
+  it("503 KÈM Retry-After (9Router: mọi tài khoản đang bị siết nhịp) là rate_limit", () => {
+    assert.equal(
+      phanLoaiLoiProvider(loiApi(503, "All accounts rate limited", { "retry-after": "12" })),
+      "rate_limit",
+    );
+    assert.equal(phanLoaiLoiProvider(loiApi(500, "x", { "retry-after": "12" })), "transient", "chỉ 503");
+  });
+
   it("400 KHÔNG kèm dấu hiệu tràn context thì là unknown, không phải context_overflow", () => {
     assert.equal(phanLoaiLoiProvider(loiApi(400, "Invalid value for 'temperature'")), "unknown");
   });
@@ -50,6 +58,11 @@ describe("phanLoaiLoiProvider - tràn context", () => {
       "Request exceeds the maximum allowed tokens",
       "Please reduce the length of the messages",
       "input exceeds context window",
+      "the request exceeds the available context size, try increasing it",
+      "exceed_context_size_error",
+      "prompt exceeds max length",
+      "Input token limit exceeded",
+      '{"error":{"type":"request_too_large"}}',
     ]) {
       assert.equal(phanLoaiLoiProvider(loiApi(400, msg)), "context_overflow", msg);
     }

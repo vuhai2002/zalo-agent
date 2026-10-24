@@ -65,6 +65,32 @@ describe("private-address-guard", () => {
     assert.equal(isPublicAddress("64:ff9b::8.8.8.8"), true);
   });
 
+  it("các dạng IPv6 bọc IPv4 khác: IPv4-translated và 6to4 xét theo IPv4 bên trong", () => {
+    // Mỗi dạng thử cả viết thập phân lẫn hex - hai cách viết đi hai nhánh khác
+    // nhau trong bộ bung địa chỉ.
+    for (const ip of ["::ffff:0:a9fe:a9fe", "::ffff:0:169.254.169.254", "::ffff:0:7f00:1", "2002:7f00:1::", "2002:a9fe:a9fe:1::1", "2002:c0a8:101::"]) {
+      assert.equal(isPublicAddress(ip), false, `${ip} phải bị chặn`);
+    }
+    for (const ip of ["::ffff:0:808:808", "2002:808:808::1"]) {
+      assert.equal(isPublicAddress(ip), true, `${ip} bọc IPv4 public nên vẫn tải được`);
+    }
+  });
+
+  it("IPv4-compatible (đã bỏ), NAT64 local-use, Teredo, site-local: chặn hẳn", () => {
+    const blocked = [
+      "::127.0.0.1", "::7f00:1", "::8.8.8.8", // ::/96 - kể cả IPv4 public bên trong
+      "64:ff9b:1::a9fe:a9fe", "64:ff9b:1::8.8.8.8", "64:ff9b:1:ffff::1",
+      "2001::1", "2001:0:4136:e378:8000:63bf:3fff:fdd2", // Teredo 2001::/32
+      "fec0::1",
+    ];
+    for (const ip of blocked) {
+      assert.equal(isPublicAddress(ip), false, `${ip} phải bị chặn`);
+    }
+    // 2001:4860::/32 (Google) chung hai byte đầu với Teredo nhưng KHÔNG phải Teredo
+    assert.equal(isPublicAddress("2001:4860:4860::8888"), true);
+    assert.equal(isPublicAddress("64:ff9b:2::1"), true, "chỉ đúng /48 local-use bị chặn");
+  });
+
   it("chuỗi không phải IP thì không tin (false)", () => {
     for (const value of ["", "localhost", "8.8.8", "8.8.8.8.8", "999.1.1.1", "vi-pham::gg::hai"]) {
       assert.equal(isPublicAddress(value), false, `"${value}" phải bị coi là không hợp lệ`);

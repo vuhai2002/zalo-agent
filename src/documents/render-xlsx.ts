@@ -11,6 +11,7 @@ import {
   styleHeaderRow,
 } from "./render-xlsx-styles.js";
 import { resolveTheme, type XlsxTheme } from "./xlsx-themes.js";
+import { lamSachChuTaiLieu } from "./xml-safe-text.js";
 
 /**
  * Dựng file .xlsx từ nội dung model cung cấp.
@@ -132,7 +133,11 @@ function columnWidth(header: string, rows: SpreadsheetCell[][], colIndex: number
   return Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, longest + 2));
 }
 
-export async function renderXlsx(sheets: Sheet[]): Promise<Buffer> {
+export async function renderXlsx(sheetsTho: Sheet[]): Promise<Buffer> {
+  // Cửa vào DUY NHẤT của chữ model: exceljs lọc C0 nhưng vẫn ghi U+FFFE/U+FFFF
+  // (xem xml-safe-text.ts). Lọc TRƯỚC computeSheetValues/columnWidth để mọi
+  // bước sau thấy cùng một chữ.
+  const sheets = lamSachChuTaiLieu(sheetsTho);
   const workbook = new ExcelJS.Workbook();
   const usedNames = new Set<string>();
 

@@ -1,7 +1,8 @@
 # pnpm v11 supply-chain settings (read from this file, NOT .npmrc)
 minimumReleaseAge: 1440 # 24h delay before installing newly published versions
 strictPeerDependencies: false # unmet peer ranges warn instead of failing
-auditLevel: moderate # pnpm audit flags moderate+ severity
+audit:
+  level: moderate # pnpm audit flags moderate+ severity (`auditLevel` là cách viết cũ, đã deprecated)
 
 # Build-script whitelist (pnpm v11 denies postinstall scripts by default)
 # Hiện không có native dep nào (SQLite dùng node:sqlite built-in);

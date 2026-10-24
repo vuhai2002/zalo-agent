@@ -323,7 +323,7 @@ const TUNING_BY_KEY = {
     kind: "number",
     group: "context",
     label: "Giữ lịch sử mỗi cuộc trò chuyện",
-    hint: "Tin cũ hơn mức này bị xóa khỏi cơ sở dữ liệu. Khác với số tin nạp lại: đây là lưu trữ, kia là thứ bot đọc.",
+    hint: "Tin cũ hơn mức này bị xóa khỏi cơ sở dữ liệu - trừ tin chưa kịp vào bản tóm tắt, được giữ thêm tới tối đa gấp đôi mức này để bot không quên những gì nhóm nói lúc bot im. Khác với số tin nạp lại: đây là lưu trữ, kia là thứ bot đọc.",
     min: 20,
     max: 100_000,
     unit: "tin",
@@ -811,6 +811,16 @@ const TUNING_BY_KEY = {
     min: 5000,
     max: 600_000,
     unit: "ms",
+  },
+  MCP_MAX_RESULT_CHARS: {
+    kind: "number",
+    group: "mcp",
+    label: "Trần chữ kết quả tool ngoài",
+    hint: "Cắt bớt kết quả quá dài của một lần gọi tool ngoài. Không có trần thì một kết quả vài MB làm nhà cung cấp model từ chối, hỏng cả lượt trả lời.",
+    min: 2000,
+    max: 100_000,
+    unit: "ký tự",
+    hienQuyDoiToken: true,
   },
 } as const satisfies Record<string, TuningDef>;
 

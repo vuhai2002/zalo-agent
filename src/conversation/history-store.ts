@@ -65,12 +65,28 @@ function parseImages(raw: string | null): string[] | undefined {
 // Giữ N tin mới nhất của thread, xóa phần cũ hơn. Subquery lấy id của tin thứ
 // N+1 tính từ mới nhất; thread có ít hơn N+1 tin thì trả NULL và không xóa gì.
 // Cả DELETE lẫn subquery đều chạy trên index (account_id, thread_id, id).
+//
+// NHƯNG không xóa tin mà bản tóm tắt CHƯA phủ (id > `summary_covers_to_message_id`),
+// trừ khi đã vượt trần cứng 2N. Lý do đo trên DB thật (2026-10-24): nhóm nghe
+// thụ động chạm trần 500 dòng, khoảng trống dài nhất giữa hai lần bot trả lời
+// là 385 tin. Bộ tóm tắt chỉ chạy SAU một lượt bot trả lời và chỉ đọc được tin
+// còn trong DB - nên nhóm nói quá ~N tin giữa hai lần bot lên tiếng là phần cũ
+// nhất bị xóa trước khi kịp vào bản tóm tắt, mất trí nhớ câm. Cùng ý goclaw
+// 1d68a21f (lưu trữ trong cùng giao dịch với lúc bỏ khỏi bộ đệm). Trần 2N giữ
+// DB không phình vô hạn ở thread mà bot không bao giờ trả lời.
 const pruneStmt = db.prepare(
   `DELETE FROM messages
    WHERE account_id = ? AND thread_id = ?
      AND id <= (SELECT id FROM messages
                 WHERE account_id = ? AND thread_id = ?
-                ORDER BY id DESC LIMIT 1 OFFSET ?)`,
+                ORDER BY id DESC LIMIT 1 OFFSET ?)
+     AND (
+       id <= COALESCE((SELECT summary_covers_to_message_id FROM threads
+                       WHERE account_id = ? AND thread_id = ?), 0)
+       OR id <= COALESCE((SELECT id FROM messages
+                          WHERE account_id = ? AND thread_id = ?
+                          ORDER BY id DESC LIMIT 1 OFFSET ?), 0)
+     )`,
 );
 
 /** Ghi 1 tin, trả về id của row để cập nhật bổ sung sau (vd gắn ảnh tải xong muộn) */
@@ -92,7 +108,8 @@ export function appendMessage(
     ? insertWithCreatedAtStmt.run(...cot, message.createdAt)
     : insertStmt.run(...cot);
   // Dọn ngay thread vừa ghi: không cần cron, và thread im lặng thì không tốn gì
-  pruneStmt.run(accountId, threadId, accountId, threadId, getTuning("HISTORY_MAX_MESSAGES_PER_THREAD"));
+  const tran = getTuning("HISTORY_MAX_MESSAGES_PER_THREAD");
+  pruneStmt.run(accountId, threadId, accountId, threadId, tran, accountId, threadId, accountId, threadId, tran * 2);
   return Number(result.lastInsertRowid);
 }
 

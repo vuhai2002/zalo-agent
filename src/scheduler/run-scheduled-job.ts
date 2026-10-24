@@ -216,6 +216,22 @@ async function runAgentJob(
       if (trace.length > 0) saveTurnTrace(turnId, trace);
       turnFinished = true;
 
+      // Câu dự phòng (router trả rỗng hai lần, hết step mà lượt chốt không ra
+      // chữ) là BÁO LỖI của hệ thống, không phải lời nhắc. Gửi nó đi là nhắn chủ
+      // động câu "trục trặc kỹ thuật" cho người ta, chốt run thành công và tiêu
+      // luôn suất ngày - trái nếp "job hỏng thì im". Xử như nhánh catch bên dưới:
+      // đếm là một lần chưa gửi được để vòng thử lại của `delivery_attempts` lo.
+      if (result.duPhong) {
+        concludeDeliveryFailed(
+          job,
+          runId,
+          options.scheduledFor,
+          `Lượt agent không ra câu trả lời (${result.duPhong}) - không gửi câu dự phòng.`,
+          turnId,
+        );
+        return;
+      }
+
       const text = result.text.trim();
       if (!text || isSilentResponse(text)) {
         conclude(job, runId, {
