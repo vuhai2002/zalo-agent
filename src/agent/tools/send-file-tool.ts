@@ -7,6 +7,7 @@ import { downloadFromPublicUrl } from "../../shared/safe-remote-download.js";
 import { withTempFile } from "../../shared/temp-file-store.js";
 import type { ToolContext } from "./index.js";
 import { apiCaNhan } from "./tool-catalog-types.js";
+import { doiDuoiTheoByteThat } from "./doi-duoi-file-theo-byte-that.js";
 import { ketQuaLoi } from "./tool-failure-result.js";
 import { guiFileKemCaption } from "./send-attachment-with-caption.js";
 import { ghiChuDaGuiFile } from "./sent-by-tool-note.js";
@@ -56,9 +57,10 @@ export function createSendFileTool(ctx: ToolContext) {
             maxBytes: MAX_DOWNLOAD_BYTES,
             signal: abortSignal,
           });
-          await withTempFile(file.fileName, file.data, (filePath) =>
-            sendAttachment(filePath, caption, file.fileName),
-          );
+          // Tên theo URL có thể nói dối (CDN trả AVIF cho link .jpg) - zca-js
+          // chọn nhánh gửi theo ĐUÔI, nên sửa đuôi theo byte thật trước khi ghi.
+          const tenFile = doiDuoiTheoByteThat(file.fileName, file.data);
+          await withTempFile(tenFile, file.data, (filePath) => sendAttachment(filePath, caption, tenFile));
           return "Đã gửi file thành công";
         }
 

@@ -43,3 +43,6 @@ Báo cáo rà soát đầy đủ (bằng chứng, nguồn, câu hỏi mở):
 - 13 job cron: cả 11 biểu thức khác nhau parse được trên cron-parser 5.10.2.
 - Lượt rỗng sau tool: 0/117 lượt có trace -> không làm. Nhóm chạm trần 500 dòng, khoảng trống tối đa 385 -> đã sửa prune.
 - 0 MCP server -> việc duyệt lại fingerprint một lần không ảnh hưởng.
+
+## Việc treo
+- zca-js: chờ bản > 2.2.0 có fix `listen` cmd 551 (PR #378, tin nhắn bị bỏ sót) + `addReaction` (PR #381). Kiểm `npm view zca-js version` mỗi lần rà deps; đã ghi vào bộ nhớ của Claude.

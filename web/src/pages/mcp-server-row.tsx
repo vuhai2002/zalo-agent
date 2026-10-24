@@ -38,6 +38,15 @@ export function McpServerRow({
             {server.loi}
           </div>
         )}
+        {/* Đã nối mà cột `loi` vẫn có chữ = ghi chú tool bị BỎ QUA lúc khám phá
+            (tham số không phải object, hoặc vượt trần 128 tool/server - xem
+            `mcp-tool-discovery-filter.ts`). Không hiện thì người vận hành thấy
+            "Đã kết nối" mà không biết vì sao thiếu tool. */}
+        {server.trangThai === "da_ket_noi" && server.loi && (
+          <div className="mt-0.5 truncate text-[12px] text-amber-600 dark:text-amber-400" title={server.loi}>
+            {server.loi}
+          </div>
+        )}
         {server.trangThai === "can_duyet_lai" && (
           <div className="mt-0.5 text-[12px] text-amber-600 dark:text-amber-400">
             Bộ tool của server đã đổi so với lần duyệt trước

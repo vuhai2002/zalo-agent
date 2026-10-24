@@ -24,7 +24,13 @@ export const MAX_REDIRECTS = 3;
 const BROWSER_HEADERS: Record<string, string> = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  // KHÔNG khai `image/avif` dù Chrome thật có khai: CDN tự đổi định dạng theo
+  // Accept (Cloudinary, imgix, Shopify...) sẽ trả byte AVIF cho cả link `.jpg`,
+  // mà không chỗ nào trong bot dùng được AVIF - cổng magic byte của
+  // `image-metadata-getter.ts` chặn nó nên `send_file` hỏng, `readImageSize`
+  // không đọc được cỡ nên ảnh bìa video rơi về gửi dạng file, và provider LLM
+  // chỉ nhận JPEG/PNG/GIF/WebP. Bỏ đi thì CDN trả JPEG/WebP như cho trình duyệt cũ.
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
   "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
   // node:http KHÔNG tự thêm Accept-Encoding và cũng không tự giải nén (khác
   // fetch/undici). Nhưng nhiều site nén gzip kể cả khi không được hỏi - đo

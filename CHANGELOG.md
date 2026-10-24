@@ -51,6 +51,15 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 - Bộ phân loại lỗi provider nhận thêm các cách báo tràn ngữ cảnh (llama.cpp,
   Ollama, GLM, 413) và coi 503 kèm `Retry-After` là siết nhịp.
 - File docx/xlsx không còn hỏng khi nội dung có ký tự điều khiển cấm trong XML.
+- **`send_file` với link `.jpg` mà CDN trả AVIF/HEIC** không còn báo gửi thất
+  bại: bộ tải thôi khai `image/avif` trong `Accept` (CDN trả JPEG/WebP như cho
+  trình duyệt cũ - có lợi luôn cho ảnh bìa video và ảnh model đọc), và nếu byte
+  vẫn không phải ảnh đọc được thì đổi đuôi file theo byte thật để gửi dạng file.
+- **`web_fetch`**: server khai `text/plain` mà trả trang HTML thật thì vẫn qua bộ
+  bóc HTML (gồm bước bỏ nội dung ẩn), không còn đưa nguyên markup vào model.
+- Trang MCP hiện ghi chú khi server đã kết nối nhưng có tool bị bỏ qua (tham số
+  không phải object, hoặc vượt trần 128 tool/server) - trước đây ghi chú này chỉ
+  có trong API, người vận hành thấy "Đã kết nối" mà không biết vì sao thiếu tool.
 
 ### Thay đổi
 

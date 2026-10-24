@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { getFetchSettings } from "../../config/runtime-tool-settings.js";
 import { extractHtmlTitle, htmlToReadableText } from "../../shared/html-to-text.js";
+import { laNoiDungHtml } from "./web-fetch-content-type.js";
 import { fetchViaJinaReader } from "../../shared/jina-reader-fallback.js";
 import { createLogger } from "../../shared/logger.js";
 import { downloadFromPublicUrl } from "../../shared/safe-remote-download.js";
@@ -29,8 +30,8 @@ type FetchedPage = { text: string; title: string; via: "truc-tiep" | "jina-reade
 async function fetchDirect(url: string, signal?: AbortSignal): Promise<FetchedPage | null> {
   try {
     const file = await downloadFromPublicUrl(url, { maxBytes: MAX_HTML_BYTES, signal });
-    const isHtml = file.mediaType.includes("html") || file.mediaType === "application/octet-stream";
     const raw = file.data.toString("utf-8");
+    const isHtml = laNoiDungHtml(file.mediaType, raw);
     const text = isHtml ? htmlToReadableText(raw) : raw.trim();
     if (text.length < TOO_LITTLE_TEXT) {
       log.debug({ url, length: text.length }, "Fetch trực tiếp ra quá ít chữ");
