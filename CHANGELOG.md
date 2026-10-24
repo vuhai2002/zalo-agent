@@ -8,6 +8,8 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ## [Chưa phát hành]
 
+## [0.4.0] - 2026-10-24
+
 ### Bảo mật
 
 - **Ảnh giả làm treo cả bot.** `image-size` 2.0.2 lặp vô hạn trên ICNS/JXL/HEIF
@@ -57,11 +59,19 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   vẫn không phải ảnh đọc được thì đổi đuôi file theo byte thật để gửi dạng file.
 - **`web_fetch`**: server khai `text/plain` mà trả trang HTML thật thì vẫn qua bộ
   bóc HTML (gồm bước bỏ nội dung ẩn), không còn đưa nguyên markup vào model.
+- **`web_fetch` không còn treo cả bot vì trang soạn khéo**: các regex bắt thẻ chạy
+  bậc hai khi trang toàn `<a x` không có `>` (ước ~15 phút khóa event loop với
+  trang 3 MB). Nay dừng ở dấu `<` kế tiếp, tuyến tính.
+
+### Thêm
+
 - Trang MCP hiện ghi chú khi server đã kết nối nhưng có tool bị bỏ qua (tham số
   không phải object, hoặc vượt trần 128 tool/server) - trước đây ghi chú này chỉ
   có trong API, người vận hành thấy "Đã kết nối" mà không biết vì sao thiếu tool.
+- Tham số `MCP_MAX_RESULT_CHARS` trên trang Cấu hình (trần ký tự kết quả một tool
+  MCP, mặc định 15000).
 
-### Thay đổi
+### Đổi
 
 - **AI SDK** `ai` 7.0.150 cùng các provider. Bản mới đổi hai hành vi stream, bot
   giữ nguyên trải nghiệm cũ: hết giờ giữa lượt vẫn vào lượt chốt từ các bước đã
@@ -71,6 +81,20 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   trúng cache Docker nên máy chủ có thể giữ mãi bản của lần build đầu.
 - `@types/node` hạ về 24 cho khớp runtime (Node 24); `schedule_task` giới hạn biểu
   thức cron 256 ký tự.
+
+### Nâng cấp
+
+- **Chạy bằng Docker**: `bash deploy.sh` là đủ - image tự lên yt-dlp 2026.10.21
+  (đã ghim) và Node 24 mới nhất. Không có biến môi trường bắt buộc nào mới.
+- **Chạy thẳng bằng Node**: `pnpm install` (lockfile đổi nhiều), `pnpm build:web`,
+  và nâng yt-dlp lên ít nhất 2026.10.21 (`pip install -U yt-dlp`).
+- **Dùng 9Router >= v0.5.109**: model vẽ ảnh `cx/gpt-5.5-image` đã ngừng (Codex
+  khai tử gpt-5.5) - đổi sang `cx/gpt-image-2.5` ở Settings của tool vẽ ảnh, rồi
+  bấm "Vẽ thử 1 ảnh".
+- Server MCP nào có tool sai schema hoặc hơn 128 tool sẽ hiện "Cần duyệt lại" MỘT
+  lần sau khi nâng (fingerprint tính trên bộ tool đã lọc) - bấm duyệt lại là xong.
+- Prompt cache trượt một lần ở các cuộc trò chuyện có tin nhiều dòng (dòng nối
+  nay được thụt vào). Không phải làm gì.
 
 ## [0.3.1] - 2026-08-30
 
@@ -478,7 +502,8 @@ Bản đầu tiên được đánh số. Gom toàn bộ những gì đã làm t�
   mệnh lệnh; tin của người ngoài danh sách cho phép có nhãn riêng
 - Rate limit đăng nhập dashboard, phiên lưu trong DB nên đăng xuất thu hồi được thật
 
-[Chưa phát hành]: https://github.com/vuhai2002/zalo-agent/compare/v0.3.1...HEAD
+[Chưa phát hành]: https://github.com/vuhai2002/zalo-agent/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/vuhai2002/zalo-agent/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/vuhai2002/zalo-agent/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/vuhai2002/zalo-agent/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/vuhai2002/zalo-agent/compare/v0.1.0...v0.2.0
