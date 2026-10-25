@@ -8,6 +8,24 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ## [Chưa phát hành]
 
+### Thêm
+
+- **Ghi chú nguyên văn** (tool `verbatim_note`): người dùng gửi một đoạn (thông báo,
+  mẫu tin, lời cảm ơn...) kèm "ghi nhớ tin này" thì bot lưu ĐÚNG từng chữ và gửi lại
+  y hệt khi được hỏi. Máy chủ đối chiếu với tin gốc và từ chối nếu bot tóm tắt hay
+  sửa chữ - trước đây `save_memory` tóm tắt hoặc lưu thiếu mà vẫn báo "đã ghi nhớ".
+  Sửa một chỗ (đổi địa điểm, số điện thoại) giữ nguyên phần còn lại; gửi bản mới thì
+  thay cả ghi chú. Mỗi lượt chat chỉ mang TÊN ghi chú, nội dung đọc khi cần nên không
+  tốn token ở lượt khác. Hai tham số mới trên trang Cấu hình: số ghi chú mỗi người
+  (mặc định 30) và độ dài mỗi ghi chú (mặc định 4000 ký tự).
+
+### Sửa
+
+- **`pnpm eval` không còn ghi vào DB dev thật.** Runner import tĩnh `kenh-ca-nhan`,
+  mà chuỗi import đó mở SQLite ngay khi nạp - trước khi trỏ sang DB tạm - nên mọi lần
+  eval đều ghi account, tin nhắn, trace vào `data/zalo-agent.db` và chạy migration
+  lên đó. Đổi sang import động, thêm test canh mọi import tĩnh của runner.
+
 ## [0.4.0] - 2026-10-24
 
 ### Bảo mật

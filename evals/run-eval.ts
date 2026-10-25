@@ -1,5 +1,4 @@
 import { canTraCuuWeb, kiemTraTienDeTraCuu } from "./preflight-web-search.js";
-import { kenhCaNhan } from "../src/zalo/kenh-ca-nhan.js";
 import { dungEvalEnv } from "./eval-env.js";
 import { EVAL_CASES } from "./eval-cases.js";
 import { taoFakeZaloApi } from "./fake-zalo-api.js";
@@ -98,8 +97,14 @@ async function main(): Promise<void> {
   const threadStore = await import("../src/conversation/thread-store.js");
   const traceStore = await import("../src/agent/agent-trace-store.js");
   const processor = await import("../src/zalo/message-turn-processor.js");
+  // ĐỘNG, không tĩnh: chuỗi import của kenh-ca-nhan (send-reply-in-parts ->
+  // history-store -> database.ts) mở SQLite ngay lúc nạp module. Import tĩnh ở
+  // đầu file là mở DB THẬT (./data) trước setupTestEnv - mọi lần eval từng ghi
+  // account, tin nhắn, trace vào DB dev và chạy migration lên đó.
+  const { kenhCaNhan } = await import("../src/zalo/kenh-ca-nhan.js");
   const database = await import("../src/conversation/database.js");
   const memoryStore = await import("../src/conversation/memory-store.js");
+  const noteStore = await import("../src/conversation/verbatim-note-store.js");
   const historyStore = await import("../src/conversation/history-store.js");
   const ghiTinDen = await import("../src/zalo/record-incoming-message.js");
   const { cleanupTestEnv } = await import("../src/shared/test-env-setup.js");
@@ -139,7 +144,14 @@ async function main(): Promise<void> {
 
       // Gieo điều bot "đã nhớ" từ trước. Xóa sạch trước mỗi case để case này
       // không thấy fact case kia vừa ghi - DB tạm dùng chung cả lượt chạy.
-      database.db.exec("DELETE FROM memories");
+      database.db.exec("DELETE FROM memories; DELETE FROM verbatim_notes;");
+      for (const g of c.ghiChuCoSan ?? []) {
+        noteStore.luuGhiChu(
+          { accountId: ACC, subjectId: "eval-user", chiTrongNhom: false },
+          { title: g.tieuDe, content: g.noiDung, threadId, isGroup: Boolean(c.laNhom) },
+          1000,
+        );
+      }
       for (const noiDung of c.factCoSan ?? []) {
         memoryStore.saveMemoryFact({
           accountId: ACC,

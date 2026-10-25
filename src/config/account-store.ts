@@ -177,6 +177,9 @@ export function deleteAccount(id: string): boolean {
     // lại account CÙNG ID mà auto-accept bật thì vòng quét accept những UID cũ
     // rích. friend-schema tự hứa "mọi nơi xóa tự dọn tường minh" nên phải làm ở đây.
     db.prepare("DELETE FROM friend_requests WHERE account_id = ?").run(id);
+    // Ghi chú nguyên văn là dữ liệu cá nhân người dùng nhờ giữ: account mất thì
+    // không ai còn đọc được, giữ lại chỉ để hồi sinh nhầm khi tạo lại CÙNG ID.
+    db.prepare("DELETE FROM verbatim_notes WHERE account_id = ?").run(id);
     return db.prepare("DELETE FROM accounts WHERE id = ?").run(id).changes > 0;
   });
 }

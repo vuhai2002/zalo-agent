@@ -768,6 +768,23 @@ describe("runAgentTurn - isolated (lượt theo lịch của scheduler)", () => 
     );
   });
 
+  it("tên ghi chú nguyên văn của NGƯỜI ĐANG NHẮN vào system prompt; lượt cô lập thì không", async () => {
+    const { db } = await import("../conversation/database.js");
+    db.prepare(
+      `INSERT INTO verbatim_notes (account_id, subject_id, title, title_key, content, learned_in_thread_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(account.id, "user-1", "Thông báo nhận quà", "thông báo nhận quà", "NOI_DUNG_KHONG_DUOC_VAO_PROMPT", "thread-1");
+    try {
+      const thuong = systemText((await chayLuot([() => traLoi("ok")])).calls[0]!)!;
+      assert.match(thuong, /<ghi_chu_da_luu>[\s\S]*- Thông báo nhận quà\n/);
+      assert.ok(!thuong.includes("NOI_DUNG_KHONG_DUOC_VAO_PROMPT"), "chỉ TÊN vào prompt, nội dung đọc bằng tool");
+      const coLap = systemText((await chayLuot([() => traLoi("ok")], [tinNhan()], { isolated: true })).calls[0]!)!;
+      assert.doesNotMatch(coLap, /ghi_chu_da_luu/);
+    } finally {
+      db.exec("DELETE FROM verbatim_notes");
+    }
+  });
+
   it("isolated:true giữ nguyên PERSONA GỐC (base persona, quy tắc an toàn) - chỉ mục 'Khả năng' đổi theo tool thật có", async () => {
     // Sửa sau review (Finding 2): trước đây kỳ vọng 2 system prompt GIỐNG HỆT
     // nhau - kỳ vọng đó SAI, vì buildSystemPrompt không truyền isolated xuống

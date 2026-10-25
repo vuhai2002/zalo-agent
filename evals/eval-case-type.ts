@@ -90,5 +90,7 @@ export type EvalCase = {
    * đang nhớ một điều SAI thì lời đính chính mới có nghĩa.
    */
   factCoSan?: string[];
+  /** Ghi chú nguyên văn (tool `verbatim_note`) người nhắn đã lưu từ trước */
+  ghiChuCoSan?: { tieuDe: string; noiDung: string }[];
   mongDoi: MongDoi;
 };

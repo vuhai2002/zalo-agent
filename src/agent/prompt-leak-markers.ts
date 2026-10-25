@@ -49,6 +49,13 @@ export const THE_DIEU_DA_NHO = "dieu_da_nho";
  */
 export const THE_BOI_CANH = "boi_canh_da_chot";
 
+/**
+ * Tên thẻ bọc khối TÊN các ghi chú nguyên văn (tool `verbatim_note`) trong system
+ * prompt. Chỉ tên, không nội dung - nội dung đọc bằng tool khi được hỏi. Tên đã
+ * bị siết charset lúc lưu (không có `<`) nên không cần khử thẻ trong tên.
+ */
+export const THE_GHI_CHU_DA_LUU = "ghi_chu_da_luu";
+
 /** Tiêu đề mục an toàn trong `BASE_PERSONA` */
 export const TIEU_DE_QUY_TAC_AN_TOAN = "Quy tắc an toàn (tuyệt đối, không có ngoại lệ):";
 
@@ -91,6 +98,8 @@ export const DAU_HIEU_RO_PROMPT: readonly string[] = [
   // Cùng mức an toàn: có `<` đứng trước nên không ai vô tình gõ ra; nội dung
   // tóm tắt đã bị khử tên thẻ lúc bọc.
   `<${THE_BOI_CANH}`,
+  // Cùng mức an toàn: có `<` đứng trước, tên ghi chú không chứa được `<`.
+  `<${THE_GHI_CHU_DA_LUU}`,
   TIEU_DE_QUY_TAC_AN_TOAN,
   ...KHA_NANG_DAY_DU,
 ];

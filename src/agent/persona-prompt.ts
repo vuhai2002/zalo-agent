@@ -5,6 +5,8 @@ import { botTimeZone } from "../config/runtime-tuning-settings.js";
 import type { MemoryContext } from "../conversation/memory-store.js";
 import { currentDateLine } from "../shared/current-datetime.js";
 import { khoiDieuDaNho } from "./memory-prompt-block.js";
+import { khoiGhiChuDaLuu } from "./verbatim-note-prompt-block.js";
+import type { TieuDeGhiChu } from "../conversation/verbatim-note-store.js";
 import { khoiBoiCanhThread } from "./thread-summary-prompt-block.js";
 import { tenNguoiGuiAnToan } from "./user-message-line.js";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
@@ -78,6 +80,8 @@ export type PromptMemory = {
   facts: MemoryContext;
   /** Rolling summary của phần hội thoại đã rớt khỏi cửa sổ replay */
   threadSummary: string;
+  /** TÊN ghi chú nguyên văn của người đang nhắn (nội dung đọc bằng tool khi cần) */
+  ghiChu?: TieuDeGhiChu[];
 };
 
 /**
@@ -117,7 +121,7 @@ export function buildSystemPrompt(
     // riêng là sớm muộn cũng lệch, mà lệch nghĩa là prompt kể một tool rồi lại
     // dạy luật của tool khác. `isolated` PHẢI truyền xuống đây - thiếu nó thì
     // lượt theo lịch (agent-loop.ts truyền isolated:true) vẫn được liệt kê cả
-    // 9 tool bị runsInScheduledTurn:false, trong khi buildAgentTools ĐÃ lọc
+    // các tool bị runsInScheduledTurn:false, trong khi buildAgentTools ĐÃ lọc
     // chúng khỏi schema thật - model tự nhận "mình vừa ghi nhớ" mà chẳng lưu
     // gì (đúng bug persona-prompt.test.ts đã dựng bất biến để canh).
     //
@@ -149,6 +153,10 @@ export function buildSystemPrompt(
 
   if (memory && memory.facts.length > 0) {
     sections.push(khoiDieuDaNho(memory.facts));
+  }
+
+  if (memory?.ghiChu && memory.ghiChu.length > 0) {
+    sections.push(khoiGhiChuDaLuu(memory.ghiChu));
   }
 
   // "MỌI tin của người dùng" chứ không phải "tin trong lịch sử": tin của lượt

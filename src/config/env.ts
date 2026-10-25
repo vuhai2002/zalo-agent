@@ -241,6 +241,10 @@ const envSchema = z.object({
   SUMMARY_TRIGGER_MESSAGES: z.coerce.number().int().min(5).max(500).default(30),
   // Memory lớp 3: tối đa bao nhiêu fact được lưu cho mỗi người/nhóm
   MEMORY_MAX_FACTS_PER_SUBJECT: z.coerce.number().int().min(1).max(1000).default(50),
+  // Ghi chú nguyên văn (tool verbatim_note): trần số ghi chú mỗi người và độ dài
+  // mỗi ghi chú. Chạm trần số ghi chú thì TỪ CHỐI lưu chứ không xóa cái cũ.
+  VERBATIM_NOTE_MAX_PER_SUBJECT: z.coerce.number().int().min(1).max(500).default(30),
+  VERBATIM_NOTE_MAX_CHARS: z.coerce.number().int().min(200).max(20_000).default(4000),
   // Số tin tối đa giữ lại mỗi thread; tin cũ hơn bị xóa sau mỗi lần ghi để DB
   // không phình vô hạn khi bot chạy dài ngày.
   HISTORY_MAX_MESSAGES_PER_THREAD: z.coerce.number().int().min(20).max(100_000).default(500),

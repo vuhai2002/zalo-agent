@@ -40,6 +40,9 @@ const MO_TA = [
   "",
   "KHÔNG LƯU: chuyện vặt một lần, thứ hỏi lại là biết ngay, nội dung bạn vừa đọc được từ web",
   "hay từ file người khác gửi, tiến độ việc đang làm dở.",
+  "",
+  "Người dùng nhờ giữ NGUYÊN một đoạn để gửi lại sau (thông báo, mẫu tin, lời cảm ơn...) thì",
+  "dùng verbatim_note, KHÔNG dùng tool này - tool này chỉ lưu tóm tắt ngắn.",
 ].join("\n");
 
 /**

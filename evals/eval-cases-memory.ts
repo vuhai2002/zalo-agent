@@ -9,6 +9,18 @@ import type { EvalCase } from "./eval-case-type.js";
  * mô tả, không phải xanh rỗng.
  */
 
+/** Thông báo GIẢ cùng hình dạng ca thật (repo công khai, không dùng tin thật) */
+const THONG_BAO_GIA = [
+  "🌻 🌻 Thông báo nhận quà sau khoá tu /-heart/-heart",
+  "Dạ con thưa HĐ, ban hậu cần có chuẩn bị quà để HĐ không",
+  " ở lại được sau khoá tu ạ",
+  "",
+  "Thông tin nhận:  ",
+  "Địa điểm: Trước cổng phụ",
+  "Liên hệ: Bạn A - 0900000000  ",
+  "Chúng con cảm ơn HĐ ạ _()__()_",
+].join("\n");
+
 export const CASE_MEMORY: EvalCase[] = [
   {
     ten: "nho-chu-dong",
@@ -59,6 +71,49 @@ export const CASE_MEMORY: EvalCase[] = [
         tool: "save_memory",
         moTa: "phải dùng action 'sua' để thay điều cũ, không phải 'them' chồng lên",
         dat: (input) => /"action"\s*:\s*"sua"/.test(input),
+      },
+    },
+  },
+  {
+    ten: "nho-nguyen-van",
+    lyDo:
+      "Ca thật trên prod 2026-10-24: người dùng gửi một thông báo rồi thêm 'ghi nhớ tin này, khi nào " +
+      "tôi hỏi thì gửi lại' ngay trong cùng tin. Với save_memory, 4/4 lần chạy model thật TÓM TẮT hoặc " +
+      "chỉ lưu đoạn cuối mà vẫn báo 'đã ghi nhớ' (mô tả của nó dạy viết ngắn 1-2 câu). Case canh model " +
+      "chọn đúng verbatim_note và KHÔNG đi đường save_memory. Tính nguyên văn thì máy chủ tự kiểm " +
+      "(khop-nguyen-van.ts) nên không cần khẳng định trên câu chữ ở đây.",
+    tinNhan: [
+      THONG_BAO_GIA,
+      "",
+      "ghi nhớ dòng tin nhắn này. khi nào tôi hỏi về quà khóa tu thì bạn gửi lại tôi nhé",
+    ].join("\n"),
+    disabledTools: ["create_image", "create_word_document", "create_excel_file", "web_search"],
+    mongDoi: {
+      goiTool: ["verbatim_note"],
+      khongGoiTool: ["save_memory"],
+      kiemTraToolArgs: {
+        tool: "verbatim_note",
+        moTa: "phải là action 'luu'",
+        dat: (input) => /"action"\s*:\s*"luu"/.test(input),
+      },
+    },
+  },
+
+  {
+    ten: "doc-nguyen-van",
+    lyDo:
+      "Nửa còn lại của ca trên: hỏi lại thì phải gửi ĐÚNG từng dòng đã lưu. Đây là ngoại lệ có chủ ý " +
+      "của luật 'không khẳng định trên câu chữ': nguyên văn CHÍNH LÀ tính chất cần đo, và phép so là " +
+      "từng dòng có mặt nguyên vẹn chứ không phải một từ khóa ngữ nghĩa. Đã đo trên model thật: tên ghi " +
+      "chú dạng ngoặc kép kèm số ký tự làm model chép tên lệch đuôi rồi lặp tới chạm guard.",
+    ghiChuCoSan: [{ tieuDe: "Thông báo nhận quà khóa tu", noiDung: THONG_BAO_GIA }],
+    tinNhan: "quà khóa tu gửi lại t với",
+    disabledTools: ["create_image", "create_word_document", "create_excel_file", "web_search"],
+    mongDoi: {
+      goiTool: ["verbatim_note"],
+      kiemTraText: {
+        moTa: "mọi dòng của ghi chú có mặt nguyên vẹn",
+        dat: (t) => THONG_BAO_GIA.split("\n").map((d) => d.trim()).filter(Boolean).every((d) => t.includes(d)),
       },
     },
   },

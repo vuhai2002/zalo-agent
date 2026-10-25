@@ -5,6 +5,7 @@ import { getAgentForAccount } from "../config/agent-store.js";
 import { isSidecarConfigured } from "../config/runtime-vision-settings.js";
 import { getRecentMessages } from "../conversation/history-store.js";
 import { getMemoriesForContext } from "../conversation/memory-store.js";
+import { danhSachGhiChu } from "../conversation/verbatim-note-store.js";
 import { getThreadContextEpoch, getThreadSummary } from "../conversation/thread-store.js";
 import { createLogger } from "../shared/logger.js";
 import { TECHNICAL_ERROR_REPLY } from "../zalo/send-reply-in-parts.js";
@@ -253,6 +254,11 @@ export async function runAgentTurn({
           isGroup: latest.isGroup,
         }),
         threadSummary: getThreadSummary(account.id, latest.threadId).summary,
+        ghiChu: danhSachGhiChu({
+          accountId: account.id,
+          subjectId: latest.senderId,
+          chiTrongNhom: latest.isGroup,
+        }),
       };
 
   // `trace` do caller truyền vào và dùng chung cho MỌI lần chạy trong lượt: lượt

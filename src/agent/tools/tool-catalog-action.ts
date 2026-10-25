@@ -8,6 +8,7 @@ import { createSaveMemoryTool } from "./save-memory-tool.js";
 import { createSendFileTool } from "./send-file-tool.js";
 import { createTagMemberTool } from "./tag-member-tool.js";
 import { createTaiVideoTool } from "./tai-video-tool.js";
+import { createVerbatimNoteTool } from "./verbatim-note-tool.js";
 import type { ToolDefinition } from "./tool-catalog-types.js";
 
 /**
@@ -106,6 +107,16 @@ export const ACTION_TOOL_DEFINITIONS: ToolDefinition[] = [
     // lượt theo lịch vốn không có phát ngôn nào của user để mà học
     runsInScheduledTurn: false,
     build: (ctx) => createSaveMemoryTool(ctx),
+  },
+  {
+    key: "verbatim_note",
+    label: "Ghi chú nguyên văn",
+    description: "Lưu nguyên văn một đoạn người dùng nhờ giữ (thông báo, mẫu tin, lời cảm ơn...) và gửi lại đúng từng chữ khi được hỏi",
+    group: "action",
+    // Cùng lý do save_memory: lượt theo lịch không có phát ngôn nào của người
+    // dùng để lưu, và nội dung job (chữ model tự viết) không được ghi/xóa ghi chú
+    runsInScheduledTurn: false,
+    build: (ctx) => createVerbatimNoteTool(ctx),
   },
   {
     key: "schedule_task",

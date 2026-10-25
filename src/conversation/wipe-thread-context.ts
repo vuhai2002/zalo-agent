@@ -88,6 +88,12 @@ const xoaTriNhoCuaThread = db.prepare(
   "DELETE FROM memories WHERE account_id = ? AND learned_in_thread_id = ?",
 );
 
+// Ghi chú nguyên văn lưu trong thread này cũng là "trí nhớ học ở đây" - đi
+// chung lựa chọn `xoaTriNho`, đếm chung vào `triNho`.
+const xoaGhiChuCuaThread = db.prepare(
+  "DELETE FROM verbatim_notes WHERE account_id = ? AND learned_in_thread_id = ?",
+);
+
 /**
  * Dọn summary và tăng epoch trong CÙNG một câu lệnh.
  *
@@ -116,7 +122,10 @@ export function xoaNguCanhThread(
     const buocAgent = Number(xoaBuocAgent.run(accountId, threadId).changes);
     const tinNhan = Number(xoaTinNhan.run(accountId, threadId).changes);
     const soDemChuDong = Number(xoaSoDemChuDong.run(accountId, threadId).changes);
-    const triNho = tuyChon.xoaTriNho ? Number(xoaTriNhoCuaThread.run(accountId, threadId).changes) : 0;
+    const triNho = tuyChon.xoaTriNho
+      ? Number(xoaTriNhoCuaThread.run(accountId, threadId).changes) +
+        Number(xoaGhiChuCuaThread.run(accountId, threadId).changes)
+      : 0;
 
     datLaiThread.run(accountId, threadId);
     const row = docEpoch.get(accountId, threadId) as { context_epoch?: number } | undefined;

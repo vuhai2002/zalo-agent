@@ -45,6 +45,8 @@ describe("năng lực kênh bot", () => {
       "read_image",
       "kb_search",
       "save_memory",
+      // Chỉ đọc lịch sử + ghi DB, không gọi API Zalo nào
+      "verbatim_note",
       // Nối vào bộ hẹn lịch ở V3.19 - scheduler dựng đường gửi theo KÊNH thay
       // vì khóa cứng zca-js. Bot API gửi chủ động được (đo: 10 tin/416ms).
       "schedule_task",

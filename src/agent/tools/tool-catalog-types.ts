@@ -142,13 +142,14 @@ export type ToolDefinition = {
   keTrongKhaNang?: boolean;
   /**
    * Tool này có được cấp trong lượt CHẠY THEO LỊCH (job scheduler) không.
-   * Mặc định true - phải khai TƯỜNG MINH false mới bị loại. Chín tool loại,
+   * Mặc định true - phải khai TƯỜNG MINH false mới bị loại. Mười một tool loại,
    * hai nhóm lý do khác nhau:
    *
    * - Không có hạ tầng cho lượt cô lập: `add_reaction` (không có `msgId` thật
    *   để thả vào), `read_image` (không có ảnh nào trong lượt), `save_memory`
    *   (đường nội dung web đi vào trí nhớ vĩnh viễn là prompt injection thật,
-   *   và lượt theo lịch vốn không có phát ngôn nào của user để mà học),
+   *   và lượt theo lịch vốn không có phát ngôn nào của user để mà học), `verbatim_note`
+   *   (cùng lý do: không có tin người dùng nào để chép nguyên văn),
    *   `schedule_task` (luật số 1 của Hermes: job không được đẻ job).
    * - Gửi tin THẲNG qua `enqueueSend` (rate-limiter THEO THREAD của
    *   `middleware/rate-limiter.ts`), KHÔNG đi qua `deliverProactively`/
