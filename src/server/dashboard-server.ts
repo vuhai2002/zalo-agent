@@ -28,6 +28,7 @@ import { overviewRoutes } from "./routes/overview-routes.js";
 import { providerRoutes } from "./routes/provider-routes.js";
 import { scheduleRoutes } from "./routes/schedule-routes.js";
 import { threadRoutes } from "./routes/thread-routes.js";
+import { verbatimNoteRoutes } from "./routes/verbatim-note-routes.js";
 import { imageRoutes } from "./routes/image-routes.js";
 import { kbRoutes } from "./routes/kb-routes.js";
 import { mcpRoutes } from "./routes/mcp-routes.js";
@@ -167,6 +168,7 @@ export function buildDashboardApp(): Hono {
   app.route("/api/friends", friendRoutes);
   app.route("/api/provider", providerRoutes);
   app.route("/api/memories", memoryRoutes);
+  app.route("/api/verbatim-notes", verbatimNoteRoutes);
   app.route("/api/accounts", accountRoutes);
   app.route("/api/agents", agentRoutes);
   app.route("/api/tools", toolRoutes);

@@ -352,6 +352,14 @@ export const api = {
     request<{ ok: true }>(`/api/memories/${id}?accountId=${encodeURIComponent(accountId)}`, {
       method: "DELETE",
     }),
+  verbatimNotes: (accountId: string, q: string, page: number) =>
+    request<{ items: VerbatimNoteItem[]; hasMore: boolean }>(
+      `/api/verbatim-notes?accountId=${encodeURIComponent(accountId)}&q=${encodeURIComponent(q)}&page=${page}`,
+    ),
+  deleteVerbatimNote: (accountId: string, id: number) =>
+    request<{ ok: true }>(`/api/verbatim-notes/${id}?accountId=${encodeURIComponent(accountId)}`, {
+      method: "DELETE",
+    }),
 
   /**
    * `agentId` optional: có truyền thì `available` của các tool gate theo agent
@@ -688,6 +696,20 @@ export type ManagedAgent = {
   contextWindow: number | null;
   isDefault: boolean;
   accountCount: number;
+};
+
+/** Ghi chú nguyên văn (tool verbatim_note) - khác fact: giữ đúng từng chữ */
+export type VerbatimNoteItem = {
+  id: number;
+  accountId: string;
+  subjectId: string;
+  /** Tên trong danh bạ; rỗng khi chưa có */
+  tenNguoi: string;
+  title: string;
+  content: string;
+  learnedInGroup: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type MemoryFactItem = {

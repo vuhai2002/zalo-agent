@@ -5,8 +5,50 @@ import { PageHeader } from "../layout/page-header";
 import { IconBrain } from "../shared/dashboard-icons";
 import { AccountFilter, accountLabel } from "../shared/account-filter";
 import { Badge, EmptyRow, formatTime, ListToolbar, TableShell } from "../shared/ui-bits";
+import { VerbatimNotesSection } from "./verbatim-notes-section";
+
+/** Hai loại trí nhớ khác bản chất nên hai bảng riêng - xem verbatim-note-schema.ts */
+const TABS = [
+  ["fact", "Điều ghi nhớ"],
+  ["nguyen-van", "Ghi chú nguyên văn"],
+] as const;
 
 export function MemoryPage({ accounts }: { accounts: AccountInfo[] }) {
+  const [tab, setTab] = useState<(typeof TABS)[number][0]>("fact");
+
+  return (
+    <div>
+      <PageHeader
+        icon={IconBrain}
+        title="Memory"
+        subtitle={
+          tab === "fact"
+            ? "Fact bot tự ghi nhớ qua tool save_memory - fact học ở chat riêng không bao giờ dùng trong nhóm"
+            : "Đoạn người dùng nhờ giữ NGUYÊN VĂN (tool verbatim_note) - bot gửi lại đúng từng chữ khi chính người đó hỏi"
+        }
+      />
+
+      {/* Segmented control tự dựng, cùng kiểu modal Kho tri thức */}
+      <div className="mb-4 flex gap-1 border-b border-line">
+        {TABS.map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`cursor-pointer rounded-t-lg px-3 py-2 text-[13px] font-medium transition-colors ${
+              tab === key ? "border-b-2 border-zalo-500 text-zalo-600" : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "fact" ? <MemoryFactsSection accounts={accounts} /> : <VerbatimNotesSection accounts={accounts} />}
+    </div>
+  );
+}
+
+function MemoryFactsSection({ accounts }: { accounts: AccountInfo[] }) {
   const [items, setItems] = useState<MemoryFactItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [query, setQuery] = useState("");
@@ -35,12 +77,6 @@ export function MemoryPage({ accounts }: { accounts: AccountInfo[] }) {
 
   return (
     <div>
-      <PageHeader
-        icon={IconBrain}
-        title="Memory"
-        subtitle="Fact bot tự ghi nhớ qua tool save_memory - fact học ở chat riêng không bao giờ dùng trong nhóm"
-      />
-
       <ListToolbar
         query={query}
         onQuery={setQuery}

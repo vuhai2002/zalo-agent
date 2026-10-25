@@ -18,6 +18,8 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   thay cả ghi chú. Mỗi lượt chat chỉ mang TÊN ghi chú, nội dung đọc khi cần nên không
   tốn token ở lượt khác. Hai tham số mới trên trang Cấu hình: số ghi chú mỗi người
   (mặc định 30) và độ dài mỗi ghi chú (mặc định 4000 ký tự).
+- **Trang Memory có tab "Ghi chú nguyên văn"**: danh sách ghi chú kèm tên người (lấy
+  từ danh bạ), bấm để xem đúng nguyên văn bot sẽ gửi lại, xóa có hỏi lại.
 
 ### Sửa
 
