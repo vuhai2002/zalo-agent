@@ -382,6 +382,10 @@ const envSchema = z.object({
   // Trần TRÊN 400 (cùng lý do KB_EXTRACT_MAX_RAM_MB dừng ở 256): kéo thanh
   // trượt hết cỡ không được tự cầm chắc OOM-kill cả container.
   EXTRACT_MAX_RSS_MB: z.coerce.number().int().min(128).max(400).default(320),
+  // Tệp người dùng gửi qua Zalo: trần chữ lưu tạm, thời gian đọc, số trang PDF
+  ATTACHMENT_EXTRACT_MAX_CHARS: z.coerce.number().int().min(10_000).max(2_000_000).default(400_000),
+  ATTACHMENT_EXTRACT_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(600_000).default(60_000),
+  ATTACHMENT_PDF_MAX_PAGES: z.coerce.number().int().min(10).max(2000).default(300),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

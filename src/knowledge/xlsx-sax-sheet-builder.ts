@@ -1,6 +1,7 @@
 import type { SaxesTagNS } from "saxes";
 import type { XmlSaxHandlers } from "../shared/xml-sax-scan.js";
 import { thayTheEscapeExcel } from "./xlsx-sax-shared-strings.js";
+import { chuCotThanhChiSo, giaTriThuocTinh } from "./xlsx-cell-ref.js";
 import { LoiVuotTran, TRAN_SO_COT_EXCEL, TRAN_TONG_KY_TU_TRICH, TRAN_TONG_SO_O } from "./ooxml-limits.js";
 
 /**
@@ -30,22 +31,15 @@ export type NganSachO = { tongO: number; tongKyTu: number };
 
 const SPREADSHEETML_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
-function giaTriThuocTinh(tag: SaxesTagNS, localName: string): string | undefined {
-  for (const key in tag.attributes) {
-    if (tag.attributes[key]?.local === localName) return tag.attributes[key]!.value;
-  }
-  return undefined;
-}
+/** Một ô đã đọc: giá trị hiển thị + kiểu (để máy chủ tự cộng đúng ô số) */
+export type OXlsx = { giaTri: string; laSo: boolean; laCongThuc: boolean };
 
-/** "B" -> 2, "AA" -> 27 (chỉ số cột 1-based, kiểu Excel). */
-function chuCotThanhChiSo(chuCai: string): number {
-  let idx = 0;
-  for (const c of chuCai) idx = idx * 26 + (c.charCodeAt(0) - 64); // 'A' = 65
-  return idx;
-}
+const O_RONG: OXlsx = { giaTri: "", laSo: false, laCongThuc: false };
 
 export type XlsxSheetSaxBuilder = XmlSaxHandlers & {
   layCacDong(): string[];
+  /** Cùng các hàng như `layCacDong` (hàng toàn ô rỗng đã bị bỏ), giữ từng ô */
+  layCacHang(): OXlsx[][];
 };
 
 /**
@@ -60,8 +54,9 @@ export function taoXlsxSheetSaxBuilder(
   nganSachO: NganSachO,
 ): XlsxSheetSaxBuilder {
   const cacDong: string[] = [];
+  const cacHang: OXlsx[][] = [];
 
-  let dongHienTai: string[] = [];
+  let dongHienTai: OXlsx[] = [];
   let cotKyVong = 1; // chỉ số cột (1-based) mong đợi ô KẾ TIẾP sẽ nằm ở đó
 
   let kieuO: string | undefined; // thuộc tính t= của <c> đang mở
@@ -70,6 +65,7 @@ export function taoXlsxSheetSaxBuilder(
   let boDemIs = "";
   let dangTrongV = false;
   let dangTrongF = false; // <f>...</f> là CÔNG THỨC, không phải giá trị - luôn bỏ qua
+  let oCoCongThuc = false; // ô đang mở có <f> - giá trị <v> là kết quả đã tính
   let dangTrongIs = false;
   let dangTrongTTrongIs = false;
   let doSauRPh = 0; // phiên âm furigana trong <is> - loại như sharedStrings
@@ -96,7 +92,14 @@ export function taoXlsxSheetSaxBuilder(
    * cộng vào `nganSachO.tongKyTu`, nên `TRAN_TONG_KY_TU_TRICH` không bắt được
    * ca này.
    */
-  function themOVaoDong(giaTri: string, chiSoCot: number): void {
+  /** Ô kiểu số: không khai t= (hoặc t="n") và <v> là số hữu hạn */
+  function oDangMo(): OXlsx {
+    const giaTri = giaTriOTheoLoai();
+    const laSo = (kieuO === undefined || kieuO === "n") && boDemV.trim() !== "" && Number.isFinite(Number(boDemV));
+    return { giaTri, laSo, laCongThuc: oCoCongThuc };
+  }
+
+  function themOVaoDong(o: OXlsx, chiSoCot: number): void {
     // Math.max(1, ...) - KHÔNG BAO GIỜ hoàn quỹ. `dongHienTai` reset mỗi
     // <row> nhưng `nganSachO.tongO` thì KHÔNG (cố ý, dùng chung cả sheet) -
     // để hiệu ÂM cộng thẳng vào (ô cột THẤP đứng SAU ô cột CAO cùng hàng, vd
@@ -114,8 +117,8 @@ export function taoXlsxSheetSaxBuilder(
         `File xlsx có quá nhiều ô để xử lý (kể cả ô trống do cột nhảy cóc), vượt quá giới hạn ${TRAN_TONG_SO_O.toLocaleString("vi-VN")} ô. Hãy rút gọn bảng tính hoặc tách thành nhiều file nhỏ hơn.`,
       );
     }
-    while (dongHienTai.length < chiSoCot - 1) dongHienTai.push("");
-    dongHienTai[chiSoCot - 1] = giaTri;
+    while (dongHienTai.length < chiSoCot - 1) dongHienTai.push(O_RONG);
+    dongHienTai[chiSoCot - 1] = o;
     cotKyVong = chiSoCot + 1;
   }
 
@@ -150,13 +153,15 @@ export function taoXlsxSheetSaxBuilder(
         chiSoCotHienTai = chiSoCotCua(tag);
         boDemV = "";
         boDemIs = "";
-        if (tag.isSelfClosing) themOVaoDong("", chiSoCotHienTai); // ô có định dạng nhưng rỗng
+        oCoCongThuc = false;
+        if (tag.isSelfClosing) themOVaoDong(O_RONG, chiSoCotHienTai); // ô có định dạng nhưng rỗng
         break;
       case "v":
         dangTrongV = true;
         break;
       case "f":
         dangTrongF = true;
+        oCoCongThuc = true;
         break;
       case "is":
         dangTrongIs = true;
@@ -174,8 +179,8 @@ export function taoXlsxSheetSaxBuilder(
     if (tag.uri !== SPREADSHEETML_NS) return;
     switch (tag.local) {
       case "row":
-        if (dongHienTai.some((o) => o.trim())) {
-          const dong = dongHienTai.join(" | ");
+        if (dongHienTai.some((o) => o.giaTri.trim())) {
+          const dong = dongHienTai.map((o) => o.giaTri).join(" | ");
           nganSachO.tongKyTu += dong.length;
           if (nganSachO.tongKyTu > TRAN_TONG_KY_TU_TRICH) {
             throw new LoiVuotTran(
@@ -183,10 +188,11 @@ export function taoXlsxSheetSaxBuilder(
             );
           }
           cacDong.push(dong);
+          cacHang.push(dongHienTai);
         }
         break;
       case "c":
-        if (!tag.isSelfClosing) themOVaoDong(giaTriOTheoLoai(), chiSoCotHienTai);
+        if (!tag.isSelfClosing) themOVaoDong(oDangMo(), chiSoCotHienTai);
         break;
       case "v":
         dangTrongV = false;
@@ -212,5 +218,5 @@ export function taoXlsxSheetSaxBuilder(
     else if (dangTrongTTrongIs) boDemIs += text;
   };
 
-  return { moThe, dongThe, chuVanBan, layCacDong: () => cacDong };
+  return { moThe, dongThe, chuVanBan, layCacDong: () => cacDong, layCacHang: () => cacHang };
 }

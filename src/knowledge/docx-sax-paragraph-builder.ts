@@ -54,6 +54,12 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
 
   let boQuaNoiDung = 0; // >0: đang trong pPr/rPr/tblPr/tcPr/trPr/sectPr (mọi cấp lồng)
   let dangTrongRunText = false; // đang trong <w:t> - CHỈ text ở đây mới là nội dung
+  // Run có <w:vanish/> (chữ ẩn): người đọc Word không thấy nên không trích.
+  // Chỉ tính vanish của rPr NẰM TRONG <w:r> - vanish trong pPr/rPr là của dấu đoạn.
+  let dangTrongRun = false;
+  let runAn = false;
+  // >0: đang trong rPrChange/pPrChange - định dạng CŨ (theo dõi thay đổi), không phải hiện hành
+  let doSauThayDoi = 0;
 
   let boDemDoanVan = ""; // buffer đoạn văn hiện tại (ngoài bảng)
   let capTieuDe: number | undefined; // từ pStyle (tầng 3)
@@ -100,6 +106,11 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
       if (ten === "pStyle") {
         const val = giaTriThuocTinh(tag, "val");
         if (val !== undefined) capTieuDe = capTuStyleId(val);
+      } else if (ten === "rPrChange" || ten === "pPrChange") {
+        doSauThayDoi++;
+      } else if (ten === "vanish" && dangTrongRun && doSauThayDoi === 0) {
+        const val = giaTriThuocTinh(tag, "val");
+        runAn = !(val === "0" || val === "false" || val === "off");
       } else if (ten === "outlineLvl") {
         const val = giaTriThuocTinh(tag, "val");
         // Word ghi "9" cho outline level "Body Text" (ECMA-376) - không phải
@@ -119,18 +130,22 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
         capTieuDe = undefined;
         outlineLvl = undefined;
         break;
+      case "r":
+        dangTrongRun = true;
+        runAn = false;
+        break;
       case "t":
         dangTrongRunText = true;
         break;
       case "tab":
-        boDemDoanVan += "\t"; // chỉ tới được đây khi KHÔNG trong pPr - đúng là tab thật trong w:r
+        if (!runAn) boDemDoanVan += "\t"; // chỉ tới được đây khi KHÔNG trong pPr - đúng là tab thật trong w:r
         break;
       case "br":
       case "cr":
-        boDemDoanVan += "\n";
+        if (!runAn) boDemDoanVan += "\n";
         break;
       case "noBreakHyphen":
-        boDemDoanVan += "-";
+        if (!runAn) boDemDoanVan += "-";
         break;
       case "tbl":
         bang.moBang();
@@ -152,9 +167,14 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
       boQuaNoiDung--;
       return;
     }
+    if (ten === "rPrChange" || ten === "pPrChange") doSauThayDoi = Math.max(0, doSauThayDoi - 1);
     if (boQuaNoiDung > 0) return;
 
     switch (ten) {
+      case "r":
+        dangTrongRun = false;
+        runAn = false;
+        break;
       case "t":
         dangTrongRunText = false;
         break;
@@ -176,7 +196,7 @@ export function taoDocxSaxBuilder(): DocxSaxBuilder {
   const chuVanBan: XmlSaxHandlers["chuVanBan"] = (text) => {
     // `<w:delText>` (chữ đã xoá, track changes) và `<w:instrText>` (mã field)
     // KHÔNG khớp local name "t" nên tự động bị loại - không cần lọc riêng.
-    if (dangTrongRunText && boQuaNoiDung === 0) boDemDoanVan += text;
+    if (dangTrongRunText && boQuaNoiDung === 0 && !runAn) boDemDoanVan += text;
   };
 
   return {

@@ -275,3 +275,52 @@ describe("extract-docx-text - bom và trần an toàn", () => {
     });
   });
 });
+
+describe("extract-docx-text - chữ ẩn (w:vanish)", () => {
+  it("bỏ chữ của run có <w:vanish/>, giữ run thường", async () => {
+    const chu = await docChuTuFile(
+      docxTuXml(
+        "<w:p><w:r><w:t>Hien ra</w:t></w:r><w:r><w:rPr><w:vanish/></w:rPr><w:t> CHU AN</w:t><w:tab/></w:r></w:p>",
+      ),
+      "docx",
+    );
+    assert.match(chu, /Hien ra/);
+    assert.doesNotMatch(chu, /CHU AN/);
+    assert.doesNotMatch(chu, /\t/, "tab trong run ẩn cũng phải bỏ");
+  });
+
+  it('<w:vanish w:val="0"/> là TẮT ẩn - chữ vẫn hiện', async () => {
+    const chu = await docChuTuFile(
+      docxTuXml('<w:p><w:r><w:rPr><w:vanish w:val="0"/></w:rPr><w:t>Van hien</w:t></w:r></w:p>'),
+      "docx",
+    );
+    assert.match(chu, /Van hien/);
+  });
+
+  it("vanish trong rPr của DẤU ĐOẠN (trong pPr) không làm ẩn chữ của đoạn", async () => {
+    const chu = await docChuTuFile(
+      docxTuXml("<w:p><w:pPr><w:rPr><w:vanish/></w:rPr></w:pPr><w:r><w:t>Chu doan</w:t></w:r></w:p>"),
+      "docx",
+    );
+    assert.match(chu, /Chu doan/);
+  });
+
+  it("vanish trong rPrChange (định dạng CŨ khi theo dõi thay đổi) không làm ẩn chữ đang hiện", async () => {
+    const chu = await docChuTuFile(
+      docxTuXml(
+        "<w:p><w:r><w:rPr><w:b/><w:rPrChange><w:rPr><w:vanish/></w:rPr></w:rPrChange></w:rPr><w:t>CHU DANG HIEN</w:t></w:r></w:p>",
+      ),
+      "docx",
+    );
+    assert.match(chu, /CHU DANG HIEN/);
+  });
+
+  it("run ẩn không lây sang run kế tiếp", async () => {
+    const chu = await docChuTuFile(
+      docxTuXml("<w:p><w:r><w:rPr><w:vanish/></w:rPr><w:t>AN</w:t></w:r><w:r><w:t>Sau do</w:t></w:r></w:p>"),
+      "docx",
+    );
+    assert.match(chu, /Sau do/);
+    assert.doesNotMatch(chu, /AN/);
+  });
+});

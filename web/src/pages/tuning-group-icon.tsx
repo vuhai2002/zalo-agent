@@ -3,6 +3,7 @@ import {
   IconBolt,
   IconClock,
   IconDatabase,
+  IconEye,
   IconFileText,
   IconGear,
   IconGlobe,
@@ -35,6 +36,8 @@ const ICON_BY_GROUP: Record<string, IconFn> = {
   sending: IconMessage,
   logs: IconClock,
   schedule: IconClock,
+  // Đọc tệp người dùng gửi - khác "documents" (tạo file) và "kb" (tra cứu đã nạp)
+  attachments: IconEye,
 };
 
 export function iconForGroup(groupId: string): IconFn {
