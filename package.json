@@ -63,6 +63,7 @@
     "@ai-sdk/mcp": "^2.0.83",
     "@ai-sdk/openai-compatible": "^3.0.77",
     "@hono/node-server": "^2.1.5",
+    "@napi-rs/canvas": "1.1.1",
     "ai": "^7.0.150",
     "cron-parser": "^5.10.2",
     "docx": "^9.14.0",

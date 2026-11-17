@@ -1,4 +1,5 @@
-import { getDocumentProxy } from "unpdf";
+import { getDocumentProxy, registerImageDecoders } from "unpdf";
+import type { ThongTinTrang } from "../attachments/phan-loai-trang-pdf.js";
 
 /**
  * Đọc chữ PDF bằng `unpdf` 2.x, TỪNG TRANG một, dừng ở trần trang/ký tự.
@@ -12,7 +13,14 @@ import { getDocumentProxy } from "unpdf";
  */
 
 export type TrangPdf = { so: number; chu: string };
-export type KetQuaDocPdf = { soTrang: number; trang: TrangPdf[]; catBot: boolean };
+export type KetQuaDocPdf = {
+  soTrang: number;
+  trang: TrangPdf[];
+  catBot: boolean;
+  /** Chỉ khi gọi với `phanLoai: true` - một phần tử mỗi trang đã đọc */
+  thongTin?: ThongTinTrang[];
+};
+
 
 /** Lỗi đọc PDF có mã - chở qua ranh giới tiến trình con bằng `ma`, không bằng chữ */
 export class LoiDocPdf extends Error {
@@ -30,12 +38,27 @@ export class LoiDocPdf extends Error {
  */
 const TRAN_ANH_DIEM = 16_777_216;
 
-export async function moPdf(buf: Buffer) {
+/**
+ * @param tranAnhDiem trần điểm ảnh pdf.js chịu giải mã. Đọc chữ giữ 16 MP; đường
+ * render OCR nâng lên (trang quét 600 dpi A4 ~35 MP) - pdf.js bỏ ÂM THẦM ảnh
+ * vượt trần nên trần thấp ở đó là trang quét render ra trắng. Trần RSS của
+ * tiến trình con mới là cầu dao bộ nhớ thật.
+ */
+export async function moPdf(buf: Buffer, tranAnhDiem = TRAN_ANH_DIEM) {
+  // Bộ giải mã ảnh CCITT/JBIG2/JPEG2000 (WASM) - unpdf 2.x tách khỏi gói chỉ
+  // đọc chữ; trang quét đen trắng cần nó để dựng danh sách lệnh vẽ và render
+  registerImageDecoders();
   try {
     // Không cần `isEvalSupported: false`: pdf.js 6.x đã bỏ hẳn tùy chọn này vì
     // glyph được dựng thành dữ liệu path, không còn qua `new Function` (đường
     // của họ CVE font-eval 2024).
-    return await getDocumentProxy(new Uint8Array(buf), { maxImageSize: TRAN_ANH_DIEM, enableXfa: false });
+    // View, không sao chép: tệp đã nằm 1 bản trong RAM của tiến trình con, mỗi
+    // bản sao thêm là thêm cỡ cả tệp vào trần RSS (đo: PDF 41 MB vượt trần 320 MB
+    // chỉ vì 3 bản sao). Đã kiểm pdf.js không detach buffer truyền vào.
+    return await getDocumentProxy(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength), {
+      maxImageSize: tranAnhDiem,
+      enableXfa: false,
+    });
   } catch (err) {
     if ((err as { name?: string })?.name === "PasswordException") {
       throw new LoiDocPdf("mat-khau", "PDF này có mật khẩu, chưa đọc được");
@@ -54,9 +77,10 @@ function boLoiPdf(err: unknown): never {
 
 export async function docTrangPdf(
   buf: Buffer,
-  tran: { tranTrang: number; tranKyTu: number },
+  tran: { tranTrang: number; tranKyTu: number; phanLoai?: boolean },
 ): Promise<KetQuaDocPdf> {
   const pdf = await moPdf(buf);
+  const thongTin: ThongTinTrang[] = [];
   try {
     const trang: TrangPdf[] = [];
     let tongKyTu = 0;
@@ -78,11 +102,13 @@ export async function docTrangPdf(
         }
         tongKyTu += chu.length;
         trang.push({ so, chu });
+        // Chữ trong getTextContent gồm cả lớp OCR ẩn của máy quét - có là dùng được
+        if (tran.phanLoai) thongTin.push({ so, doDaiChu: chu.replace(/\s/g, "").length });
       } finally {
         page.cleanup();
       }
     }
-    return { soTrang: pdf.numPages, trang, catBot };
+    return { soTrang: pdf.numPages, trang, catBot, ...(tran.phanLoai ? { thongTin } : {}) };
   } finally {
     // pdf.js 6.x bỏ `PDFDocumentProxy.destroy()`; hủy qua loadingTask
     await pdf.loadingTask.destroy();

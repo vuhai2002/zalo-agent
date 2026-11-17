@@ -72,3 +72,29 @@ export function taoPdfBomFlate(mbSauGiaiNen: number): Buffer {
     "<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
   ]);
 }
+
+/**
+ * PDF 2 trang: trang 1 có chữ, trang 2 chỉ có một ảnh JPEG phủ kín trang
+ * (hình dạng của trang quét nhìn từ phía trình đọc).
+ */
+export function taoPdfCoTrangAnh(chuTrang1: string, jpeg: Buffer, rong: number, cao: number): Buffer {
+  const ve1 = Buffer.from(`BT /F1 12 Tf 72 720 Td (${chuTrang1}) Tj ET\n`, "latin1");
+  const ve2 = Buffer.from("q 612 0 0 792 0 0 cm /Im1 Do Q\n", "latin1");
+  return ghepPdf([
+    "<</Type/Catalog/Pages 2 0 R>>",
+    "<</Type/Pages/Kids[4 0 R 6 0 R]/Count 2>>",
+    "<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+    "<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Resources<</Font<</F1 3 0 R>>>>/Contents 5 0 R>>",
+    luongNoiDung(ve1, false),
+    "<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Resources<</XObject<</Im1 8 0 R>>>>/Contents 7 0 R>>",
+    luongNoiDung(ve2, false),
+    Buffer.concat([
+      Buffer.from(
+        `<</Type/XObject/Subtype/Image/Width ${rong}/Height ${cao}/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length ${jpeg.length}>>\nstream\n`,
+        "latin1",
+      ),
+      jpeg,
+      Buffer.from("\nendstream", "latin1"),
+    ]),
+  ]);
+}

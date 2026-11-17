@@ -57,10 +57,13 @@ export type SidecarCaller = (
   settings: VisionSidecarSettings,
   image: SidecarImage,
   prompt: string,
+  /** Mặc định trần mô tả ảnh; OCR trang tài liệu truyền trần riêng, lớn hơn */
+  maxOutputTokens?: number,
+  abortSignal?: AbortSignal,
 ) => Promise<SidecarResult>;
 
 /** Đường gọi thật - tách ra để test tiêm caller giả, không chạm mạng */
-const defaultCaller: SidecarCaller = async (settings, image, prompt) => {
+export const defaultCaller: SidecarCaller = async (settings, image, prompt, maxOutputTokens = DESCRIBE_MAX_TOKENS, abortSignal) => {
   const provider = createOpenAICompatible({
     name: "vision-sidecar",
     baseURL: settings.baseUrl,
@@ -82,7 +85,8 @@ const defaultCaller: SidecarCaller = async (settings, image, prompt) => {
           ],
         },
       ],
-      maxOutputTokens: DESCRIBE_MAX_TOKENS,
+      maxOutputTokens,
+      abortSignal,
       maxRetries: 1,
       onError,
     }),

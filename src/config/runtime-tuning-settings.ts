@@ -149,6 +149,13 @@ const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => s
         : null,
   },
   {
+    keys: ["ATTACHMENT_OCR_PREFETCH_PAGES", "ATTACHMENT_OCR_MAX_PAGES_PER_FILE"],
+    check: (so) =>
+      so("ATTACHMENT_OCR_PREFETCH_PAGES") > so("ATTACHMENT_OCR_MAX_PAGES_PER_FILE")
+        ? "Số trang quét chép sẵn không được lớn hơn số trang quét tối đa mỗi tệp."
+        : null,
+  },
+  {
     keys: ["SEND_DELAY_MIN_MS", "SEND_DELAY_MAX_MS"],
     check: (so) =>
       so("SEND_DELAY_MIN_MS") > so("SEND_DELAY_MAX_MS")

@@ -56,9 +56,10 @@ describe("trichXuatTep - đọc tệp chat trong tiến trình con", () => {
     assert.deepEqual(kq.trangCanOcr, []);
   });
 
-  it("PDF có trang không lớp chữ -> trang đó vào trangCanOcr", async () => {
+  it("PDF có trang không lớp chữ -> trang đó vào trangCanOcr (model đọc ảnh tự báo nếu trắng thật)", async () => {
     const kq = await goi(taoPdfNhieuTrang(["Trang mot co chu day du de vuot nguong ba muoi", ""]), "pdf");
     assert.deepEqual(kq.trangCanOcr, [2]);
+    assert.deepEqual(kq.phan.map((p) => p.nhan), ["Trang 1"]);
   });
 
   it(".doc -> dinhDang doc", async () => {

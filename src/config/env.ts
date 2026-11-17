@@ -386,6 +386,14 @@ const envSchema = z.object({
   ATTACHMENT_EXTRACT_MAX_CHARS: z.coerce.number().int().min(10_000).max(2_000_000).default(400_000),
   ATTACHMENT_EXTRACT_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(600_000).default(60_000),
   ATTACHMENT_PDF_MAX_PAGES: z.coerce.number().int().min(10).max(2000).default(300),
+  // OCR trang quét qua model đọc ảnh: trần output mỗi trang (sao kê dày chữ
+  // vượt 2048 token của mô tả ảnh), trang OCR sẵn, trần mỗi tệp, mỗi giờ, song song
+  ATTACHMENT_OCR_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1024).max(16_000).default(6000),
+  ATTACHMENT_OCR_PREFETCH_PAGES: z.coerce.number().int().min(0).max(20).default(5),
+  ATTACHMENT_OCR_MAX_PAGES_PER_FILE: z.coerce.number().int().min(1).max(150).default(50),
+  ATTACHMENT_OCR_MAX_PAGES_PER_HOUR: z.coerce.number().int().min(1).max(1000).default(60),
+  ATTACHMENT_OCR_CONCURRENCY: z.coerce.number().int().min(1).max(4).default(2),
+  ATTACHMENT_OCR_PAGE_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(600_000).default(120_000),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

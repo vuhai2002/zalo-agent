@@ -4,6 +4,7 @@ import { extractXlsxSheets } from "../knowledge/extract-xlsx-sheets.js";
 import { LoiVuotTran } from "../knowledge/ooxml-limits.js";
 import { LoiTep, type KetQuaTrichXuatTep, type PhanNoiDung } from "./attachment-extract-types.js";
 import { extractDocText } from "./extract-doc-text.js";
+import { phanLoaiTrang } from "./phan-loai-trang-pdf.js";
 import { giaiMaVanBan, nhanDienDinhDang } from "./nhan-dien-dinh-dang-tep.js";
 import { thongKeSheet } from "./thong-ke-sheet.js";
 
@@ -18,8 +19,6 @@ import { thongKeSheet } from "./thong-ke-sheet.js";
 
 export type DuLieuTrichXuat = { buf: Buffer; duoiKhai: string; tranKyTu: number; tranTrangPdf: number };
 
-/** Trang PDF có ít hơn chừng này ký tự (bỏ khoảng trắng) coi như không có lớp chữ */
-const NGUONG_KY_TU_TRANG = 30;
 /** Excel giới hạn tên sheet 31 ký tự; tệp tự dựng thì không - chặn ở mức rộng hơn */
 const TRAN_TEN_SHEET = 100;
 
@@ -41,7 +40,8 @@ function catTheoTran(phan: PhanNoiDung[], tranKyTu: number, canhBao: string[]): 
 }
 
 async function docTheoLoai(d: DuLieuTrichXuat): Promise<KetQuaTrichXuatTep> {
-  const buf = Buffer.from(d.buf);
+  // View, không sao chép - xem `moPdf`
+  const buf = Buffer.from(d.buf.buffer, d.buf.byteOffset, d.buf.byteLength);
   const loai = nhanDienDinhDang(buf, d.duoiKhai);
   const canhBao: string[] = [];
   const ket = (kq: Omit<KetQuaTrichXuatTep, "canhBao" | "trangCanOcr"> & { trangCanOcr?: number[] }) => ({
@@ -53,14 +53,16 @@ async function docTheoLoai(d: DuLieuTrichXuat): Promise<KetQuaTrichXuatTep> {
 
   switch (loai) {
     case "pdf": {
-      const pdf = await docTrangPdf(buf, { tranTrang: d.tranTrangPdf, tranKyTu: d.tranKyTu });
+      const pdf = await docTrangPdf(buf, { tranTrang: d.tranTrangPdf, tranKyTu: d.tranKyTu, phanLoai: true });
       if (pdf.catBot) canhBao.push(`Đã cắt: chỉ đọc ${pdf.trang.length}/${pdf.soTrang} trang đầu`);
-      const coChu = pdf.trang.filter((t) => t.chu.replace(/\s/g, "").length >= NGUONG_KY_TU_TRANG);
+      const loai = new Map((pdf.thongTin ?? []).map((t) => [t.so, phanLoaiTrang(t)]));
       return ket({
         dinhDang: "pdf",
         soTrang: pdf.soTrang,
-        phan: coChu.map((t) => ({ nhan: `Trang ${t.so}`, chu: t.chu, nguon: "chu" })),
-        trangCanOcr: pdf.trang.filter((t) => !coChu.includes(t)).map((t) => t.so),
+        phan: pdf.trang
+          .filter((t) => loai.get(t.so) === "chu")
+          .map((t) => ({ nhan: `Trang ${t.so}`, chu: t.chu, nguon: "chu" })),
+        trangCanOcr: pdf.trang.filter((t) => loai.get(t.so) === "ocr").map((t) => t.so),
       });
     }
     case "docx":
