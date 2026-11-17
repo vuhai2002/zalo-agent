@@ -15,6 +15,7 @@ import { buildTurnMessages, type ImageContextMode } from "./agent-turn-content.j
 import { resolveLanguageModel, resolveReasoningEffort, resolveReasoningOptions } from "./llm-provider.js";
 import { markModelNoVision } from "./model-vision-detection.js";
 import { buildSystemPrompt } from "./persona-prompt.js";
+import { ghepPrepareStep, type TrangThaiLuot } from "./chan-tool-sau-khi-doc-tep.js";
 import { buildAgentTools, TOOL_DEFINITIONS } from "./tools/index.js";
 import { forLog, taoQuanSatStep } from "./agent-step-observer.js";
 import { nguongTheoTranStep, ToolLoopGuard } from "./tool-loop-guard.js";
@@ -316,6 +317,13 @@ export async function runAgentTurn({
    */
   const tinChenDaKeo: ParsedMessage[] = [];
 
+  /**
+   * Trạng thái CỦA LƯỢT, giữ ở đây (không trong `runOnce`) để sống qua mọi lần
+   * thử lại: đã đọc tệp ở lần chạy đầu thì lần chạy lại vẫn phải chặn tool ghi
+   * bền - xem `chan-tool-sau-khi-doc-tep.ts`.
+   */
+  const trangThaiLuot: TrangThaiLuot = { daDocTep: false };
+
   // `layImageMode` là HÀM: `imageMode` đổi giữa lượt khi provider từ chối pixel
   // và vòng lặp dựng lại input không kèm ảnh. Truyền giá trị là tin chen bị
   // dựng theo chế độ đã hết hiệu lực.
@@ -386,7 +394,8 @@ export async function runAgentTurn({
     // Thêm `isolated` lọc bớt tool không hợp với lượt theo lịch (add_reaction
     // không có msgId thật, read_image không có ảnh, save_memory chặn injection
     // từ job) - xem runsInScheduledTurn ở tool-registry.ts
-    const toolSet = buildAgentTools({ api, account, agent, message: latest, batch, isolated, ghiNhanDaGui });
+    const toolSet = buildAgentTools({ api, account, agent, message: latest, batch, isolated, ghiNhanDaGui, trangThaiLuot });
+    const prepareStep = ghepPrepareStep(chenTinGiuaLuot, trangThaiLuot, () => Object.keys(toolSet));
     heThongDaGui = heThong;
     toolSetDaGui = toolSet;
     // Step ĐÃ XONG của riêng lần chạy này - nguyên liệu để cứu lượt khi hết giờ
@@ -453,7 +462,8 @@ export async function runAgentTurn({
           // Ranh giới step: sau khi có kết quả tool, TRƯỚC lần gọi LLM kế -
           // đúng điểm chèn goclaw dùng. Bản ghi đè `messages` được AI SDK mang
           // sang các step sau nên chỉ cần chèn một lần.
-          prepareStep: ({ messages: tinHienTai }) => chenTinGiuaLuot(tinHienTai),
+          // Cộng thêm: đã đọc tệp trong lượt thì gỡ tool ghi bền khỏi `activeTools`
+          prepareStep: ({ messages: tinHienTai }) => prepareStep(tinHienTai),
         }),
       ghiLoiStream,
     ).catch((err: unknown) => {

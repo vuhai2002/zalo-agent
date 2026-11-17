@@ -1,4 +1,5 @@
 import { getTuning } from "../config/runtime-tuning-settings.js";
+import { anKetQuaNhayCam } from "./tool-ket-qua-nhay-cam.js";
 import { createLogger } from "../shared/logger.js";
 import { summarizeStep, type RawStep, type StepTrace } from "./agent-step-trace.js";
 import { laKetQuaLoi } from "./tools/tool-failure-result.js";
@@ -111,7 +112,7 @@ export function taoQuanSatStep(input: {
           // Đứng SAU input trong object nhưng là field riêng nên không bị trần
           // 200 ký tự của input nuốt mất
           args: shortArgsOf(r.input),
-          output: forLog(r.output, 300),
+          output: forLog(anKetQuaNhayCam(r.toolName, r.output), 300),
         },
         "Tool đã chạy",
       );

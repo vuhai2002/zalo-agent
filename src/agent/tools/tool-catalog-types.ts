@@ -63,6 +63,13 @@ export type ToolContext = {
    * lượt đó (`runsInScheduledTurn: false`).
    */
   ghiNhanDaGui?: (noiDung: string) => void;
+  /**
+   * Trạng thái dùng chung cho CẢ LƯỢT (một object, sống qua mọi lần thử lại):
+   * `doc_file` bật `daDocTep` khi đọc được tệp, từ đó các tool ghi bền / tác
+   * động ra ngoài bị tạm tắt tới hết lượt - xem `chan-tool-sau-khi-doc-tep.ts`.
+   * Tùy chọn vì lượt theo lịch không có tệp nào để đọc.
+   */
+  trangThaiLuot?: { daDocTep: boolean };
 };
 
 /**

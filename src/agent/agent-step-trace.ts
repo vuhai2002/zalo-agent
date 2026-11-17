@@ -18,6 +18,7 @@
 
 // Module THUẦN (0 import), không phá tính thuần của file này
 import { laKetQuaLoi } from "./tools/tool-failure-result.js";
+import { anKetQuaNhayCam } from "./tool-ket-qua-nhay-cam.js";
 
 /**
  * Hình dạng tối thiểu mình cần từ StepResult. Tự khai thay vì import type của
@@ -141,7 +142,9 @@ export function summarizeStep(step: RawStep, maxChars: number, attempt = 1): Ste
     })),
     toolResults: (step.toolResults ?? []).map((r) => ({
       name: r.toolName ?? "?",
-      output: cat(thanhChuoi(r.output), maxChars),
+      // Kết quả nhạy cảm (nội dung tệp người dùng gửi) chỉ còn độ dài - trace
+      // lưu nhiều ngày và hiện trên dashboard
+      output: cat(thanhChuoi(anKetQuaNhayCam(r.toolName, r.output)), maxChars),
       ...(laKetQuaLoi(r.output) ? { hong: true } : {}),
     })),
     toolErrors: (step.content ?? [])

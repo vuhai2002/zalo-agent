@@ -865,6 +865,15 @@ const TUNING_BY_KEY = {
     max: 4,
     unit: "trang",
   },
+  ATTACHMENT_READ_MAX_CHARS: {
+    kind: "number",
+    group: "attachments",
+    label: "Số chữ đưa model mỗi lần đọc tệp",
+    hint: "Tệp dài hơn thì bot đọc từng phần. Cao thì ít lượt gọi hơn nhưng mỗi lượt tốn nhiều token hơn.",
+    min: 2_000,
+    max: 100_000,
+    unit: "ký tự",
+  },
   ATTACHMENT_RETENTION_DAYS: {
     kind: "number",
     group: "attachments",

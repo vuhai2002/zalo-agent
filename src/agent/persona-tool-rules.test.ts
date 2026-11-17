@@ -41,6 +41,13 @@ describe("toolPersonaSections", () => {
     assert.ok(!tat.includes("sua_anh_da_gui"));
   });
 
+  it("có doc_file thì dạy tự đọc tệp và không đọc lại tệp ở lượt xác nhận; tắt thì không", () => {
+    const bat = gop(["doc_file"]);
+    assert.ok(bat.includes('Tin có [tệp đính kèm "..."]'), bat);
+    assert.ok(bat.includes("đừng đọc lại tệp"));
+    assert.ok(!gop(["web_search"]).includes("tệp đính kèm"));
+  });
+
   it("tắt tool tạo file thì không còn luật xuất file", () => {
     const tat = gop(["web_search"]);
     assert.ok(!tat.includes("create_word_document"));

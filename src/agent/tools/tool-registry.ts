@@ -1,5 +1,6 @@
 import type { Tool } from "ai";
 import { TOOL_KHONG_CHAY_TREN_BOT } from "../../zalo-bot/nang-luc-kenh-bot.js";
+import { biTatSauKhiDocTep, bocToolBiChan } from "../chan-tool-sau-khi-doc-tep.js";
 import { layToolMcpChoAgent } from "./mcp-tool-provider.js";
 import { TOOL_DEFINITIONS, type ToolContext, type ToolDefinition } from "./tool-catalog.js";
 import type { ToolScope } from "./tool-catalog-types.js";
@@ -37,7 +38,10 @@ export function buildAgentTools(ctx: ToolContext): Record<string, Tool> {
     { agent: ctx.agent, account: ctx.account },
     { isolated: ctx.isolated },
   )) {
-    tools[def.key] = def.build(ctx);
+    const t = def.build(ctx);
+    // Lưới thứ hai của luật "đọc tệp xong thì tạm tắt tool ghi bền": kể cả khi
+    // model vẫn gọi được tool (activeTools là lớp thứ nhất), execute tự từ chối
+    tools[def.key] = ctx.trangThaiLuot && biTatSauKhiDocTep(def.key) ? bocToolBiChan(t, ctx.trangThaiLuot) : t;
   }
   return tools;
 }

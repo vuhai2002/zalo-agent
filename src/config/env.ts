@@ -402,6 +402,8 @@ const envSchema = z.object({
   ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(25).default(20),
   ATTACHMENT_OFFICE_MAX_MB: z.coerce.number().int().min(1).max(25).default(10),
   ATTACHMENT_MAX_FILES_PER_HOUR: z.coerce.number().int().min(1).max(200).default(30),
+  // Số ký tự nội dung tệp trả cho model mỗi lần gọi doc_file (đọc tiếp bằng tuKyTu)
+  ATTACHMENT_READ_MAX_CHARS: z.coerce.number().int().min(2_000).max(100_000).default(30_000),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

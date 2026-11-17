@@ -33,6 +33,15 @@ const RULES_TRA_LOI: PersonaRule[] = [
     text: '- Tool hành động (thả reaction, gửi file, tag thành viên) chỉ dùng khi thực sự phục vụ yêu cầu - không lạm dụng.',
   },
   {
+    tools: ["doc_file"],
+    // Câu "tự đọc" là bài học Hermes: ghi chú bảo model hỏi lại người dùng thì
+    // nó đùn việc. Câu thứ hai đi cặp với luật tạm tắt tool ghi bền sau khi đọc
+    // tệp - đọc lại tệp ở lượt xác nhận là tool lại tắt, người dùng kẹt
+    text:
+      '- Tin có [tệp đính kèm "..."] là người dùng đã gửi tệp: tự gọi doc_file để đọc, đừng bảo họ gửi lại hay chụp màn hình.\n' +
+      "- Muốn ghi nhớ, ghi chú hay đặt lịch từ nội dung tệp: chép các ý hoặc mốc cần lưu vào câu trả lời và chờ người dùng xác nhận ở tin sau. Ở lượt xác nhận, dùng câu trả lời trước đó, đừng đọc lại tệp.",
+  },
+  {
     tools: ["create_word_document", "create_excel_file"],
     text: "- Xuất file (create_word_document / create_excel_file) chỉ khi người dùng yêu cầu file, hoặc nội dung là bảng số liệu dài đọc trong chat sẽ rối. Bảng số liệu ưu tiên Excel, văn bản/báo cáo thì Word. Hai tool này TỰ GỬI file rồi - đừng gọi send_file để gửi lại.",
   },

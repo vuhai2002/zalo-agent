@@ -1,6 +1,7 @@
 import { isSidecarConfigured } from "../../config/runtime-vision-settings.js";
 import { nguonCuaAgent } from "../../knowledge/kb-agent-binding.js";
 import { coNguonNao } from "../../knowledge/kb-source-queries.js";
+import { createDocFileTool } from "./doc-file-tool.js";
 import { createGetDatetimeTool } from "./get-datetime-tool.js";
 import { createGetGroupInfoTool } from "./get-group-info-tool.js";
 import { createKbSearchTool } from "./kb-search-tool.js";
@@ -55,6 +56,15 @@ export const READ_TOOL_DEFINITIONS: ToolDefinition[] = [
     // Lượt theo lịch không có ảnh nào để mà nhìn kỹ lại
     runsInScheduledTurn: false,
     build: (ctx) => createReadImageTool(ctx),
+  },
+  {
+    key: "doc_file",
+    label: "Đọc tệp đính kèm",
+    description: "Đọc pdf, Word (docx/doc), Excel, văn bản người dùng gửi; PDF quét chép chữ bằng model đọc ảnh",
+    group: "read",
+    // Lượt theo lịch không có tệp người dùng vừa gửi để đọc
+    runsInScheduledTurn: false,
+    build: (ctx) => createDocFileTool(ctx),
   },
   {
     key: "get_group_info",

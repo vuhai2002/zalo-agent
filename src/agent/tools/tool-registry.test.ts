@@ -219,9 +219,10 @@ describe("tool-registry", () => {
     "tai_video",
     "tag_member",
     "verbatim_note",
+    "doc_file",
   ];
 
-  it("isolated:true (lượt theo lịch) loại đủ 11 tool kể cả khi hạ tầng/cấu hình đã sẵn sàng", () => {
+  it("isolated:true (lượt theo lịch) loại đủ 12 tool kể cả khi hạ tầng/cấu hình đã sẵn sàng", () => {
     // Cấu hình sidecar + endpoint vẽ ảnh TRƯỚC để chứng minh read_image/create_image
     // bị loại vì runsInScheduledTurn, không phải vì thiếu cấu hình - nếu không
     // cấu hình thì test này không phân biệt được 2 nguyên nhân (vắng mặt do
@@ -253,7 +254,7 @@ describe("tool-registry", () => {
     imageStore.clearImageSettings();
   });
 
-  it("runsInScheduledTurn khai đúng false cho đúng 11 tool, còn lại mặc định undefined (coi như true)", () => {
+  it("runsInScheduledTurn khai đúng false cho đúng 12 tool, còn lại mặc định undefined (coi như true)", () => {
     const bịLoại = registry.TOOL_DEFINITIONS.filter((t) => t.runsInScheduledTurn === false).map((t) => t.key);
     assert.deepEqual(bịLoại.sort(), [...TOOL_LOAI_KHOI_LICH].sort());
   });
@@ -265,5 +266,37 @@ describe("tool-registry", () => {
       assert.ok(def.label && def.description, `tool ${def.key} thiếu label/description cho UI`);
       assert.ok(["read", "action"].includes(def.group));
     }
+  });
+});
+
+describe("buildAgentTools - lớp chặn thứ hai sau khi đọc tệp", () => {
+  it("đã đọc tệp trong lượt: execute của save_memory tự từ chối dù tool vẫn có trong bộ", async () => {
+    const { CAU_TOOL_TAM_TAT } = await import("../chan-tool-sau-khi-doc-tep.js");
+    const tools = registry.buildAgentTools({
+      api: {} as never,
+      account: { id: "acc-chan2", disabledTools: [] } as never,
+      agent: fakeAgentProfile(),
+      message: {
+        accountId: "acc-chan2",
+        threadId: "t",
+        senderId: "u",
+        senderName: "A",
+        text: "",
+        images: [],
+        msgId: "m",
+        cliMsgId: "c",
+        isSelf: false,
+        mentionsMe: false,
+        isGroup: false,
+        threadType: 0,
+        sentAt: new Date().toISOString(),
+        rawData: {},
+      },
+      batch: [],
+      trangThaiLuot: { daDocTep: true },
+    });
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const kq = await (tools.save_memory as any).execute({ action: "them", content: "lưu thử một điều", about: "sender" }, {});
+    assert.deepEqual(kq, { ok: false, loi: CAU_TOOL_TAM_TAT });
   });
 });
