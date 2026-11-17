@@ -103,6 +103,13 @@ describe("ocrCacTrang - OCR nhiều trang có trần", () => {
     ]);
   });
 
+  it("model trả chữ rỗng (trang trắng thật) -> coi như ĐÃ CHÉP, không hoàn suất để chép lại mãi", async () => {
+    const d = phuThuoc({ tranGio: 1, chep: async () => ({ text: "  ", truncated: false }) });
+    const kq = await ocrCacTrang(Buffer.alloc(1), [1], "a:u8", d);
+    assert.deepEqual(kq.trang, [{ so: 1, chu: "[trang trống]", cut: false }]);
+    assert.deepEqual(kq.boQua, []);
+  });
+
   it("trang bị cắt vì chạm trần output -> cut true", async () => {
     const d = phuThuoc({ chep: async () => ({ text: "dở", truncated: true }) });
     const kq = await ocrCacTrang(Buffer.alloc(1), [1], "a:u6", d);

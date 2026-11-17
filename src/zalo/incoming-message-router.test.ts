@@ -132,3 +132,49 @@ describe("routeIncomingMessage - ghi lịch sử ngay lúc nhận", () => {
     await sleep(30);
   });
 });
+
+describe("routeIncomingMessage - tệp đính kèm", () => {
+  const tinTep = (threadId: string, msgId: string, type = ThreadType.User) => ({
+    threadId,
+    type,
+    isSelf: false,
+    data: {
+      msgType: "share.file",
+      content: { title: "Biên bản.pdf", href: "https://file-stal-1.dlfl.vn/gr/a/b", params: '{"fileSize":"10","fileExt":"pdf"}' },
+      uidFrom: "user-1",
+      dName: "Hải",
+      msgId,
+      cliMsgId: `c-${msgId}`,
+    },
+  });
+
+  it("tin 1-1 có tệp: ghi dòng tệp + thẻ trong lịch sử, và tải sớm chạy nền", async () => {
+    const { napSan } = await import("../attachments/phu-thuoc-lay-tep.js");
+    const goc = napSan.chay;
+    const daGoi: [number, string][] = [];
+    napSan.chay = (id, key) => void daGoi.push([id, key]);
+    try {
+      router.routeIncomingMessage(ACC, apiGia, SELF, tinTep("thread-tep-1", "m-tep-1"));
+      assert.deepEqual(noiDungHistory("thread-tep-1"), ['[tệp đính kèm "Biên bản.pdf"]']);
+      assert.equal(daGoi.length, 1);
+      assert.equal(daGoi[0]![1], `${ACC}:user-1`);
+    } finally {
+      napSan.chay = goc;
+      batcher.clearPendingBatches();
+    }
+  });
+
+  it("tin nhóm KHÔNG gọi bot có tệp: không tải sớm (chỉ tải khi có người hỏi tới)", async () => {
+    const { napSan } = await import("../attachments/phu-thuoc-lay-tep.js");
+    const goc = napSan.chay;
+    let soLan = 0;
+    napSan.chay = () => void soLan++;
+    try {
+      router.routeIncomingMessage(ACC, apiGia, SELF, tinTep("thread-tep-nhom", "m-tep-2", ThreadType.Group));
+      assert.equal(soLan, 0);
+    } finally {
+      napSan.chay = goc;
+      batcher.clearPendingBatches();
+    }
+  });
+});

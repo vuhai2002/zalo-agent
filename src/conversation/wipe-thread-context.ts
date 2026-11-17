@@ -51,6 +51,8 @@ export type KetQuaXoaNguCanh = {
   moTaAnh: number;
   triNho: number;
   soDemChuDong: number;
+  /** Tệp đính kèm (link tải + chữ đã trích) của thread */
+  tepDinhKem: number;
   /** Epoch mới sau khi tăng - khóa phiên gửi router đổi theo số này */
   epochMoi: number;
 };
@@ -79,6 +81,8 @@ const xoaBuocAgent = db.prepare(
   `DELETE FROM agent_steps
    WHERE turn_id IN (SELECT id FROM agent_turns WHERE account_id = ? AND thread_id = ?)`,
 );
+
+const xoaTepDinhKem = db.prepare("DELETE FROM tep_dinh_kem WHERE account_id = ? AND thread_id = ?");
 
 const xoaSoDemChuDong = db.prepare(
   "DELETE FROM proactive_send_counters WHERE account_id = ? AND thread_id = ?",
@@ -122,6 +126,7 @@ export function xoaNguCanhThread(
     const buocAgent = Number(xoaBuocAgent.run(accountId, threadId).changes);
     const tinNhan = Number(xoaTinNhan.run(accountId, threadId).changes);
     const soDemChuDong = Number(xoaSoDemChuDong.run(accountId, threadId).changes);
+    const tepDinhKem = Number(xoaTepDinhKem.run(accountId, threadId).changes);
     const triNho = tuyChon.xoaTriNho
       ? Number(xoaTriNhoCuaThread.run(accountId, threadId).changes) +
         Number(xoaGhiChuCuaThread.run(accountId, threadId).changes)
@@ -130,7 +135,7 @@ export function xoaNguCanhThread(
     datLaiThread.run(accountId, threadId);
     const row = docEpoch.get(accountId, threadId) as { context_epoch?: number } | undefined;
 
-    return { tinNhan, buocAgent, triNho, soDemChuDong, epochMoi: row?.context_epoch ?? 0 };
+    return { tinNhan, buocAgent, triNho, soDemChuDong, tepDinhKem, epochMoi: row?.context_epoch ?? 0 };
   });
 
   // Ngoài giao dịch, và CỐ Ý chạy sau: file mất mà DB còn dòng chỉ là ảnh hỏng,

@@ -32,7 +32,8 @@ export function shouldRespond(
     return skip("tin của chính bot");
   }
 
-  if (!msg.text.trim() && msg.images.length === 0) {
+  // Tin chỉ có tệp đính kèm (không chữ) vẫn là nội dung xử lý được
+  if (!msg.text.trim() && msg.images.length === 0 && (msg.files ?? []).length === 0) {
     return skip("không có nội dung xử lý được (sticker/voice/...)");
   }
 

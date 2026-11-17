@@ -4,6 +4,9 @@ import { request as httpsRequest } from "node:https";
 import net, { type LookupFunction } from "node:net";
 import zlib from "node:zlib";
 import { hostnameToAddress, isPublicAddress } from "./private-address-guard.js";
+import { kiemHostDuocPhep, LoiTaiVe } from "./safe-download-host-allowlist.js";
+
+export { kiemHostDuocPhep, LoiTaiVe, type MaLoiTaiVe } from "./safe-download-host-allowlist.js";
 
 /**
  * Tải nội dung từ URL bên ngoài một cách an toàn:
@@ -42,7 +45,22 @@ const BROWSER_HEADERS: Record<string, string> = {
 };
 
 export type RemoteFile = { data: Buffer; mediaType: string; fileName: string };
-export type DownloadOptions = { maxBytes: number; timeoutMs?: number; signal?: AbortSignal };
+export type DownloadOptions = {
+  maxBytes: number;
+  /** Trần IM LẶNG (idle) của socket - nguồn nhỏ giọt vẫn lọt; xem `hanTongMs` */
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /**
+   * Chỉ cho tải từ các host này (khớp đúng tên hoặc đuôi `.tên`), kiểm ở MỌI
+   * hop chuyển hướng. Không truyền = không giới hạn host (vẫn chặn IP nội bộ).
+   */
+  hostDuocPhep?: readonly string[];
+  /** Chỉ nhận https, ở mọi hop */
+  chiHttps?: boolean;
+  /** Hạn chót TỔNG cho cả lần tải (mọi hop + đọc thân) */
+  hanTongMs?: number;
+};
+
 
 /**
  * Lỗi khi bị HỦY qua `AbortSignal` (lượt agent hết `LLM_TURN_TIMEOUT_MS` hoặc bị
@@ -109,7 +127,7 @@ export async function readCappedStream(
     for await (const chunk of stream) {
       const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
       total += buffer.byteLength;
-      if (total > maxBytes) throw new Error(`Nội dung vượt giới hạn ${formatMb(maxBytes)}`);
+      if (total > maxBytes) throw new LoiTaiVe("qua-lon", `Nội dung vượt giới hạn ${formatMb(maxBytes)}`);
       chunks.push(buffer);
     }
     // Stream kết thúc bình thường NGAY khi abort (mock không destroy được) vẫn
@@ -257,10 +275,18 @@ export async function downloadFromPublicUrl(
   }
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const tinHieu = [options.signal, options.hanTongMs ? AbortSignal.timeout(options.hanTongMs) : undefined].filter(
+    (s): s is AbortSignal => s !== undefined,
+  );
+  const signal = tinHieu.length > 1 ? AbortSignal.any(tinHieu) : tinHieu[0];
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    if (options.signal?.aborted) throw new Error(LOI_DA_HUY);
-    const res = await openGuardedRequest(url, timeoutMs, "GET", {}, options.signal);
+    if (signal?.aborted) throw new Error(LOI_DA_HUY);
+    // Kiểm host ở MỌI hop, TRƯỚC khi mở kết nối: CDN cho phép mà chuyển hướng
+    // sang host khác thì hop đó phải bị chặn như URL gốc
+    const lyDoChan = kiemHostDuocPhep(url, options.hostDuocPhep, options.chiHttps);
+    if (lyDoChan) throw new LoiTaiVe("host-la", lyDoChan);
+    const res = await openGuardedRequest(url, timeoutMs, "GET", {}, signal);
     const status = res.statusCode ?? 0;
     const location = res.headers.location;
 
@@ -272,18 +298,18 @@ export async function downloadFromPublicUrl(
 
     if (status < 200 || status >= 300) {
       res.destroy();
-      throw new Error(`HTTP ${status}`);
+      throw new LoiTaiVe("http", `HTTP ${status}`, status);
     }
 
     // Có Content-Length thì chặn trước khi đọc byte nào
     const declared = Number(res.headers["content-length"]);
     if (Number.isFinite(declared) && declared > options.maxBytes) {
       res.destroy();
-      throw new Error(`Nội dung vượt giới hạn ${formatMb(options.maxBytes)}`);
+      throw new LoiTaiVe("qua-lon", `Nội dung vượt giới hạn ${formatMb(options.maxBytes)}`);
     }
 
-    const raw = await readCappedStream(res, options.maxBytes, options.signal);
-    if (raw.byteLength === 0) throw new Error("Nội dung rỗng");
+    const raw = await readCappedStream(res, options.maxBytes, signal);
+    if (raw.byteLength === 0) throw new LoiTaiVe("rong", "Nội dung rỗng");
 
     // Giải nén TRƯỚC khi trả về: caller nào cũng đang coi đây là dữ liệu thô
     const data = decompressBody(raw, res.headers["content-encoding"], options.maxBytes);
@@ -295,5 +321,5 @@ export async function downloadFromPublicUrl(
     };
   }
 
-  throw new Error(`Quá ${MAX_REDIRECTS} lần chuyển hướng`);
+  throw new LoiTaiVe("chuyen-huong", `Quá ${MAX_REDIRECTS} lần chuyển hướng`);
 }

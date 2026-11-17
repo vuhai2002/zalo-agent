@@ -156,3 +156,25 @@ describe("downloadFromPublicUrl - chặn trước khi mở kết nối", () => {
     );
   });
 });
+
+describe("kiemHostDuocPhep + downloadFromPublicUrl với allowlist host", () => {
+  const DS = ["zdn.vn", "dlfl.vn"] as const;
+  it("khớp đúng tên hoặc đuôi CÓ dấu chấm; tên khác chặn", async () => {
+    const { kiemHostDuocPhep } = await import("./safe-remote-download.js");
+    assert.equal(kiemHostDuocPhep(new URL("https://file-stal-1.dlfl.vn/gr/x"), DS, true), null);
+    assert.equal(kiemHostDuocPhep(new URL("https://f21-zfcloud.zdn.vn/x"), DS, true), null);
+    assert.equal(kiemHostDuocPhep(new URL("https://dlfl.vn/x"), DS, true), null);
+    assert.match(kiemHostDuocPhep(new URL("https://notdlfl.vn/x"), DS, true)!, /không được phép/);
+    assert.match(kiemHostDuocPhep(new URL("https://dlfl.vn.evil.example/x"), DS, true)!, /không được phép/);
+    assert.match(kiemHostDuocPhep(new URL("http://fg1.dlfl.vn/x"), DS, true)!, /https/);
+    assert.equal(kiemHostDuocPhep(new URL("https://evil.example/x"), undefined, false), null, "không truyền danh sách = không giới hạn host");
+  });
+
+  it("host ngoài danh sách bị chặn TRƯỚC khi mở kết nối, lỗi có mã host-la", async () => {
+    const { LoiTaiVe } = await import("./safe-remote-download.js");
+    await assert.rejects(
+      downloadFromPublicUrl("https://evil.example/x", { maxBytes: 100, hostDuocPhep: DS, chiHttps: true }),
+      (err: unknown) => err instanceof LoiTaiVe && err.ma === "host-la",
+    );
+  });
+});

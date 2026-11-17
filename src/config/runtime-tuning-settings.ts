@@ -156,6 +156,20 @@ const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => s
         : null,
   },
   {
+    keys: ["ATTACHMENT_CACHE_IDLE_HOURS", "ATTACHMENT_RETENTION_DAYS"],
+    check: (so) =>
+      so("ATTACHMENT_CACHE_IDLE_HOURS") > so("ATTACHMENT_RETENTION_DAYS") * 24
+        ? "Thời gian giữ chữ đã đọc không được dài hơn thời gian giữ tệp."
+        : null,
+  },
+  {
+    keys: ["ATTACHMENT_OFFICE_MAX_MB", "ATTACHMENT_MAX_MB"],
+    check: (so) =>
+      so("ATTACHMENT_OFFICE_MAX_MB") > so("ATTACHMENT_MAX_MB")
+        ? "Dung lượng tối đa tệp Word/Excel không được lớn hơn dung lượng tệp tối đa."
+        : null,
+  },
+  {
     keys: ["SEND_DELAY_MIN_MS", "SEND_DELAY_MAX_MS"],
     check: (so) =>
       so("SEND_DELAY_MIN_MS") > so("SEND_DELAY_MAX_MS")

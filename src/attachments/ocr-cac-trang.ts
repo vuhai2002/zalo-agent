@@ -73,7 +73,9 @@ export async function ocrCacTrang(
       for (let so = hangDoi.shift(); so !== undefined; so = hangDoi.shift()) {
         const a = coAnh.get(so)!;
         const kq = await d.chep({ base64: Buffer.from(a.jpeg).toString("base64"), mediaType: "image/jpeg" }).catch(() => null);
-        if (kq && kq.text.trim()) trang.push({ so, chu: kq.text, cut: kq.truncated });
+        // Rỗng mà không lỗi = trang trắng thật: coi như đã chép, không hoàn suất
+        // - hoàn suất thì mỗi lượt sau lại render + gọi model có trả phí cho nó
+        if (kq) trang.push({ so, chu: kq.text.trim() ? kq.text : "[trang trống]", cut: kq.truncated });
         else hong(so);
       }
     };

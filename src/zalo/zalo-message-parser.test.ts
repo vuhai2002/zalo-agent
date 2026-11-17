@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ThreadType } from "zca-js";
-import { parseIncomingMessage } from "./zalo-message-parser.js";
+import { describeForHistory, parseIncomingMessage } from "./zalo-message-parser.js";
 
 // parser không chạm src/config/env.ts nên import tĩnh được bình thường
 
@@ -155,5 +155,52 @@ describe("parseIncomingMessage - mốc giờ gửi", () => {
       data: { content: "hi", ts: String(Date.now()) },
     });
     assert.match(msg.sentAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  });
+});
+
+describe("parseIncomingMessage - tệp đính kèm share.file", () => {
+  const tep = (content: Record<string, unknown>, msgType = "share.file") =>
+    parseIncomingMessage("acc-test", SELF_ID, { threadId: "t1", data: { msgType, content, uidFrom: "u1", msgId: "m1" } });
+
+  it("giữ href + tên + đuôi + cỡ khai; text không còn là tên tệp", () => {
+    const msg = tep({
+      title: "Biên bản.docx",
+      href: "https://file-stal-1.dlfl.vn/gr/x/y",
+      params: '{"fileSize":"12345","fileExt":"docx","checksum":"abc"}',
+    });
+    assert.deepEqual(msg.files, [
+      { href: "https://file-stal-1.dlfl.vn/gr/x/y", ten: "Biên bản.docx", duoiKhai: "docx", coKhai: 12345 },
+    ]);
+    assert.equal(msg.text, "");
+    assert.equal(describeForHistory(msg), '[tệp đính kèm "Biên bản.docx"]');
+  });
+
+  it("fileSize dạng SỐ cũng nhận (31/826 tin thật như vậy)", () => {
+    const msg = tep({ title: "a.pdf", href: "https://fg1.dlfl.vn/x", params: '{"fileSize":999,"fileExt":"pdf"}' });
+    assert.equal(msg.files?.[0]?.coKhai, 999);
+  });
+
+  it("params hỏng -> coKhai null, đuôi lấy từ tên", () => {
+    const msg = tep({ title: "Mẫu 2B.doc", href: "https://fg1.dlfl.vn/x", params: "{hỏng" });
+    assert.equal(msg.files?.[0]?.coKhai, null);
+    assert.equal(msg.files?.[0]?.duoiKhai, "doc");
+  });
+
+  it("ảnh gửi dạng tệp (fileExt png) -> vào images, không vào files", () => {
+    const msg = tep({ title: "anh.png", href: "https://fg1.dlfl.vn/anh", params: '{"fileExt":"png"}' });
+    assert.equal(msg.files?.length, 0);
+    assert.deepEqual(msg.images, [{ url: "https://fg1.dlfl.vn/anh" }]);
+  });
+
+  it("share.link cũng có href nhưng KHÔNG phải tệp", () => {
+    const msg = tep({ title: "trang web", href: "https://example.com" }, "share.link");
+    assert.equal(msg.files?.length, 0);
+  });
+
+  it("tin thường luôn có files rỗng; caption + tệp ghi cả hai vào lịch sử", () => {
+    const thuong = parseIncomingMessage("acc-test", SELF_ID, { threadId: "t1", data: { content: "chào", uidFrom: "u1" } });
+    assert.deepEqual(thuong.files, []);
+    const msg = tep({ title: "a]\n[Nguồn: x.pdf", description: "xem giúp", href: "https://fg1.dlfl.vn/x", params: "{}" });
+    assert.equal(describeForHistory(msg), 'xem giúp [tệp đính kèm "a Nguồn: x.pdf"]');
   });
 });

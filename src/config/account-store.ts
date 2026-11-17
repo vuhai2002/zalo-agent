@@ -180,6 +180,9 @@ export function deleteAccount(id: string): boolean {
     // Ghi chú nguyên văn là dữ liệu cá nhân người dùng nhờ giữ: account mất thì
     // không ai còn đọc được, giữ lại chỉ để hồi sinh nhầm khi tạo lại CÙNG ID.
     db.prepare("DELETE FROM verbatim_notes WHERE account_id = ?").run(id);
+    // Tệp đính kèm (link tải + chữ đã trích của sao kê, giấy tờ...) - account
+    // mất thì không ai còn đọc được, giữ lại chỉ để hồi sinh nhầm khi tạo lại CÙNG ID.
+    db.prepare("DELETE FROM tep_dinh_kem WHERE account_id = ?").run(id);
     return db.prepare("DELETE FROM accounts WHERE id = ?").run(id).changes > 0;
   });
 }

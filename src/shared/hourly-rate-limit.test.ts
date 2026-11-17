@@ -180,3 +180,15 @@ describe("hoanSuat - trả lại suất khi việc thất bại", () => {
     assert.equal(rl.check("t1", t0 + HOUR + 3).ok, false, "trần phải vẫn là 1");
   });
 });
+
+describe("createHourlyRateLimit - conSuat", () => {
+  it("chỉ XEM còn suất, không ghi nhận", async () => {
+    const { createHourlyRateLimit } = await import("./hourly-rate-limit.js");
+    const gh = createHourlyRateLimit({ limit: () => 1, buildReason: () => "hết" });
+    assert.equal(gh.conSuat("k", 1000), true);
+    assert.equal(gh.conSuat("k", 1000), true, "gọi conSuat nhiều lần không được tiêu suất");
+    assert.equal(gh.check("k", 1000).ok, true);
+    assert.equal(gh.conSuat("k", 1000), false);
+    assert.equal(gh.conSuat("k", 1000 + 60 * 60 * 1000 + 1), true, "qua cửa sổ 1 giờ thì có lại suất");
+  });
+});

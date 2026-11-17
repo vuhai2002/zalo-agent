@@ -8,6 +8,7 @@ import { startScheduler, stopScheduler } from "./scheduler/scheduler-loop.js";
 import { startDashboardServer, stopDashboardServer } from "./server/dashboard-server.js";
 import { createLogger } from "./shared/logger.js";
 import { startTempFileCleanupSchedule } from "./shared/temp-file-store.js";
+import { startQuetDonTepDinhKem } from "./attachments/quet-don-tep-dinh-kem.js";
 import { startAllAccounts, stopAllAccounts } from "./zalo/account-manager.js";
 import { startFriendAutoAcceptSweep } from "./zalo/friend-auto-accept-sweep.js";
 
@@ -40,6 +41,7 @@ let shuttingDown = false;
 let stopKbIngestWorker: () => void = () => {};
 let stopFriendSweep: () => void = () => {};
 let stopMcpManager: () => void = () => {};
+let stopQuetDonTep: () => void = () => {};
 function shutdown(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -48,6 +50,7 @@ function shutdown(signal: string): void {
   stopFriendSweep();
   stopKbIngestWorker();
   stopMcpManager();
+  stopQuetDonTep();
   stopDashboardServer();
   stopAllAccounts();
   closeHistoryStore();
@@ -79,6 +82,8 @@ setInterval(() => heartbeatLog.debug("còn sống"), 15 * 60_000).unref();
 startMediaCleanupSchedule();
 // Dọn file tạm mồ côi của tool send_file (process bị kill giữa lượt gửi)
 startTempFileCleanupSchedule();
+// Dọn tệp người dùng gửi: xóa hẳn tệp quá hạn giữ, bỏ chữ đã trích quá hạn trượt (mỗi giờ)
+stopQuetDonTep = startQuetDonTepDinhKem();
 
 // Dashboard TRƯỚC worker Kho tri thức - cố ý, đây là ranh giới quản trị/dữ
 // liệu (management plane tách khỏi data plane): một nguồn độc treo/chết worker

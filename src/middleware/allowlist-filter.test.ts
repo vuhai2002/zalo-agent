@@ -60,6 +60,14 @@ describe("shouldRespond", () => {
     assert.equal(decision.respond, false);
   });
 
+  it("nhận tin chỉ có tệp đính kèm, không có chữ (người dùng gửi pdf/docx trơn)", () => {
+    const msg = makeMessage({
+      text: "",
+      files: [{ href: "https://fg1.dlfl.vn/x", ten: "a.pdf", duoiKhai: "pdf", coKhai: 1 }],
+    });
+    assert.equal(shouldRespond(makeAccount(), msg).respond, true);
+  });
+
   it("nhận tin chỉ có ảnh, không có chữ", () => {
     const msg = makeMessage({ text: "", images: [{ url: "https://example.com/a.jpg" }] });
     assert.equal(shouldRespond(makeAccount(), msg).respond, true);

@@ -1,5 +1,5 @@
 import { botTimeZone } from "../config/runtime-tuning-settings.js";
-import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
+import { ghiChuTep, type ParsedMessage } from "../zalo/zalo-message-parser.js";
 import { dongTinNguoiDung } from "./user-message-line.js";
 
 /** Tin chỉ có ảnh vẫn phải có chữ, không thì model đọc một dòng trống */
@@ -39,7 +39,7 @@ export function dongTinCuaLuot(batch: ParsedMessage[]): string {
   const timeZone = botTimeZone();
   const dong = batch
     .map((m) => {
-      const chu = m.text.trim();
+      const chu = `${m.text}${ghiChuTep(m)}`.trim();
       if (!chu && m.images.length === 0) return "";
       return dongTinNguoiDung({
         createdAt: m.sentAt,

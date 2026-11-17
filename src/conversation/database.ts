@@ -8,6 +8,7 @@ import { taoBangKnowledgeBase } from "../knowledge/kb-schema.js";
 import { taoBangMcp } from "../mcp/mcp-schema.js";
 import { taoBangFriendRequests } from "./friend-schema.js";
 import { taoBangVerbatimNotes } from "./verbatim-note-schema.js";
+import { taoBangTepDinhKem } from "../attachments/attachment-schema.js";
 
 export const db = new DatabaseSync(path.join(dataDir, "zalo-agent.db"));
 db.exec("PRAGMA journal_mode = WAL;");
@@ -259,6 +260,10 @@ function runMigrations(): void {
   // Ghi chú NGUYÊN VĂN (tool verbatim_note) - tách khỏi `memories`, lý do ở
   // verbatim-note-schema.ts.
   taoBangVerbatimNotes(db);
+
+  // Tệp người dùng gửi (share.file): metadata + cache chữ hạn trượt - xem
+  // src/attachments/attachment-schema.ts.
+  taoBangTepDinhKem(db);
 
   // Tool CHẠY LỖI: AI SDK để chúng ở content dạng tool-error, không vào
   // toolResults, nên trước cột này mọi lần tool hỏng đều mất tăm khỏi trace.

@@ -1,6 +1,10 @@
 import { appendMessage, setMessageImages } from "../conversation/history-store.js";
 import { imagePathsOf, persistBatchImages } from "../conversation/media-store.js";
+import { ghiTepDen } from "../attachments/attachment-store.js";
+import { createLogger } from "../shared/logger.js";
 import { describeForHistory, type ParsedMessage } from "./zalo-message-parser.js";
+
+const log = createLogger("record-incoming-message");
 
 /**
  * Ghi một tin đến vào lịch sử NGAY LÚC NHẬN, và đóng dấu id dòng lên chính tin
@@ -59,6 +63,17 @@ export function ghiTinDenVaoHistory(
     createdAt: msg.sentAt,
   });
   msg.historyRowId = rowId;
+
+  // Tệp đính kèm: ghi metadata + link tải (KHÔNG tải ở đây). Hỏng thì chỉ mất
+  // khả năng đọc tệp, không được chặn đường ghi tin / trả lời.
+  if (msg.files && msg.files.length > 0) {
+    try {
+      const now = new Date();
+      msg.tepIds = msg.files.map((f) => ghiTepDen(accountId, msg.threadId, rowId, msg.senderId, f, now));
+    } catch (err) {
+      log.error({ accountId, threadId: msg.threadId, err }, "Không ghi được tệp đính kèm");
+    }
+  }
 
   if (luuAnhNgay && msg.images.length > 0) {
     // `persistBatchImages` không reject, nhưng `setMessageImages` chạm DB nên

@@ -394,6 +394,14 @@ const envSchema = z.object({
   ATTACHMENT_OCR_MAX_PAGES_PER_HOUR: z.coerce.number().int().min(1).max(1000).default(60),
   ATTACHMENT_OCR_CONCURRENCY: z.coerce.number().int().min(1).max(4).default(2),
   ATTACHMENT_OCR_PAGE_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(600_000).default(120_000),
+  // Tuổi thọ tệp: xóa hẳn sau N ngày từ lúc gửi (khớp tuổi link Zalo), cache chữ
+  // hết hạn sau N giờ không ai đọc; trần tải (mọi loại / riêng Office); trần tệp
+  // tải mới mỗi người mỗi giờ
+  ATTACHMENT_RETENTION_DAYS: z.coerce.number().int().min(1).max(30).default(7),
+  ATTACHMENT_CACHE_IDLE_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+  ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(25).default(20),
+  ATTACHMENT_OFFICE_MAX_MB: z.coerce.number().int().min(1).max(25).default(10),
+  ATTACHMENT_MAX_FILES_PER_HOUR: z.coerce.number().int().min(1).max(200).default(30),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

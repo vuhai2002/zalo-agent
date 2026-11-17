@@ -39,6 +39,8 @@ export type HourlyRateLimit = {
    * số đếm âm.
    */
   hoanSuat: (key: string, now?: number) => void;
+  /** Còn suất cho `key` không - CHỈ XEM, không ghi nhận (để quyết có nên làm việc đắt trước đó không) */
+  conSuat: (key: string, now?: number) => boolean;
   /** Chỉ dùng cho test - xóa toàn bộ trạng thái đếm */
   reset: () => void;
   /**
@@ -93,6 +95,11 @@ export function createHourlyRateLimit({ limit, buildReason }: HourlyRateLimitOpt
       recent.pop();
       if (recent.length === 0) recentByKey.delete(key);
       else recentByKey.set(key, recent);
+    },
+
+    conSuat(key, now = Date.now()) {
+      const cutoff = now - WINDOW_MS;
+      return (recentByKey.get(key) ?? []).filter((at) => at > cutoff).length < limit();
     },
 
     reset() {

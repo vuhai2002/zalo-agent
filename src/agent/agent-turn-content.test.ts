@@ -79,6 +79,27 @@ function chuCuaLuot(parts: { type: string; text?: string }[]): string {
   return text[text.length - 1]!.text!;
 }
 
+describe("buildCurrentTurnContent - tệp đính kèm", () => {
+  it("tin CHỈ có tệp: dòng của lượt mang thẻ tệp y hệt dòng lịch sử, không thành '(gửi ảnh...)'", async () => {
+    const tin: ParsedMessage = {
+      ...msgTu("Hải", "", "2026-08-07T17:12:00.000Z", false),
+      files: [{ href: "https://fg1.dlfl.vn/x", ten: "Biên bản.pdf", duoiKhai: "pdf", coKhai: 1 }],
+    };
+    const chu = chuCuaLuot(partsOf(await content.buildCurrentTurnContent([tin], "blind")));
+    assert.match(chu, /\[tệp đính kèm "Biên bản.pdf"\]/);
+    assert.doesNotMatch(chu, /gửi ảnh/);
+  });
+
+  it("tin có chữ kèm tệp: giữ cả hai", async () => {
+    const tin: ParsedMessage = {
+      ...msgTu("Hải", "sửa giúp biên bản này", "2026-08-07T17:12:00.000Z", false),
+      files: [{ href: "https://fg1.dlfl.vn/x", ten: "a.docx", duoiKhai: "docx", coKhai: 1 }],
+    };
+    const chu = chuCuaLuot(partsOf(await content.buildCurrentTurnContent([tin], "blind")));
+    assert.match(chu, /sửa giúp biên bản này \[tệp đính kèm "a.docx"\]/);
+  });
+});
+
 describe("buildCurrentTurnContent", () => {
   it("blind: không tải ảnh, chèn 1 ghi chú tổng dặn bot nói thật", async () => {
     const parts = partsOf(
