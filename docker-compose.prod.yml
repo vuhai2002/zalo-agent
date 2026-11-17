@@ -74,7 +74,8 @@ services:
           memory: 768M
           cpus: "1"
           # Trần số tiến trình: một lỗi đẻ tiến trình vô hạn chỉ giết được
-          # chính container này, không kéo sập cả máy chủ. Bot không fork gì
+          # chính container này, không kéo sập cả máy chủ. Bot chỉ đẻ tiến
+          # trình con ngắn hạn (yt-dlp, MỘT tiến trình đọc tài liệu mỗi lúc)
           # nên 256 là dư.
           #
           # Phải khai ở ĐÂY chứ không phải bằng `pids_limit` cấp trên: đặt cả
@@ -89,6 +90,12 @@ services:
     # 768M chứ không phải 512M như mặc định nhà: một lượt agent có thể ôm ảnh
     # gốc dạng base64 để gửi cho model vision, cộng ngữ cảnh vài chục nghìn
     # token. 512M là chỗ dễ bị OOM-kill đúng lúc đang trả lời.
+
+    # Không đổ core dump: tiến trình con đọc tài liệu vượt trần heap thì V8
+    # abort() (SIGABRT) - đó là đường chặn tệp độc bình thường, có thể lặp lại
+    # mỗi khi người lạ gửi tệp bom; mỗi lần đổ core là vài trăm MB lên đĩa host.
+    ulimits:
+      core: 0
 
     logging:
       driver: json-file

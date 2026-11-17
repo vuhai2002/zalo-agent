@@ -10,6 +10,18 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Thêm
 
+- **Bot đọc được tệp người dùng gửi qua Zalo** (tool `doc_file`): pdf, Word (docx và
+  .doc đời cũ), Excel, txt/csv/md. Trước đây bot chỉ thấy TÊN tệp và bảo người dùng
+  "gửi lại" dù họ đã gửi đúng (đo trên prod: 19 câu trả lời kiểu đó). Excel có thêm
+  dòng số liệu do máy chủ tự cộng (chỉ ô kiểu số, bỏ ô công thức) để bot khỏi cộng
+  nhẩm. Tin gọi bot thì tệp được tải và đọc sẵn chạy nền.
+- **OCR PDF quét**: trang không có lớp chữ được render thành ảnh rồi model đọc ảnh
+  (sidecar) chép nguyên văn - kể cả scan đen trắng nén CCITT/JBIG2 (văn bản cơ quan).
+  Chép sẵn 5 trang đầu, trang sau chép khi cần; trần trang mỗi tệp, mỗi người mỗi giờ.
+- **Nhóm cấu hình "Tệp người dùng gửi"** trên trang Cấu hình: dung lượng tối đa,
+  thời gian giữ tệp (mặc định 7 ngày, khớp tuổi link Zalo) và giữ chữ đã đọc (24 giờ
+  kể từ lần đọc cuối), trần OCR, số tệp mỗi người mỗi giờ.
+
 - **Ghi chú nguyên văn** (tool `verbatim_note`): người dùng gửi một đoạn (thông báo,
   mẫu tin, lời cảm ơn...) kèm "ghi nhớ tin này" thì bot lưu ĐÚNG từng chữ và gửi lại
   y hệt khi được hỏi. Máy chủ đối chiếu với tin gốc và từ chối nếu bot tóm tắt hay
@@ -21,8 +33,31 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 - **Trang Memory có tab "Ghi chú nguyên văn"**: danh sách ghi chú kèm tên người (lấy
   từ danh bạ), bấm để xem đúng nguyên văn bot sẽ gửi lại, xóa có hỏi lại.
 
+### Bảo mật
+
+- **Tệp độc không còn làm sập bot.** Mọi việc đọc tài liệu (cả Kho tri thức) chạy
+  trong tiến trình con có trần thời gian, trần heap và trần RSS đo từ ngoài; một
+  việc mỗi lúc. Đo bằng PoC: PDF 128 KB có luồng nén bom phình 385 MB bộ nhớ ngoài
+  heap mà worker thread cũ không chặn được.
+- **Kiểm cấu trúc tệp .doc trước thư viện đọc**: cỡ sector bất thường, chuỗi sector
+  vòng, đuôi dùng chung, cây thư mục vòng, stream rỗng trỏ chuỗi vòng đều bị chặn.
+- **Tải tệp chỉ từ CDN Zalo**, chỉ https, kiểm host ở mọi lần chuyển hướng, có hạn
+  chót tổng; nhận diện loại tệp bằng byte thật, không tin đuôi.
+- **Nội dung tệp không vào log hay trace**; tên tệp, tên sheet, tiêu đề cột của người
+  lạ chỉ nằm trong khối nonce. Đọc tệp xong thì tới hết lượt, các tool ghi bền / tác
+  động ra ngoài (`save_memory`, `verbatim_note`, `schedule_task`, `tag_member`, tool
+  MCP) tạm tắt - chặn tệp giấu chỉ thị.
+
+### Thay đổi
+
+- **Cần Node >= 24** (unpdf 2.x). Thêm phụ thuộc `@napi-rs/canvas` (render trang PDF,
+  binary dựng sẵn) và `word-extractor` (đọc .doc).
+- Kho tri thức: bỏ chữ ẩn của docx (`w:vanish`) và sheet Excel ẩn hẳn (`veryHidden`);
+  PDF dài hơn 2.000 trang được ghi chú "chỉ nạp N/M trang đầu" thay vì cắt âm thầm.
+
 ### Sửa
 
+- **Tin chỉ có tệp đính kèm (không kèm chữ) không còn bị bỏ qua** như tin rỗng.
 - **`pnpm eval` không còn ghi vào DB dev thật.** Runner import tĩnh `kenh-ca-nhan`,
   mà chuỗi import đó mở SQLite ngay khi nạp - trước khi trỏ sang DB tạm - nên mọi lần
   eval đều ghi account, tin nhắn, trace vào `data/zalo-agent.db` và chạy migration

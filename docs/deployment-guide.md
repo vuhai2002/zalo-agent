@@ -175,6 +175,17 @@ DEPLOY_SKIP_PULL=1 bash deploy.sh
 
 Dữ liệu không bị đụng - nó nằm ngoài image.
 
+### Đọc tệp người dùng gửi (từ V3.33)
+
+- Image cần **Node >= 24** (Dockerfile đã dùng `node:24-alpine`).
+- `@napi-rs/canvas` cài binary dựng sẵn `linux-x64-musl` theo nền tảng lúc
+  `pnpm install` trong Docker - không cần build tools, không cần `allowBuilds`.
+- `docker-compose.prod.yml` đặt `ulimits: core: 0`: tiến trình con đọc tài liệu
+  chết vì vượt trần heap là đường chặn tệp độc bình thường, không được đổ core.
+- Log có dòng "Không đọc được /proc của tiến trình đọc tệp" nghĩa là trần RSS đang
+  lùi về số tiến trình con tự báo (yếu hơn) - kiểm `/proc` của container.
+- OCR PDF quét cần model đọc ảnh (sidecar `VISION_SIDECAR_*`, chỉnh ở trang Tools, mục cài đặt đọc ảnh); chưa cấu hình thì trang quét báo "chưa bật model đọc ảnh".
+
 ## Gỡ rối
 
 | Triệu chứng | Nguyên nhân hay gặp |

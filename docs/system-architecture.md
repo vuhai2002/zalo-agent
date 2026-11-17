@@ -182,7 +182,17 @@ Vì sao cột `phang` đã bỏ dấu: `remove_diacritics 2` của FTS5 không x
 chữ `đ` (U+0111 là chữ cái riêng, không phải dấu phụ tổ hợp), nên tự bỏ dấu
 bằng `bo-dau-tieng-viet.ts` TRƯỚC khi ghi, thay vì dựa vào tokenizer.
 
-### Worker thread trích xuất - vì sao bắt buộc
+### Tiến trình con trích xuất - vì sao bắt buộc
+
+**Cập nhật 2026-11-18:** trích xuất đã chuyển từ worker thread sang TIẾN TRÌNH
+CON (`shared/chay-tien-trinh-con-co-tran.ts`), dùng chung với tệp người dùng
+gửi. Hai PoC buộc phải đổi: PDF 128 KB có luồng Flate bom phình 385 MB
+ArrayBuffer NGOÀI heap (worker `resourceLimits` không thấy, container 768 MB
+chết), và V8 vượt heap trong worker có lúc `abort()` CẢ tiến trình. Con thì
+SIGKILL luôn an toàn, RSS đo từ `/proc/<pid>/statm` mỗi 25 ms
+(`EXTRACT_MAX_RSS_MB`), một con mỗi lúc (`shared/hang-doi-trich-xuat.ts`). Cái
+giá ~50 MB RSS mỗi con (lý do bản cũ chọn worker) giờ chấp nhận được vì chỉ có
+một con. Phần dưới là lý do GỐC của việc tách luồng - vẫn đúng.
 
 Đặt timeout cho code ĐỒNG BỘ đang quay CPU trên CÙNG một luồng là **không làm
 được**: `setTimeout`/`AbortSignal` chỉ được xét ở ranh giới event loop, mà một
@@ -261,6 +271,61 @@ hình). Đây là loại ràng buộc GIỮA nhiều tham số mà nhìn từng 
 trên dashboard sẽ không ai nhận ra - luật chỉ áp khi người dùng đang đổi MỘT
 trong các tham số liên quan, để một cấu hình sẵn có lệch (đặt tay trong `.env`)
 không khóa cứng cả trang Cấu hình.
+
+## Tệp người dùng gửi (đọc tệp đính kèm + OCR)
+
+Plan: `plans/261117-1525-doc-file-dinh-kem-tu-chat/` (research + số đo ở `reports/`).
+
+### Đường đi
+
+```
+Zalo share.file -> parser giữ href/tên (đã làm sạch)/đuôi/cỡ khai
+  -> ghi lịch sử: dòng tin + [tệp đính kèm "tên"] ; bảng tep_dinh_kem: href + metadata
+  -> tin GỌI bot: tải + đọc sẵn chạy nền (napSan) ; tin nhóm thụ động: chỉ ghi
+tool doc_file(tepSo, trang?, tuKyTu?)
+  -> layNoiDungTep: cache chữ còn hạn? dùng : tải lại (allowlist CDN Zalo, https, từng hop)
+     -> tiến trình con: nhận diện bằng byte -> pdf/docx/doc/xlsx/chữ
+     -> trang PDF ít chữ -> tiến trình con render JPEG ~2000 px (cụm 5 trang)
+        -> sidecar chép nguyên văn (trần output + hạn thời gian riêng)
+  -> kết quả: phần đầu do máy chủ dựng + khối nonce chứa mọi chuỗi người lạ
+```
+
+### Ba lớp tuổi thọ
+
+| Lớp | Sống bao lâu |
+|---|---|
+| Thẻ tên tệp trong lịch sử | như lịch sử |
+| Dòng `tep_dinh_kem` + `href` | `ATTACHMENT_RETENTION_DAYS` (7) từ lúc gửi - khớp tuổi link Zalo đo được (dưới 7 ngày tải lại 835/835) |
+| Chữ đã trích / OCR | hạn TRƯỢT `ATTACHMENT_CACHE_IDLE_HOURS` (24) từ lần đọc cuối, không vượt dòng trên |
+| Byte gốc | chỉ trong RAM |
+
+Tool result không sống qua lượt (lịch sử chỉ giữ chữ cuối của assistant), nên
+cache chữ là bắt buộc: không có nó thì mỗi câu hỏi tiếp lại tải + OCR lại.
+
+### Quyết định và lý do
+
+- **Không gửi PDF thẳng cho model**: 9Router v0.5.116 biến part `file` thành
+  chữ JSON trên đường model `cx/*` (`openai-responses.js`).
+- **OCR = render trang + model đọc ảnh**, không tesseract.js. Trang < 30 ký tự đi
+  thẳng OCR, KHÔNG xét "trang có vẽ ảnh": pdf.js âm thầm bỏ ảnh vượt `maxImageSize`
+  trước khi phát lệnh vẽ (trang quét 600 dpi hiện như trang trắng), và dựng danh
+  sách lệnh vẽ là giải mã mọi ảnh (300 trang: 49 giây). Trang trắng thật thì model
+  trả "[trang trống]". Render trong tiến trình con riêng (canvas không chạy trong
+  worker thread).
+- **`.doc` qua `word-extractor` CHỈ sau bộ kiểm CFB** (`attachments/kiem-cau-truc-cfb.ts`):
+  thư viện tin mọi con số trong tệp.
+- **Đọc tệp xong thì tạm tắt tool ghi bền / tác động ngoài tới hết lượt**
+  (`agent/chan-tool-sau-khi-doc-tep.ts`): gỡ khỏi `activeTools` + `execute` tự từ
+  chối. Giữ `web_search`/`web_fetch`, tool tạo/gửi tệp.
+- **Suất tính theo người HỎI**, hoàn suất khi không đọc được gì.
+
+### Rủi ro còn lại (chấp nhận)
+
+- `web_fetch` tới URL do tệp xúi có thể làm kênh rò dữ liệu - cùng mức nội dung web.
+- Đổi `activeTools` giữa lượt đổi phần schema tool đầu prompt: các step sau
+  `doc_file` mất prompt cache của lượt đó.
+- Nội dung tệp mà model CHÉP vào câu trả lời hay tham số tool khác vẫn vào trace.
+- Trang quét có kèm dòng chữ thật >= 30 ký tự (dấu Bates) bị coi là trang chữ.
 
 ## MCP client
 

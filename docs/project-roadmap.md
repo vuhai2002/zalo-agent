@@ -6496,3 +6496,24 @@ Bài học đã ghi vào `docs/release-guide.md` + mục "Phát hành" của `CL
 CHANGELOG `[Chưa phát hành]` bị bỏ trống nhiều đợt nên 3 feature lớn suýt không
 vào release notes. Kỷ luật từ nay: **thêm/sửa/xóa gì thì cập nhật `[Chưa phát
 hành]` NGAY trong đợt đó**, đừng để dồn.
+
+## V3.33 - Đọc tệp người dùng gửi + OCR PDF quét (2026-11-18, plan: plans/261117-1525-doc-file-dinh-kem-tu-chat/)
+
+Nguồn nhu cầu: đọc prod - 12 tin gửi pdf/doc/docx mà bot chỉ thấy tên, 19 câu trả
+lời "chỉ thấy tên file". 6 phase, mỗi phase một sub-agent rà rồi sửa trước khi commit:
+
+1. Tiến trình con có trần RSS cho MỌI trích xuất (vá PDF bom ở Kho tri thức), unpdf 2.x.
+2. Nhận diện bằng byte; kiểm CFB trước `word-extractor`; docx bỏ chữ ẩn; xlsx theo sheet + thống kê.
+3. OCR: render trang trong tiến trình con, sidecar chép chữ, trần theo giờ.
+4. Parser `share.file`, bảng `tep_dinh_kem` (cache hạn trượt), tải qua allowlist từng hop.
+5. Tool `doc_file`, tạm tắt tool ghi bền sau khi đọc tệp, ẩn log/trace, luật persona.
+6. Tài liệu, compose `ulimits core: 0`.
+
+Lỗi thật bắt được trong lúc làm: tin chỉ có tệp bị bộ lọc bỏ như tin rỗng; dòng
+lượt hiện tại bỏ mất thẻ tệp.
+
+### Còn treo
+- Đo trên tệp mẫu thật (scan đen trắng cơ quan, .doc có bảng, sao kê) + eval hai lượt
+  bằng model thật - cần user cấp mẫu / cho phép tốn token.
+- Build Docker + đo RSS tiến trình con trên VPS (máy dev không có Docker).
+- Log debug ghi nguyên văn câu trả lời của bot (việc riêng, user đã tách).
