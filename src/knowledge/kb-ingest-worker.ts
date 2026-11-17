@@ -16,13 +16,21 @@ import { datTrangThai, layNguon } from "./kb-source-store.js";
  * trang ngay trong handler là chặn cả bot (không nhận tin, không chạy lượt
  * nào).
  *
- * Trích xuất + cắt đoạn chạy trong `node:worker_threads` (xem
- * `chay-trich-xuat-tach-luong.ts`) - file NÀY chỉ giành nguồn, gọi worker, rồi
+ * Trích xuất + cắt đoạn chạy trong TIẾN TRÌNH CON (xem
+ * `chay-trich-xuat-tach-luong.ts`) - file NÀY chỉ giành nguồn, gọi tiến trình con, rồi
  * GHI DB (luồng chính là nơi DUY NHẤT mở SQLite, bất biến "một connection cho
  * cả process").
  */
 
 const log = createLogger("kb-ingest-worker");
+
+let daCanhBaoProc = false;
+/** Một lần mỗi tiến trình: Linux mà không đọc được `/proc` là cầu dao RSS đang yếu */
+function canhBaoKhongDoDuocRss(): void {
+  if (daCanhBaoProc) return;
+  daCanhBaoProc = true;
+  log.warn("Không đọc được /proc của tiến trình đọc tài liệu - trần RSS lùi về số tự báo, PDF bom có thể lọt");
+}
 
 // Quét mỗi 5s: bảng kb_sources rất nhỏ nên quét dày không tốn gì đáng kể, chỉ
 // ảnh hưởng độ trễ tối đa trước khi một nguồn vừa upload được nhặt lên xử lý.
@@ -69,9 +77,11 @@ async function xuLyMotNguon(n: KbSourceTomTat): Promise<void> {
       thamSoCat: { coDoanToiDa: getTuning("KB_CHUNK_CHARS"), chongLan: getTuning("KB_CHUNK_OVERLAP_PERCENT") },
       hanMs: getTuning("KB_EXTRACT_TIMEOUT_MS"),
       tranRamMb: getTuning("KB_EXTRACT_MAX_RAM_MB"),
+      tranRssMb: getTuning("EXTRACT_MAX_RSS_MB"),
+      baoKhongDoDuocRss: canhBaoKhongDoDuocRss,
     });
 
-    // I4: DELETE có thể xen vào ĐÚNG lúc worker đang await trích xuất - nguồn
+    // I4: DELETE có thể xen vào ĐÚNG lúc đang await trích xuất - nguồn
     // không còn thì KHÔNG ghi đoạn (đoạn mồ côi vĩnh viễn nếu ghi, không đường
     // dọn nào khác ngoài donDoanMoCoi() chạy lúc boot).
     if (!layNguon(n.id)) return;
@@ -118,7 +128,7 @@ export async function xuLyMotVong(): Promise<void> {
   for (const n of dangCho) {
     await xuLyMotNguon(n);
     // Nhả event loop giữa MỖI nguồn - xem lịch sử đo ở phase trước: trích xuất
-    // giờ chạy trong worker thread riêng (không còn chặn luồng chính khi CPU
+    // giờ chạy trong tiến trình con (không còn chặn luồng chính khi CPU
     // nặng), nhưng bước giành/đọc file/ghi DB vẫn đồng bộ trên luồng chính, và
     // nhả giữa từng nguồn vẫn rẻ.
     await new Promise((resolve) => setImmediate(resolve));
@@ -148,7 +158,7 @@ export function goNguonKetDauTick(): void {
   for (const n of layNguonTheoTrangThai("dang_xu_ly")) {
     if (n.soLanThu >= tranLanThu) {
       datTrangThai(n.id, "hong", {
-        loi: `Nguồn này làm worker treo hoặc dừng bất thường liên tiếp - đã thử ${n.soLanThu} lần, dừng xử lý.`,
+        loi: `Nguồn này làm tiến trình đọc tài liệu treo hoặc dừng bất thường liên tiếp - đã thử ${n.soLanThu} lần, dừng xử lý.`,
       });
     } else {
       datTrangThai(n.id, "cho_xu_ly");

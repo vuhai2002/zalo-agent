@@ -42,7 +42,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -73,7 +73,7 @@
     "pino": "^10.4.0",
     "pino-roll": "^4.0.0",
     "saxes": "^6.0.0",
-    "unpdf": "^1.9.1",
+    "unpdf": "^2.2.1",
     "zca-js": "2.2.0",
     "zod": "^4.6.7"
   },

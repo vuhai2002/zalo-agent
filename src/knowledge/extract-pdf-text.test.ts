@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 // Module thuần (chỉ đụng unpdf) - không chạm env/DB nên import tĩnh được
 import { docChuTuFile } from "./doc-text-extract.js";
+import { docTrangPdf } from "./extract-pdf-text.js";
+import { taoPdfNhieuTrang } from "./fixtures/tao-pdf-thu-nghiem.js";
 
 /**
  * PDF một trang tối thiểu, chữ ASCII. Truyền chuỗi rỗng thì ra trang KHÔNG có
@@ -46,5 +48,33 @@ describe("extract-pdf-text (qua docChuTuFile)", () => {
   it("PDF không có lớp chữ (ảnh quét) báo ĐÚNG BỆNH, không báo chung chung", async () => {
     // `unpdf` trả chuỗi rỗng chứ không ném - nhánh này phải tự nhận ra
     await assert.rejects(() => docChuTuFile(pdfMotTrang(""), "pdf"), /ảnh quét/i);
+  });
+});
+
+describe("docTrangPdf - đọc từng trang có trần", () => {
+  const nam = taoPdfNhieuTrang(["Trang mot", "Trang hai", "Trang ba", "Trang bon", "Trang nam"]);
+
+  it("dừng ở tranTrang, vẫn báo tổng số trang thật và đánh dấu đã cắt", async () => {
+    const kq = await docTrangPdf(nam, { tranTrang: 2, tranKyTu: 1_000_000 });
+    assert.equal(kq.soTrang, 5);
+    assert.deepEqual(
+      kq.trang.map((t) => t.so),
+      [1, 2],
+    );
+    assert.match(kq.trang[1]!.chu, /Trang hai/);
+    assert.equal(kq.catBot, true);
+  });
+
+  it("dừng ở tranKyTu, cắt giữa trang cũng được", async () => {
+    const kq = await docTrangPdf(nam, { tranTrang: 100, tranKyTu: 12 });
+    const tong = kq.trang.reduce((n, t) => n + t.chu.length, 0);
+    assert.ok(tong <= 12, `tổng ${tong} ký tự vượt trần`);
+    assert.equal(kq.catBot, true);
+  });
+
+  it("không chạm trần thì không đánh dấu cắt", async () => {
+    const kq = await docTrangPdf(nam, { tranTrang: 5, tranKyTu: 1_000_000 });
+    assert.equal(kq.trang.length, 5);
+    assert.equal(kq.catBot, false);
   });
 });

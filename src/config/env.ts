@@ -370,19 +370,18 @@ const envSchema = z.object({
   // chặn nguồn làm worker treo/chết lặp lại vô hạn qua các lần khởi động lại.
   // Đếm tăng NGAY LÚC GIÀNH (giaNguonChoXuLy), không phải lúc phát hiện hỏng.
   KB_MAX_INGEST_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(2),
-  // Trần RAM (old space của V8) cho worker trích xuất - cầu dao thứ HAI, song
-  // song với KB_EXTRACT_TIMEOUT_MS: trần thời gian bắt tài liệu quay CPU,
-  // trần này bắt tài liệu PHÌNH HEAP JS. Đo được `resourceLimits` mặc định của
-  // Node là maxOldGenerationSizeMb = 4096, tức worker được phép ăn 4 GB trong
-  // một container 768 MB.
-  //
-  // Trần TRÊN 256 (không phải 512): trần heap THẬT của worker là
-  // maxOld + maxYoung, mà maxYoung đặt cứng 32 MB - nên 256 nghĩa là 288 MB.
-  // Cộng ~384 MB old space của luồng chính là 672/768 MB, còn ~96 MB đệm cho
-  // RSS overhead (đo: RSS 321 MB khi heapUsed mới 206 MB). Để max 512 thì
-  // riêng worker đã 544 MB - kéo thanh trượt hết cỡ là tự cầm chắc OOM-kill.
-  // Xem chay-trich-xuat-tach-luong.ts cho bảng đo và HAI GIỚI HẠN của cầu dao.
+  // Trần HEAP (`--max-old-space-size`) của TIẾN TRÌNH CON trích xuất tài liệu -
+  // bắt tài liệu phình heap JS. Giữ tên cũ (thời còn chạy worker thread) để
+  // cấu hình đã lưu trên DB không hỏng. Bộ nhớ NGOÀI heap (PDF bom Flate) do
+  // EXTRACT_MAX_RSS_MB bắt. Xem chay-tien-trinh-con-co-tran.ts.
   KB_EXTRACT_MAX_RAM_MB: z.coerce.number().int().min(64).max(256).default(192),
+  // Trần RSS (MB) của tiến trình con đọc tài liệu, đo từ ngoài 25ms/lần - bắt
+  // cả bộ nhớ ngoài heap mà trần heap không thấy (PoC: PDF 128 KB -> 385 MB
+  // ArrayBuffer). Container 768 MB và chỉ 1 tiến trình con mỗi lúc, nên 320
+  // còn chừa ~450 MB cho bot. Dùng chung cho Kho tri thức và tệp chat.
+  // Trần TRÊN 400 (cùng lý do KB_EXTRACT_MAX_RAM_MB dừng ở 256): kéo thanh
+  // trượt hết cỡ không được tự cầm chắc OOM-kill cả container.
+  EXTRACT_MAX_RSS_MB: z.coerce.number().int().min(128).max(400).default(320),
 
   // Dashboard web (Hono, cùng process). Không set DASHBOARD_PASSWORD = dashboard tắt.
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3900),

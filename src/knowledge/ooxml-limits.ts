@@ -160,13 +160,13 @@ export type NguonChanTran = "khai-bao" | "do-that";
  * đúng bẫy "Bẫy khi viết test" của CLAUDE.md.
  *
  * PHẠM VI DÙNG ĐƯỢC - đọc trước khi định dựa vào hai trường này: chúng chỉ
- * sống trong TIẾN TRÌNH WORKER và trong test. Luồng chính KHÔNG BAO GIỜ đọc
+ * sống trong TIẾN TRÌNH CON trích xuất và trong test. Luồng chính KHÔNG BAO GIỜ đọc
  * được, và đó là hệ quả cấu trúc chứ không phải thiếu sót tạm: cả đường trích
- * xuất chạy trong `kb-extract-worker.ts`, mà nó làm PHẲNG lỗi thành `err.message`
- * trước `postMessage` (object Error không đi qua ranh giới thread được).
+ * xuất chạy trong `kb-extract-child.ts`, mà nó làm PHẲNG lỗi thành `err.message`
+ * trước khi gửi qua IPC (object Error không đi qua ranh giới tiến trình được).
  * Hiện KHÔNG chỗ nào trong code chạy thật đọc hai trường này; test dùng chúng
  * để phân biệt trần nào đã bắn và bắn theo số KHAI hay số ĐO. Muốn ghi log
- * chúng thì phải log NGAY TRONG worker, không phải ở caller.
+ * chúng thì phải log NGAY TRONG tiến trình con, không phải ở caller.
  */
 export class LoiVuotTran extends Error {
   readonly entryName?: string;

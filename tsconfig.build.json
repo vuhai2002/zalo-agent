@@ -19,6 +19,8 @@
     // dùng. Không loại thì bộ dựng bom zip đi thẳng vào `dist/` sản phẩm.
     "src/knowledge/ooxml-zip-test-helper.ts",
     "src/knowledge/kb-slow-docx-test-fixture.ts",
+    // Thư mục fixtures: bộ dựng PDF bom, tiến trình con giả - chỉ test dùng
+    "src/**/fixtures/**",
     // Bộ eval chạy TAY bằng tsx, không bao giờ chạy từ `dist`
     "evals/**"
   ]
