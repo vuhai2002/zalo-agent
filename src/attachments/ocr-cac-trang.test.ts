@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { LoiTienTrinhConBiNgat } from "../shared/chay-tien-trinh-con-co-tran.js";
 import { createHourlyRateLimit } from "../shared/hourly-rate-limit.js";
 import { ocrCacTrang, type PhuThuocOcr } from "./ocr-cac-trang.js";
 
@@ -80,6 +81,20 @@ describe("ocrCacTrang - OCR nhiều trang có trần", () => {
     const kq = await ocrCacTrang(Buffer.alloc(1), [1, 2], "a:u5", d);
     assert.deepEqual(kq.boQua.map((b) => b.lyDo), ["loi", "loi"]);
     assert.equal(d.gioiHan.check("a:u5").ok, true);
+  });
+
+  it("render HẾT GIỜ thì dừng hẳn các cụm sau - không giữ hàng đợi chung 60s x mỗi cụm", async () => {
+    const cacCum: number[][] = [];
+    const d = phuThuoc({
+      render: async (_buf, so) => {
+        cacCum.push(so);
+        throw new LoiTienTrinhConBiNgat("het-gio", "hết giờ");
+      },
+    });
+    const kq = await ocrCacTrang(Buffer.alloc(1), Array.from({ length: 12 }, (_, i) => i + 1), "a:u8", d);
+    assert.equal(cacCum.length, 1, "chỉ được thử MỘT cụm");
+    assert.equal(kq.boQua.length, 12);
+    assert.ok(kq.boQua.every((b) => b.lyDo === "loi"));
   });
 
   it("render theo cụm 5 trang: cụm chứa trang độc hỏng thì CHỈ cụm đó mất", async () => {

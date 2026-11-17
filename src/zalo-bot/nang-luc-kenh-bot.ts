@@ -62,6 +62,14 @@ export const TOOL_KHONG_CHAY_TREN_BOT: Record<string, LyDoKhongHoTro> = {
   get_group_info: {
     hint: "Zalo Bot API không có method đọc thông tin nhóm (getChat/getChatMember trả 404)",
   },
+  doc_file: {
+    // Tool KHÔNG cần `api` (chỉ đọc bảng `tep_dinh_kem`), bị chặn vì một lý do
+    // khác: `zalo-bot-update-parser.ts` không sinh ra tệp nào - update của Bot
+    // API chỉ có ảnh/sticker/voice. Để tool lại thì mọi lần gọi đều trả "nhờ
+    // người dùng gửi tệp", người dùng gửi lại vô ích - đúng vòng lặp tính năng
+    // này sinh ra để chữa. Mở lại khi parser kênh bot nhận được tệp.
+    hint: "Zalo Bot API không chuyển tệp người dùng gửi tới bot (update chỉ có ảnh, sticker, tin thoại)",
+  },
 };
 
 export function toolChayDuocTrenBot(key: string): boolean {
@@ -78,7 +86,8 @@ export function toolChayDuocTrenBot(key: string): boolean {
 export const LUAT_PERSONA_KENH_BOT =
   "- Bạn đang chạy trên TÀI KHOẢN BOT của Zalo. Kênh này KHÔNG gửi được file, " +
   "tài liệu Word/Excel, ảnh tự vẽ, video tải về, không thả được cảm xúc, không tag được ai " +
-  "trong nhóm và không xem được danh sách thành viên nhóm - đó là giới hạn của " +
+  "trong nhóm, không xem được danh sách thành viên nhóm và không mở được tệp người " +
+  "dùng gửi (pdf, Word, Excel) - đó là giới hạn của " +
   "nền tảng Zalo, KHÔNG phải bạn bị lỗi. Ai nhờ mấy việc đó thì nói thẳng là tài " +
   "khoản bot không làm được, và mời họ nhắn qua tài khoản cá nhân nếu cần. Đừng " +
   "hứa rồi im, cũng đừng xin lỗi vòng vo.";

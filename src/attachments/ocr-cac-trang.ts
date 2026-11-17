@@ -1,3 +1,4 @@
+import { LoiTienTrinhConBiNgat } from "../shared/chay-tien-trinh-con-co-tran.js";
 import type { HourlyRateLimit } from "../shared/hourly-rate-limit.js";
 import type { AnhTrang } from "./render-trang-pdf.js";
 
@@ -61,7 +62,15 @@ export async function ocrCacTrang(
     let anh: AnhTrang[];
     try {
       anh = await d.render(buf, cum);
-    } catch {
+    } catch (err) {
+      // HẾT GIỜ thì dừng hẳn: tệp render chậm cỡ này thì cụm sau cũng chậm, mỗi
+      // cụm lại chiếm trọn chỗ DUY NHẤT của hàng đợi trích xuất dùng chung
+      // (50 trang = 10 cụm x 60s). Lỗi khác (vượt RAM ở một trang độc) thì chỉ
+      // mất cụm đó - các cụm sau vẫn đáng thử.
+      if (err instanceof LoiTienTrinhConBiNgat && err.lyDo === "het-gio") {
+        duocLam.slice(i).forEach(hong);
+        break;
+      }
       cum.forEach(hong);
       continue;
     }

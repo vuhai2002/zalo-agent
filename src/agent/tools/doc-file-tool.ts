@@ -103,6 +103,7 @@ export function createDocFileTool(ctx: ToolContext, deps: PhuThuocDocFile = phuT
           // phần đầu kết quả là vùng model tin - chỉ chữ do máy chủ dựng
           dinhDang: kq.tep.dinhDang ?? "không rõ",
           ...(daiTrang ? { daiTrang } : {}),
+          ...(ctx.message.isGroup ? { nguoiGui: tep.senderId === ctx.message.senderId ? "nguoi-hoi" : "nguoi-khac" } as const : {}),
           soTrang: kq.tep.soTrang,
           noiDung: kq.noiDung,
           trangDaOcr: kq.trangDaOcr,
@@ -113,10 +114,10 @@ export function createDocFileTool(ctx: ToolContext, deps: PhuThuocDocFile = phuT
           tuKyTu,
           tranKyTu: getTuning("ATTACHMENT_READ_MAX_CHARS"),
         });
-      } catch (err) {
-        // Tool không ném ra agent loop - luật repo
-        const lyDo = err instanceof Error ? err.message : String(err);
-        return ketQuaLoi(`Đọc tệp lỗi (${lyDo}). Nói thật với người dùng là chưa đọc được, đừng đoán nội dung.`);
+      } catch {
+        // Tool không ném ra agent loop - luật repo. Câu CỐ ĐỊNH: chữ của lỗi có
+        // thể mang chuỗi từ tệp/thư viện, mà kết quả lỗi nằm ngoài khối nonce
+        return ketQuaLoi("Đọc tệp gặp lỗi bất ngờ. Nói thật với người dùng là chưa đọc được, đừng đoán nội dung.");
       }
     },
   });

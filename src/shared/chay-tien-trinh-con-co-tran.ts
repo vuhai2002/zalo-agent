@@ -147,7 +147,12 @@ export function chayTienTrinhCon<V, R>(p: {
       ketThuc(() => reject(new LoiTienTrinhConBiNgat("chet-bat-thuong", `Không chạy được tiến trình con: ${err.message}`)));
     });
 
-    con.once("exit", (code, signal) => {
+    // `close`, KHÔNG `exit`: Node không hứa `exit` tới SAU tin IPC cuối cùng -
+    // con gửi kết quả rồi thoát ngay, cha mà xử lý `exit` trước là báo nhầm
+    // lượt thành công thành "thoát bất thường". `close` chờ cả kênh IPC lẫn
+    // stderr đóng (nên đuôi stderr cũng đủ hơn). Treo mãi không đóng thì hạn
+    // giờ vẫn bắn.
+    con.once("close", (code, signal) => {
       const lyDo = dongLoiTrongStderr(stderrDuoi);
       const duoi = lyDo ? ` - ${lyDo}` : "";
       ketThuc(() =>

@@ -23,7 +23,7 @@ import type { ParsedMessage } from "./zalo-message-parser.js";
 export type KenhLuot = {
   /**
    * API zca-js, đi thẳng vào `ToolContext.api`. `null` trên kênh bot; an toàn
-   * vì 8 tool dùng nó trùng khít 8 tool bị chặn (xem `nang-luc-kenh-bot.ts`).
+   * vì 8 tool dùng nó đều nằm trong bảng chặn (xem `nang-luc-kenh-bot.ts`).
    */
   api: API | null;
   /** Dựng đường gửi cho một thread cụ thể */

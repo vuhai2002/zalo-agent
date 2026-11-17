@@ -149,6 +149,15 @@ const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => s
         : null,
   },
   {
+    // RSS = heap + mã V8/pdf.js + ArrayBuffer ngoài heap; chừa dưới ~96 MB là
+    // mọi tài liệu (kể cả tệp lành) chết vì "vượt RAM" trước khi chạm trần heap
+    keys: ["EXTRACT_MAX_RSS_MB", "KB_EXTRACT_MAX_RAM_MB"],
+    check: (so) =>
+      so("EXTRACT_MAX_RSS_MB") < so("KB_EXTRACT_MAX_RAM_MB") + 96
+        ? `Trần RSS tiến trình đọc tài liệu (${so("EXTRACT_MAX_RSS_MB")} MB) phải lớn hơn trần heap (${so("KB_EXTRACT_MAX_RAM_MB")} MB) ít nhất 96 MB, nếu không mọi tài liệu đều bị dừng vì vượt RAM.`
+        : null,
+  },
+  {
     keys: ["ATTACHMENT_OCR_PREFETCH_PAGES", "ATTACHMENT_OCR_MAX_PAGES_PER_FILE"],
     check: (so) =>
       so("ATTACHMENT_OCR_PREFETCH_PAGES") > so("ATTACHMENT_OCR_MAX_PAGES_PER_FILE")

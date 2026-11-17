@@ -92,6 +92,14 @@ describe("validateTuning - ràng buộc chéo", () => {
     assert.ok(loi.some((l) => /lớn hơn trần thời gian mỗi ảnh/.test(l)));
   });
 
+  it("trần RSS tiến trình đọc tài liệu phải chừa chỗ trên trần heap", () => {
+    // RSS = heap + mã V8/pdf.js + ArrayBuffer ngoài heap. RSS 128 với heap 192
+    // nghĩa là MỌI tài liệu chết vì "vượt RAM" dù tệp lành.
+    const loi = tuning.validateTuning({ EXTRACT_MAX_RSS_MB: 128, KB_EXTRACT_MAX_RAM_MB: 192 });
+    assert.ok(loi.some((l) => /trần RSS/i.test(l)), loi.join(" | "));
+    assert.ok(!tuning.validateTuning({ EXTRACT_MAX_RSS_MB: 320, KB_EXTRACT_MAX_RAM_MB: 192 }).some((l) => /trần RSS/i.test(l)));
+  });
+
   it("kiểm được cả khi chỉ sửa MỘT ô - ô kia lấy giá trị hiện tại", () => {
     tuning.setTuning("IMAGE_GEN_TIMEOUT_MS", 600_000);
     const loi = tuning.validateTuning({ LLM_TURN_TIMEOUT_MS: 120_000 });

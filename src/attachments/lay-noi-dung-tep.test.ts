@@ -48,6 +48,7 @@ function dep(p: Partial<PhuThuocLayTep> & { soTai?: { n: number }; ocrNhan?: num
     },
     gioiHanTep: rate.createHourlyRateLimit({ limit: () => p.tranTepGio ?? 100, buildReason: () => "hết" }),
     lyDoKhongOcr: () => null,
+    giuLuotTai: async () => () => {},
     cauHinh: () => ({ maxMb: 20, officeMaxMb: 10, ocrSanTrang: 5, ocrToiDaMoiTep: 50 }),
     ...p,
   };
@@ -91,6 +92,60 @@ describe("layNoiDungTep", () => {
     assert.deepEqual(await lay.layNoiDungTep(t, { nguoiGuiKey: "k3", now: T0, deps: d }), { ok: false, ma: "bi-ngat" });
     assert.equal(store.layTep(t.id)!.maLoi, null);
     assert.equal((await lay.layNoiDungTep(t, { nguoiGuiKey: "k3", now: T0, deps: d })).ok, true);
+  });
+
+  it("tệp làm tiến trình con chết HAI lần -> lần sau trả bi-ngat ngay, KHÔNG tải lại", async () => {
+    const t = tao();
+    const soTai = { n: 0 };
+    const d = dep({
+      soTai,
+      trichXuat: async () => {
+        throw new tienTrinh.LoiTienTrinhConBiNgat("het-gio", "hết giờ");
+      },
+    });
+    for (let i = 0; i < 2; i++) assert.deepEqual(await lay.layNoiDungTep(t, { nguoiGuiKey: "k9", now: T0, deps: d }), { ok: false, ma: "bi-ngat" });
+    assert.equal(soTai.n, 2);
+    assert.deepEqual(await lay.layNoiDungTep(t, { nguoiGuiKey: "k9", now: T0, deps: d }), { ok: false, ma: "bi-ngat" });
+    assert.equal(soTai.n, 2, "tệp độc không được tải + trích lại mỗi lần hỏi");
+    // Sau một giờ được thử lại (máy có thể chỉ bận lúc đó)
+    await lay.layNoiDungTep(t, { nguoiGuiKey: "k9", now: gio(2), deps: d });
+    assert.equal(soTai.n, 3);
+  });
+
+  it("nhiều tệp cùng lúc: mỗi người gửi MỘT lượt tải, cả máy tối đa HAI - byte không dồn hết vào RAM", async () => {
+    const gioiHan = (await import("./gioi-han-luot-tai-tep.js")).taoGioiHanLuotTai({ toiDa: 2, toiDaMoiKey: 1 });
+    let dangTai = 0;
+    let dinhTong = 0;
+    const dinhMoiNguoi = new Map<string, number>();
+    const dangTaiMoiNguoi = new Map<string, number>();
+    const d = (key: string) =>
+      dep({
+        giuLuotTai: (k) => gioiHan.giu(k),
+        taiTep: async () => {
+          dangTai++;
+          dangTaiMoiNguoi.set(key, (dangTaiMoiNguoi.get(key) ?? 0) + 1);
+          dinhTong = Math.max(dinhTong, dangTai);
+          dinhMoiNguoi.set(key, Math.max(dinhMoiNguoi.get(key) ?? 0, dangTaiMoiNguoi.get(key)!));
+          await new Promise((r) => setTimeout(r, 10));
+          return { ok: true, buf: Buffer.from("%PDF-1.4 x") };
+        },
+        trichXuat: async () => {
+          await new Promise((r) => setTimeout(r, 10));
+          dangTai--;
+          dangTaiMoiNguoi.set(key, dangTaiMoiNguoi.get(key)! - 1);
+          return PDF_CHU;
+        },
+      });
+    const viec = [
+      ...[1, 2, 3, 4].map(() => lay.layNoiDungTep(tao(), { nguoiGuiKey: "ke", now: T0, deps: d("ke") })),
+      ...[1, 2].map(() => lay.layNoiDungTep(tao(), { nguoiGuiKey: "kf", now: T0, deps: d("kf") })),
+      ...[1, 2].map(() => lay.layNoiDungTep(tao(), { nguoiGuiKey: "kg", now: T0, deps: d("kg") })),
+    ];
+    const kq = await Promise.all(viec);
+    assert.ok(kq.every((k) => k.ok));
+    assert.equal(dinhTong, 2, "cả máy tối đa 2 tệp đang giữ byte");
+    assert.equal(Math.max(...dinhMoiNguoi.values()), 1, "một người gửi tối đa 1 tệp đang giữ byte");
+    assert.deepEqual(gioiHan.trangThai(), { dangChay: 0, dangCho: 0 }, "phải nhả hết lượt");
   });
 
   it("OCR: lần đầu chép sẵn 5 trang; xin dải 4-8 thì chỉ chép phần thiếu 6-8", async () => {

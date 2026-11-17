@@ -18,10 +18,11 @@ export type ToolContext = {
    * API của zca-js. `null` trên kênh BOT - Zalo Bot API không có method nào
    * tương đương nên không tool nào dùng tới.
    *
-   * Điều làm chuyện này an toàn: 8 tool dùng `api` TRÙNG KHÍT 8 tool bị chặn
-   * trên kênh bot (`nang-luc-kenh-bot.ts`). Không phải trùng hợp - chúng bị
-   * chặn vì cần đúng năng lực gửi mà Bot API không có. Nên khi `api` là null
-   * thì `build()` của 8 tool đó không bao giờ được gọi.
+   * Điều làm chuyện này an toàn: 8 tool dùng `api` đều nằm trong bảng chặn
+   * kênh bot (`nang-luc-kenh-bot.ts`; bảng còn thêm `doc_file`, không dùng
+   * `api`). Không phải trùng hợp - chúng bị chặn vì cần đúng năng lực gửi mà
+   * Bot API không có. Nên khi `api` là null thì `build()` của 8 tool đó không
+   * bao giờ được gọi.
    *
    * Compiler không thấy được bất biến ấy, nên 8 tool đó gọi `apiCaNhan(ctx)`
    * để nói ra tường minh thay vì rải `!` khắp nơi.

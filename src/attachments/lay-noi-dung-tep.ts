@@ -3,6 +3,7 @@ import type { HourlyRateLimit } from "../shared/hourly-rate-limit.js";
 import { LoiTep, type KetQuaTrichXuatTep, type PhanNoiDung } from "./attachment-extract-types.js";
 import { chamDocTep, ghiLoiTep, layTep, luuNoiDungTep, type MaLoiLuu, type TepDinhKem } from "./attachment-store.js";
 import type { KetQuaOcr } from "./ocr-cac-trang.js";
+import { daBiNgatQuaNhieu, ghiBiNgat } from "./tep-bi-ngat-gan-day.js";
 import type { KetQuaTaiTep } from "./tai-tep-zalo.js";
 
 /**
@@ -30,6 +31,11 @@ export type PhuThuocLayTep = {
   trichXuat: (buf: Buffer, duoiKhai: string) => Promise<KetQuaTrichXuatTep>;
   ocr: (buf: Buffer, soTrang: number[], nguoiGuiKey: string) => Promise<KetQuaOcr>;
   gioiHanTep: HourlyRateLimit;
+  /**
+   * Chờ lượt giữ byte (xem `gioi-han-luot-tai-tep.ts`) - gọi ngay TRƯỚC lần
+   * tải đầu tiên của lời gọi, nhả khi lời gọi xong. Đọc từ cache thì không giữ.
+   */
+  giuLuotTai: (nguoiGuiKey: string) => Promise<() => void>;
   cauHinh: () => { maxMb: number; officeMaxMb: number; ocrSanTrang: number; ocrToiDaMoiTep: number };
 };
 
@@ -81,8 +87,14 @@ type KetQuaTai = { loi: "het-tran-gio" | "het-han" | "qua-lon" | "host-la" | "ma
  * khi vĩnh viễn với tệp này: link chết, host lạ. Quá trần thì KHÔNG ghi - người
  * vận hành nâng trần trên dashboard là đọc được ngay.
  */
-async function taiByte(t: TepDinhKem, d: PhuThuocLayTep, nguoiGuiKey: string): Promise<KetQuaTai> {
+async function taiByte(
+  t: TepDinhKem,
+  d: PhuThuocLayTep,
+  nguoiGuiKey: string,
+  giu: { nha?: () => void },
+): Promise<KetQuaTai> {
   const ch = d.cauHinh();
+  if (!giu.nha) giu.nha = await d.giuLuotTai(nguoiGuiKey);
   if (!d.gioiHanTep.check(nguoiGuiKey).ok) return { loi: "het-tran-gio" };
   const tai = await d.taiTep(t.href, ch.maxMb * MB, t.duoiKhai).catch((): KetQuaTaiTep => ({ ok: false, ma: "mang" }));
   if (!tai.ok) {
@@ -98,6 +110,19 @@ async function taiByte(t: TepDinhKem, d: PhuThuocLayTep, nguoiGuiKey: string): P
 }
 
 async function thucHien(id: number, p: Parameters<typeof layNoiDungTep>[1]): Promise<KetQuaLayTep> {
+  const giu: { nha?: () => void } = {};
+  try {
+    return await thucHienTrongLuot(id, p, giu);
+  } finally {
+    giu.nha?.();
+  }
+}
+
+async function thucHienTrongLuot(
+  id: number,
+  p: Parameters<typeof layNoiDungTep>[1],
+  giu: { nha?: () => void },
+): Promise<KetQuaLayTep> {
   const d = p.deps;
   const t = layTep(id);
   if (!t || t.xoaLuc <= p.now.toISOString()) return { ok: false, ma: "het-han" };
@@ -110,7 +135,8 @@ async function thucHien(id: number, p: Parameters<typeof layNoiDungTep>[1]): Pro
     if (conCache) {
       kq = { dinhDang: t.dinhDang, soTrang: t.soTrang, noiDung: t.noiDung!, trangCanOcr: t.trangCanOcr, canhBao: t.canhBao };
     } else {
-      const tai = await taiByte(t, d, p.nguoiGuiKey);
+      if (daBiNgatQuaNhieu(id, p.now)) return { ok: false, ma: "bi-ngat" };
+      const tai = await taiByte(t, d, p.nguoiGuiKey, giu);
       if ("loi" in tai) return { ok: false, ma: tai.loi };
       buf = tai.buf;
       const tx = await d.trichXuat(buf, t.duoiKhai);
@@ -122,7 +148,10 @@ async function thucHien(id: number, p: Parameters<typeof layNoiDungTep>[1]): Pro
       ghiLoiTep(id, err.ma);
       return { ok: false, ma: err.ma };
     }
-    if (err instanceof LoiTienTrinhConBiNgat) return { ok: false, ma: "bi-ngat" };
+    if (err instanceof LoiTienTrinhConBiNgat) {
+      ghiBiNgat(id, p.now);
+      return { ok: false, ma: "bi-ngat" };
+    }
     return { ok: false, ma: "mang" };
   }
 
@@ -148,7 +177,7 @@ async function thucHien(id: number, p: Parameters<typeof layNoiDungTep>[1]): Pro
       boQuaOcr = canLam.map((so) => ({ so, lyDo: "loi" }));
     } else if (!buf) {
       // Cache chữ còn nhưng cần trang quét mới: tải lại byte (tính suất như tải mới)
-      const tai = await taiByte(t, d, p.nguoiGuiKey);
+      const tai = await taiByte(t, d, p.nguoiGuiKey, giu);
       if ("loi" in tai) boQuaOcr = canLam.map((so) => ({ so, lyDo: tai.loi === "het-tran-gio" ? "het-tran-gio" : "loi" }));
       else buf = tai.buf;
     }

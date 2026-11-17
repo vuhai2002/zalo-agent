@@ -55,7 +55,7 @@ describe("năng lực kênh bot", () => {
     assert.deepEqual(chuaXet, [], `tool chưa xét cho kênh bot: ${chuaXet.join(", ")}`);
   });
 
-  it("8 tool đụng năng lực Bot API KHÔNG CÓ thì bị chặn, tool thuần thì không", () => {
+  it("9 tool đụng năng lực Bot API KHÔNG CÓ thì bị chặn, tool thuần thì không", () => {
     assert.equal(toolChayDuocTrenBot("send_file"), false);
     assert.equal(toolChayDuocTrenBot("create_word_document"), false);
     assert.equal(toolChayDuocTrenBot("create_excel_file"), false);
@@ -67,7 +67,9 @@ describe("năng lực kênh bot", () => {
     // không ra method gửi video nào, và tool dựng trên `api.sendVideo` của
     // zca-js - thứ `KenhLuot.api` để null trên kênh bot.
     assert.equal(toolChayDuocTrenBot("tai_video"), false);
-    assert.equal(Object.keys(TOOL_KHONG_CHAY_TREN_BOT).length, 8);
+    // Không cần `api`, nhưng parser kênh bot không sinh ra tệp nào
+    assert.equal(toolChayDuocTrenBot("doc_file"), false);
+    assert.equal(Object.keys(TOOL_KHONG_CHAY_TREN_BOT).length, 9);
 
     // `schedule_task` TỪNG bị chặn và là mục DUY NHẤT trong bảng không dẫn
     // được một số đo 404 nào - lý do thật là scheduler khóa cứng vào zca-js,
@@ -87,7 +89,7 @@ describe("năng lực kênh bot", () => {
     }
   });
 
-  it("persona nêu ĐỦ CẢ TÁM tool bị chặn - không để model im lặng về một giới hạn", () => {
+  it("persona nêu ĐỦ mọi tool bị chặn - không để model im lặng về một giới hạn", () => {
     // Bất đối xứng đã trả giá: câu mô tả trên dashboard có ca canh độ phủ, còn
     // persona thì không - nên khi vòng rà soát 3 bổ sung `get_group_info` vào
     // dashboard, persona trôi lại và độ lệch chỉ ĐẢO CHIỀU chứ chưa hết
@@ -109,6 +111,7 @@ describe("năng lực kênh bot", () => {
       add_reaction: /thả được cảm xúc/i,
       tag_member: /tag được ai/i,
       get_group_info: /danh sách thành viên nhóm/i,
+      doc_file: /mở được tệp người dùng gửi/i,
     };
 
     assert.deepEqual(

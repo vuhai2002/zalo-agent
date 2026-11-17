@@ -40,6 +40,7 @@ describe("mô tả loại kênh trên trang Accounts", () => {
       add_reaction: /thả cảm xúc/i,
       tag_member: /tag thành viên/i,
       get_group_info: /thành viên nhóm/i,
+      doc_file: /mở được tệp người dùng gửi/i,
     };
 
     assert.deepEqual(

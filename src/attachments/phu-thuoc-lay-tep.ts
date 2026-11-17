@@ -5,6 +5,7 @@ import type { TranTienTrinhCon } from "../shared/chay-tien-trinh-con-co-tran.js"
 import { createHourlyRateLimit } from "../shared/hourly-rate-limit.js";
 import { createLogger } from "../shared/logger.js";
 import { layTep } from "./attachment-store.js";
+import { taoGioiHanLuotTai } from "./gioi-han-luot-tai-tep.js";
 import { layNoiDungTep, type PhuThuocLayTep } from "./lay-noi-dung-tep.js";
 import { ocrCacTrang } from "./ocr-cac-trang.js";
 import { taiTepZalo } from "./tai-tep-zalo.js";
@@ -26,6 +27,13 @@ const gioiHanTrangOcr = createHourlyRateLimit({
   limit: () => getTuning("ATTACHMENT_OCR_MAX_PAGES_PER_HOUR"),
   buildReason: ({ used, waitMinutes }) => `Đã chép ${used} trang quét trong 1 giờ qua, thử lại sau ${waitMinutes} phút`,
 });
+
+/**
+ * Cố định, không lên dashboard - cùng lý do hàng đợi trích xuất cố định 1:
+ * 2 tệp x 20 MB (+ bản sao qua IPC) là phần RAM tiến trình cha dành cho việc
+ * này trong container 768 MB. Xem `gioi-han-luot-tai-tep.ts`.
+ */
+const luotTai = taoGioiHanLuotTai({ toiDa: 2, toiDaMoiKey: 1 });
 
 let daCanhBaoProc = false;
 function canhBaoKhongDoDuocRss(): void {
@@ -67,6 +75,7 @@ export function taoPhuThuocLayTep(): PhuThuocLayTep {
         songSong: getTuning("ATTACHMENT_OCR_CONCURRENCY"),
       }),
     gioiHanTep,
+    giuLuotTai: (key) => luotTai.giu(key),
     cauHinh: () => ({
       maxMb: getTuning("ATTACHMENT_MAX_MB"),
       officeMaxMb: getTuning("ATTACHMENT_OFFICE_MAX_MB"),

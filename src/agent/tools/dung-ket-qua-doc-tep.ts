@@ -29,6 +29,13 @@ export type DuLieuDocTep = {
   tranKyTu: number;
   /** Dải trang model xin (tool tham số `trang`) - có thì chỉ hiện các trang này */
   daiTrang?: [number, number];
+  /**
+   * Chỉ trong NHÓM: tệp do chính người đang hỏi gửi hay người khác. `tepSo`
+   * đếm mọi tệp của thread (kể cả thành viên chưa xác minh), nên "đọc tệp tôi
+   * vừa gửi" có thể trỏ nhầm sang tệp người khác gửi chen vào - dòng này là do
+   * máy chủ dựng, model dùng nó để kiểm lại trước khi trả lời.
+   */
+  nguoiGui?: "nguoi-hoi" | "nguoi-khac";
 };
 
 /** Số trang đề nghị đọc thêm mỗi lần gọi lại */
@@ -58,6 +65,12 @@ function phanDau(d: DuLieuDocTep): string[] {
   const trang = d.soTrang ? ` | ${d.soTrang} trang` : "";
   const ocr = d.trangDaOcr.length > 0 ? ` | đã OCR ${gopDaiTrang(d.trangDaOcr)}/${d.soTrang ?? "?"}` : "";
   dong.push(`Tệp số ${d.tepSo} | ${d.dinhDang}${trang}${ocr}`);
+  if (d.nguoiGui === "nguoi-hoi") dong.push("Người gửi tệp: chính người đang hỏi.");
+  if (d.nguoiGui === "nguoi-khac") {
+    dong.push(
+      "Người gửi tệp: người KHÁC trong nhóm, không phải người đang hỏi. Nếu người hỏi nói tới tệp CỦA HỌ thì đây có thể là nhầm tệp - thử tepSo khác hoặc hỏi lại họ.",
+    );
+  }
   for (const c of d.canhBao) dong.push(`Cảnh báo: ${c}`);
   if (d.trangChuaOcr.length > 0) {
     const tiep = d.trangChuaOcr.slice(0, SO_TRANG_GOI_Y_MOI_LAN);

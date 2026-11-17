@@ -41,6 +41,8 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   heap mà worker thread cũ không chặn được.
 - **Kiểm cấu trúc tệp .doc trước thư viện đọc**: cỡ sector bất thường, chuỗi sector
   vòng, đuôi dùng chung, cây thư mục vòng, stream rỗng trỏ chuỗi vòng đều bị chặn.
+- **Một người gửi dồn nhiều tệp không làm cạn RAM**: cả máy tối đa 2 tệp đang giữ
+  byte, mỗi người gửi 1; tệp làm tiến trình đọc chết 2 lần thì thôi thử trong 1 giờ.
 - **Tải tệp chỉ từ CDN Zalo**, chỉ https, kiểm host ở mọi lần chuyển hướng, có hạn
   chót tổng; nhận diện loại tệp bằng byte thật, không tin đuôi.
 - **Nội dung tệp không vào log hay trace**; tên tệp, tên sheet, tiêu đề cột của người

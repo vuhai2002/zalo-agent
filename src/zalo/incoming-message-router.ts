@@ -21,6 +21,8 @@ import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
 import { ganAnhVaoHistory, ghiTinDenVaoHistory } from "./record-incoming-message.js";
 import { parseIncomingMessage } from "./zalo-message-parser.js";
 import { napSan } from "../attachments/phu-thuoc-lay-tep.js";
+import { nenNapSanTep } from "../attachments/nen-nap-san-tep.js";
+import { getAgentForAccount } from "../config/agent-store.js";
 
 const log = createLogger("message-router");
 
@@ -99,7 +101,10 @@ export function routeIncomingMessage(
   // Tin GỌI bot có tệp, ĐÃ vào hàng chờ: tải + đọc sẵn chạy nền để lời gọi
   // tool đầu tiên nhanh. Tin nhóm nghe thụ động không tới được đây (return ở
   // trên), tin bị hàng chờ bỏ cũng không - tệp của chúng chỉ tải khi có người hỏi.
-  if (daNhan) for (const tepId of msg.tepIds ?? []) napSan.chay(tepId, `${config.id}:${msg.senderId}`);
+  // Tool đã tắt thì không nạp sẵn - xem `nen-nap-san-tep.ts`.
+  if (daNhan && msg.tepIds?.length && nenNapSanTep(getAgentForAccount(config.agentId), config)) {
+    for (const tepId of msg.tepIds) napSan.chay(tepId, `${config.id}:${msg.senderId}`);
+  }
 
   if (!daNhan) {
     // Tin đã nằm trong lịch sử rồi, nhưng KHÔNG lượt nào tải ảnh cho nó nữa -
