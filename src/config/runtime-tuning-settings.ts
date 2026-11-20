@@ -156,6 +156,13 @@ const LUAT_CHEO: { keys: TuningKey[]; check: (so: (k: TuningKey) => number) => s
         : null,
   },
   {
+    keys: ["LAY_BU_GIAN_CACH_MIN_GIAY", "LAY_BU_GIAN_CACH_MAX_GIAY"],
+    check: (so) =>
+      so("LAY_BU_GIAN_CACH_MIN_GIAY") > so("LAY_BU_GIAN_CACH_MAX_GIAY")
+        ? "Giãn cách lấy bù tối thiểu không được lớn hơn tối đa."
+        : null,
+  },
+  {
     // Bot chỉ dùng tới 70% trần context (chừa chỗ cho phần model viết ra và cho
     // kết quả tool cộng dồn - xem `nganSachAnToan`). Trần mà không lớn hơn hẳn
     // phần model được phép viết ra thì phần chừa đó đã bị output ăn sạch trước

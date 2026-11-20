@@ -281,6 +281,16 @@ const envSchema = z.object({
   // Zalo không có API tắt "đang nhập", chỉ báo tự hết sau vài giây -> phải bắn
   // lặp lại theo chu kỳ này cho tới khi gửi xong câu trả lời
   TYPING_REFRESH_MS: z.coerce.number().int().min(1000).max(10000).default(3000),
+  // Lấy bù tin lỡ: mỗi lần listener kết nối, xin Zalo gửi lại tin lỡ (cmd
+  // 510/511) rồi trả lời trễ từng người, mở đầu bằng một câu xin lỗi vui.
+  // Xem src/zalo/offline-replay/. Tin cũ hơn trần tuổi bị bỏ hẳn (lần đầu chưa
+  // có mốc Zalo trả cả ~2 tuần); giãn cách giữa hai hội thoại để không dồn dập.
+  LAY_BU_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
+  LAY_BU_TRAN_TUOI_GIO: z.coerce.number().int().min(1).max(336).default(48),
+  LAY_BU_NGUONG_XIN_LOI_PHUT: z.coerce.number().int().min(0).max(1440).default(30),
+  LAY_BU_GIAN_CACH_MIN_GIAY: z.coerce.number().int().min(0).max(600).default(20),
+  LAY_BU_GIAN_CACH_MAX_GIAY: z.coerce.number().int().min(0).max(600).default(60),
+  LAY_BU_KHOANG_TOI_THIEU_PHUT: z.coerce.number().int().min(0).max(1440).default(10),
   ZALO_BOT_POLL_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(60).default(30),
 
   // ===== Lịch hẹn (scheduler): bot tự nhắn theo lịch =====

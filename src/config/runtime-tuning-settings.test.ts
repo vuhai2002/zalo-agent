@@ -108,6 +108,20 @@ describe("validateTuning - ràng buộc chéo", () => {
     assert.ok(loi.some((l) => /tối thiểu/.test(l)));
   });
 
+  it("giãn cách lấy bù tối thiểu không được lớn hơn tối đa", () => {
+    const loi = tuning.validateTuning({ LAY_BU_GIAN_CACH_MIN_GIAY: 70, LAY_BU_GIAN_CACH_MAX_GIAY: 60 });
+    assert.ok(loi.some((l) => /lấy bù/.test(l)), `phải chặn, nhận: ${JSON.stringify(loi)}`);
+  });
+
+  it("giá trị mặc định của các tham số lấy bù", () => {
+    assert.equal(tuning.getTuning("LAY_BU_ENABLED"), true);
+    assert.equal(tuning.getTuning("LAY_BU_TRAN_TUOI_GIO"), 48);
+    assert.equal(tuning.getTuning("LAY_BU_NGUONG_XIN_LOI_PHUT"), 30);
+    assert.equal(tuning.getTuning("LAY_BU_GIAN_CACH_MIN_GIAY"), 20);
+    assert.equal(tuning.getTuning("LAY_BU_GIAN_CACH_MAX_GIAY"), 60);
+    assert.equal(tuning.getTuning("LAY_BU_KHOANG_TOI_THIEU_PHUT"), 10);
+  });
+
   it("trần ký tự tài liệu quá lớn so với trần token thì chặn", () => {
     const loi = tuning.validateTuning({ DOCUMENT_MAX_CHARS: 400_000, LLM_MAX_OUTPUT_TOKENS: 16_384 });
     assert.ok(loi.some((l) => /tài liệu/.test(l)));
