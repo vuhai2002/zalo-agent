@@ -95,6 +95,25 @@ describe("tiepNhanTinLayBu", () => {
     assert.equal(daVao[0]?.[1].layBu, true);
   });
 
+  it("trễ từ ngưỡng xin lỗi (mặc định 30 phút): cờ den_tre ghi vào DB và đi theo tin", () => {
+    const { ctx, daVao } = dungCtx();
+    mod.tiepNhanTinLayBu(ctx, "tin_1_1", tin11("8400000000111", gioTruoc(3)));
+    const row = database.db.prepare("SELECT den_tre FROM messages").get() as { den_tre: number | null };
+    assert.equal(row.den_tre, 1);
+    assert.equal(daVao[0]?.[1].denTre, true);
+  });
+
+  it("chớp mạng vài phút (dưới ngưỡng): KHÔNG dán cờ den_tre, vẫn là tin lấy bù", () => {
+    // Ngưỡng xin lỗi chính là ngưỡng "đáng nhắc tới gián đoạn": dưới nó người dùng
+    // chốt không xin lỗi, nên lịch sử cũng không được kể chuyện hệ thống gián đoạn.
+    const { ctx, daVao } = dungCtx();
+    mod.tiepNhanTinLayBu(ctx, "tin_1_1", tin11("8400000000112", gioTruoc(5 / 60)));
+    const row = database.db.prepare("SELECT den_tre FROM messages").get() as { den_tre: number | null };
+    assert.equal(row.den_tre, null);
+    assert.equal(daVao[0]?.[1].layBu, true);
+    assert.equal(daVao[0]?.[1].denTre, undefined);
+  });
+
   it("cùng tin lần hai: 'trung', vẫn một dòng, không vào hàng chờ lần hai", () => {
     const { ctx, daVao } = dungCtx();
     const t = tin11("8400000000102", gioTruoc(3));

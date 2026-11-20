@@ -80,7 +80,19 @@ export type EvalCase = {
    * Đo được: cùng system prompt, thread trắng thì 2/2 lần đánh số đúng luật
    * mới, thread có câu trả lời cũ kiểu phẳng thì 2/2 lần chép lại kiểu cũ.
    */
-  lichSuTruoc?: { role: "user" | "assistant"; content: string }[];
+  lichSuTruoc?: {
+    role: "user" | "assistant";
+    content: string;
+    /** Giờ gửi (ISO) - thiếu thì DB tự lấy giờ ghi */
+    createdAt?: string;
+    /** Tin người dùng tới lúc hệ thống gián đoạn (lấy bù tin lỡ) - dòng lịch sử mang nhãn */
+    denTre?: boolean;
+  }[];
+  /**
+   * Tin hiện tại là tin LẤY BÙ: người ta gửi từ `gioTruoc` giờ trước, lúc hệ thống
+   * gián đoạn, giờ mới tới (lượt trả lời trễ có lời nhắc xin lỗi).
+   */
+  tinNhanLayBu?: { gioTruoc: number };
   /** Chat nhóm thay vì chat riêng */
   laNhom?: boolean;
   /**

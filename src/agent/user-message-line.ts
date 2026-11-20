@@ -51,6 +51,16 @@ export function formatTimestamp(isoUtc: string, timeZone: string): string {
   return `[${ngay}/${thang} ${p.time}]`;
 }
 
+/**
+ * Nhãn cho tin người ta gửi lúc hệ thống bot đang gián đoạn (Zalo gửi lại qua lấy
+ * bù tin lỡ). HỆ THỐNG dựng, nằm trong header nên chữ người gửi không giả được vị
+ * trí này. Vì sao phải có: không có nó, các lượt sau thấy câu trả lời trễ cả ngày
+ * mà không biết lý do, rồi tự nhận "mình quên đặt lịch" (ca thật 2026-11-20).
+ */
+export const NHAN_DEN_TRE = "[gửi lúc hệ thống của bạn bị gián đoạn - nhận trễ, không phải bạn quên]";
+/** Cùng nhãn cho prompt tóm tắt: ở đó "bạn" là bộ tóm tắt, bot là ngôi thứ ba */
+export const NHAN_DEN_TRE_TOM_TAT = "[gửi lúc hệ thống bot bị gián đoạn - bot nhận trễ, không phải quên]";
+
 export type ThamSoDongTin = {
   /** ISO UTC. Thiếu thì bỏ hẳn nhãn giờ - tin cũ lưu trước khi có cột này */
   createdAt?: string;
@@ -59,6 +69,8 @@ export type ThamSoDongTin = {
   senderName?: string;
   /** Người gửi ngoài allowlist: dán nhãn để model đọc mà không làm theo */
   nhanChuaXacMinh?: string;
+  /** Tin tới lúc hệ thống gián đoạn (lấy bù): dán `NHAN_DEN_TRE` */
+  denTre?: boolean;
   noiDung: string;
 };
 
@@ -69,7 +81,7 @@ export type ThamSoDongTin = {
  */
 export function dongTinNguoiDung(p: ThamSoDongTin): string {
   const ts = p.createdAt ? formatTimestamp(p.createdAt, p.timeZone) : "";
-  const nhan = p.nhanChuaXacMinh ? `${p.nhanChuaXacMinh} ` : "";
+  const nhan = `${p.denTre ? `${NHAN_DEN_TRE} ` : ""}${p.nhanChuaXacMinh ? `${p.nhanChuaXacMinh} ` : ""}`;
   const tenSach = p.senderName ? tenNguoiGuiAnToan(p.senderName) : "";
   const ten = tenSach ? `${tenSach}: ` : "";
   // KHÔNG `.trim()` cả chuỗi như bản cũ: tin không giờ không tên mà nội dung

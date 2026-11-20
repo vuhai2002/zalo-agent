@@ -37,6 +37,14 @@ export type ParsedMessage = {
    */
   layBu?: true;
   /**
+   * Tin lấy bù trễ từ ngưỡng xin lỗi (`LAY_BU_NGUONG_XIN_LOI_PHUT`): dòng của nó
+   * (lịch sử + lượt hiện tại) mang nhãn "hệ thống gián đoạn". Chốt MỘT lần lúc
+   * nhận, tách khỏi `layBu`: chớp mạng vài phút thì không kể chuyện gián đoạn, và
+   * `layBu` còn bị gỡ khi người đó nhắn lại (không xin lỗi) trong khi dòng lịch sử
+   * đã ghi cờ - hai nơi đọc hai trường khác nhau là lệch nhau.
+   */
+  denTre?: true;
+  /**
    * id dòng trong bảng `messages`, đóng dấu bởi `ghiTinDenVaoHistory` ngay lúc
    * nhận tin. Chưa ghi thì chưa có.
    *

@@ -60,12 +60,19 @@ describe("loiNhacTraLoiTre", () => {
     const chu = loiNhacTraLoiTre([tin("2026-03-10T01:00:00.000Z", true)], NOW, 30, TZ) ?? "";
     // Bot chỉ gửi chữ của step CUỐI: câu xin lỗi phải nằm ở câu trả lời CHỐT, và
     // "sẽ xử lý ngay" chỉ khi chưa làm xong được (lúc gửi thì việc đã xong rồi)
+    // Sự thật phải tới được model (ca thật 20/11: không biết hệ thống gián đoạn nên
+    // bị hỏi "tại sao" thì tự nhận "mình quên đặt lịch"), mà giọng vẫn vui
     for (const doan of [
       "[Lời nhắc hệ thống]",
+      "hệ thống của bạn bị gián đoạn",
+      "bạn không hề quên",
       "câu trả lời CHỐT",
       "MỘT câu vui",
+      "ngủ",
       "xưng hô như mọi khi",
       "KHÔNG bịa bệnh",
+      "nói thật",
+      "đừng nhận là mình quên",
       "chưa làm xong được",
     ]) {
       assert.ok(chu.includes(doan), `thiếu "${doan}"`);

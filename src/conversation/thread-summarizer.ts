@@ -1,6 +1,6 @@
 import { streamText, type LanguageModel } from "ai";
 import { chayStream } from "../agent/stream-text-result.js";
-import { tenNguoiGuiAnToan, thutDongNoi } from "../agent/user-message-line.js";
+import { NHAN_DEN_TRE_TOM_TAT, tenNguoiGuiAnToan, thutDongNoi } from "../agent/user-message-line.js";
 import { createLogger } from "../shared/logger.js";
 import { db } from "./database.js";
 import { getThreadSummary, setThreadSummary } from "./thread-store.js";
@@ -24,7 +24,7 @@ const windowStartStmt = db.prepare(
 );
 
 const backlogStmt = db.prepare(
-  `SELECT id, role, sender_name, content FROM messages
+  `SELECT id, role, sender_name, content, den_tre FROM messages
    WHERE account_id = ? AND thread_id = ? AND id > ? AND id < ?
    ORDER BY id LIMIT ?`,
 );
@@ -40,7 +40,7 @@ const backlogStmt = db.prepare(
  */
 export const TRAN_TIN_MOI_LAN_TOM_TAT = 400;
 
-type BacklogRow = { id: number; role: string; sender_name: string | null; content: string };
+type BacklogRow = { id: number; role: string; sender_name: string | null; content: string; den_tre?: number | null };
 
 /** Phần thuần (test được không cần LLM): gom tin đã rớt khỏi window mà summary chưa phủ */
 export function collectSummaryBacklog(
@@ -130,7 +130,10 @@ export function buildSummaryPrompt(oldSummary: string, backlog: BacklogRow[]): s
   // được nạp lại vào system prompt như bối cảnh đã chốt.
   const lines = backlog.map((m) => {
     const name = m.role === "assistant" ? "Bot" : tenNguoiGuiAnToan(m.sender_name ?? "") || "Người dùng";
-    return `${name}: ${thutDongNoi(m.content)}`;
+    // Tin tới lúc hệ thống gián đoạn: giữ nhãn, không thì bản tóm tắt dễ chốt
+    // "bot quên" vào bối cảnh lâu dài
+    const nhan = m.den_tre === 1 ? ` ${NHAN_DEN_TRE_TOM_TAT}` : "";
+    return `${name}${nhan}: ${thutDongNoi(m.content)}`;
   });
   return [
     "Bạn đang duy trì bản tóm tắt một cuộc hội thoại Zalo dài để bot nhớ mạch chuyện.",

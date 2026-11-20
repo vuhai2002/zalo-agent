@@ -7,13 +7,16 @@ import { formatTimestamp } from "./user-message-line.js";
  * model mở đầu câu trả lời bằng MỘT câu vui xin lỗi vì trả lời muộn, trong CÙNG
  * tin trả lời.
  *
- * Người dùng chốt: lý do mơ hồ kiểu ngủ quên / bận - KHÔNG bịa bệnh hay sự cố cụ
- * thể (người ta hỏi lại "khỏe chưa?" là phải bịa tiếp); ý "sẽ xử lý ngay" là của
- * người dùng. Bot chỉ gửi chữ của step CUỐI (chữ ở các step giữa bị bỏ), nên nhắc
- * rõ câu xin lỗi nằm ở câu trả lời CHỐT, và "sẽ xử lý ngay" chỉ khi chưa làm xong
- * được việc người ta nhờ - lúc gửi câu chốt thì việc đã làm xong rồi.
- * Xưng hô để model tự lo theo tên + lịch sử như mọi lượt. Mốc giờ là tin lấy bù
- * SỚM NHẤT của lượt, cùng định dạng nhãn dòng tin.
+ * Model PHẢI được biết sự thật: hệ thống gián đoạn nên không nhận được tin, không
+ * phải nó quên. Bản đầu giấu lý do ("chưa đọc được", "không nói chuyện kỹ thuật"),
+ * ca thật 2026-11-20: bị hỏi "tại sao bạn phạm lỗi" thì model tự nhận "mình không
+ * đặt lịch nhắc" và xin lỗi rối rít. Giọng vẫn vui (người dùng chốt: kiểu mới ngủ tỉnh
+ * dậy - ví von cho gián đoạn; KHÔNG dùng "ngủ quên", nó là tự nhận lỗi, ngược sự thật), KHÔNG bịa bệnh hay sự cố cụ thể khác (hỏi "khỏe chưa?" là phải
+ * bịa tiếp); bị hỏi lý do thì nói thật nhẹ nhàng. Bot chỉ gửi chữ của step CUỐI,
+ * nên nhắc rõ câu xin lỗi nằm ở câu trả lời CHỐT; "sẽ xử lý ngay" chỉ khi chưa làm
+ * xong được việc người ta nhờ (ý của người dùng).
+ * Dòng tin lấy bù còn mang nhãn `NHAN_DEN_TRE` trong lịch sử nên các lượt SAU cũng
+ * biết - lời nhắc này chỉ có ở lượt trả lời trễ.
  * `null` = không cần nhắc (không có tin lấy bù, hoặc chỉ trễ vài phút vì chớp mạng).
  */
 export function loiNhacTraLoiTre(
@@ -32,10 +35,14 @@ export function loiNhacTraLoiTre(
 
   const moc = formatTimestamp(new Date(somNhat).toISOString(), timeZone);
   return (
-    `[Lời nhắc hệ thống] Các tin trên gửi lúc bạn chưa đọc được (sớm nhất ${moc}), giờ bạn mới thấy. ` +
-    "Mở đầu câu trả lời CHỐT gửi người này bằng MỘT câu vui, tự nhiên xin lỗi vì trả lời muộn, " +
-    "xưng hô như mọi khi với người này. Lý do mơ hồ kiểu ngủ quên, bận tối mắt; KHÔNG bịa bệnh hay " +
-    "sự cố cụ thể, không nói chuyện kỹ thuật. Nếu chưa làm xong được việc người ta nhờ thì nói sẽ " +
-    "xử lý ngay. Sau câu đó trả lời đầy đủ như bình thường."
+    `[Lời nhắc hệ thống] Lúc các tin trên được gửi (sớm nhất ${moc}), hệ thống của bạn bị gián đoạn ` +
+    "nên KHÔNG nhận được chúng; giờ chạy lại bạn mới nhận - bạn không hề quên hay bỏ qua. " +
+    "Mở đầu câu trả lời CHỐT gửi người này bằng MỘT câu vui, tự nhiên xin lỗi vì trả lời muộn, xưng hô " +
+    'như mọi khi với người này, ví von chuyện gián đoạn thành vừa ngủ một giấc dài mới tỉnh (ví dụ: "mình ' +
+    'vừa tỉnh giấc", "mình mới ngủ đông dậy") - tự nói theo cách của mình, đừng chép y ví dụ. ' +
+    "KHÔNG bịa bệnh hay sự cố cụ thể khác. Nếu người ta hỏi vì sao trả lời muộn thì nói thật, nhẹ nhàng: " +
+    "hệ thống bên mình bị gián đoạn một lúc nên tin không tới được; đừng nhận là mình quên, cũng đừng xin " +
+    "lỗi rối rít. Nếu chưa làm xong được việc người ta nhờ thì nói sẽ xử lý ngay. Sau câu đó trả lời đầy " +
+    "đủ như bình thường."
   );
 }

@@ -556,6 +556,16 @@ Luồng:
    `TRAN_TIN_DON` tin mới nhất. Bỏ thread có tin của tài khoản SAU tin chờ cuối.
 5. `loi-nhac-tra-loi-tre.ts`: batch có tin `layBu` trễ >= ngưỡng thì `buildCurrentTurnContent`
    thêm lời nhắc mở đầu câu trả lời CHỐT bằng một câu xin lỗi vui (dùng chung cho tin chen).
+   Lời nhắc nói THẬT với model: hệ thống gián đoạn nên không nhận được tin, không phải nó quên;
+   giọng vui kiểu "vừa ngủ một giấc dài mới tỉnh", bị hỏi lý do thì giải thích nhẹ nhàng.
+6. Tin lấy bù trễ từ ngưỡng xin lỗi được chốt `denTre` MỘT lần lúc nhận (`tiep-nhan-tin-lay-bu.ts`;
+   chớp mạng vài phút thì không), ghi cột `messages.den_tre = 1`. Tách khỏi `layBu` vì `layBu` bị gỡ
+   khi người đó nhắn lại (không xin lỗi) trong khi dòng lịch sử đã ghi - đọc hai trường là lệch. Dòng lịch
+   sử, dòng của lượt hiện tại và dòng tóm tắt hội thoại mang nhãn `NHAN_DEN_TRE` do HỆ THỐNG dựng
+   trong header (`user-message-line.ts`), nên các lượt SAU cũng biết - lời nhắc ở bước 5 chỉ có ở
+   lượt trả lời trễ. Ca thật 2026-11-20: thiếu nhãn này, bị hỏi "tại sao bạn phạm lỗi" ở lượt
+   sau thì model tự nhận "mình không đặt lịch nhắc". Prompt tóm tắt dùng bản ngôi thứ ba
+   (`NHAN_DEN_TRE_TOM_TAT`). Tin nhận trước khi có cột thì không có nhãn.
 
 Tin trực tiếp: `daCoTinDen` chặn trùng (cmd 501 + 551, trực tiếp + trang lấy bù); tin không
 trùng không self đẩy mốc khi hàng chờ Zalo đã bắt kịp. Người có tin lỡ đang chờ nhắn tin mới mà bot

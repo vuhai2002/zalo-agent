@@ -293,6 +293,9 @@ function runMigrations(): void {
   // ghi trước khi có cột này và ở dòng của bot.
   addColumnIfMissing("messages", "msg_id", "TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_messages_msg_id ON messages (account_id, thread_id, msg_id)");
+  // Tin tới lúc hệ thống bot gián đoạn (lấy bù tin lỡ): 1, còn lại NULL. Dòng lịch
+  // sử được dán nhãn để các lượt sau không tưởng bot đã quên (xem NHAN_DEN_TRE).
+  addColumnIfMissing("messages", "den_tre", "INTEGER");
   // Memory lớp 2: rolling summary per thread
   addColumnIfMissing("threads", "summary", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing("threads", "summary_covers_to_message_id", "INTEGER NOT NULL DEFAULT 0");

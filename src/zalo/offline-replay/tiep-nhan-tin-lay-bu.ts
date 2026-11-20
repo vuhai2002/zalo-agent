@@ -85,6 +85,7 @@ export function tiepNhanTinLayBu(
     if (quaTuoi) return "qua-tuoi";
 
     msg.layBu = true;
+    if (lech >= getTuning("LAY_BU_NGUONG_XIN_LOI_PHUT") * 60_000) msg.denTre = true;
     const kq = nhanVaGhiTinDen(ctx.config, ctx.api, msg);
     if (kq !== "tra-loi") return kq;
     ctx.hangCho.them(threadKey, msg);

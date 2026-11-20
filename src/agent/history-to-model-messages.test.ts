@@ -292,3 +292,16 @@ describe("đánh dấu người ngoài allowlist", () => {
     assert.equal(ra[0]!.content, "Dạ vâng");
   });
 });
+
+describe("historyToModelMessages - tin tới lúc hệ thống gián đoạn", () => {
+  it("dòng lịch sử có denTre mang nhãn gián đoạn; dòng thường thì không", () => {
+    const history: StoredMessage[] = [
+      { role: "user", content: "nhắc tôi 15h chiều nay", senderName: "Lan", createdAt: "2026-03-10T03:13:00.000Z", denTre: true },
+      { role: "assistant", content: "ok" },
+      { role: "user", content: "sao bạn sai sót vậy", senderName: "Lan", createdAt: "2026-03-11T07:58:00.000Z" },
+    ];
+    const out = historyToModelMessages(history, 0, fakeLoader, TZ);
+    assert.match(String(out[0]!.content), /gián đoạn/);
+    assert.doesNotMatch(String(out[2]!.content), /gián đoạn/);
+  });
+});

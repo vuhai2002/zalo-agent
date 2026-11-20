@@ -116,6 +116,28 @@ describe("daCoTinDen", () => {
   });
 });
 
+describe("cờ den_tre (tin tới lúc hệ thống gián đoạn)", () => {
+  it("ghi denTre rồi đọc lại qua getRecentMessages; tin thường không có cờ", () => {
+    store.appendMessage(ACC, THREAD, { role: "user", content: "a", senderId: "u-lan", createdAt: GIO, msgId: "m-1", denTre: true });
+    store.appendMessage(ACC, THREAD, { role: "user", content: "b", senderId: "u-lan", createdAt: GIO, msgId: "m-2" });
+    const [a, b] = store.getRecentMessages(ACC, THREAD, 10);
+    assert.equal(a?.denTre, true);
+    assert.equal(b?.denTre, undefined);
+  });
+
+  it("ghiTinDenVaoHistory: cờ đọc từ denTre (chốt lúc nhận), KHÔNG từ layBu", () => {
+    ghi.ghiTinDenVaoHistory(ACC, tin({ msgId: "m-lb", layBu: true, denTre: true }), { luuAnhNgay: false });
+    // Lấy bù nhưng chỉ chớp mạng vài phút (dưới ngưỡng): không kể chuyện gián đoạn
+    ghi.ghiTinDenVaoHistory(ACC, tin({ msgId: "m-chop", layBu: true }), { luuAnhNgay: false });
+    ghi.ghiTinDenVaoHistory(ACC, tin({ msgId: "m-tt" }), { luuAnhNgay: false });
+    const cot = (ma: string) =>
+      (database.db.prepare("SELECT den_tre FROM messages WHERE msg_id = ?").get(ma) as { den_tre: number | null }).den_tre;
+    assert.equal(cot("m-lb"), 1);
+    assert.equal(cot("m-chop"), null);
+    assert.equal(cot("m-tt"), null);
+  });
+});
+
 describe("ghiTinDenVaoHistory ghi mã tin", () => {
   it("cột msg_id = msg.msgId", () => {
     const rowId = ghi.ghiTinDenVaoHistory(ACC, tin(), { luuAnhNgay: false });

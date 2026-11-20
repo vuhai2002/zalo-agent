@@ -16,7 +16,8 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
   qua đúng bộ lọc như tin thường (danh sách cho phép, nhóm phải nhắc tên bot), được ghi
   vào lịch sử, rồi bot trả lời từng người một, cách nhau 20-60 giây cho khỏi dồn dập.
   Tin trễ từ 30 phút thì câu trả lời mở đầu bằng một câu vui xin lỗi vì trả lời muộn
-  (lý do mơ hồ kiểu ngủ quên, không bịa bệnh). Bỏ qua: tin cũ hơn 48 giờ, tin người gửi
+  (kiểu vừa ngủ một giấc dài mới tỉnh, không bịa bệnh; bị hỏi thì nói thật là hệ
+  thống bị gián đoạn). Bỏ qua: tin cũ hơn 48 giờ, tin người gửi
   đã thu hồi, hội thoại mà chủ đã tự trả lời trên điện thoại, và tin lỡ của người đã kịp
   nhắn lại và được bot trả lời bình thường (họ biết bot chạy lại rồi). Không trả lời trùng
   khi một tin vừa tới trực tiếp vừa nằm trong phần lấy lại. Sáu tham số mới trong nhóm
@@ -37,6 +38,13 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- **Bot biết tin trả lời trễ là do hệ thống gián đoạn, không tự nhận "mình quên".**
+  Trước đây sau một lượt trả lời trễ, người dùng hỏi "sao bạn sai sót" thì bot tự nhận
+  lỗi và xin lỗi rối rít, vì không có gì cho nó biết lúc đó hệ thống bị gián đoạn.
+  Giờ tin tới lúc gián đoạn được đánh dấu trong lịch sử (cả bản tóm tắt hội thoại), và
+  lời nhắc trả lời trễ nói rõ sự thật: mở đầu vẫn vui kiểu "vừa ngủ một giấc dài mới
+  tỉnh", bị hỏi lý do thì bot giải thích nhẹ nhàng là hệ thống bị gián đoạn. Chớp
+  mạng dưới ngưỡng xin lỗi thì không đánh dấu. Chỉ áp dụng cho tin nhận từ bản này trở đi.
 - **Nâng zca-js 2.3.0: listener không còn bỏ sót tin đến qua lệnh 551.**
 - **Lỗi websocket của listener không còn làm sập cả bot.** Bot chỉ nghe lỗi qua
   callback `onError` (đã deprecated), trong khi zca-js còn phát sự kiện `"error"` mà

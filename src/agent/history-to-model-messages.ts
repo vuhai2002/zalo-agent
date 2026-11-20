@@ -113,6 +113,7 @@ export function historyToModelMessages(
       timeZone,
       senderName: message.senderName,
       nhanChuaXacMinh: senderTrust?.isUnverified(message.senderId) ? UNVERIFIED_TAG : undefined,
+      denTre: message.denTre,
       noiDung: message.content,
     });
 
