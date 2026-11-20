@@ -116,31 +116,6 @@ export function appendMessage(
   return Number(result.lastInsertRowid);
 }
 
-const daCoTinDenStmt = db.prepare(
-  `SELECT 1 FROM messages
-   WHERE account_id = ? AND thread_id = ? AND (
-     (msg_id = ? AND ? <> '')
-     OR (msg_id IS NULL AND role = 'user' AND sender_id = ? AND created_at = ?)
-   )
-   LIMIT 1`,
-);
-
-/**
- * Tin đến này đã nằm trong lịch sử chưa.
- *
- * Khớp theo mã tin Zalo; dòng ghi TRƯỚC khi có cột `msg_id` thì khớp theo
- * người gửi + giờ gửi (cột `created_at` lưu đúng `sentAt` của tin đến, tới
- * từng ms). Vế sau cần cho lần lấy bù đầu tiên sau deploy, khi mọi dòng cũ
- * đều chưa có mã. Mã rỗng (parser gán `""` khi thiếu) không khớp gì.
- */
-export function daCoTinDen(
-  accountId: string,
-  threadId: string,
-  tin: { msgId: string; senderId: string; sentAt: string },
-): boolean {
-  return daCoTinDenStmt.get(accountId, threadId, tin.msgId, tin.msgId, tin.senderId, tin.sentAt) !== undefined;
-}
-
 const setImagesStmt = db.prepare(`UPDATE messages SET images = ? WHERE id = ?`);
 
 /** Gắn ảnh vào tin đã ghi - dùng cho passive listen (ghi tin ngay, ảnh tải xong sau) */

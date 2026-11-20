@@ -16,6 +16,7 @@ let dataDir: string;
 let store: typeof import("./history-store.js");
 let database: typeof import("./database.js");
 let ghi: typeof import("../zalo/record-incoming-message.js");
+let khuTrung: typeof import("./khu-trung-tin-den.js");
 
 const ACC = "acc-khu-trung";
 const THREAD = "t-lan";
@@ -26,6 +27,7 @@ before(async () => {
   store = await import("./history-store.js");
   database = await import("./database.js");
   ghi = await import("../zalo/record-incoming-message.js");
+  khuTrung = await import("./khu-trung-tin-den.js");
 });
 
 after(() => {
@@ -60,36 +62,57 @@ function tin(overrides: Partial<ParsedMessage> = {}): ParsedMessage {
 describe("daCoTinDen", () => {
   it("cùng msgId -> đã có; msgId khác cùng giờ, khác người -> chưa có", () => {
     store.appendMessage(ACC, THREAD, { role: "user", content: "a", senderId: "u-lan", createdAt: GIO, msgId: "m-1" });
-    assert.equal(store.daCoTinDen(ACC, THREAD, { msgId: "m-1", senderId: "u-lan", sentAt: GIO }), true);
-    assert.equal(store.daCoTinDen(ACC, THREAD, { msgId: "m-2", senderId: "u-minh", sentAt: GIO }), false);
+    assert.equal(khuTrung.daCoTinDen(ACC, THREAD, { msgId: "m-1", senderId: "u-lan", sentAt: GIO }), true);
+    assert.equal(khuTrung.daCoTinDen(ACC, THREAD, { msgId: "m-2", senderId: "u-minh", sentAt: GIO }), false);
+  });
+
+  it("dòng CÓ mã: cùng người cùng giờ nhưng KHÁC mã -> chưa có (vế dự phòng chỉ cho dòng không mã)", () => {
+    store.appendMessage(ACC, THREAD, { role: "user", content: "a", senderId: "u-lan", createdAt: GIO, msgId: "m-1" });
+    assert.equal(khuTrung.daCoTinDen(ACC, THREAD, { msgId: "m-2", senderId: "u-lan", sentAt: GIO }), false);
+  });
+
+  it("dòng cũ không mã: cùng giờ nhưng KHÁC người -> chưa có", () => {
+    store.appendMessage(ACC, THREAD, { role: "user", content: "a", senderId: "u-lan", createdAt: GIO });
+    assert.equal(khuTrung.daCoTinDen(ACC, THREAD, { msgId: "m-9", senderId: "u-minh", sentAt: GIO }), false);
   });
 
   it("không lẫn giữa account / thread", () => {
     store.appendMessage(ACC, THREAD, { role: "user", content: "a", senderId: "u-lan", createdAt: GIO, msgId: "m-1" });
-    assert.equal(store.daCoTinDen("acc-khac", THREAD, { msgId: "m-1", senderId: "u-lan", sentAt: GIO }), false);
-    assert.equal(store.daCoTinDen(ACC, "t-khac", { msgId: "m-1", senderId: "u-lan", sentAt: GIO }), false);
+    assert.equal(khuTrung.daCoTinDen("acc-khac", THREAD, { msgId: "m-1", senderId: "u-lan", sentAt: GIO }), false);
+    assert.equal(khuTrung.daCoTinDen(ACC, "t-khac", { msgId: "m-1", senderId: "u-lan", sentAt: GIO }), false);
   });
 
   it("dòng cũ CHƯA có msg_id: khớp theo người gửi + giờ gửi đúng từng ms", () => {
     store.appendMessage(ACC, THREAD, { role: "user", content: "a", senderId: "u-lan", createdAt: GIO });
-    assert.equal(store.daCoTinDen(ACC, THREAD, { msgId: "m-9", senderId: "u-lan", sentAt: GIO }), true);
+    assert.equal(khuTrung.daCoTinDen(ACC, THREAD, { msgId: "m-9", senderId: "u-lan", sentAt: GIO }), true);
     assert.equal(
-      store.daCoTinDen(ACC, THREAD, { msgId: "m-9", senderId: "u-lan", sentAt: "2026-03-10T07:00:00.001Z" }),
+      khuTrung.daCoTinDen(ACC, THREAD, { msgId: "m-9", senderId: "u-lan", sentAt: "2026-03-10T07:00:00.001Z" }),
       false,
     );
   });
 
   it("dòng cũ của BOT (assistant) không bị coi là tin đến", () => {
     store.appendMessage(ACC, THREAD, { role: "assistant", content: "a", senderId: "u-lan", createdAt: GIO });
-    assert.equal(store.daCoTinDen(ACC, THREAD, { msgId: "m-9", senderId: "u-lan", sentAt: GIO }), false);
+    assert.equal(khuTrung.daCoTinDen(ACC, THREAD, { msgId: "m-9", senderId: "u-lan", sentAt: GIO }), false);
   });
 
-  it('msgId rỗng "" không bao giờ khớp dòng khác cũng rỗng', () => {
-    store.appendMessage(ACC, THREAD, { role: "user", content: "a", senderId: "u-lan", createdAt: GIO, msgId: "" });
+  it('mã rỗng "" ở vế mã không khớp dòng nào mang mã rỗng (dòng lạ ghi "" thẳng vào cột)', () => {
+    database.db
+      .prepare(
+        "INSERT INTO messages (account_id, thread_id, role, sender_id, content, msg_id, created_at) VALUES (?, ?, 'user', ?, 'a', '', ?)",
+      )
+      .run(ACC, THREAD, "u-lan", GIO);
     assert.equal(
-      store.daCoTinDen(ACC, THREAD, { msgId: "", senderId: "u-minh", sentAt: "2026-03-10T08:00:00.000Z" }),
+      khuTrung.daCoTinDen(ACC, THREAD, { msgId: "", senderId: "u-minh", sentAt: "2026-03-10T08:00:00.000Z" }),
       false,
     );
+  });
+
+  it('tin tới với mã rỗng được lưu thành NULL nên về sau chỉ khớp theo người gửi + giờ', () => {
+    store.appendMessage(ACC, THREAD, { role: "user", content: "a", senderId: "u-lan", createdAt: GIO, msgId: "" });
+    const row = database.db.prepare("SELECT msg_id FROM messages").get() as { msg_id: string | null };
+    assert.equal(row.msg_id, null);
+    assert.equal(khuTrung.daCoTinDen(ACC, THREAD, { msgId: "m-5", senderId: "u-lan", sentAt: GIO }), true);
   });
 });
 
