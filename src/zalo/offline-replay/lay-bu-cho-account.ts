@@ -40,7 +40,12 @@ export function batDauLayBuChoAccount(
     accountId: config.id,
     enqueue:
       tiem.enqueue ??
-      ((threadKey, msg) => enqueueMessage(threadKey, msg, (batch) => processBatch(cauHinh(), kenhCaNhan(api), batch))),
+      ((threadKey, msg) =>
+        enqueueMessage(threadKey, msg, (batch) => {
+          // Account đã bị xóa trong lúc batch trễ còn đọng: bỏ lượt, không chạy bằng config cũ
+          const c = getAccount(config.id);
+          return c ? processBatch(c, kenhCaNhan(api), batch) : Promise.resolve();
+        })),
     gianCachMs: () => [getTuning("LAY_BU_GIAN_CACH_MIN_GIAY") * 1000, getTuning("LAY_BU_GIAN_CACH_MAX_GIAY") * 1000],
     luuAnhTinBoQua: (msgs) => {
       if (!msgs.some((m) => m.images.length > 0)) return;
@@ -69,6 +74,10 @@ export function batDauLayBuChoAccount(
     khoangToiThieuMs: () => getTuning("LAY_BU_KHOANG_TOI_THIEU_PHUT") * 60_000,
   });
 
+  // Bộ nghe khung gắn lại vào ws MỚI ở sự kiện "connected", mà zca-js phát nó NGAY
+  // SAU `onConnectedCallback` (nơi lệnh 510 được gửi) trong cùng một nhịp đồng bộ
+  // của `onopen` - nên không lỡ trang đầu. Đừng đổi chỗ gửi 510 sang bất đồng bộ
+  // mà không xem lại thứ tự này.
   const goNghe = (Object.keys(LENH_LAY_BU) as HangChoLayBu[]).map((h) =>
     ganNgheKhungWsTho(
       api,

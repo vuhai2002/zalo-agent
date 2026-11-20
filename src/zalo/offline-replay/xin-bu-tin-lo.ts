@@ -30,6 +30,14 @@ export function taoBoXinBu(deps: K.PhuThuocXinBu): K.BoXinBu {
   const daBatKip = new Set<HangChoLayBu>();
   let lanXinCuoi = Number.NEGATIVE_INFINITY;
   let daDung = false;
+  // Lượt HOÃN (vừa lấy bù xong) giữ riêng, KHÔNG trong `timers`: đóng kết nối lúc
+  // chỉ đang hoãn không phải lượt dở - tính là dở thì mạng chập chờn xin bù cứ
+  // hai lần nối lại một lần, đúng kiểu dồn dập cần tránh
+  let henHoan: ReturnType<typeof setTimeout> | null = null;
+  const huyHoan = (): void => {
+    if (henHoan) clearTimeout(henHoan);
+    henHoan = null;
+  };
 
   const an = (viec: string, fn: () => void): void => {
     try {
@@ -111,6 +119,7 @@ export function taoBoXinBu(deps: K.PhuThuocXinBu): K.BoXinBu {
 
   /** Dọn mọi thứ đang chạy (đóng kết nối, hoặc kết nối mới tới khi lượt cũ còn dở) */
   const donLuot = (lyDo: string): void => {
+    huyHoan();
     const dangDo = timers.size > 0 || choBatDau.size > 0 || dangCoLuot();
     const conLuot = dangCoLuot();
     for (const t of timers) clearTimeout(t);
@@ -139,7 +148,10 @@ export function taoBoXinBu(deps: K.PhuThuocXinBu): K.BoXinBu {
         // Vừa lấy bù xong: HOÃN tới hết khoảng chứ không bỏ - kết nối sau đó có thể
         // ổn định nhiều ngày, bỏ là tin lỡ lúc chớp mạng không bao giờ được xin
         log.debug({ conChoMs: conCho }, "Vừa lấy bù gần đây - hoãn lượt này");
-        sau(conCho, batDauLuot);
+        henHoan = setTimeout(() => {
+          henHoan = null;
+          if (!daDung) an("lượt hoãn", batDauLuot);
+        }, conCho);
         return;
       }
       batDauLuot();
@@ -201,6 +213,7 @@ export function taoBoXinBu(deps: K.PhuThuocXinBu): K.BoXinBu {
 
     dung() {
       daDung = true;
+      huyHoan();
       for (const t of timers) clearTimeout(t);
       timers.clear();
       choBatDau.clear();

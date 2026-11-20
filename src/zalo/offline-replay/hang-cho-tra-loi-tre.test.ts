@@ -200,6 +200,20 @@ describe("tin trực tiếp chen vào", () => {
     assert.equal(enq.length, 2, "thread đã nhả ngay bị nhả lần hai");
   });
 
+  it("đã nhaNgay một thread: tin lấy bù tới SAU trong cùng lượt không xếp lại (không trả lời trễ hai lần)", () => {
+    const { hang, enq } = dung();
+    hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
+    hang.nhaNgay(key("a"));
+    hang.them(key("a"), tin("a", "2026-03-10T07:05:00.000Z"));
+    hang.nha();
+    mock.timers.tick(120_000);
+    assert.equal(enq.length, 1);
+    // Lượt sau (nha() đã chạy) thì thread đó lại được xếp như thường
+    hang.them(key("a"), tin("a", "2026-03-10T09:00:00.000Z"));
+    hang.nha();
+    assert.equal(enq.length, 2);
+  });
+
   it("nhaNgay chạy được cả khi hàng chờ chưa bắt đầu nhả", () => {
     const enq: ParsedMessage[] = [];
     const hang = new HangChoTraLoiTre({

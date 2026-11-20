@@ -129,13 +129,19 @@ export function attachAccount(config: AccountConfig, api: API): void {
   stopAccount(config.id);
   const selfId = String(api.getOwnId());
   const layBu = batDauLayBuChoAccount(config, api, selfId);
-  const dungListener = startListener(
-    config.id,
-    api,
-    (raw) => routeIncomingMessage(config.id, api, selfId, raw),
-    (event) => handleFriendEvent(config.id, api, event),
-    { khiKetNoi: () => layBu?.khiKetNoi(), khiDong: () => layBu?.khiDongKetNoi() },
-  );
+  let dungListener: () => void;
+  try {
+    dungListener = startListener(
+      config.id,
+      api,
+      (raw) => routeIncomingMessage(config.id, api, selfId, raw),
+      (event) => handleFriendEvent(config.id, api, event),
+      { khiKetNoi: () => layBu?.khiKetNoi(), khiDong: () => layBu?.khiDongKetNoi() },
+    );
+  } catch (err) {
+    layBu?.dung();
+    throw err;
+  }
   const stopListener = (): void => {
     layBu?.dung();
     dungListener();

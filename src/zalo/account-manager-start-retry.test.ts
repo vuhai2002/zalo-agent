@@ -108,6 +108,31 @@ describe("hẹn thử lại không sống sót qua dừng", () => {
 });
 
 describe("lấy bù tin lỡ đi theo vòng đời account", () => {
+  it("dây thật: listener báo kết nối (onConnected của startListener) -> xin bù 510", () => {
+    const lenh: { cmd: number }[] = [];
+    let khiKetNoi: (() => void) | undefined;
+    const api = {
+      getOwnId: () => "self-1",
+      listener: {
+        on: () => {},
+        onConnected: (cb: () => void) => {
+          khiKetNoi = cb;
+        },
+        onClosed: () => {},
+        start: () => {},
+        stop: () => {},
+        sendWs: (p: { cmd: number }) => lenh.push(p),
+      },
+    } as unknown as API;
+    manager.attachAccount(accounts.getAccount(ID)!, api);
+    khiKetNoi?.();
+    manager.stopAccount(ID);
+    assert.deepEqual(
+      lenh.map((l) => l.cmd),
+      [510],
+    );
+  });
+
   it("gắn phiên thì đăng ký lấy bù, dừng account thì gỡ", async () => {
     const registry = await import("./offline-replay/lay-bu-registry.js");
     manager.attachAccount(accounts.getAccount(ID)!, apiGia());

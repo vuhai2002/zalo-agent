@@ -293,6 +293,24 @@ describe("kết nối đóng / nối lại", () => {
     assert.deepEqual(lenh.at(-1), { cmd: 510, first: true, lastId: "10" });
   });
 
+  it("mạng chập chờn: lượt đang HOÃN mà đóng rồi nối lại vẫn hoãn, không xin ngay", () => {
+    const { bo, lenh, luotXong } = dung({ khoangToiThieuMs: 600_000 });
+    bo.khiKetNoi();
+    bo.khiTrang("tin_1_1", trang("10", false));
+    mock.timers.tick(2_000);
+    bo.khiTrang("tin_nhom", trang("20", false));
+    bo.khiDongKetNoi();
+    const truoc = lenh.length;
+    const xongTruoc = luotXong();
+    bo.khiKetNoi(); // hoãn
+    bo.khiDongKetNoi();
+    bo.khiKetNoi(); // vẫn phải hoãn
+    assert.equal(lenh.length, truoc, "chập chờn mà vẫn xin bù ngay");
+    assert.equal(luotXong(), xongTruoc, "đóng lúc chỉ đang hoãn không phải xong một lượt");
+    mock.timers.tick(600_000);
+    assert.equal(lenh.length, truoc + 1);
+  });
+
   it("đóng đúng lúc 511 còn chờ bắt đầu: vẫn báo xong lượt đúng một lần, nối lại là xin ngay", () => {
     const { bo, lenh, luotXong } = dung({ khoangToiThieuMs: 600_000 });
     bo.khiKetNoi();

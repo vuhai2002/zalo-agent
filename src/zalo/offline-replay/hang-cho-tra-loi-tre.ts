@@ -17,6 +17,13 @@ export class HangChoTraLoiTre {
   /** Giờ gửi tin mới nhất của CHÍNH tài khoản trong thread (thấy qua lấy bù) */
   private readonly selfLuc = new Map<string, number>();
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Thread đã được `nhaNgay` trong lượt lấy bù hiện tại: tin lấy bù của nó tới
+   * SAU (trang sau của cùng lượt) chỉ nằm trong lịch sử, không xếp lại - xếp lại
+   * là một lượt trả lời trễ thứ hai, xin lỗi hai lần, trả lời tin cũ sau tin mới.
+   * Xóa ở `nha()` (gọi khi một lượt lấy bù kết thúc).
+   */
+  private readonly daNhaNgay = new Set<string>();
   private dangNha = false;
   private daDung = false;
 
@@ -37,7 +44,7 @@ export class HangChoTraLoiTre {
   }
 
   them(threadKey: string, msg: ParsedMessage): void {
-    if (this.daDung) return;
+    if (this.daDung || this.daNhaNgay.has(threadKey)) return;
     const ds = this.cho.get(threadKey) ?? [];
     ds.push(msg);
     this.cho.set(threadKey, ds);
@@ -63,6 +70,7 @@ export class HangChoTraLoiTre {
 
   /** Bắt đầu / tiếp tục nhả tuần tự. Đang nhả thì không làm gì (gọi nhiều lần được). */
   nha(): void {
+    this.daNhaNgay.clear();
     if (this.daDung || this.dangNha) return;
     this.dangNha = true;
     this.buoc();
@@ -76,6 +84,7 @@ export class HangChoTraLoiTre {
   nhaNgay(threadKey: string): boolean {
     const ds = this.cho.get(threadKey);
     if (this.daDung || !ds) return false;
+    this.daNhaNgay.add(threadKey);
     this.cho.delete(threadKey);
     this.selfLuc.delete(threadKey);
     this.dayVao(threadKey, ds);

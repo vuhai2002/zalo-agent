@@ -100,12 +100,33 @@ describe("lấy bù theo account", () => {
     assert.equal(daVao[0]?.layBu, true);
   });
 
-  it("khung hỏng (không giải mã được): lượt dở, không ném ra ws", () => {
+  it("khung hỏng (không giải mã được): lượt dở NGAY, giữ mốc (không chờ hết giờ rồi bỏ mốc), không ném ra ws", () => {
+    moc.luuMocLayBu(ACC, "tin_1_1", "8400000000100");
     const { api, ws } = apiGia();
     const layBu = mod.batDauLayBuChoAccount(accounts.getAccount(ACC)!, api, SELF, { enqueue: () => true })!;
     layBu.khiKetNoi();
     const hong = Buffer.concat([dungKhungWs(510, 1, {}).subarray(0, 4), Buffer.from('{"data":"x","encrypt":2}', "utf8")]);
     assert.doesNotThrow(() => ws.emit("message", hong));
+    mock.timers.tick(8_000);
+    assert.equal(moc.docMocLayBu(ACC).tin_1_1, "8400000000100");
+  });
+
+  it("tin trực tiếp đẩy mốc khi đã bắt kịp; tin trùng / tin self thì không", () => {
+    const { api, ws } = apiGia();
+    const layBu = mod.batDauLayBuChoAccount(accounts.getAccount(ACC)!, api, SELF, { enqueue: () => true })!;
+    layBu.khiKetNoi();
+    ws.emit("message", dungKhungWs(510, 1, { msgs: [], more: 0, lastActionId: "8400000000500" }));
+    const live = (msgId: string, uidFrom: string) => ({
+      threadId: "u-lan",
+      type: 0,
+      isSelf: uidFrom === SELF,
+      data: { content: "alo", uidFrom, idTo: SELF, dName: "Lan", msgId, cliMsgId: "c" },
+    });
+    router.routeIncomingMessage(ACC, api, SELF, live("8400000000600", "u-lan"));
+    assert.equal(moc.docMocLayBu(ACC).tin_1_1, "8400000000600");
+    router.routeIncomingMessage(ACC, api, SELF, live("8400000000600", "u-lan"));
+    router.routeIncomingMessage(ACC, api, SELF, live("8400000000700", SELF));
+    assert.equal(moc.docMocLayBu(ACC).tin_1_1, "8400000000600", "tin self đã đẩy mốc");
   });
 
   it("tắt LAY_BU_ENABLED trên dashboard: kết nối không xin gì", () => {
@@ -122,14 +143,41 @@ describe("lấy bù theo account", () => {
     assert.equal(mod.batDauLayBuChoAccount(bot, api, SELF), null);
   });
 
-  it("dừng: gỡ khỏi sổ đăng ký, không xin thêm", () => {
-    const { api, lenh } = apiGia();
-    mod.batDauLayBuChoAccount(accounts.getAccount(ACC)!, api, SELF, { enqueue: () => true });
-    assert.ok(registry.layBuCuaAccount(ACC));
-    mod.dungLayBuChoAccount(ACC);
-    assert.equal(registry.layBuCuaAccount(ACC), undefined);
-    mock.timers.tick(10_000);
-    assert.equal(lenh.length, 0);
+  it("dừng giữa lượt có thread đang chờ: gỡ sổ đăng ký, không xin thêm, không đưa thêm vào bộ gộp", () => {
+    tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", 60);
+    tuning.setTuning("LAY_BU_GIAN_CACH_MAX_GIAY", 60);
+    try {
+      const { api, lenh, ws } = apiGia();
+      let soVao = 0;
+      const layBu = mod.batDauLayBuChoAccount(accounts.getAccount(ACC)!, api, SELF, {
+        enqueue: () => {
+          soVao++;
+          return true;
+        },
+      })!;
+      layBu.khiKetNoi();
+      ws.emit(
+        "message",
+        dungKhungWs(510, 1, {
+          msgs: [tinTho("8400000000801", "u-lan", 3), tinTho("8400000000802", "u-minh", 2)],
+          more: 0,
+          lastActionId: "8400000000802",
+        }),
+      );
+      mock.timers.tick(5_000);
+      ws.emit("message", dungKhungWs(511, 1, { groupMsgs: [], more: 0, lastActionId: "1" }));
+      assert.equal(soVao, 1);
+      assert.ok(registry.layBuCuaAccount(ACC));
+      const lenhTruoc = lenh.length;
+      mod.dungLayBuChoAccount(ACC);
+      assert.equal(registry.layBuCuaAccount(ACC), undefined);
+      mock.timers.tick(600_000);
+      assert.equal(soVao, 1, "đã dừng mà vẫn đưa thread còn chờ vào bộ gộp");
+      assert.equal(lenh.length, lenhTruoc);
+    } finally {
+      tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", null);
+      tuning.setTuning("LAY_BU_GIAN_CACH_MAX_GIAY", null);
+    }
   });
 
   it("đầu-cuối với router: người đang chờ trả lời trễ nhắn tin mới -> CÙNG một batch [tin lấy bù, tin trực tiếp]", () => {
@@ -158,7 +206,12 @@ describe("lấy bù theo account", () => {
         isSelf: false,
         data: { content: "alo", uidFrom: "u-minh", idTo: SELF, dName: "Minh", msgId: "8400000000403", cliMsgId: "c" },
       });
-      assert.equal(batcher.idTinDangCho(`${ACC}:u-minh`).length, 2, "tin lấy bù và tin trực tiếp phải chung một batch");
+      const ids = batcher.idTinDangCho(`${ACC}:u-minh`);
+      assert.equal(ids.length, 2, "tin lấy bù và tin trực tiếp phải chung một batch");
+      const thuTu = ids.map(
+        (id) => (database.db.prepare("SELECT msg_id FROM messages WHERE id = ?").get(id) as { msg_id: string }).msg_id,
+      );
+      assert.deepEqual(thuTu, ["8400000000402", "8400000000403"], "tin lấy bù phải vào batch TRƯỚC tin trực tiếp");
     } finally {
       tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", null);
       tuning.setTuning("LAY_BU_GIAN_CACH_MAX_GIAY", null);
