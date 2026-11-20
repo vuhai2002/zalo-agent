@@ -558,8 +558,10 @@ Luồng:
    thêm lời nhắc mở đầu câu trả lời CHỐT bằng một câu xin lỗi vui (dùng chung cho tin chen).
 
 Tin trực tiếp: `daCoTinDen` chặn trùng (cmd 501 + 551, trực tiếp + trang lấy bù); tin không
-trùng không self đẩy mốc khi hàng chờ Zalo đã bắt kịp; người đang chờ trả lời trễ nhắn tin mới
-thì `nhaNgay` đẩy tin chờ của họ vào bộ gộp TRƯỚC tin mới (một lượt thấy cả hai).
+trùng không self đẩy mốc khi hàng chờ Zalo đã bắt kịp. Người có tin lỡ đang chờ nhắn tin mới mà bot
+sắp trả lời (`daTraLoiTrucTiep`): họ biết bot chạy lại rồi, nên tin lỡ CŨ hơn tin đó bị bỏ hẳn (kể cả
+trang về muộn) - không trả lời riêng, không xin lỗi; tin cũ vẫn trong lịch sử làm ngữ cảnh. Tin lỡ
+MỚI hơn (lần mất mạng sau) xử lý như thường. Tin trực tiếp bị lọc không tính.
 
 Giới hạn đã biết (chấp nhận):
 - Hàng chờ trả lời trễ chỉ trong RAM: restart giữa lúc nhả thì thread còn chờ không được trả

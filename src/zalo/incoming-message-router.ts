@@ -45,9 +45,9 @@ export function routeIncomingMessage(
   // Tin trực tiếp mới (không trùng, không self) đẩy mốc lấy bù khi hàng chờ Zalo đã bắt kịp
   if (layBu && ketQua !== "trung" && !msg.isSelf && msg.threadId) layBu.khiTinTrucTiep(msg);
   if (ketQua !== "tra-loi") return;
-  // Người này còn tin lấy bù đang chờ trả lời trễ: đẩy chúng vào bộ gộp TRƯỚC tin
-  // này để một lượt thấy cả hai (lượt vẫn mang cờ trễ nên vẫn có câu xin lỗi)
-  layBu?.nhaNgay(`${config.id}:${msg.threadId}`);
+  // Người này nhắn lại và sắp được trả lời: họ biết bot chạy lại rồi, nên tin lấy
+  // bù cũ hơn của họ bỏ hẳn - không trả lời riêng, không xin lỗi (vẫn trong lịch sử)
+  layBu?.daTraLoiTrucTiep(`${config.id}:${msg.threadId}`, Date.parse(msg.sentAt));
   xepHangTraLoi(config, api, msg);
 }
 

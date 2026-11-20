@@ -129,7 +129,7 @@ describe("lấy bù theo account", () => {
     assert.equal(moc.docMocLayBu(ACC).tin_1_1, "8400000000600", "tin self đã đẩy mốc");
   });
 
-  it("hai lần mất mạng: người đã được nhả ngay ở lượt 1 vẫn được trả lời tin lỡ của lượt 2", () => {
+  it("hai lần mất mạng: người đã nhắn trực tiếp ở lượt 1 vẫn được trả lời tin lỡ MỚI của lượt 2", () => {
     tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", 60);
     tuning.setTuning("LAY_BU_GIAN_CACH_MAX_GIAY", 60);
     tuning.setTuning("LAY_BU_KHOANG_TOI_THIEU_PHUT", 0);
@@ -153,10 +153,11 @@ describe("lấy bù theo account", () => {
       );
       mock.timers.tick(5_000);
       ws.emit("message", dungKhungWs(511, 1, { groupMsgs: [], more: 0, lastActionId: "1" }));
-      layBu.nhaNgay(`${ACC}:u-minh`); // Minh nhắn trực tiếp lúc đang chờ
+      layBu.daTraLoiTrucTiep(`${ACC}:u-minh`, Date.now()); // Minh nhắn trực tiếp lúc đang chờ
       layBu.khiDongKetNoi();
-      layBu.khiKetNoi(); // lượt 2
-      ws.emit("message", dungKhungWs(510, 1, { msgs: [tinTho("8400000000903", "u-minh", 1)], more: 0, lastActionId: "8400000000903" }));
+      layBu.khiKetNoi(); // lượt 2 - tin lỡ gửi SAU lúc Minh nhắn trực tiếp
+      const tinMoi = { ...tinTho("8400000000903", "u-minh", 0), ts: String(Date.now() + 60_000) };
+      ws.emit("message", dungKhungWs(510, 1, { msgs: [tinMoi], more: 0, lastActionId: "8400000000903" }));
       mock.timers.tick(5_000);
       ws.emit("message", dungKhungWs(511, 1, { groupMsgs: [], more: 0, lastActionId: "2" }));
       mock.timers.tick(120_000);
@@ -219,12 +220,19 @@ describe("lấy bù theo account", () => {
     }
   });
 
-  it("đầu-cuối với router: người đang chờ trả lời trễ nhắn tin mới -> CÙNG một batch [tin lấy bù, tin trực tiếp]", () => {
+  it("đầu-cuối với router: người đang chờ trả lời trễ nhắn tin mới -> CHỈ tin mới vào lượt, tin lỡ cũ bị bỏ (vẫn trong lịch sử)", () => {
     tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", 60);
     tuning.setTuning("LAY_BU_GIAN_CACH_MAX_GIAY", 60);
     try {
       const { api, ws } = apiGia();
-      const layBu = mod.batDauLayBuChoAccount(accounts.getAccount(ACC)!, api, SELF)!;
+      // Hàng chờ trễ đẩy vào hàm ghi lại; tin trực tiếp đi bộ gộp THẬT của router
+      const traLoiTre: string[] = [];
+      const layBu = mod.batDauLayBuChoAccount(accounts.getAccount(ACC)!, api, SELF, {
+        enqueue: (_tk, m) => {
+          traLoiTre.push(m.msgId);
+          return true;
+        },
+      })!;
       layBu.khiKetNoi();
       // Hai người lỡ tin; người đầu được nhả ngay, người sau chờ nhịp 60 giây
       ws.emit(
@@ -246,11 +254,17 @@ describe("lấy bù theo account", () => {
         data: { content: "alo", uidFrom: "u-minh", idTo: SELF, dName: "Minh", msgId: "8400000000403", cliMsgId: "c" },
       });
       const ids = batcher.idTinDangCho(`${ACC}:u-minh`);
-      assert.equal(ids.length, 2, "tin lấy bù và tin trực tiếp phải chung một batch");
-      const thuTu = ids.map(
+      const maTin = ids.map(
         (id) => (database.db.prepare("SELECT msg_id FROM messages WHERE id = ?").get(id) as { msg_id: string }).msg_id,
       );
-      assert.deepEqual(thuTu, ["8400000000402", "8400000000403"], "tin lấy bù phải vào batch TRƯỚC tin trực tiếp");
+      assert.deepEqual(maTin, ["8400000000403"], "tin lỡ cũ không được vào lượt khi người ta đã nhắn lại");
+      // Dọn bộ gộp TRƯỚC khi tick (debounce xả batch thật là lượt agent gọi ra ngoài),
+      // rồi chờ hết nhịp giãn: tin lỡ cũ của Minh không bao giờ được nhả
+      batcher.clearPendingBatches();
+      mock.timers.tick(120_000);
+      assert.ok(!traLoiTre.includes("8400000000402"), `tin lỡ cũ vẫn được trả lời trễ: ${traLoiTre.join(",")}`);
+      const coTrongLichSu = database.db.prepare("SELECT 1 FROM messages WHERE msg_id = ?").get("8400000000402");
+      assert.ok(coTrongLichSu, "tin lỡ cũ vẫn phải nằm trong lịch sử làm ngữ cảnh");
     } finally {
       tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", null);
       tuning.setTuning("LAY_BU_GIAN_CACH_MAX_GIAY", null);

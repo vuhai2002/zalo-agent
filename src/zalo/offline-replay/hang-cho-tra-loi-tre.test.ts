@@ -184,93 +184,76 @@ describe("đã có người trả lời", () => {
   });
 });
 
-describe("tin trực tiếp chen vào", () => {
-  it("nhaNgay: đẩy NGAY tin chờ của thread (giữ cờ layBu), gỡ khỏi hàng; không có thì false", () => {
+describe("người đó đã nhắn trực tiếp và được bot trả lời (biết bot chạy lại rồi)", () => {
+  // Người dùng chốt: người ta đã nhắn và bot đã trả lời bình thường thì họ biết bot
+  // hoạt động lại - BỎ các tin lỡ cũ hơn, không trả lời riêng, không xin lỗi. Tin cũ
+  // vẫn nằm trong lịch sử nên lượt trả lời tin mới vẫn thấy chúng làm ngữ cảnh.
+  const LUC_TRUC_TIEP = Date.parse("2026-03-10T10:00:00.000Z");
+
+  it("tin lấy bù đang chờ của thread đó bị BỎ (không vào bộ gộp, kể cả về sau); thread khác không ảnh hưởng", () => {
     const { hang, enq } = dung();
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
     hang.them(key("b"), tin("b", "2026-03-10T08:00:00.000Z"));
     hang.nha();
-    assert.equal(hang.nhaNgay(key("b")), true);
+    assert.equal(hang.daTraLoiTrucTiep(key("b"), LUC_TRUC_TIEP), true);
+    mock.timers.tick(600_000);
     assert.deepEqual(
       enq.map(([tk]) => tk),
-      [key("a"), key("b")],
+      [key("a")],
     );
-    assert.equal(hang.nhaNgay(key("b")), false);
-    mock.timers.tick(120_000);
-    assert.equal(enq.length, 2, "thread đã nhả ngay bị nhả lần hai");
+    assert.equal(hang.soThreadDangCho(), 0);
   });
 
-  it("đã nhaNgay một thread: tin lấy bù tới SAU trong cùng lượt không xếp lại (không trả lời trễ hai lần)", () => {
+  it("không có gì đang chờ -> false", () => {
+    const { hang } = dung();
+    assert.equal(hang.daTraLoiTrucTiep(key("a"), LUC_TRUC_TIEP), false);
+  });
+
+  it("tin lấy bù tới SAU mà CŨ hơn tin trực tiếp đã trả lời: bỏ, kể cả ở lượt sau", () => {
     const { hang, enq } = dung();
+    hang.daTraLoiTrucTiep(key("a"), LUC_TRUC_TIEP);
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
-    hang.nhaNgay(key("a"));
-    hang.them(key("a"), tin("a", "2026-03-10T07:05:00.000Z"));
+    hang.them(key("a"), tin("a", "2026-03-10T09:59:59.000Z"));
     hang.nha();
-    mock.timers.tick(120_000);
-    assert.equal(enq.length, 1);
-    // Lượt lấy bù SAU bắt đầu thì thread đó lại được xếp như thường
-    hang.batDauLuotMoi();
-    hang.them(key("a"), tin("a", "2026-03-10T09:00:00.000Z"));
-    hang.nha();
-    assert.equal(enq.length, 2);
+    mock.timers.tick(600_000);
+    assert.equal(enq.length, 0);
   });
 
-  it("nhaNgay ở lượt trước KHÔNG chặn tin lỡ của lần mất mạng sau", () => {
+  it("tin lỡ MỚI hơn (lần mất mạng sau): vẫn được trả lời như thường", () => {
     const { hang, enq } = dung();
-    hang.them(key("x"), tin("x", "2026-03-10T07:00:00.000Z"));
-    hang.them(key("p"), tin("p", "2026-03-10T07:10:00.000Z"));
-    hang.nha();
-    hang.nhaNgay(key("p"));
-    mock.timers.tick(120_000);
-    // Vài giờ sau: mất mạng lần 2, lượt mới bắt đầu, P lại có tin lỡ
-    hang.batDauLuotMoi();
-    hang.them(key("p"), tin("p", "2026-03-10T12:00:00.000Z"));
+    hang.daTraLoiTrucTiep(key("a"), LUC_TRUC_TIEP);
+    hang.them(key("a"), tin("a", "2026-03-10T12:00:00.000Z"));
     hang.nha();
     assert.deepEqual(
       enq.map(([, id]) => id),
-      ["x-2026-03-10T07:00:00.000Z", "p-2026-03-10T07:10:00.000Z", "p-2026-03-10T12:00:00.000Z"],
+      ["a-2026-03-10T12:00:00.000Z"],
     );
   });
 
-  it("nhaNgay: đẩy theo thứ tự giờ gửi; chủ đã trả lời SAU tin chờ thì không đẩy tin cũ", () => {
-    const { hang, enq, boQua } = dung();
-    hang.them(key("a"), tin("a", "2026-03-10T07:30:00.000Z"));
-    hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
-    hang.nhaNgay(key("a"));
-    assert.deepEqual(
-      enq.map(([, id]) => id),
-      ["a-2026-03-10T07:00:00.000Z", "a-2026-03-10T07:30:00.000Z"],
-    );
-    hang.them(key("b"), tin("b", "2026-03-10T07:00:00.000Z"));
-    hang.ghiNhanTinSelf(key("b"), Date.parse("2026-03-10T07:05:00.000Z"));
-    assert.equal(hang.nhaNgay(key("b")), false);
-    assert.equal(enq.length, 2);
-    assert.equal(boQua.flat().some((m) => m.threadId === "b"), true);
+  it("tin bị bỏ có ảnh thì vẫn đi đường lưu ảnh (dòng lịch sử có đường dẫn ảnh)", () => {
+    const { hang, boQua } = dung();
+    hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z", { images: [{ url: "https://f1.zdn.vn/a.jpg" }] as ParsedMessage["images"] }));
+    hang.daTraLoiTrucTiep(key("a"), LUC_TRUC_TIEP);
+    hang.them(key("a"), tin("a", "2026-03-10T08:00:00.000Z", { images: [{ url: "https://f1.zdn.vn/b.jpg" }] as ParsedMessage["images"] }));
+    assert.equal(boQua.flat().length, 2);
   });
 
-  it("nhaNgay chạy được cả khi hàng chờ chưa bắt đầu nhả", () => {
-    const enq: ParsedMessage[] = [];
-    const hang = new HangChoTraLoiTre({
-      accountId: "acc",
-      enqueue: (_tk, m) => {
-        enq.push(m);
-        return true;
-      },
-      gianCachMs: () => [20_000, 60_000],
-      luuAnhTinBoQua: () => {},
-    });
+  it("mốc giờ chỉ TIẾN: báo một tin trực tiếp cũ hơn không kéo lùi", () => {
+    const { hang, enq } = dung();
+    hang.daTraLoiTrucTiep(key("a"), LUC_TRUC_TIEP);
+    hang.daTraLoiTrucTiep(key("a"), Date.parse("2026-03-10T05:00:00.000Z"));
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
-    assert.equal(hang.nhaNgay(key("a")), true);
-    assert.equal(enq[0]?.layBu, true);
+    hang.nha();
+    assert.equal(enq.length, 0);
   });
 });
 
 describe("dừng", () => {
-  it("nhaNgay sau khi dừng: không đẩy gì", () => {
+  it("báo tin trực tiếp sau khi dừng: không làm gì", () => {
     const { hang, enq } = dung();
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
     hang.dungVaBaoBoDo();
-    assert.equal(hang.nhaNgay(key("a")), false);
+    assert.equal(hang.daTraLoiTrucTiep(key("a"), Date.parse("2026-03-10T10:00:00.000Z")), false);
     assert.equal(enq.length, 0);
   });
 

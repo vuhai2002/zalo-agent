@@ -119,7 +119,6 @@ export function taoBoXinBu(deps: K.PhuThuocXinBu): K.BoXinBu {
 
   const batDauLuot = (): void => {
     if (!dangBat()) return;
-    an("báo bắt đầu lượt", () => deps.onLuotBatDau?.());
     lanXinCuoi = now();
     choBatDau.add("tin_nhom");
     batDau("tin_1_1");

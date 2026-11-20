@@ -16,15 +16,15 @@ export class HangChoTraLoiTre {
   private readonly cho = new Map<string, ParsedMessage[]>();
   /** Giờ gửi tin mới nhất của CHÍNH tài khoản trong thread (thấy qua lấy bù) */
   private readonly selfLuc = new Map<string, number>();
-  private timer: ReturnType<typeof setTimeout> | null = null;
   /**
-   * Thread đã được `nhaNgay` trong lượt lấy bù hiện tại: tin lấy bù của nó tới
-   * SAU (trang sau của cùng lượt) chỉ nằm trong lịch sử, không xếp lại - xếp lại
-   * là một lượt trả lời trễ thứ hai, xin lỗi hai lần, trả lời tin cũ sau tin mới.
-   * Xóa ở `batDauLuotMoi()` (một lượt lấy bù MỚI bắt đầu) - xóa ở cuối lượt là
-   * để nó sống qua tới lượt sau và chặn mất tin lỡ của lần mất mạng kế tiếp.
+   * Giờ gửi của tin TRỰC TIẾP mới nhất mà bot đã nhận để trả lời, theo thread.
+   * Người dùng chốt: người ta đã nhắn và được bot trả lời thì họ biết bot chạy lại
+   * rồi - mọi tin lỡ CŨ hơn mốc này bỏ hẳn, không trả lời riêng, không xin lỗi
+   * (tin vẫn nằm trong lịch sử nên lượt trả lời tin mới vẫn thấy). Tin lỡ MỚI hơn
+   * (lần mất mạng sau) vẫn xử lý như thường.
    */
-  private readonly daNhaNgay = new Set<string>();
+  private readonly trucTiepLuc = new Map<string, number>();
+  private timer: ReturnType<typeof setTimeout> | null = null;
   private dangNha = false;
   private daDung = false;
 
@@ -45,7 +45,12 @@ export class HangChoTraLoiTre {
   }
 
   them(threadKey: string, msg: ParsedMessage): void {
-    if (this.daDung || this.daNhaNgay.has(threadKey)) return;
+    if (this.daDung) return;
+    const trucTiep = this.trucTiepLuc.get(threadKey);
+    if (trucTiep !== undefined && !(Date.parse(msg.sentAt) > trucTiep)) {
+      this.an("lưu ảnh tin bỏ lượt", () => this.deps.luuAnhTinBoQua([msg]));
+      return;
+    }
     const ds = this.cho.get(threadKey) ?? [];
     ds.push(msg);
     this.cho.set(threadKey, ds);
@@ -70,11 +75,6 @@ export class HangChoTraLoiTre {
   }
 
   /** Bắt đầu / tiếp tục nhả tuần tự. Đang nhả thì không làm gì (gọi nhiều lần được). */
-  /** Một lượt lấy bù mới bắt đầu (không gồm lượt chạy tiếp sau trần - cùng lượt) */
-  batDauLuotMoi(): void {
-    this.daNhaNgay.clear();
-  }
-
   nha(): void {
     if (this.daDung || this.dangNha) return;
     this.dangNha = true;
@@ -82,24 +82,21 @@ export class HangChoTraLoiTre {
   }
 
   /**
-   * Người đang chờ vừa nhắn tin TRỰC TIẾP: đẩy ngay tin chờ của họ vào bộ gộp,
-   * TRƯỚC tin trực tiếp, để một lượt thấy cả hai (vẫn mang cờ trễ). Không bỏ
-   * lượt theo tin self: người ta đang nhắn thì phải trả lời.
+   * Bot vừa nhận một tin TRỰC TIẾP của thread này để trả lời: bỏ mọi tin lỡ đang
+   * chờ của thread (người ta biết bot chạy lại rồi), và nhớ mốc giờ để tin lỡ cũ
+   * hơn tới sau (trang về muộn) cũng bị bỏ. Trả `true` nếu có tin chờ bị bỏ.
    */
-  nhaNgay(threadKey: string): boolean {
-    const ds = this.cho.get(threadKey);
-    if (this.daDung || !ds) return false;
-    this.daNhaNgay.add(threadKey);
-    this.cho.delete(threadKey);
-    const self = this.selfLuc.get(threadKey);
-    this.selfLuc.delete(threadKey);
-    const sapXep = this.sapTheoGio(ds);
-    if (self !== undefined && self > Date.parse(sapXep.at(-1)?.sentAt ?? "")) {
-      // Chủ đã trả lời tay các tin cũ: chỉ tin trực tiếp mới đi, không trả lời lại tin cũ
-      this.an("lưu ảnh tin bỏ lượt", () => this.deps.luuAnhTinBoQua(sapXep));
-      return false;
+  daTraLoiTrucTiep(threadKey: string, lucMs: number): boolean {
+    if (this.daDung) return false;
+    if (Number.isFinite(lucMs)) {
+      this.trucTiepLuc.set(threadKey, Math.max(lucMs, this.trucTiepLuc.get(threadKey) ?? Number.NEGATIVE_INFINITY));
     }
-    this.dayVao(threadKey, sapXep);
+    const ds = this.cho.get(threadKey);
+    if (!ds) return false;
+    this.cho.delete(threadKey);
+    this.selfLuc.delete(threadKey);
+    this.log.info({ threadKey, soTin: ds.length }, "Người này đã nhắn lại và được trả lời - bỏ tin lỡ cũ");
+    this.an("lưu ảnh tin bỏ lượt", () => this.deps.luuAnhTinBoQua(ds));
     return true;
   }
 
@@ -120,6 +117,7 @@ export class HangChoTraLoiTre {
     }
     this.cho.clear();
     this.selfLuc.clear();
+    this.trucTiepLuc.clear();
     return boDo;
   }
 

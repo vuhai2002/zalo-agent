@@ -72,7 +72,6 @@ export function batDauLayBuChoAccount(
       hangCho.nha();
     },
     khoangToiThieuMs: () => getTuning("LAY_BU_KHOANG_TOI_THIEU_PHUT") * 60_000,
-    onLuotBatDau: () => hangCho.batDauLuotMoi(),
     dangBat: () => getTuning("LAY_BU_ENABLED"),
   });
 
@@ -100,8 +99,8 @@ export function batDauLayBuChoAccount(
     },
     khiDongKetNoi: () => bo.khiDongKetNoi(),
     khiTinTrucTiep: (msg) => bo.khiTinTrucTiep(msg.isGroup ? "tin_nhom" : "tin_1_1", msg.msgId),
-    nhaNgay: (threadKey) => {
-      hangCho.nhaNgay(threadKey);
+    daTraLoiTrucTiep: (threadKey, lucMs) => {
+      hangCho.daTraLoiTrucTiep(threadKey, lucMs);
     },
     dung: () => {
       bo.dung();

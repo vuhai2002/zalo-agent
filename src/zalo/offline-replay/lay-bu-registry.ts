@@ -12,8 +12,8 @@ export type LayBuCuaAccount = {
   khiDongKetNoi(): void;
   /** Tin TRỰC TIẾP (không trùng, không self): đẩy mốc nếu hàng chờ Zalo đã bắt kịp */
   khiTinTrucTiep(msg: ParsedMessage): void;
-  /** Tin trực tiếp cần trả lời: đẩy ngay tin lấy bù đang chờ của thread vào bộ gộp TRƯỚC nó */
-  nhaNgay(threadKey: string): void;
+  /** Tin trực tiếp cần trả lời: bỏ tin lấy bù cũ hơn của thread (người ta biết bot chạy lại rồi) */
+  daTraLoiTrucTiep(threadKey: string, lucMs: number): void;
   dung(): void;
 };
 
