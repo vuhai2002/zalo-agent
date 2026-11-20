@@ -23,6 +23,18 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- **Lỗi websocket của listener không còn làm sập cả bot.** Bot chỉ nghe lỗi qua
+  callback `onError` (đã deprecated), trong khi zca-js còn phát sự kiện `"error"` mà
+  không ai nghe, nên Node ném lỗi và tiến trình thoát, kéo theo mọi account. Ca thật
+  2026-11-19: DNS của VPS chết vài phút, lần nối lại websocket lỗi `getaddrinfo` làm
+  container restart. Một gói tin giải mã hỏng cũng đi đúng đường này. Log lỗi listener
+  giờ ghi được nguyên nhân (trước chỉ ra `{}`).
+- **Account cá nhân tự khởi động lại khi lúc boot mất mạng.** Trước đây đăng nhập
+  hỏng vì lỗi mạng thì account bị bỏ qua vĩnh viễn (ca trên: nằm im hơn 30 tiếng dù
+  mạng lành sau vài phút). Giờ tự thử lại, giãn 30 giây tới tối đa 5 phút. Phiên chết
+  hay thiếu credential thì vẫn dừng như cũ (phải quét QR). Tắt, xóa hay quét QR trong
+  lúc chờ thì hủy lượt thử; đăng nhập xong mới phát hiện account vừa bị tắt thì không
+  khởi động.
 - **`pnpm eval` không còn ghi vào DB dev thật.** Runner import tĩnh `kenh-ca-nhan`,
   mà chuỗi import đó mở SQLite ngay khi nạp - trước khi trỏ sang DB tạm - nên mọi lần
   eval đều ghi account, tin nhắn, trace vào `data/zalo-agent.db` và chạy migration

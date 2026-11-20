@@ -16,6 +16,7 @@ import type { KenhLuot } from "./kenh-luot.js";
 import { loginWithStoredCredentials } from "./zalo-client.js";
 import { startListener } from "./zalo-listener.js";
 import { handleFriendEvent } from "./friend-event-handler.js";
+import { HenKhoiDongLai, laLoiMangTamThoi } from "./account-start-retry.js";
 
 /**
  * Vòng đời của các account đang chạy. Đường đi của tin nhắn nằm ở
@@ -43,6 +44,32 @@ type RunningAccount = {
 
 const running = new Map<string, RunningAccount>();
 const log = createLogger("account-manager");
+
+/**
+ * Hẹn thử lại cho account khởi động hỏng vì lỗi mạng (xem `account-start-retry.ts`).
+ * `nenThu` đọc lại DB + sổ `running` lúc timer nổ; `boQuaNeuDangChay` chặn lần
+ * thử đang dở ghi đè một phiên mà người vận hành vừa quét QR xong.
+ */
+let dangNhap = loginWithStoredCredentials;
+
+/** Chỉ test dùng - đổi hàm đăng nhập bằng cookie rồi trả hàm khôi phục */
+export function tiemDangNhapChoTest(gia: typeof loginWithStoredCredentials): () => void {
+  const cu = dangNhap;
+  dangNhap = gia;
+  return () => {
+    dangNhap = cu;
+  };
+}
+
+/** Account có đang chờ lượt tự thử khởi động lại không - chỉ test dùng */
+export function dangHenKhoiDongLai(accountId: string): boolean {
+  return henKhoiDongLai.dangHen(accountId);
+}
+
+const henKhoiDongLai = new HenKhoiDongLai({
+  thuKhoiDong: (id) => startAccount(id, { boQuaNeuDangChay: true }),
+  nenThu: (id) => !running.has(id) && Boolean(getAccount(id)?.enabled),
+});
 
 /** Trạng thái account đang chạy - cho dashboard */
 export function getRunningAccounts(): { id: string; label: string; selfId: string }[] {
@@ -111,7 +138,10 @@ export function attachAccount(config: AccountConfig, api: API): void {
 }
 
 /** Start bằng credentials đã lưu - dùng lúc boot và khi bật lại từ dashboard */
-export async function startAccount(accountId: string): Promise<void> {
+export async function startAccount(
+  accountId: string,
+  opts: { boQuaNeuDangChay?: boolean } = {},
+): Promise<void> {
   const config = getAccount(accountId);
   if (!config) throw new Error(`Account "${accountId}" không tồn tại`);
   if (!config.enabled) throw new Error(`Account "${accountId}" đang tắt`);
@@ -121,7 +151,19 @@ export async function startAccount(accountId: string): Promise<void> {
     return;
   }
 
-  const api = await loginWithStoredCredentials(accountId);
+  const api = await dangNhap(accountId);
+
+  // Đọc LẠI sau await, cùng lý do với `startBotAccount`: login mất một vòng
+  // mạng, đủ rộng để người vận hành bấm TẮT hoặc XÓA - mà giờ còn có lượt thử
+  // lại TỰ ĐỘNG chạy lúc không ai nhìn. Chưa gắn listener nên bỏ `api` là xong.
+  if (!getAccount(accountId)?.enabled) {
+    log.info({ accountId }, "Account bị tắt/xóa trong lúc đăng nhập - không khởi động");
+    return;
+  }
+  if (opts.boQuaNeuDangChay && running.has(accountId)) {
+    log.info({ accountId }, "Account đã chạy (quét QR/bật tay) trong lúc thử lại - giữ phiên đang chạy");
+    return;
+  }
   attachAccount(config, api);
 }
 
@@ -165,6 +207,8 @@ async function startBotAccount(config: AccountConfig): Promise<void> {
 }
 
 export function stopAccount(accountId: string): void {
+  // Tắt/xóa/gắn phiên mới đều đi qua đây - hẹn thử lại cũ không còn ý nghĩa.
+  henKhoiDongLai.huy(accountId);
   const account = running.get(accountId);
   if (!account) return;
   account.stopListener();
@@ -181,7 +225,12 @@ export async function startAllAccounts(): Promise<void> {
     try {
       await startAccount(config.id);
     } catch (err) {
-      log.error({ accountId: config.id, err }, "Không khởi động được account - bỏ qua");
+      if (laLoiMangTamThoi(err)) {
+        log.error({ accountId: config.id, err }, "Không khởi động được account vì lỗi mạng - hẹn thử lại");
+        henKhoiDongLai.henThu(config.id);
+      } else {
+        log.error({ accountId: config.id, err }, "Không khởi động được account - bỏ qua");
+      }
     }
   }
 
@@ -195,6 +244,7 @@ export async function startAllAccounts(): Promise<void> {
 
 export function stopAllAccounts(): void {
   clearPendingBatches();
+  henKhoiDongLai.huyHet();
   for (const id of [...running.keys()]) {
     stopAccount(id);
   }

@@ -11,6 +11,19 @@ const JITTER_MS = 1_000;
 const MA_START_NEM = -1;
 
 /**
+ * Lỗi websocket tới dưới dạng `ErrorEvent` của ws - pino ghi nó thành `{}` (log
+ * prod 2026-11-19 chỉ có `"error":{}`), mất hẳn nguyên nhân. Rút ra chuỗi đọc
+ * được: `ErrorEvent` mang `message` + `error` gốc, lỗi giải mã là `Error` thường.
+ */
+export function moTaLoiListener(error: unknown): string {
+  if (!error || typeof error !== "object") return String(error);
+  const e = error as { message?: unknown; error?: { code?: unknown } };
+  const thongDiep = typeof e.message === "string" && e.message ? e.message : "không rõ";
+  const ma = typeof e.error?.code === "string" ? ` (${e.error.code})` : "";
+  return `${thongDiep}${ma}`;
+}
+
+/**
  * Start listener cho 1 account, tự reconnect với backoff khi bị đóng.
  * Lưu ý: Zalo chỉ cho 1 web listener/account - mở Zalo Web trên trình duyệt
  * sẽ đá listener này ra (bot sẽ tự reconnect và đá ngược lại phiên web).
@@ -88,8 +101,18 @@ export function startListener(
     log.info("Listener đã kết nối");
   });
 
-  api.listener.onError((error: unknown) => {
-    log.error({ error }, "Listener báo lỗi");
+  // PHẢI là `on("error")`, KHÔNG phải `onError(cb)` (đã deprecated). Listener
+  // của zca-js là một EventEmitter: `ws.onerror` gọi callback cũ RỒI
+  // `this.emit("error")` (listen.js:141-144, 357-359). Không ai nghe sự kiện
+  // "error" thì Node NÉM lỗi đó ra - thành `uncaughtException`, sập CẢ tiến trình
+  // kéo theo mọi account. Ca thật 2026-11-19: DNS của VPS chết vài phút, lần nối
+  // lại websocket lỗi `getaddrinfo` -> crash -> container restart. Tệ hơn, cú ném
+  // xảy ra GIỮA `emitErrorAndClose` của thư viện ws nên bước `emitClose` không
+  // bao giờ chạy: kể cả không crash thì cũng không có `onClosed` để kích vòng
+  // nối lại. Có người nghe thì ws đi tiếp tới close -> `onClosed` dưới đây lo.
+  // Một gói tin giải mã hỏng cũng đi đúng đường này.
+  api.listener.on("error", (error: unknown) => {
+    log.error({ loi: moTaLoiListener(error) }, "Listener báo lỗi");
   });
 
   // code/reason của zca-js (CloseReason: 3000/3003 = bị web session đá hợp lệ,
