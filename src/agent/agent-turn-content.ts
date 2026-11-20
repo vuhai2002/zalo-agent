@@ -19,6 +19,7 @@ import { describeImage, ensureDescriptionsFor } from "./vision-sidecar.js";
 
 import { botTimeZone, getTuning } from "../config/runtime-tuning-settings.js";
 import { dongTinCuaLuot } from "./batch-to-user-lines.js";
+import { loiNhacTraLoiTre } from "./loi-nhac-tra-loi-tre.js";
 
 /**
  * Dựng input cho 1 lượt agent theo 4 chế độ ảnh (mô hình auto|native|text của
@@ -250,6 +251,12 @@ export async function buildCurrentTurnContent(
   }
 
   parts.push({ type: "text", text: dongTinCuaLuot(batch) });
+
+  // Tin lấy bù trễ (bot không nghe lúc người ta gửi): nhắc mở đầu bằng một câu
+  // xin lỗi vui. Hàm này dùng chung cho tin chen giữa lượt nên tin lấy bù bị kéo
+  // vào như tin chen cũng được nhắc.
+  const loiNhac = loiNhacTraLoiTre(batch, new Date(), getTuning("LAY_BU_NGUONG_XIN_LOI_PHUT"), botTimeZone());
+  if (loiNhac) parts.push({ type: "text", text: loiNhac });
 
   return parts;
 }

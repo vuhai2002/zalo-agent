@@ -79,6 +79,24 @@ function chuCuaLuot(parts: { type: string; text?: string }[]): string {
   return text[text.length - 1]!.text!;
 }
 
+describe("buildCurrentTurnContent - lời nhắc trả lời trễ", () => {
+  it("batch có tin lấy bù trễ 3 giờ: part text CUỐI là lời nhắc, ngay sau dòng tin", async () => {
+    const tre = new Date(Date.now() - 3 * 3_600_000).toISOString();
+    const parts = partsOf(
+      await content.buildCurrentTurnContent([{ ...msgTu("Lan", "hẹn họp lúc 9h nhé", tre, false), layBu: true }], "blind"),
+    );
+    const text = parts.filter((p) => p.type === "text");
+    assert.equal(text.length, 2);
+    assert.match(text[0]!.text!, /hẹn họp lúc 9h nhé/);
+    assert.match(text[1]!.text!, /KHÔNG bịa bệnh/);
+  });
+
+  it("batch thường (không lấy bù): không có lời nhắc", async () => {
+    const parts = partsOf(await content.buildCurrentTurnContent([msgWithImages("chào", [])], "blind"));
+    assert.ok(!parts.some((p) => p.text?.includes("Lời nhắc hệ thống")));
+  });
+});
+
 describe("buildCurrentTurnContent", () => {
   it("blind: không tải ảnh, chèn 1 ghi chú tổng dặn bot nói thật", async () => {
     const parts = partsOf(
