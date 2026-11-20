@@ -44,11 +44,15 @@ after(async () => {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** API giả: mọi lệnh gửi ra Zalo đều nuốt êm, không chạm mạng */
+/** API giả: mọi lệnh gửi ra Zalo đều nuốt êm, không chạm mạng; đếm biên nhận "đã nhận" */
+let soBienNhan = 0;
 const apiGia = {
   addReaction: async () => ({}),
   sendSeenEvent: async () => ({}),
-  sendDeliveredEvent: async () => ({}),
+  sendDeliveredEvent: async () => {
+    soBienNhan++;
+    return {};
+  },
   sendTypingEvent: async () => ({}),
   getGroupInfo: async () => ({}),
 } as unknown as API;
@@ -58,7 +62,9 @@ function tinRaw(threadId: string, text: string, msgId: string) {
     threadId,
     type: ThreadType.User,
     isSelf: false,
-    data: { content: text, uidFrom: "user-1", dName: "Hải", msgId, cliMsgId: `c-${msgId}` },
+    // idTo: `toReceiptParams` đọc rawData và bỏ lặng lẽ tin thiếu trường này -
+    // thiếu là mọi biên nhận "đã nhận" thành 0 và phép đếm biên nhận đo rỗng
+    data: { content: text, uidFrom: "user-1", idTo: SELF, dName: "Hải", msgId, cliMsgId: `c-${msgId}` },
   };
 }
 
@@ -87,10 +93,30 @@ describe("routeIncomingMessage - ghi lịch sử ngay lúc nhận", () => {
     // Zalo có thể đẩy một tin qua cả cmd 501 lẫn 551, hoặc vừa trực tiếp vừa
     // trong trang lấy bù - ghi hai dòng là model đọc hai lần, trả lời hai lần
     const threadId = "thread-trung-ma";
+    const truoc = soBienNhan;
     router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw(threadId, "hẹn họp lúc 9h nhé", "m-trung"));
     router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw(threadId, "hẹn họp lúc 9h nhé", "m-trung"));
     assert.deepEqual(noiDungHistory(threadId), ["hẹn họp lúc 9h nhé"]);
     assert.equal(batcher.idTinDangCho(`${ACC}:${threadId}`).length, 1);
+    await sleep(10);
+    assert.equal(soBienNhan - truoc, 1, "tin trùng vẫn gửi biên nhận 'đã nhận' lần hai");
+    batcher.clearPendingBatches();
+  });
+
+  it("cùng msgId nhưng KHÁC thread: giữ cả hai", async () => {
+    router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw("thread-ma-a", "một", "m-chung"));
+    router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw("thread-ma-b", "hai", "m-chung"));
+    assert.deepEqual(noiDungHistory("thread-ma-a"), ["một"]);
+    assert.deepEqual(noiDungHistory("thread-ma-b"), ["hai"]);
+    batcher.clearPendingBatches();
+  });
+
+  it("msgId rỗng: không khử trùng theo mã (mọi tin rỗng mã không bị coi là một)", async () => {
+    const threadId = "thread-ma-rong";
+    router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw(threadId, "câu một", ""));
+    await sleep(2);
+    router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw(threadId, "câu hai", ""));
+    assert.deepEqual(noiDungHistory(threadId), ["câu một", "câu hai"]);
     batcher.clearPendingBatches();
   });
 

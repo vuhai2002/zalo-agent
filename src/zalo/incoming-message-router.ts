@@ -1,7 +1,7 @@
 import type { API } from "zca-js";
 import { kenhCaNhan } from "./kenh-ca-nhan.js";
 import { replyTargetTuKenh } from "./reply-target-tu-kenh.js";
-import { getAccount } from "../config/account-store.js";
+import { getAccount, type AccountConfig } from "../config/account-store.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { recordContactActivity } from "../conversation/contact-store.js";
 import { persistBatchImages } from "../conversation/media-store.js";
@@ -20,7 +20,6 @@ import { processBatch } from "./message-turn-processor.js";
 import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
 import { ganAnhVaoHistory, ghiTinDenVaoHistory } from "./record-incoming-message.js";
 import { parseIncomingMessage, type ParsedMessage } from "./zalo-message-parser.js";
-import type { AccountConfig } from "../config/account-store.js";
 import { daCoTinDen } from "../conversation/khu-trung-tin-den.js";
 
 const log = createLogger("message-router");
@@ -40,13 +39,6 @@ export function routeIncomingMessage(
 
   const msg = parseIncomingMessage(config.id, selfId, raw, getTuning("ZALO_IMAGE_QUALITY"));
 
-  // Cùng một tin tới hai lần (cmd 501 và 551; trực tiếp và trong trang lấy bù):
-  // bỏ lần sau, kể cả biên nhận - ghi hai dòng là model đọc hai lần, trả lời hai lần
-  if (msg.msgId && msg.threadId && daCoTinDen(config.id, msg.threadId, msg)) {
-    log.debug({ accountId: config.id, threadId: msg.threadId }, "Tin trùng mã đã có trong lịch sử - bỏ");
-    return;
-  }
-
   if (nhanVaGhiTinDen(config, api, msg) !== "tra-loi") return;
   xepHangTraLoi(config, api, msg);
 }
@@ -56,12 +48,22 @@ export function routeIncomingMessage(
  * lấy bù (`offline-replay/`): biên nhận "đã nhận", danh bạ/thread, bộ lọc, ghi
  * lịch sử. Trả quyết định để caller tự xếp hàng trả lời - tin trực tiếp vào thẳng
  * bộ gộp, tin lấy bù vào hàng chờ trả lời trễ.
+ *
+ * Khử trùng nằm TRONG hàm (không ở caller): mọi đường vào đều đi qua đây, nên
+ * không caller nào quên được.
  */
 export function nhanVaGhiTinDen(
   config: AccountConfig,
   api: API,
   msg: ParsedMessage,
-): "bo" | "ghi-thu-dong" | "tra-loi" {
+): "trung" | "bo" | "ghi-thu-dong" | "tra-loi" {
+  // Cùng một tin tới hai lần (cmd 501 và 551; trực tiếp và trong trang lấy bù):
+  // bỏ lần sau, kể cả biên nhận - ghi hai dòng là model đọc hai lần, trả lời hai lần
+  if (msg.msgId && msg.threadId && daCoTinDen(config.id, msg.threadId, msg)) {
+    log.debug({ accountId: config.id, threadId: msg.threadId }, "Tin trùng mã đã có trong lịch sử - bỏ");
+    return "trung";
+  }
+
   // Chạy TRƯỚC mọi nhánh return bên dưới: tin thiếu threadId bị bỏ qua lặng lẽ
   // ở ngay dòng dưới, không cảnh báo ở đây thì không còn chỗ nào biết
   reportPayloadAnomalies(config.id, msg);
