@@ -70,8 +70,10 @@ export function nhanVaGhiTinDen(
 
   if (!msg.isSelf && msg.threadId) {
     // "Đã nhận" cho MỌI tin về tới listener, kể cả tin sắp bị lọc - client Zalo
-    // thật cũng báo nhận tự động, không phụ thuộc người dùng có đọc hay không
-    sendDeliveredReceipt(api, msg);
+    // thật cũng báo nhận tự động, không phụ thuộc người dùng có đọc hay không.
+    // Trừ tin LẤY BÙ: một lượt có thể chở hàng trăm tin cũ, bắn từng biên nhận một
+    // trong vài giây là tải dồn dập; lượt trả lời trễ vẫn gửi "đã xem" theo batch.
+    if (!msg.layBu) sendDeliveredReceipt(api, msg);
     recordContactActivity(config.id, msg.senderId, msg.senderName);
     recordThreadActivity({
       accountId: config.id,

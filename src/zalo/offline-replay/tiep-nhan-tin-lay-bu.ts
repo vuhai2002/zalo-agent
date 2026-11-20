@@ -9,8 +9,11 @@ import { doiSangMilli } from "../zalo-message-timestamp.js";
 import type { HangChoTraLoiTre } from "./hang-cho-tra-loi-tre.js";
 
 const log = createLogger("lay-bu-tiep-nhan");
+/** ts sớm hơn giờ máy quá mức này là rác / lệch đồng hồ (cùng ngưỡng với parser) */
+const SOM_TOI_DA_MS = 5 * 60 * 1000;
 
 export type KetQuaTiepNhan =
+  | "thu-hoi"
   | "self"
   | "khong-hop-le"
   | "trung"
@@ -30,7 +33,12 @@ export type KetQuaTiepNhan =
  *   ngày - tin rất cũ sẽ trông như "vừa gửi". `ts` hỏng thì coi là quá tuổi.
  * - tin cần trả lời vào hàng chờ trả lời trễ, không vào thẳng bộ gộp.
  * Tin của chính tài khoản không ghi, chỉ ghi nhận giờ (chủ đã trả lời tay thì
- * không trả lời chồng). Không ném: một tin hỏng không được dừng cả trang.
+ * không trả lời chồng). Lệnh THU HỒI (zca-js chỉ tách thành `undo` ở đường trực
+ * tiếp, trang lấy bù chở nguyên payload `content.deleteMsg`): không ghi, gỡ tin
+ * gốc khỏi hàng chờ - không trả lời tin người ta đã rút lại; dòng lịch sử của
+ * tin gốc giữ nguyên như đường trực tiếp. Không ném: một tin hỏng không được
+ * dừng cả trang. Lưu ý: constructor của zca-js SỬA `tinTho` tại chỗ ("0" thành
+ * uid thật) - caller đừng đọc lại tin thô sau khi gọi.
  */
 export function tiepNhanTinLayBu(
   ctx: {
@@ -49,12 +57,24 @@ export function tiepNhanTinLayBu(
       hangChoZalo === "tin_1_1"
         ? new UserMessage(ctx.selfId, tinTho as unknown as ConstructorParameters<typeof UserMessage>[1])
         : new GroupMessage(ctx.selfId, tinTho as unknown as ConstructorParameters<typeof GroupMessage>[1]);
-    const msg = parseIncomingMessage(ctx.config.id, ctx.selfId, boc, getTuning("ZALO_IMAGE_QUALITY"));
+    const threadId = String(boc.threadId ?? "");
+    if (!threadId) return "khong-hop-le";
+    const threadKey = `${ctx.config.id}:${threadId}`;
+
+    const noiDung = tinTho.content;
+    if (noiDung && typeof noiDung === "object" && !Array.isArray(noiDung) && "deleteMsg" in noiDung) {
+      const goc = (noiDung as { globalMsgId?: unknown }).globalMsgId;
+      if (goc !== undefined && goc !== null) ctx.hangCho.boTin(threadKey, String(goc));
+      return "thu-hoi";
+    }
+
+    const msg = parseIncomingMessage(ctx.config.id, ctx.selfId, boc, getTuning("ZALO_IMAGE_QUALITY"), ctx.now);
     if (!msg.threadId) return "khong-hop-le";
-    const threadKey = `${ctx.config.id}:${msg.threadId}`;
 
     const tsMs = doiSangMilli(tinTho.ts);
-    const quaTuoi = tsMs === null || ctx.now.getTime() - tsMs > ctx.tranTuoiGio * 3_600_000;
+    const lech = tsMs === null ? Number.NaN : ctx.now.getTime() - tsMs;
+    // ts hỏng, ở tương lai quá xa, hay cũ hơn trần: không tin được giờ gửi
+    const quaTuoi = !(lech >= -SOM_TOI_DA_MS && lech <= ctx.tranTuoiGio * 3_600_000);
 
     if (msg.isSelf) {
       // Tin self quá tuổi / ts hỏng: không ghi nhận - "self lúc bây giờ" là bỏ lượt oan cả thread

@@ -40,8 +40,12 @@ beforeEach(() => {
   database.db.exec("DELETE FROM messages");
 });
 
+let soBienNhan = 0;
 const apiGia = {
-  sendDeliveredEvent: async () => ({}),
+  sendDeliveredEvent: async () => {
+    soBienNhan++;
+    return {};
+  },
   getGroupInfo: async () => ({}),
 } as unknown as API;
 
@@ -142,6 +146,59 @@ describe("tiepNhanTinLayBu", () => {
     mod.tiepNhanTinLayBu(ctx, "tin_1_1", { ...tin11("8400000000108", gioTruoc(100)), uidFrom: "0", idTo: "u-lan" });
     mod.tiepNhanTinLayBu(ctx, "tin_1_1", { ...tin11("8400000000109", "x"), uidFrom: "0", idTo: "u-lan" });
     assert.deepEqual(self, []);
+  });
+
+  it("không gửi biên nhận 'đã nhận' cho tin lấy bù (trang có thể chở hàng trăm tin cũ)", async () => {
+    const { ctx } = dungCtx();
+    const truoc = soBienNhan;
+    mod.tiepNhanTinLayBu(ctx, "tin_1_1", tin11("8400000000110", gioTruoc(2)));
+    mod.tiepNhanTinLayBu(ctx, "tin_1_1", tin11("8400000000111", gioTruoc(2)));
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(soBienNhan - truoc, 0);
+  });
+
+  it("ts ở TƯƠNG LAI quá 5 phút: coi là hỏng (tin thường quá tuổi, tin self không ghi nhận)", () => {
+    const { ctx, self } = dungCtx();
+    const tuongLai = String(NOW.getTime() + 3_600_000);
+    assert.equal(mod.tiepNhanTinLayBu(ctx, "tin_1_1", tin11("8400000000112", tuongLai)), "qua-tuoi");
+    mod.tiepNhanTinLayBu(ctx, "tin_1_1", { ...tin11("8400000000113", tuongLai), uidFrom: "0", idTo: "u-lan" });
+    assert.deepEqual(self, []);
+  });
+
+  it("tin nhóm CÓ @mention bot: vào hàng chờ với threadKey của nhóm", () => {
+    accounts.updateAccount(ACC, { respondToGroups: true });
+    const { ctx, daVao } = dungCtx();
+    const tinNhom = {
+      ...tin11("8400000000114", gioTruoc(2)),
+      idTo: "g-1",
+      content: "@Bot ơi hẹn họp lúc 9h nhé",
+      mentions: [{ uid: SELF, pos: 0, len: 4, type: 0 }],
+    };
+    assert.equal(mod.tiepNhanTinLayBu(ctx, "tin_nhom", tinNhom), "cho-tra-loi");
+    assert.equal(daVao[0]?.[0], `${ACC}:g-1`);
+    assert.equal(daVao[0]?.[1].mentionsMe, true);
+  });
+
+  it("tin self trong nhóm: ghi nhận theo threadKey của NHÓM", () => {
+    const { ctx, self } = dungCtx();
+    const ts = gioTruoc(1);
+    mod.tiepNhanTinLayBu(ctx, "tin_nhom", { ...tin11("8400000000115", ts), uidFrom: "0", idTo: "g-1" });
+    assert.deepEqual(self, [[`${ACC}:g-1`, Number(ts)]]);
+  });
+
+  it("lệnh THU HỒI: không ghi, gỡ tin gốc khỏi hàng chờ (không trả lời tin người ta đã rút lại)", () => {
+    const { ctx } = dungCtx();
+    mod.tiepNhanTinLayBu(ctx, "tin_1_1", tin11("8400000000116", gioTruoc(3)));
+    assert.equal(ctx.hangCho.soThreadDangCho(), 1);
+    const thuHoi = { ...tin11("8400000000117", gioTruoc(2)), content: { deleteMsg: {}, globalMsgId: "8400000000116" } };
+    assert.equal(mod.tiepNhanTinLayBu(ctx, "tin_1_1", thuHoi), "thu-hoi");
+    assert.equal(soDong(), 1, "lệnh thu hồi không được thành một dòng lịch sử");
+    assert.equal(ctx.hangCho.soThreadDangCho(), 0);
+  });
+
+  it("parser ném (quote hỏng hình): 'khong-hop-le', không ném ra ngoài", () => {
+    const { ctx } = dungCtx();
+    assert.equal(mod.tiepNhanTinLayBu(ctx, "tin_1_1", tin11("8400000000118", gioTruoc(1), { quote: "x" })), "khong-hop-le");
   });
 
   it("tin thô hỏng hình: 'khong-hop-le', không ném", () => {

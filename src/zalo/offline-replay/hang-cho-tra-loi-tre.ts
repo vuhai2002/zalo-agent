@@ -52,6 +52,15 @@ export class HangChoTraLoiTre {
     this.selfLuc.set(threadKey, Math.max(lucMs, this.selfLuc.get(threadKey) ?? Number.NEGATIVE_INFINITY));
   }
 
+  /** Gỡ một tin đang chờ (người gửi đã THU HỒI nó) - thread hết tin thì gỡ luôn thread */
+  boTin(threadKey: string, msgId: string): void {
+    const ds = this.cho.get(threadKey);
+    if (!ds) return;
+    const con = ds.filter((m) => m.msgId !== msgId);
+    if (con.length > 0) this.cho.set(threadKey, con);
+    else this.cho.delete(threadKey);
+  }
+
   /** Bắt đầu / tiếp tục nhả tuần tự. Đang nhả thì không làm gì (gọi nhiều lần được). */
   nha(): void {
     if (this.daDung || this.dangNha) return;
