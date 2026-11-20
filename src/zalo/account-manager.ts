@@ -16,6 +16,7 @@ import type { KenhLuot } from "./kenh-luot.js";
 import { loginWithStoredCredentials } from "./zalo-client.js";
 import { startListener } from "./zalo-listener.js";
 import { handleFriendEvent } from "./friend-event-handler.js";
+import { batDauLayBuChoAccount } from "./offline-replay/lay-bu-cho-account.js";
 import { HenKhoiDongLai, laLoiMangTamThoi } from "./account-start-retry.js";
 
 /**
@@ -127,12 +128,18 @@ export function attachAccount(config: AccountConfig, api: API): void {
   }
   stopAccount(config.id);
   const selfId = String(api.getOwnId());
-  const stopListener = startListener(
+  const layBu = batDauLayBuChoAccount(config, api, selfId);
+  const dungListener = startListener(
     config.id,
     api,
     (raw) => routeIncomingMessage(config.id, api, selfId, raw),
     (event) => handleFriendEvent(config.id, api, event),
+    { khiKetNoi: () => layBu?.khiKetNoi(), khiDong: () => layBu?.khiDongKetNoi() },
   );
+  const stopListener = (): void => {
+    layBu?.dung();
+    dungListener();
+  };
   running.set(config.id, { config, kenh: kenhCaNhan(api), selfId, stopListener });
   log.info({ accountId: config.id, label: config.label }, "Account sẵn sàng");
 }

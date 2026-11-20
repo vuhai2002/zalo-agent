@@ -34,6 +34,8 @@ export function startListener(
   api: API,
   onMessage: RawMessageHandler,
   onFriendEvent?: FriendEventHandler,
+  /** Lấy bù tin lỡ (`offline-replay/`): xin bù lúc kết nối, bỏ phần dở lúc đóng */
+  hooks: { khiKetNoi?: () => void; khiDong?: () => void } = {},
 ): () => void {
   const log = createLogger(`listener:${accountId}`);
   let stopped = false;
@@ -99,6 +101,12 @@ export function startListener(
   api.listener.onConnected(() => {
     keHoach.danhDauKetNoi(Date.now());
     log.info("Listener đã kết nối");
+    // Chạy trong onopen của ws: ném ra là đụng zca-js - bọc lại
+    try {
+      hooks.khiKetNoi?.();
+    } catch (err) {
+      log.warn({ err }, "Bắt đầu lấy bù tin lỡ hỏng");
+    }
   });
 
   // PHẢI là `on("error")`, KHÔNG phải `onError(cb)` (đã deprecated). Listener
@@ -121,6 +129,12 @@ export function startListener(
   // bừa có thể nuốt mất chính cảnh báo cần thiết.
   api.listener.onClosed((code: number, reason: string) => {
     if (stopped) return;
+    // Bọc: hook ném mà chặn mất bước lên lịch nối lại là bot offline câm
+    try {
+      hooks.khiDong?.();
+    } catch (err) {
+      log.warn({ err }, "Dừng lượt lấy bù khi đóng kết nối hỏng");
+    }
     xuLyDongVaLenLich(code, reason);
   });
 

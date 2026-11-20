@@ -21,6 +21,7 @@ import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
 import { ganAnhVaoHistory, ghiTinDenVaoHistory } from "./record-incoming-message.js";
 import { parseIncomingMessage, type ParsedMessage } from "./zalo-message-parser.js";
 import { daCoTinDen } from "../conversation/khu-trung-tin-den.js";
+import { layBuCuaAccount } from "./offline-replay/lay-bu-registry.js";
 
 const log = createLogger("message-router");
 
@@ -39,7 +40,14 @@ export function routeIncomingMessage(
 
   const msg = parseIncomingMessage(config.id, selfId, raw, getTuning("ZALO_IMAGE_QUALITY"));
 
-  if (nhanVaGhiTinDen(config, api, msg) !== "tra-loi") return;
+  const ketQua = nhanVaGhiTinDen(config, api, msg);
+  const layBu = layBuCuaAccount(config.id);
+  // Tin trực tiếp mới (không trùng, không self) đẩy mốc lấy bù khi hàng chờ Zalo đã bắt kịp
+  if (layBu && ketQua !== "trung" && !msg.isSelf && msg.threadId) layBu.khiTinTrucTiep(msg);
+  if (ketQua !== "tra-loi") return;
+  // Người này còn tin lấy bù đang chờ trả lời trễ: đẩy chúng vào bộ gộp TRƯỚC tin
+  // này để một lượt thấy cả hai (lượt vẫn mang cờ trễ nên vẫn có câu xin lỗi)
+  layBu?.nhaNgay(`${config.id}:${msg.threadId}`);
   xepHangTraLoi(config, api, msg);
 }
 

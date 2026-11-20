@@ -107,6 +107,16 @@ describe("hẹn thử lại không sống sót qua dừng", () => {
   });
 });
 
+describe("lấy bù tin lỡ đi theo vòng đời account", () => {
+  it("gắn phiên thì đăng ký lấy bù, dừng account thì gỡ", async () => {
+    const registry = await import("./offline-replay/lay-bu-registry.js");
+    manager.attachAccount(accounts.getAccount(ID)!, apiGia());
+    assert.ok(registry.layBuCuaAccount(ID), "account cá nhân chạy mà không có lấy bù");
+    manager.stopAccount(ID);
+    assert.equal(registry.layBuCuaAccount(ID), undefined, "dừng account mà lấy bù vẫn sống");
+  });
+});
+
 describe("startAccount đọc lại trạng thái sau khi đăng nhập", () => {
   it("account bị TẮT trong lúc đăng nhập -> không vào sổ chạy", async () => {
     tiemDangNhap(async () => {

@@ -73,6 +73,29 @@ describe("listener: websocket lỗi không làm sập tiến trình", () => {
   });
 });
 
+describe("listener: hook lấy bù", () => {
+  it("đóng kết nối gọi khiDong; hook ném cũng không chặn vòng nối lại", async () => {
+    const listener = new Listener(nguCanhGia(), ["ws://127.0.0.1:1/"]);
+    let soLanDong = 0;
+    let soLanHook = 0;
+    listener.on("disconnected", () => {
+      soLanDong += 1;
+    });
+    const dung = startListener("acc-test-hook", { listener } as unknown as API, () => {}, undefined, {
+      khiDong: () => {
+        soLanHook += 1;
+        throw new Error("hook hỏng");
+      },
+    });
+    try {
+      await doiChoDenKhi(() => soLanDong >= 2, { tranMs: 15_000, moTa: "vẫn nối lại dù hook ném" });
+      assert.ok(soLanHook >= 1);
+    } finally {
+      dung();
+    }
+  });
+});
+
 describe("moTaLoiListener", () => {
   it("rút message + mã từ ErrorEvent của ws (pino ghi ErrorEvent thành {})", () => {
     const suKien = { message: "getaddrinfo EAI_AGAIN wpa.chat.zalo.me", error: { code: "EAI_AGAIN" } };
