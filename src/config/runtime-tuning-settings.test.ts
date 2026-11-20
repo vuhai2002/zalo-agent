@@ -121,6 +121,12 @@ describe("validateTuning - ràng buộc chéo", () => {
     assert.ok(loi.some((l) => /lấy bù/.test(l)), `phải chặn, nhận: ${JSON.stringify(loi)}`);
   });
 
+  it("trần tuổi lấy bù tối đa 168 giờ (parser kẹp giờ gửi của tin cũ hơn 7 ngày)", async () => {
+    const { TUNING_DEFS } = await import("./tuning-definitions.js");
+    const def = TUNING_DEFS.LAY_BU_TRAN_TUOI_GIO as { max?: number };
+    assert.equal(def.max, 168);
+  });
+
   it("giãn cách lấy bù: tối thiểu bằng tối đa là hợp lệ", () => {
     const loi = tuning.validateTuning({ LAY_BU_GIAN_CACH_MIN_GIAY: 60, LAY_BU_GIAN_CACH_MAX_GIAY: 60 });
     assert.ok(!loi.some((l) => /lấy bù/.test(l)), JSON.stringify(loi));

@@ -286,7 +286,7 @@ const envSchema = z.object({
   // Xem src/zalo/offline-replay/. Tin cũ hơn trần tuổi bị bỏ hẳn (lần đầu chưa
   // có mốc Zalo trả cả ~2 tuần); giãn cách giữa hai hội thoại để không dồn dập.
   LAY_BU_ENABLED: z.preprocess(emptyToUndefined, z.stringbool().default(true)),
-  LAY_BU_TRAN_TUOI_GIO: z.coerce.number().int().min(1).max(336).default(48),
+  LAY_BU_TRAN_TUOI_GIO: z.coerce.number().int().min(1).max(168).default(48),
   LAY_BU_NGUONG_XIN_LOI_PHUT: z.coerce.number().int().min(0).max(1440).default(30),
   LAY_BU_GIAN_CACH_MIN_GIAY: z.coerce.number().int().min(0).max(600).default(20),
   LAY_BU_GIAN_CACH_MAX_GIAY: z.coerce.number().int().min(0).max(600).default(60),

@@ -607,9 +607,9 @@ const TUNING_BY_KEY = {
     kind: "number",
     group: "sending",
     label: "Lấy bù: bỏ tin cũ hơn",
-    hint: "Tin lỡ cũ hơn mức này bị bỏ hẳn, không ghi, không trả lời. Khi chưa có mốc (lần đầu, hoặc mốc bị bỏ), Zalo gửi lại cả khoảng 2 tuần - trần này chặn bot đi trả lời tin từ nhiều ngày trước.",
+    hint: "Tin lỡ cũ hơn mức này bị bỏ hẳn, không ghi, không trả lời. Khi chưa có mốc (lần đầu, hoặc mốc bị bỏ), Zalo gửi lại cả khoảng 2 tuần - trần này chặn bot đi trả lời tin từ nhiều ngày trước. Tối đa 7 ngày: tin cũ hơn thế Zalo không còn cho biết đúng giờ gửi.",
     min: 1,
-    max: 336,
+    max: 168,
     unit: "giờ",
   },
   LAY_BU_NGUONG_XIN_LOI_PHUT: {

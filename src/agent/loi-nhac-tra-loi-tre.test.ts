@@ -31,6 +31,11 @@ function tin(sentAt: string, layBu: boolean): ParsedMessage {
 }
 
 describe("loiNhacTraLoiTre", () => {
+  it("sentAt hỏng thì bỏ qua tin đó; ngưỡng 0 thì nhắc ngay", () => {
+    assert.equal(loiNhacTraLoiTre([{ ...tin("x", true), sentAt: "khong-phai-gio" }], NOW, 30, TZ), null);
+    assert.notEqual(loiNhacTraLoiTre([tin("2026-03-10T11:59:59.000Z", true)], NOW, 0, TZ), null);
+  });
+
   it("batch không có tin lấy bù -> null", () => {
     assert.equal(loiNhacTraLoiTre([tin("2026-03-10T01:00:00.000Z", false)], NOW, 30, TZ), null);
   });
@@ -47,12 +52,22 @@ describe("loiNhacTraLoiTre", () => {
       30,
       TZ,
     );
-    assert.ok(chu?.includes("sớm nhất 08:00 10/03"), chu ?? "null");
+    // Cùng định dạng nhãn dòng tin `[dd/mm HH:MM]` (dùng lại formatTimestamp)
+    assert.ok(chu?.includes("sớm nhất [10/03 08:00]"), chu ?? "null");
   });
 
   it("chữ cố định giữ đủ các luật người dùng chốt", () => {
     const chu = loiNhacTraLoiTre([tin("2026-03-10T01:00:00.000Z", true)], NOW, 30, TZ) ?? "";
-    for (const doan of ["[Lời nhắc hệ thống]", "MỘT câu vui", "xưng hô như mọi khi", "KHÔNG bịa bệnh", "đợi chút"]) {
+    // Bot chỉ gửi chữ của step CUỐI: câu xin lỗi phải nằm ở câu trả lời CHỐT, và
+    // "sẽ xử lý ngay" chỉ khi chưa làm xong được (lúc gửi thì việc đã xong rồi)
+    for (const doan of [
+      "[Lời nhắc hệ thống]",
+      "câu trả lời CHỐT",
+      "MỘT câu vui",
+      "xưng hô như mọi khi",
+      "KHÔNG bịa bệnh",
+      "chưa làm xong được",
+    ]) {
       assert.ok(chu.includes(doan), `thiếu "${doan}"`);
     }
   });
