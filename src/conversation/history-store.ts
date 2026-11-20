@@ -27,11 +27,13 @@ export type StoredMessage = {
    * và tin cũ về muộn sau khi listener nối lại thì lệch hẳn hàng giờ.
    */
   createdAt?: string;
+  /** Mã tin Zalo - chỉ tin ĐẾN có, để khử trùng (xem `daCoTinDen`). Rỗng coi như không có. */
+  msgId?: string;
 };
 
 const insertStmt = db.prepare(
-  `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content, images)
-   VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content, images, msg_id)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 /**
@@ -41,8 +43,8 @@ const insertStmt = db.prepare(
  * định dạng khác nhau mà không gì đỏ.
  */
 const insertWithCreatedAtStmt = db.prepare(
-  `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content, images, created_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content, images, msg_id, created_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const recentStmt = db.prepare(
@@ -103,6 +105,7 @@ export function appendMessage(
     message.senderId ?? null,
     message.content,
     message.images && message.images.length > 0 ? JSON.stringify(message.images) : null,
+    message.msgId || null,
   ] as const;
   const result = message.createdAt
     ? insertWithCreatedAtStmt.run(...cot, message.createdAt)
@@ -111,6 +114,31 @@ export function appendMessage(
   const tran = getTuning("HISTORY_MAX_MESSAGES_PER_THREAD");
   pruneStmt.run(accountId, threadId, accountId, threadId, tran, accountId, threadId, accountId, threadId, tran * 2);
   return Number(result.lastInsertRowid);
+}
+
+const daCoTinDenStmt = db.prepare(
+  `SELECT 1 FROM messages
+   WHERE account_id = ? AND thread_id = ? AND (
+     (msg_id = ? AND ? <> '')
+     OR (msg_id IS NULL AND role = 'user' AND sender_id = ? AND created_at = ?)
+   )
+   LIMIT 1`,
+);
+
+/**
+ * Tin đến này đã nằm trong lịch sử chưa.
+ *
+ * Khớp theo mã tin Zalo; dòng ghi TRƯỚC khi có cột `msg_id` thì khớp theo
+ * người gửi + giờ gửi (cột `created_at` lưu đúng `sentAt` của tin đến, tới
+ * từng ms). Vế sau cần cho lần lấy bù đầu tiên sau deploy, khi mọi dòng cũ
+ * đều chưa có mã. Mã rỗng (parser gán `""` khi thiếu) không khớp gì.
+ */
+export function daCoTinDen(
+  accountId: string,
+  threadId: string,
+  tin: { msgId: string; senderId: string; sentAt: string },
+): boolean {
+  return daCoTinDenStmt.get(accountId, threadId, tin.msgId, tin.msgId, tin.senderId, tin.sentAt) !== undefined;
 }
 
 const setImagesStmt = db.prepare(`UPDATE messages SET images = ? WHERE id = ?`);

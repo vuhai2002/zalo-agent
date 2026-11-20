@@ -277,6 +277,11 @@ function runMigrations(): void {
   // Ảnh kèm tin nhắn: JSON array đường dẫn file trong data/media (tương đối DATA_DIR)
   // để lượt sau nạp lại cho model xem; NULL = tin không có ảnh
   addColumnIfMissing("messages", "images", "TEXT");
+  // Mã tin Zalo của tin ĐẾN, để khử trùng: tin lỡ được Zalo gửi lại qua hàng
+  // chờ lấy bù (cmd 510/511) có thể trùng tin đã tới trực tiếp. NULL ở mọi dòng
+  // ghi trước khi có cột này và ở dòng của bot.
+  addColumnIfMissing("messages", "msg_id", "TEXT");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_messages_msg_id ON messages (account_id, thread_id, msg_id)");
   // Memory lớp 2: rolling summary per thread
   addColumnIfMissing("threads", "summary", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing("threads", "summary_covers_to_message_id", "INTEGER NOT NULL DEFAULT 0");
