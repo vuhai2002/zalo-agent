@@ -5,7 +5,13 @@ import type { TrangLayBu } from "./doc-trang-lay-bu.js";
 export const TRAN_TRANG = 30;
 export const HET_GIO_TRANG_MS = 8_000;
 export const CHAY_TIEP_SAU_TRAN_MS = 60_000;
-export const HANG_CHO: HangChoLayBu[] = ["tin_1_1", "tin_nhom"];
+export const HANG_CHO: readonly HangChoLayBu[] = ["tin_1_1", "tin_nhom"];
+/** 511 bắt đầu sau 510 thêm [BAT_DAU_511_MS, + LECH_511_MS) */
+export const BAT_DAU_511_MS = 2_000;
+export const LECH_511_MS = 3_000;
+/** Trang kế xin sau [NHIP_TRANG_MS, + LECH_TRANG_MS) - giữ nhịp, không dồn dập */
+export const NHIP_TRANG_MS = 2_000;
+export const LECH_TRANG_MS = 2_000;
 
 export type KetQuaHangCho = {
   hangCho: HangChoLayBu;
@@ -41,7 +47,11 @@ export type PhuThuocXinBu = {
   guiLenh: (cmd: 510 | 511, data: { first: boolean; lastId: string | null; preIds: [] }) => void;
   onTin: (hangCho: HangChoLayBu, tinTho: Record<string, unknown>) => void;
   onHangChoXong: (kq: KetQuaHangCho) => void;
-  /** Cả hai hàng chờ đã kết thúc (đủ hoặc dở) - nhả hàng chờ trả lời trễ */
+  /**
+   * Hết một lượt (cả hai hàng chờ đã kết thúc, đủ hoặc dở; hoặc lượt chạy tiếp sau
+   * trần xong; hoặc kết nối đóng giữa lượt) - nhả hàng chờ trả lời trễ. Có thể gọi
+   * nhiều lần trong một kết nối.
+   */
   onLuotXong: () => void;
   khoangToiThieuMs: () => number;
   now?: () => number;

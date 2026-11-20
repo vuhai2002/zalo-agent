@@ -38,7 +38,7 @@ afterEach(() => {
 
 type Lenh = { cmd: number; first: boolean; lastId: string | null };
 
-function dung(opts: { khoangToiThieuMs?: number; guiLenhNem?: boolean } = {}) {
+function dung(opts: { khoangToiThieuMs?: number; guiLenhNem?: boolean; callbackNem?: boolean } = {}) {
   const lenh: Lenh[] = [];
   const tin: [string, Record<string, unknown>][] = [];
   const xong: import("./xin-bu-tin-lo.js").KetQuaHangCho[] = [];
@@ -50,8 +50,14 @@ function dung(opts: { khoangToiThieuMs?: number; guiLenhNem?: boolean } = {}) {
       lenh.push({ cmd, first: data.first, lastId: data.lastId });
     },
     onTin: (h, t) => tin.push([h, t]),
-    onHangChoXong: (kq) => xong.push(kq),
-    onLuotXong: () => luotXong++,
+    onHangChoXong: (kq) => {
+      xong.push(kq);
+      if (opts.callbackNem) throw new Error("callback hỏng");
+    },
+    onLuotXong: () => {
+      luotXong++;
+      if (opts.callbackNem) throw new Error("callback hỏng");
+    },
     khoangToiThieuMs: () => opts.khoangToiThieuMs ?? 600_000,
     random: () => 0,
   });
@@ -199,7 +205,7 @@ describe("trang không về / hỏng", () => {
     assert.equal(xong[0]?.trangThai, "do");
   });
 
-  it("trang về TRỄ (lượt đã kết thúc): vẫn giao tin, không xin thêm", () => {
+  it("trang về TRỄ (lượt đã kết thúc): vẫn giao tin, không xin thêm, không đụng mốc", () => {
     const { bo, lenh, tin } = dung();
     bo.khiKetNoi();
     mock.timers.tick(8_000);
@@ -207,6 +213,48 @@ describe("trang không về / hỏng", () => {
     mock.timers.tick(10_000);
     assert.equal(tin.length, 2);
     assert.equal(lenh.filter((l) => l.cmd === 510).length, 1);
+    assert.equal(moc.docMocLayBu(ACC).tin_1_1, undefined);
+  });
+
+  it("trang LẠC tới lúc không có yêu cầu nào đang chờ: giao tin, không lật thêm, không tính trang", () => {
+    const { bo, lenh, tin } = dung();
+    bo.khiKetNoi();
+    bo.khiTrang("tin_1_1", trang("10", true));
+    bo.khiTrang("tin_1_1", trang("11", true));
+    mock.timers.tick(2_000);
+    assert.deepEqual(
+      lenh.filter((l) => l.cmd === 510).map((l) => l.lastId),
+      [null, "10"],
+    );
+    assert.equal(tin.length, 2);
+    assert.equal(moc.docMocLayBu(ACC).tin_1_1, "10");
+  });
+
+  it("callback ném (kể cả trong timer, kể cả lúc đóng): không ném ra ngoài, hàng chờ còn lại vẫn kết thúc", () => {
+    const { bo, xong } = dung({ callbackNem: true });
+    assert.doesNotThrow(() => bo.khiKetNoi());
+    // 511 bắt đầu TRONG nhịp tick đầu nên hết giờ của nó tính từ cuối nhịp đó
+    assert.doesNotThrow(() => mock.timers.tick(8_000));
+    assert.doesNotThrow(() => mock.timers.tick(8_000));
+    assert.equal(xong.length, 2);
+    const b2 = dung({ callbackNem: true });
+    b2.bo.khiKetNoi();
+    mock.timers.tick(2_000);
+    assert.doesNotThrow(() => b2.bo.khiDongKetNoi());
+    assert.equal(b2.xong.length, 2, "hàng chờ thứ hai không được kết thúc vì callback của cái đầu ném");
+  });
+
+  it("chạm trần mà mốc KHÔNG tiến (mã trang không phải dãy số): không chạy tiếp, không lặp", () => {
+    const { bo, lenh, xong } = dung();
+    bo.khiKetNoi();
+    for (let i = 1; i <= 30; i++) {
+      bo.khiTrang("tin_1_1", trang(`ma-${i}`, true));
+      mock.timers.tick(2_000);
+    }
+    mock.timers.tick(60_000);
+    mock.timers.tick(60_000);
+    assert.equal(lenh.filter((l) => l.cmd === 510).length, 30);
+    assert.equal(xong.find((k) => k.hangCho === "tin_1_1")?.trangThai, "do");
   });
 });
 
@@ -223,22 +271,73 @@ describe("kết nối đóng / nối lại", () => {
     assert.deepEqual(lenh.at(-1), { cmd: 510, first: true, lastId: "200" });
   });
 
-  it("lượt trước xong đủ: nối lại trong khoảng tối thiểu thì không xin, qua khoảng thì xin", () => {
+  it("lượt trước xong đủ: nối lại trong khoảng tối thiểu thì HOÃN tới hết khoảng, không bỏ hẳn", () => {
     const { bo, lenh } = dung({ khoangToiThieuMs: 600_000 });
     bo.khiKetNoi();
     bo.khiTrang("tin_1_1", trang("10", false));
     mock.timers.tick(2_000);
     bo.khiTrang("tin_nhom", trang("20", false));
+    bo.khiDongKetNoi();
+    mock.timers.tick(1_000);
     const truoc = lenh.length;
     bo.khiKetNoi();
+    assert.equal(lenh.length, truoc, "chưa hết khoảng tối thiểu mà đã xin");
+    mock.timers.tick(596_999);
     assert.equal(lenh.length, truoc);
-    mock.timers.tick(600_000);
+    mock.timers.tick(1);
+    assert.deepEqual(lenh.at(-1), { cmd: 510, first: true, lastId: "10" });
+  });
+
+  it("đóng đúng lúc 511 còn chờ bắt đầu: vẫn báo xong lượt đúng một lần, nối lại là xin ngay", () => {
+    const { bo, lenh, luotXong } = dung({ khoangToiThieuMs: 600_000 });
     bo.khiKetNoi();
-    assert.equal(lenh.length, truoc + 1);
+    bo.khiTrang("tin_1_1", trang("10", false, 2));
+    assert.equal(luotXong(), 0);
+    bo.khiDongKetNoi();
+    assert.equal(luotXong(), 1, "tin 1-1 vừa lấy về phải được nhả để trả lời");
+    const truoc = lenh.length;
+    bo.khiKetNoi();
+    assert.deepEqual(lenh.slice(truoc), [{ cmd: 510, first: true, lastId: "10" }]);
+  });
+
+  it("đóng giữa lượt rồi nối lại: các timer chạy tiếp/hết giờ cũ không còn tác dụng", () => {
+    const { bo, lenh } = dung();
+    bo.khiKetNoi();
+    mock.timers.tick(2_000);
+    bo.khiTrang("tin_nhom", trang("1", false, 0));
+    for (let i = 1; i <= 30; i++) {
+      bo.khiTrang("tin_1_1", trang(String(1000 + i), true));
+      mock.timers.tick(2_000);
+    }
+    bo.khiDongKetNoi();
+    mock.timers.tick(120_000);
+    assert.equal(lenh.filter((l) => l.cmd === 510).length, 30, "chạy tiếp sau trần vẫn bắn sau khi đã đóng");
+  });
+
+  it("kết nối mới tới khi lượt cũ còn chạy (không có 'đóng' xen giữa): dọn lượt cũ, không gửi 511 hai lần, không bỏ mốc oan", () => {
+    moc.luuMocLayBu(ACC, "tin_1_1", "100");
+    const { bo, lenh } = dung({ khoangToiThieuMs: 0 });
+    bo.khiKetNoi();
+    bo.khiKetNoi();
+    bo.khiTrang("tin_1_1", trang("150", false));
+    mock.timers.tick(5_000);
+    mock.timers.tick(8_000);
+    assert.equal(lenh.filter((l) => l.cmd === 511).length, 1, "511 của lượt cũ vẫn bắn");
+    assert.equal(moc.docMocLayBu(ACC).tin_1_1, "150", "timer hết giờ của lượt cũ đã bỏ mất mốc");
   });
 });
 
 describe("tin trực tiếp đẩy mốc", () => {
+  it("bắt kịp ở kết nối trước không tính cho kết nối sau", () => {
+    const { bo } = dung({ khoangToiThieuMs: 600_000 });
+    bo.khiKetNoi();
+    bo.khiTrang("tin_1_1", trang("300", false));
+    bo.khiDongKetNoi();
+    bo.khiKetNoi();
+    bo.khiTinTrucTiep("tin_1_1", "500");
+    assert.equal(moc.docMocLayBu(ACC).tin_1_1, "300");
+  });
+
   it("chỉ sau khi hàng chờ đó đã lấy bù xong trong kết nối này, và chỉ tiến", () => {
     const { bo } = dung();
     bo.khiKetNoi();
