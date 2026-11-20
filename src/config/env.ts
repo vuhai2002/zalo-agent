@@ -492,6 +492,13 @@ if (env.SEND_DELAY_MAX_MS < env.SEND_DELAY_MIN_MS) {
   process.exit(1);
 }
 
+// Luật chéo trên dashboard không canh `.env`; hàng chờ trả lời trễ chọn nhịp
+// ngẫu nhiên trong [min, max] nên min > max là cấu hình tự mâu thuẫn
+if (env.LAY_BU_GIAN_CACH_MAX_GIAY < env.LAY_BU_GIAN_CACH_MIN_GIAY) {
+  console.error("LAY_BU_GIAN_CACH_MAX_GIAY phải >= LAY_BU_GIAN_CACH_MIN_GIAY");
+  process.exit(1);
+}
+
 // Giữ ít hơn số tin agent đọc mỗi lượt = vừa ghi xong đã bị xóa mất context
 if (env.HISTORY_MAX_MESSAGES_PER_THREAD < env.HISTORY_CONTEXT_LIMIT) {
   console.error("HISTORY_MAX_MESSAGES_PER_THREAD phải >= HISTORY_CONTEXT_LIMIT");

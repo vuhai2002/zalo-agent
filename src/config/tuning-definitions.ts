@@ -135,7 +135,7 @@ export const TUNING_GROUPS: TuningGroup[] = [
     id: "sending",
     title: "Gửi tin trên Zalo",
     navHint: "Cấu hình gửi tin nhắn",
-    hint: "Cách bot chia tin và giãn nhịp gửi cho tự nhiên.",
+    hint: "Cách bot chia tin và giãn nhịp gửi cho tự nhiên, và lấy bù tin lỡ khi mất kết nối.",
   },
   {
     id: "logs",
@@ -576,17 +576,38 @@ const TUNING_BY_KEY = {
     max: 60_000,
     unit: "ms",
   },
+  TYPING_REFRESH_MS: {
+    kind: "number",
+    group: "sending",
+    label: "Nhịp báo đang nhập",
+    hint: "Zalo không có lệnh tắt chỉ báo nên phải bắn lại theo chu kỳ để giữ chữ đang nhập.",
+    min: 1000,
+    max: 10_000,
+    unit: "ms",
+  },
+
+  ZALO_BOT_POLL_TIMEOUT_SECONDS: {
+    kind: "number",
+    group: "sending",
+    label: "Thời gian giữ kết nối khi chờ tin (tài khoản bot)",
+    hint:
+      "Số giây xin server Zalo giữ kết nối mỗi lần hỏi tin mới. Hết hạn mà không có tin thì hỏi lại - " +
+      "đó là chuyện bình thường, không phải lỗi. Đặt thấp thì hỏi dồn dập và dễ bị Zalo chặn 429.",
+    min: 5,
+    max: 60,
+    unit: "giây",
+  },
   LAY_BU_ENABLED: {
     kind: "boolean",
     group: "sending",
-    label: "Lấy bù tin lỡ",
-    hint: "Mỗi lần bot kết nối lại Zalo (khởi động, rớt mạng, bật lại), xin Zalo gửi lại những tin người ta nhắn trong lúc bot không nghe, ghi vào lịch sử và trả lời trễ. Tắt thì tin lỡ mất hẳn như trước.",
+    label: "Lấy bù tin lỡ (tài khoản cá nhân)",
+    hint: "Mỗi lần bot kết nối lại Zalo (khởi động, rớt mạng, bật lại), xin Zalo gửi lại những tin người ta nhắn trong lúc bot không nghe, ghi vào lịch sử và trả lời trễ (theo đúng luật lọc như tin thường). Tắt thì tin nhắn tới lúc bot mất kết nối bị bỏ qua. Tài khoản bot không có tính năng này.",
   },
   LAY_BU_TRAN_TUOI_GIO: {
     kind: "number",
     group: "sending",
     label: "Lấy bù: bỏ tin cũ hơn",
-    hint: "Tin lỡ cũ hơn mức này bị bỏ hẳn, không ghi, không trả lời. Lần đầu bật, Zalo gửi lại cả khoảng 2 tuần - trần này chặn bot đi trả lời tin từ nhiều ngày trước.",
+    hint: "Tin lỡ cũ hơn mức này bị bỏ hẳn, không ghi, không trả lời. Khi chưa có mốc (lần đầu, hoặc mốc bị bỏ), Zalo gửi lại cả khoảng 2 tuần - trần này chặn bot đi trả lời tin từ nhiều ngày trước.",
     min: 1,
     max: 336,
     unit: "giờ",
@@ -626,27 +647,6 @@ const TUNING_BY_KEY = {
     min: 0,
     max: 1440,
     unit: "phút",
-  },
-  TYPING_REFRESH_MS: {
-    kind: "number",
-    group: "sending",
-    label: "Nhịp báo đang nhập",
-    hint: "Zalo không có lệnh tắt chỉ báo nên phải bắn lại theo chu kỳ để giữ chữ đang nhập.",
-    min: 1000,
-    max: 10_000,
-    unit: "ms",
-  },
-
-  ZALO_BOT_POLL_TIMEOUT_SECONDS: {
-    kind: "number",
-    group: "sending",
-    label: "Thời gian giữ kết nối khi chờ tin (tài khoản bot)",
-    hint:
-      "Số giây xin server Zalo giữ kết nối mỗi lần hỏi tin mới. Hết hạn mà không có tin thì hỏi lại - " +
-      "đó là chuyện bình thường, không phải lỗi. Đặt thấp thì hỏi dồn dập và dễ bị Zalo chặn 429.",
-    min: 5,
-    max: 60,
-    unit: "giây",
   },
 
   // --- Trace và dọn dẹp ---

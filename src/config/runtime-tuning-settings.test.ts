@@ -113,13 +113,17 @@ describe("validateTuning - ràng buộc chéo", () => {
     assert.ok(loi.some((l) => /lấy bù/.test(l)), `phải chặn, nhận: ${JSON.stringify(loi)}`);
   });
 
-  it("giá trị mặc định của các tham số lấy bù", () => {
-    assert.equal(tuning.getTuning("LAY_BU_ENABLED"), true);
-    assert.equal(tuning.getTuning("LAY_BU_TRAN_TUOI_GIO"), 48);
-    assert.equal(tuning.getTuning("LAY_BU_NGUONG_XIN_LOI_PHUT"), 30);
-    assert.equal(tuning.getTuning("LAY_BU_GIAN_CACH_MIN_GIAY"), 20);
-    assert.equal(tuning.getTuning("LAY_BU_GIAN_CACH_MAX_GIAY"), 60);
-    assert.equal(tuning.getTuning("LAY_BU_KHOANG_TOI_THIEU_PHUT"), 10);
+  it("giãn cách lấy bù: chỉ sửa ô tối đa xuống dưới tối thiểu đã lưu cũng bị chặn", () => {
+    // Dashboard tự lưu TỪNG ô: ca thật là gửi một khóa, khóa kia lấy giá trị hiện tại
+    tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", 50);
+    const loi = tuning.validateTuning({ LAY_BU_GIAN_CACH_MAX_GIAY: 30 });
+    tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", null);
+    assert.ok(loi.some((l) => /lấy bù/.test(l)), `phải chặn, nhận: ${JSON.stringify(loi)}`);
+  });
+
+  it("giãn cách lấy bù: tối thiểu bằng tối đa là hợp lệ", () => {
+    const loi = tuning.validateTuning({ LAY_BU_GIAN_CACH_MIN_GIAY: 60, LAY_BU_GIAN_CACH_MAX_GIAY: 60 });
+    assert.ok(!loi.some((l) => /lấy bù/.test(l)), JSON.stringify(loi));
   });
 
   it("trần ký tự tài liệu quá lớn so với trần token thì chặn", () => {
