@@ -99,8 +99,8 @@ export function batDauLayBuChoAccount(
     },
     khiDongKetNoi: () => bo.khiDongKetNoi(),
     khiTinTrucTiep: (msg) => bo.khiTinTrucTiep(msg.isGroup ? "tin_nhom" : "tin_1_1", msg.msgId),
-    daTraLoiTrucTiep: (threadKey, lucMs) => {
-      hangCho.daTraLoiTrucTiep(threadKey, lucMs);
+    daTraLoiTrucTiep: (threadKey, senderId, lucMs) => {
+      hangCho.daTraLoiTrucTiep(threadKey, senderId, lucMs);
     },
     dung: () => {
       bo.dung();

@@ -6505,6 +6505,6 @@ Sau sự cố 2026-11-19 (DNS VPS chết, account cá nhân im 30 giờ, tin t�
 - [x] Nâng zca-js 2.3.0 (nhận tin cmd 551)
 - [x] Mỗi lần kết nối xin bù cmd 510/511 từ mốc, lật trang theo `more`, chạy tiếp sau trần
 - [x] Tin lấy bù qua bộ lọc chung, khử trùng theo `msg_id`, trần tuổi theo `ts` thô, bỏ tin thu hồi
-- [x] Hàng chờ trả lời trễ giãn nhịp, bỏ thread chủ đã trả lời tay, gộp với tin trực tiếp mới
+- [x] Hàng chờ trả lời trễ giãn nhịp, bỏ thread chủ đã trả lời tay; người đã nhắn lại và được trả lời thì bỏ tin lỡ cũ của họ
 - [x] Câu xin lỗi vui ở câu trả lời chốt khi trễ >= ngưỡng
 - [ ] Đo thật trên prod: lượt lấy bù đầu của `minh-triet` sau deploy (nâng tạm trần tuổi)

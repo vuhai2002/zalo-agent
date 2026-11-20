@@ -195,7 +195,7 @@ describe("người đó đã nhắn trực tiếp và được bot trả lời (
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
     hang.them(key("b"), tin("b", "2026-03-10T08:00:00.000Z"));
     hang.nha();
-    assert.equal(hang.daTraLoiTrucTiep(key("b"), LUC_TRUC_TIEP), true);
+    assert.equal(hang.daTraLoiTrucTiep(key("b"), "u-b", LUC_TRUC_TIEP), true);
     mock.timers.tick(600_000);
     assert.deepEqual(
       enq.map(([tk]) => tk),
@@ -206,12 +206,12 @@ describe("người đó đã nhắn trực tiếp và được bot trả lời (
 
   it("không có gì đang chờ -> false", () => {
     const { hang } = dung();
-    assert.equal(hang.daTraLoiTrucTiep(key("a"), LUC_TRUC_TIEP), false);
+    assert.equal(hang.daTraLoiTrucTiep(key("a"), "u-a", LUC_TRUC_TIEP), false);
   });
 
   it("tin lấy bù tới SAU mà CŨ hơn tin trực tiếp đã trả lời: bỏ, kể cả ở lượt sau", () => {
     const { hang, enq } = dung();
-    hang.daTraLoiTrucTiep(key("a"), LUC_TRUC_TIEP);
+    hang.daTraLoiTrucTiep(key("a"), "u-a", LUC_TRUC_TIEP);
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
     hang.them(key("a"), tin("a", "2026-03-10T09:59:59.000Z"));
     hang.nha();
@@ -221,7 +221,7 @@ describe("người đó đã nhắn trực tiếp và được bot trả lời (
 
   it("tin lỡ MỚI hơn (lần mất mạng sau): vẫn được trả lời như thường", () => {
     const { hang, enq } = dung();
-    hang.daTraLoiTrucTiep(key("a"), LUC_TRUC_TIEP);
+    hang.daTraLoiTrucTiep(key("a"), "u-a", LUC_TRUC_TIEP);
     hang.them(key("a"), tin("a", "2026-03-10T12:00:00.000Z"));
     hang.nha();
     assert.deepEqual(
@@ -233,15 +233,56 @@ describe("người đó đã nhắn trực tiếp và được bot trả lời (
   it("tin bị bỏ có ảnh thì vẫn đi đường lưu ảnh (dòng lịch sử có đường dẫn ảnh)", () => {
     const { hang, boQua } = dung();
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z", { images: [{ url: "https://f1.zdn.vn/a.jpg" }] as ParsedMessage["images"] }));
-    hang.daTraLoiTrucTiep(key("a"), LUC_TRUC_TIEP);
+    hang.daTraLoiTrucTiep(key("a"), "u-a", LUC_TRUC_TIEP);
     hang.them(key("a"), tin("a", "2026-03-10T08:00:00.000Z", { images: [{ url: "https://f1.zdn.vn/b.jpg" }] as ParsedMessage["images"] }));
     assert.equal(boQua.flat().length, 2);
   });
 
+  it("NHÓM: tính theo NGƯỜI GỬI - B nhắn lại chỉ bỏ tin lỡ của B, tin lỡ của A vẫn được trả lời", () => {
+    const { hang, enq } = dung();
+    hang.them(key("g"), tin("g", "2026-03-10T07:00:00.000Z", { senderId: "u-lan", msgId: "g-lan" }));
+    hang.them(key("g"), tin("g", "2026-03-10T07:10:00.000Z", { senderId: "u-minh", msgId: "g-minh" }));
+    hang.daTraLoiTrucTiep(key("g"), "u-minh", LUC_TRUC_TIEP);
+    hang.them(key("g"), tin("g", "2026-03-10T07:20:00.000Z", { senderId: "u-lan", msgId: "g-lan-2" }));
+    hang.them(key("g"), tin("g", "2026-03-10T07:30:00.000Z", { senderId: "u-minh", msgId: "g-minh-2" }));
+    hang.nha();
+    assert.deepEqual(
+      enq.map(([, id]) => id),
+      ["g-lan", "g-lan-2"],
+    );
+  });
+
+  it("tin lỡ cùng đúng mili giây với tin trực tiếp: bỏ (không mới hơn)", () => {
+    const { hang, enq } = dung();
+    hang.daTraLoiTrucTiep(key("a"), "u-a", LUC_TRUC_TIEP);
+    hang.them(key("a"), tin("a", new Date(LUC_TRUC_TIEP).toISOString()));
+    hang.nha();
+    assert.equal(enq.length, 0);
+  });
+
+  it("tin cũ ĐÃ nhả vào bộ gộp (lượt chưa chạy) rồi người đó nhắn lại: gỡ cờ trễ (không xin lỗi)", () => {
+    const daVao: ParsedMessage[] = [];
+    const hang = new HangChoTraLoiTre({
+      accountId: "acc",
+      enqueue: (_tk, m) => {
+        daVao.push(m);
+        return true;
+      },
+      gianCachMs: () => [0, 0],
+      luuAnhTinBoQua: () => {},
+      random: () => 0,
+    });
+    hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
+    hang.nha();
+    assert.equal(daVao[0]?.layBu, true);
+    assert.equal(hang.daTraLoiTrucTiep(key("a"), "u-a", LUC_TRUC_TIEP), false);
+    assert.equal(daVao[0]?.layBu, undefined, "tin cũ trong batch vẫn mang cờ trễ -> lượt vẫn xin lỗi");
+  });
+
   it("mốc giờ chỉ TIẾN: báo một tin trực tiếp cũ hơn không kéo lùi", () => {
     const { hang, enq } = dung();
-    hang.daTraLoiTrucTiep(key("a"), LUC_TRUC_TIEP);
-    hang.daTraLoiTrucTiep(key("a"), Date.parse("2026-03-10T05:00:00.000Z"));
+    hang.daTraLoiTrucTiep(key("a"), "u-a", LUC_TRUC_TIEP);
+    hang.daTraLoiTrucTiep(key("a"), "u-a", Date.parse("2026-03-10T05:00:00.000Z"));
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
     hang.nha();
     assert.equal(enq.length, 0);
@@ -253,7 +294,7 @@ describe("dừng", () => {
     const { hang, enq } = dung();
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
     hang.dungVaBaoBoDo();
-    assert.equal(hang.daTraLoiTrucTiep(key("a"), Date.parse("2026-03-10T10:00:00.000Z")), false);
+    assert.equal(hang.daTraLoiTrucTiep(key("a"), "u-a", Date.parse("2026-03-10T10:00:00.000Z")), false);
     assert.equal(enq.length, 0);
   });
 

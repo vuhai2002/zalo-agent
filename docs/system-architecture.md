@@ -559,9 +559,10 @@ Luồng:
 
 Tin trực tiếp: `daCoTinDen` chặn trùng (cmd 501 + 551, trực tiếp + trang lấy bù); tin không
 trùng không self đẩy mốc khi hàng chờ Zalo đã bắt kịp. Người có tin lỡ đang chờ nhắn tin mới mà bot
-sắp trả lời (`daTraLoiTrucTiep`): họ biết bot chạy lại rồi, nên tin lỡ CŨ hơn tin đó bị bỏ hẳn (kể cả
-trang về muộn) - không trả lời riêng, không xin lỗi; tin cũ vẫn trong lịch sử làm ngữ cảnh. Tin lỡ
-MỚI hơn (lần mất mạng sau) xử lý như thường. Tin trực tiếp bị lọc không tính.
+sắp trả lời (`daTraLoiTrucTiep`, theo (thread, người gửi)): họ biết bot chạy lại rồi, nên tin lỡ CŨ
+hơn tin đó CỦA HỌ bị bỏ hẳn (kể cả trang về muộn) - không trả lời riêng, không xin lỗi; tin cũ vẫn
+trong lịch sử làm ngữ cảnh. Tin lỡ MỚI hơn (lần mất mạng sau) xử lý như thường. Tin trực tiếp bị lọc
+không tính. Tin cũ đã nhả vào bộ gộp mà lượt chưa chạy thì chỉ gỡ cờ trễ (trả lời chung, không xin lỗi).
 
 Giới hạn đã biết (chấp nhận):
 - Hàng chờ trả lời trễ chỉ trong RAM: restart giữa lúc nhả thì thread còn chờ không được trả

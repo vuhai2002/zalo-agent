@@ -46,8 +46,9 @@ export function routeIncomingMessage(
   if (layBu && ketQua !== "trung" && !msg.isSelf && msg.threadId) layBu.khiTinTrucTiep(msg);
   if (ketQua !== "tra-loi") return;
   // Người này nhắn lại và sắp được trả lời: họ biết bot chạy lại rồi, nên tin lấy
-  // bù cũ hơn của họ bỏ hẳn - không trả lời riêng, không xin lỗi (vẫn trong lịch sử)
-  layBu?.daTraLoiTrucTiep(`${config.id}:${msg.threadId}`, Date.parse(msg.sentAt));
+  // bù cũ hơn CỦA HỌ bỏ hẳn - không trả lời riêng, không xin lỗi (vẫn trong lịch sử).
+  // Theo người gửi: trong nhóm, B nhắn không có nghĩa A biết bot chạy lại.
+  layBu?.daTraLoiTrucTiep(`${config.id}:${msg.threadId}`, msg.senderId, Date.parse(msg.sentAt));
   xepHangTraLoi(config, api, msg);
 }
 

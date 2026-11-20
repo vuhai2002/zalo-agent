@@ -1,5 +1,6 @@
 import { createLogger } from "../../shared/logger.js";
 import type { ParsedMessage } from "../zalo-message-parser.js";
+import { khoaNguoi, MocTraLoiTrucTiep } from "./moc-tra-loi-truc-tiep.js";
 
 /**
  * Hàng chờ trả lời trễ: tin lấy bù (đã ghi lịch sử, đã qua bộ lọc) chờ ở đây,
@@ -16,14 +17,8 @@ export class HangChoTraLoiTre {
   private readonly cho = new Map<string, ParsedMessage[]>();
   /** Giờ gửi tin mới nhất của CHÍNH tài khoản trong thread (thấy qua lấy bù) */
   private readonly selfLuc = new Map<string, number>();
-  /**
-   * Giờ gửi của tin TRỰC TIẾP mới nhất mà bot đã nhận để trả lời, theo thread.
-   * Người dùng chốt: người ta đã nhắn và được bot trả lời thì họ biết bot chạy lại
-   * rồi - mọi tin lỡ CŨ hơn mốc này bỏ hẳn, không trả lời riêng, không xin lỗi
-   * (tin vẫn nằm trong lịch sử nên lượt trả lời tin mới vẫn thấy). Tin lỡ MỚI hơn
-   * (lần mất mạng sau) vẫn xử lý như thường.
-   */
-  private readonly trucTiepLuc = new Map<string, number>();
+  /** Người đã nhắn lại và được trả lời: bỏ tin lỡ cũ hơn của họ (xem `moc-tra-loi-truc-tiep.ts`) */
+  private readonly trucTiep = new MocTraLoiTrucTiep();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private dangNha = false;
   private daDung = false;
@@ -46,8 +41,7 @@ export class HangChoTraLoiTre {
 
   them(threadKey: string, msg: ParsedMessage): void {
     if (this.daDung) return;
-    const trucTiep = this.trucTiepLuc.get(threadKey);
-    if (trucTiep !== undefined && !(Date.parse(msg.sentAt) > trucTiep)) {
+    if (this.trucTiep.cuHonMoc(khoaNguoi(threadKey, msg.senderId), msg.sentAt)) {
       this.an("lưu ảnh tin bỏ lượt", () => this.deps.luuAnhTinBoQua([msg]));
       return;
     }
@@ -82,21 +76,27 @@ export class HangChoTraLoiTre {
   }
 
   /**
-   * Bot vừa nhận một tin TRỰC TIẾP của thread này để trả lời: bỏ mọi tin lỡ đang
-   * chờ của thread (người ta biết bot chạy lại rồi), và nhớ mốc giờ để tin lỡ cũ
-   * hơn tới sau (trang về muộn) cũng bị bỏ. Trả `true` nếu có tin chờ bị bỏ.
+   * Bot vừa nhận một tin TRỰC TIẾP của người này (trong thread này) để trả lời: họ
+   * biết bot chạy lại rồi - bỏ mọi tin lỡ đang chờ CỦA HỌ, nhớ mốc giờ để tin lỡ cũ
+   * hơn tới sau (trang về muộn) cũng bị bỏ, và gỡ cờ trễ của tin cũ vừa nhả vào bộ
+   * gộp. Trả `true` nếu có tin chờ bị bỏ.
    */
-  daTraLoiTrucTiep(threadKey: string, lucMs: number): boolean {
+  daTraLoiTrucTiep(threadKey: string, senderId: string, lucMs: number): boolean {
     if (this.daDung) return false;
-    if (Number.isFinite(lucMs)) {
-      this.trucTiepLuc.set(threadKey, Math.max(lucMs, this.trucTiepLuc.get(threadKey) ?? Number.NEGATIVE_INFINITY));
-    }
+    this.trucTiep.ghi(khoaNguoi(threadKey, senderId), lucMs);
+
     const ds = this.cho.get(threadKey);
     if (!ds) return false;
-    this.cho.delete(threadKey);
-    this.selfLuc.delete(threadKey);
-    this.log.info({ threadKey, soTin: ds.length }, "Người này đã nhắn lại và được trả lời - bỏ tin lỡ cũ");
-    this.an("lưu ảnh tin bỏ lượt", () => this.deps.luuAnhTinBoQua(ds));
+    const cuaHo = ds.filter((m) => m.senderId === senderId);
+    if (cuaHo.length === 0) return false;
+    const conLai = ds.filter((m) => m.senderId !== senderId);
+    if (conLai.length > 0) this.cho.set(threadKey, conLai);
+    else {
+      this.cho.delete(threadKey);
+      this.selfLuc.delete(threadKey);
+    }
+    this.log.info({ threadKey, soTin: cuaHo.length }, "Người này đã nhắn lại và được trả lời - bỏ tin lỡ cũ của họ");
+    this.an("lưu ảnh tin bỏ lượt", () => this.deps.luuAnhTinBoQua(cuaHo));
     return true;
   }
 
@@ -117,7 +117,7 @@ export class HangChoTraLoiTre {
     }
     this.cho.clear();
     this.selfLuc.clear();
-    this.trucTiepLuc.clear();
+    this.trucTiep.xoaHet();
     return boDo;
   }
 
@@ -168,12 +168,16 @@ export class HangChoTraLoiTre {
       if (n <= tran) giu.add(m);
     }
     const boQua = ds.filter((m) => !giu.has(m));
+    const theoNguoi = new Map<string, ParsedMessage[]>();
     for (const msg of ds) {
       if (!giu.has(msg)) continue;
+      const khoa = khoaNguoi(threadKey, msg.senderId);
+      theoNguoi.set(khoa, [...(theoNguoi.get(khoa) ?? []), msg]);
       let nhan = false;
       this.an("đưa tin vào bộ gộp", () => (nhan = this.deps.enqueue(threadKey, msg)));
       if (!nhan) boQua.push(msg);
     }
+    for (const [khoa, msgs] of theoNguoi) this.trucTiep.daNha(khoa, msgs);
     if (boQua.length > 0) this.an("lưu ảnh tin bỏ lượt", () => this.deps.luuAnhTinBoQua(boQua));
   }
 

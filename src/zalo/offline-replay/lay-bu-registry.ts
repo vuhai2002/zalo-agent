@@ -13,7 +13,7 @@ export type LayBuCuaAccount = {
   /** Tin TRỰC TIẾP (không trùng, không self): đẩy mốc nếu hàng chờ Zalo đã bắt kịp */
   khiTinTrucTiep(msg: ParsedMessage): void;
   /** Tin trực tiếp cần trả lời: bỏ tin lấy bù cũ hơn của thread (người ta biết bot chạy lại rồi) */
-  daTraLoiTrucTiep(threadKey: string, lucMs: number): void;
+  daTraLoiTrucTiep(threadKey: string, senderId: string, lucMs: number): void;
   dung(): void;
 };
 

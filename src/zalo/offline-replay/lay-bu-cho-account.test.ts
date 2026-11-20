@@ -153,7 +153,7 @@ describe("lấy bù theo account", () => {
       );
       mock.timers.tick(5_000);
       ws.emit("message", dungKhungWs(511, 1, { groupMsgs: [], more: 0, lastActionId: "1" }));
-      layBu.daTraLoiTrucTiep(`${ACC}:u-minh`, Date.now()); // Minh nhắn trực tiếp lúc đang chờ
+      layBu.daTraLoiTrucTiep(`${ACC}:u-minh`, "u-minh", Date.now()); // Minh nhắn trực tiếp lúc đang chờ
       layBu.khiDongKetNoi();
       layBu.khiKetNoi(); // lượt 2 - tin lỡ gửi SAU lúc Minh nhắn trực tiếp
       const tinMoi = { ...tinTho("8400000000903", "u-minh", 0), ts: String(Date.now() + 60_000) };
@@ -166,6 +166,42 @@ describe("lấy bù theo account", () => {
       tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", null);
       tuning.setTuning("LAY_BU_GIAN_CACH_MAX_GIAY", null);
       tuning.setTuning("LAY_BU_KHOANG_TOI_THIEU_PHUT", null);
+    }
+  });
+
+  it("tin trực tiếp BỊ LỌC (nhóm không @mention bot) không tính: tin lỡ của người đó vẫn được trả lời", () => {
+    accounts.updateAccount(ACC, { respondToGroups: true });
+    try {
+      const { api, ws } = apiGia();
+      const traLoiTre: string[] = [];
+      const layBu = mod.batDauLayBuChoAccount(accounts.getAccount(ACC)!, api, SELF, {
+        enqueue: (_tk, m) => {
+          traLoiTre.push(m.msgId);
+          return true;
+        },
+      })!;
+      layBu.khiKetNoi();
+      const tinNhomLo = {
+        ...tinTho("8400000001001", "u-lan", 2),
+        idTo: "g-1",
+        content: "@Bot ơi hẹn họp lúc 9h nhé",
+        mentions: [{ uid: SELF, pos: 0, len: 4, type: 0 }],
+      };
+      ws.emit("message", dungKhungWs(510, 1, { msgs: [], more: 0, lastActionId: "1" }));
+      mock.timers.tick(5_000);
+      // Lan nhắn trong nhóm KHÔNG gọi bot (bị lọc, bot không trả lời) trước khi trang nhóm về
+      router.routeIncomingMessage(ACC, api, SELF, {
+        threadId: "g-1",
+        type: 1,
+        isSelf: false,
+        data: { content: "mọi người ơi", uidFrom: "u-lan", idTo: "g-1", dName: "Lan", msgId: "8400000001002", cliMsgId: "c" },
+      });
+      ws.emit("message", dungKhungWs(511, 1, { groupMsgs: [tinNhomLo], more: 0, lastActionId: "8400000001001" }));
+      batcher.clearPendingBatches();
+      mock.timers.tick(5_000);
+      assert.ok(traLoiTre.includes("8400000001001"), `tin lỡ bị bỏ oan vì một tin bị lọc: ${traLoiTre.join(",")}`);
+    } finally {
+      accounts.updateAccount(ACC, { respondToGroups: true }); // mặc định của account
     }
   });
 
