@@ -180,8 +180,8 @@ export function deleteAccount(id: string): boolean {
     // Ghi chú nguyên văn là dữ liệu cá nhân người dùng nhờ giữ: account mất thì
     // không ai còn đọc được, giữ lại chỉ để hồi sinh nhầm khi tạo lại CÙNG ID.
     db.prepare("DELETE FROM verbatim_notes WHERE account_id = ?").run(id);
-    // Mốc lấy bù tin lỡ: tạo lại account CÙNG ID (nick khác) mà còn mốc cũ là
-    // xin Zalo từ một id của tài khoản khác - Zalo im, bộ xin bù bỏ mốc, mất một lượt.
+    // Mốc lấy bù tin lỡ: tạo lại account CÙNG ID (có thể là nick khác) mà còn mốc
+    // cũ là xin Zalo từ mốc của tài khoản trước - bỏ sót tin của nick mới cũ hơn mốc.
     db.prepare("DELETE FROM offline_replay_cursors WHERE account_id = ?").run(id);
     return db.prepare("DELETE FROM accounts WHERE id = ?").run(id).changes > 0;
   });
