@@ -23,11 +23,14 @@ export class HangChoTraLoiTre {
   constructor(
     private readonly deps: {
       accountId: string;
-      enqueue: (threadKey: string, msg: ParsedMessage) => void;
+      /** `false` = bộ gộp từ chối (chạm trần batch) - tin đó đi đường lưu ảnh */
+      enqueue: (threadKey: string, msg: ParsedMessage) => boolean;
       gianCachMs: () => [number, number];
       /** Thread bị bỏ lượt mà tin có ảnh: tải + gắn ảnh như nhánh chạm trần của router */
       luuAnhTinBoQua: (msgs: ParsedMessage[]) => void;
       random?: () => number;
+      /** Trần tin một batch của bộ gộp (`TRAN_TIN_DON`) - mặc định 32 */
+      tranTinMoiNguoi?: number;
     },
   ) {
     this.log = createLogger(`tra-loi-tre:${deps.accountId}`);
@@ -40,10 +43,13 @@ export class HangChoTraLoiTre {
     this.cho.set(threadKey, ds);
   }
 
-  ghiNhanTinSelf(threadKey: string, sentAt: string): void {
-    const luc = Date.parse(sentAt);
-    if (Number.isNaN(luc)) return;
-    this.selfLuc.set(threadKey, Math.max(luc, this.selfLuc.get(threadKey) ?? Number.NEGATIVE_INFINITY));
+  /**
+   * `lucMs` lấy từ `ts` THÔ của tin, không từ `sentAt` của parser: `sentAt` bị kẹp
+   * về giờ nhận khi `ts` hỏng/quá cũ, mà "self lúc bây giờ" là bỏ lượt oan cả thread.
+   */
+  ghiNhanTinSelf(threadKey: string, lucMs: number): void {
+    if (!Number.isFinite(lucMs)) return;
+    this.selfLuc.set(threadKey, Math.max(lucMs, this.selfLuc.get(threadKey) ?? Number.NEGATIVE_INFINITY));
   }
 
   /** Bắt đầu / tiếp tục nhả tuần tự. Đang nhả thì không làm gì (gọi nhiều lần được). */
@@ -73,13 +79,17 @@ export class HangChoTraLoiTre {
     this.timer = null;
     const boDo = [...this.cho.keys()];
     if (boDo.length > 0) {
-      const ds = boDo.map((tk) => ({ threadKey: tk, nguoiGui: this.cho.get(tk)?.at(-1)?.senderName ?? "?" }));
+      const ds = boDo.map((tk) => {
+        const cuoi = this.cho.get(tk)?.at(-1);
+        return { threadKey: tk, loai: cuoi?.isGroup ? "nhóm" : "1-1", nguoiGuiCuoi: cuoi?.senderName ?? "?" };
+      });
       this.log.warn(
         { soThread: boDo.length, ds },
         "Dừng giữa lúc nhả hàng chờ trả lời trễ - các hội thoại này KHÔNG được trả lời, hãy tự nhắn",
       );
     }
     this.cho.clear();
+    this.selfLuc.clear();
     return boDo;
   }
 
@@ -113,8 +123,30 @@ export class HangChoTraLoiTre {
     }
   }
 
+  /**
+   * Đẩy tin (đã sắp theo giờ gửi) vào bộ gộp. Bộ gộp gom theo NGƯỜI GỬI và từ chối
+   * tin vượt trần batch - mà tin bị từ chối lại là tin MỚI NHẤT. Nên mỗi người chỉ
+   * đẩy N tin mới nhất (phần cũ hơn đã có trong lịch sử, model vẫn đọc được); phần
+   * bị bỏ hay bị từ chối đi đường lưu ảnh, như nhánh chạm trần của router.
+   */
   private dayVao(threadKey: string, ds: ParsedMessage[]): void {
-    for (const msg of ds) this.an("đưa tin vào bộ gộp", () => this.deps.enqueue(threadKey, msg));
+    const tran = this.deps.tranTinMoiNguoi ?? 32;
+    const demTuCuoi = new Map<string, number>();
+    const giu = new Set<ParsedMessage>();
+    for (let i = ds.length - 1; i >= 0; i--) {
+      const m = ds[i]!;
+      const n = (demTuCuoi.get(m.senderId) ?? 0) + 1;
+      demTuCuoi.set(m.senderId, n);
+      if (n <= tran) giu.add(m);
+    }
+    const boQua = ds.filter((m) => !giu.has(m));
+    for (const msg of ds) {
+      if (!giu.has(msg)) continue;
+      let nhan = false;
+      this.an("đưa tin vào bộ gộp", () => (nhan = this.deps.enqueue(threadKey, msg)));
+      if (!nhan) boQua.push(msg);
+    }
+    if (boQua.length > 0) this.an("lưu ảnh tin bỏ lượt", () => this.deps.luuAnhTinBoQua(boQua));
   }
 
   private threadSomNhat(): string | undefined {

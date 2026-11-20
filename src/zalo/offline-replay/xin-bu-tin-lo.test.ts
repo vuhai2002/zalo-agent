@@ -131,7 +131,9 @@ describe("lật trang", () => {
     }
     assert.equal(xong.find((k) => k.hangCho === "tin_1_1")?.trangThai, "do");
     assert.equal(lenh.filter((l) => l.cmd === 510).length, 30, "trang 31 không được xin ngay");
-    assert.equal(luotXong(), 1, "hết lượt (dở) vẫn phải nhả hàng chờ trả lời");
+    // Còn lượt chạy tiếp thì CHƯA nhả: tin chủ trả lời tay có thể nằm ở trang sau,
+    // nhả sớm là trả lời chồng, và trang sau lại thêm tin cho thread đã nhả -> xin lỗi hai lần
+    assert.equal(luotXong(), 0, "nhả hàng chờ khi còn lượt chạy tiếp");
     mock.timers.tick(60_000);
     assert.deepEqual(lenh.filter((l) => l.cmd === 510).at(-1), { cmd: 510, first: true, lastId: "1030" });
     for (let i = 31; i <= 35; i++) {
@@ -139,7 +141,7 @@ describe("lật trang", () => {
       mock.timers.tick(2_000);
     }
     assert.equal(xong.at(-1)?.trangThai, "du");
-    assert.equal(luotXong(), 2);
+    assert.equal(luotXong(), 1);
   });
 
   it("còn trang mà thiếu mã trang, hay trùng mã vừa xin: dừng dở, không xin lặp", () => {
@@ -245,8 +247,10 @@ describe("trang không về / hỏng", () => {
   });
 
   it("chạm trần mà mốc KHÔNG tiến (mã trang không phải dãy số): không chạy tiếp, không lặp", () => {
-    const { bo, lenh, xong } = dung();
+    const { bo, lenh, xong, luotXong } = dung();
     bo.khiKetNoi();
+    mock.timers.tick(2_000);
+    bo.khiTrang("tin_nhom", trang("1", false, 0));
     for (let i = 1; i <= 30; i++) {
       bo.khiTrang("tin_1_1", trang(`ma-${i}`, true));
       mock.timers.tick(2_000);
@@ -255,6 +259,7 @@ describe("trang không về / hỏng", () => {
     mock.timers.tick(60_000);
     assert.equal(lenh.filter((l) => l.cmd === 510).length, 30);
     assert.equal(xong.find((k) => k.hangCho === "tin_1_1")?.trangThai, "do");
+    assert.equal(luotXong(), 1, "không chạy tiếp thì phải nhả ngay");
   });
 });
 

@@ -39,15 +39,19 @@ function tin(threadId: string, sentAt: string, extra: Partial<ParsedMessage> = {
 
 const key = (t: string) => `acc:${t}`;
 
-function dung(gian: [number, number] = [20_000, 60_000]) {
+function dung(gian: [number, number] = [20_000, 60_000], opts: { random?: number; tran?: number; tuChoi?: boolean } = {}) {
   const enq: [string, string][] = [];
   const boQua: ParsedMessage[][] = [];
   const hang = new HangChoTraLoiTre({
     accountId: "acc",
-    enqueue: (tk, m) => enq.push([tk, m.msgId]),
+    enqueue: (tk, m) => {
+      enq.push([tk, m.msgId]);
+      return !opts.tuChoi;
+    },
     gianCachMs: () => gian,
     luuAnhTinBoQua: (msgs) => boQua.push(msgs),
-    random: () => 0,
+    random: () => opts.random ?? 0,
+    tranTinMoiNguoi: opts.tran ?? 32,
   });
   return { hang, enq, boQua };
 }
@@ -74,6 +78,17 @@ describe("nhả có giãn nhịp", () => {
     mock.timers.tick(20_000);
     assert.equal(enq.at(-1)?.[0], key("c"));
     assert.equal(hang.soThreadDangCho(), 0);
+  });
+
+  it("nhịp không vượt tối đa (random sát 1)", () => {
+    const { hang, enq } = dung([20_000, 60_000], { random: 0.9999 });
+    hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
+    hang.them(key("b"), tin("b", "2026-03-10T08:00:00.000Z"));
+    hang.nha();
+    mock.timers.tick(59_000);
+    assert.equal(enq.length, 1, "nhịp đang lấy sát tối thiểu thay vì ngẫu nhiên trong khoảng");
+    mock.timers.tick(1_000);
+    assert.equal(enq.length, 2);
   });
 
   it("nhịp lấy trong [min, max] kể cả khi cấu hình đảo ngược (min > max)", () => {
@@ -112,11 +127,44 @@ describe("nhả có giãn nhịp", () => {
   });
 });
 
+describe("trần tin mỗi người gửi của bộ gộp", () => {
+  it("một người quá trần: chỉ đẩy N tin MỚI NHẤT, phần cũ hơn đi đường lưu ảnh", () => {
+    const { hang, enq, boQua } = dung([20_000, 60_000], { tran: 2 });
+    for (const gio of ["07:00", "07:10", "07:20", "07:30"]) {
+      hang.them(key("a"), tin("a", `2026-03-10T${gio}:00.000Z`));
+    }
+    hang.nha();
+    assert.deepEqual(
+      enq.map(([, id]) => id),
+      ["a-2026-03-10T07:20:00.000Z", "a-2026-03-10T07:30:00.000Z"],
+    );
+    assert.deepEqual(
+      boQua.flat().map((m) => m.sentAt),
+      ["2026-03-10T07:00:00.000Z", "2026-03-10T07:10:00.000Z"],
+    );
+  });
+
+  it("trần tính theo NGƯỜI GỬI (bộ gộp gom theo người), không theo cả nhóm", () => {
+    const { hang, enq } = dung([20_000, 60_000], { tran: 1 });
+    hang.them(key("g"), tin("g", "2026-03-10T07:00:00.000Z", { senderId: "u-lan" }));
+    hang.them(key("g"), tin("g", "2026-03-10T07:01:00.000Z", { senderId: "u-minh", msgId: "g-minh" }));
+    hang.nha();
+    assert.equal(enq.length, 2);
+  });
+
+  it("bộ gộp từ chối tin (trả false): tin đó đi đường lưu ảnh", () => {
+    const { hang, boQua } = dung([20_000, 60_000], { tuChoi: true });
+    hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
+    hang.nha();
+    assert.equal(boQua.flat().length, 1);
+  });
+});
+
 describe("đã có người trả lời", () => {
   it("tin của tài khoản SAU tin chờ cuối: bỏ lượt thread đó, lưu ảnh, không tốn nhịp", () => {
     const { hang, enq, boQua } = dung();
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
-    hang.ghiNhanTinSelf(key("a"), "2026-03-10T07:05:00.000Z");
+    hang.ghiNhanTinSelf(key("a"), Date.parse("2026-03-10T07:05:00.000Z"));
     hang.them(key("b"), tin("b", "2026-03-10T08:00:00.000Z"));
     hang.nha();
     assert.deepEqual(
@@ -129,7 +177,7 @@ describe("đã có người trả lời", () => {
 
   it("tin của tài khoản TRƯỚC tin chờ: vẫn trả lời", () => {
     const { hang, enq } = dung();
-    hang.ghiNhanTinSelf(key("a"), "2026-03-10T06:00:00.000Z");
+    hang.ghiNhanTinSelf(key("a"), Date.parse("2026-03-10T06:00:00.000Z"));
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
     hang.nha();
     assert.equal(enq.length, 1);
@@ -156,7 +204,10 @@ describe("tin trực tiếp chen vào", () => {
     const enq: ParsedMessage[] = [];
     const hang = new HangChoTraLoiTre({
       accountId: "acc",
-      enqueue: (_tk, m) => enq.push(m),
+      enqueue: (_tk, m) => {
+        enq.push(m);
+        return true;
+      },
       gianCachMs: () => [20_000, 60_000],
       luuAnhTinBoQua: () => {},
     });
@@ -167,6 +218,14 @@ describe("tin trực tiếp chen vào", () => {
 });
 
 describe("dừng", () => {
+  it("nhaNgay sau khi dừng: không đẩy gì", () => {
+    const { hang, enq } = dung();
+    hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
+    hang.dungVaBaoBoDo();
+    assert.equal(hang.nhaNgay(key("a")), false);
+    assert.equal(enq.length, 0);
+  });
+
   it("dungVaBaoBoDo: trả thread còn chờ, sau đó không enqueue gì nữa", () => {
     const { hang, enq } = dung();
     hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
@@ -186,6 +245,7 @@ describe("dừng", () => {
       enqueue: () => {
         lan++;
         if (lan === 1) throw new Error("hỏng");
+        return true;
       },
       gianCachMs: () => [0, 0],
       luuAnhTinBoQua: () => {},

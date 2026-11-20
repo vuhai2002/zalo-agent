@@ -177,6 +177,10 @@ export function taoBoXinBu(deps: K.PhuThuocXinBu): K.BoXinBu {
         // Chỉ chạy tiếp khi mốc ĐÃ tiến tới trang cuối: không thì lượt sau xin lại
         // đúng 30 trang đó, lặp mãi trong cùng kết nối
         const tien = docMoc(hangCho) === ke;
+        // Còn chạy tiếp thì tính như "chờ bắt đầu": CHƯA nhả hàng chờ trả lời - tin
+        // chủ trả lời tay có thể nằm ở trang sau, và trang sau lại thêm tin cho
+        // thread đã nhả (xin lỗi hai lần)
+        if (tien) choBatDau.add(hangCho);
         ketThuc(hangCho, l, "do", tien ? `Chạm trần ${K.TRAN_TRANG} trang - chạy tiếp sau` : "Chạm trần, mốc không tiến");
         if (tien) sau(K.CHAY_TIEP_SAU_TRAN_MS, () => !luot[hangCho] && batDau(hangCho));
         else log.warn({ hangCho }, "Chạm trần trang mà mốc không lưu được - không chạy tiếp");
