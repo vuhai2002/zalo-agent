@@ -24,18 +24,29 @@ const laObject = (v: unknown): Record<string, unknown> | null =>
  * Đọc một trang phản hồi 510/511 đã giải mã: `{ msgs | groupMsgs, more,
  * lastActionId, queueStatus }`, có khi nằm trong `data`. Hình dạng theo phản
  * hồi thật đã ghi ở `zalo-archive-mcp` (`offline-message-replay.ts`).
+ *
+ * `null` = trang KHÔNG HỢP LỆ: thiếu hẳn mảng tin, hoặc có `error_code` khác 0.
+ * Cố ý không hiểu những ca đó là "hết trang" (`more: false`): hiểu vậy là chốt
+ * hàng chờ đã xong, rồi tin trực tiếp đẩy mốc qua mặt đoạn tin lỡ - mất câm.
+ * zca-js và archive cũng chặt kiểu này (thiếu mảng thì `msgs.map` ném, trang coi
+ * như không về).
  */
-export function docTrangLayBu(hangCho: HangChoLayBu, duLieu: Record<string, unknown>): TrangLayBu {
+export function docTrangLayBu(hangCho: HangChoLayBu, duLieu: Record<string, unknown>): TrangLayBu | null {
   const d = laObject(duLieu.data) ?? duLieu;
+  const maLoi = d.error_code ?? duLieu.error_code;
+  if (maLoi !== undefined && maLoi !== 0 && maLoi !== "0") return null;
   const mang = d[hangCho === "tin_1_1" ? "msgs" : "groupMsgs"];
-  const tin = Array.isArray(mang) ? mang.filter((m): m is Record<string, unknown> => laObject(m) !== null) : [];
+  if (!Array.isArray(mang)) return null;
+  const tin = mang.filter((m): m is Record<string, unknown> => laObject(m) !== null);
   const ma = d.lastActionId;
   const { cmd, subCmd } = LENH_LAY_BU[hangCho];
   const evict = laObject(laObject(d.queueStatus)?.[`${cmd}_${subCmd}`])?.evict;
   return {
     tin,
     more: d.more === true || d.more === 1,
-    lastActionId: typeof ma === "string" || typeof ma === "number" ? String(ma) : null,
+    // Số vượt 2^53 đã bị JSON.parse làm tròn (zca-js dùng JSONBig): mốc sai thì
+    // thà không có
+    lastActionId: typeof ma === "string" ? ma : typeof ma === "number" && Number.isSafeInteger(ma) ? String(ma) : null,
     evict: evict === true || evict === 1,
   };
 }

@@ -9,8 +9,8 @@ import type { API } from "zca-js";
  * mỗi "connected". Cách làm theo `zalo-archive-mcp/src/zalo/raw-ws-frame-listener.ts`.
  */
 type WsLike = {
-  on: (e: string, fn: (d: unknown) => void) => void;
-  off?: (e: string, fn: (d: unknown) => void) => void;
+  on: (e: string, fn: (d: unknown, isBinary?: unknown) => void) => void;
+  off?: (e: string, fn: (d: unknown, isBinary?: unknown) => void) => void;
 };
 type ListenerLike = {
   on: (event: string, fn: () => void) => void;
@@ -29,13 +29,22 @@ export function ganNgheKhungWsTho(
   if (!listener || typeof listener.on !== "function") return () => {};
   let wsDangGan: WsLike | null = null;
 
-  const xuLy = (data: unknown): void => {
+  const xuLy = (data: unknown, isBinary?: unknown): void => {
+    // Khung chữ: thư viện ws vẫn đưa Buffer cho `on("message")`, còn `onmessage`
+    // của zca-js nhận chuỗi nên bỏ qua - bỏ theo
+    if (isBinary === false) return;
     if (!Buffer.isBuffer(data) || data.length < 5 || data[0] !== 1) return;
     if (data.readUInt16LE(1) !== lenh.cmd || data[3] !== lenh.subCmd) return;
     try {
       onFrame(data, listener.cipherKey ?? null);
     } catch (err) {
-      onError(err);
+      // Ném ra đây là đi vào receiver của ws -> uncaughtException -> thoát tiến
+      // trình, kéo theo mọi account. onError hỏng cũng phải nuốt.
+      try {
+        onError(err);
+      } catch {
+        /* nuốt */
+      }
     }
   };
 
