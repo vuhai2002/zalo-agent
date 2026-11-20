@@ -19,7 +19,9 @@ import { sendDeliveredReceipt } from "./message-receipts.js";
 import { processBatch } from "./message-turn-processor.js";
 import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
 import { ganAnhVaoHistory, ghiTinDenVaoHistory } from "./record-incoming-message.js";
-import { parseIncomingMessage } from "./zalo-message-parser.js";
+import { parseIncomingMessage, type ParsedMessage } from "./zalo-message-parser.js";
+import type { AccountConfig } from "../config/account-store.js";
+import { daCoTinDen } from "../conversation/khu-trung-tin-den.js";
 
 const log = createLogger("message-router");
 
@@ -38,6 +40,28 @@ export function routeIncomingMessage(
 
   const msg = parseIncomingMessage(config.id, selfId, raw, getTuning("ZALO_IMAGE_QUALITY"));
 
+  // Cùng một tin tới hai lần (cmd 501 và 551; trực tiếp và trong trang lấy bù):
+  // bỏ lần sau, kể cả biên nhận - ghi hai dòng là model đọc hai lần, trả lời hai lần
+  if (msg.msgId && msg.threadId && daCoTinDen(config.id, msg.threadId, msg)) {
+    log.debug({ accountId: config.id, threadId: msg.threadId }, "Tin trùng mã đã có trong lịch sử - bỏ");
+    return;
+  }
+
+  if (nhanVaGhiTinDen(config, api, msg) !== "tra-loi") return;
+  xepHangTraLoi(config, api, msg);
+}
+
+/**
+ * Bước "nhận + lọc + ghi" của MỌI tin đến, dùng chung cho tin trực tiếp và tin
+ * lấy bù (`offline-replay/`): biên nhận "đã nhận", danh bạ/thread, bộ lọc, ghi
+ * lịch sử. Trả quyết định để caller tự xếp hàng trả lời - tin trực tiếp vào thẳng
+ * bộ gộp, tin lấy bù vào hàng chờ trả lời trễ.
+ */
+export function nhanVaGhiTinDen(
+  config: AccountConfig,
+  api: API,
+  msg: ParsedMessage,
+): "bo" | "ghi-thu-dong" | "tra-loi" {
   // Chạy TRƯỚC mọi nhánh return bên dưới: tin thiếu threadId bị bỏ qua lặng lẽ
   // ở ngay dòng dưới, không cảnh báo ở đây thì không còn chỗ nào biết
   reportPayloadAnomalies(config.id, msg);
@@ -70,7 +94,7 @@ export function routeIncomingMessage(
       { accountId: config.id, threadId: msg.threadId, reason: decision.reason },
       decision.record ? "Ghi passive, không trả lời" : "Bỏ qua tin",
     );
-    return;
+    return decision.record ? "ghi-thu-dong" : "bo";
   }
 
   // Ghi TRƯỚC khi xếp hàng, không đợi lượt agent chạy xong: thứ tự trong lịch
@@ -91,7 +115,11 @@ export function routeIncomingMessage(
   } catch (err) {
     log.error({ accountId: config.id, threadId: msg.threadId, err }, "Không ghi được tin vào history - vẫn trả lời");
   }
+  return "tra-loi";
+}
 
+/** Tin trực tiếp đủ điều kiện trả lời: vào bộ gộp, câu trấn an khi bắt chờ lâu */
+function xepHangTraLoi(config: AccountConfig, api: API, msg: ParsedMessage): void {
   const threadKey = `${config.id}:${msg.threadId}`;
   const daNhan = enqueueMessage(threadKey, msg, (batch) => processBatch(config, kenhCaNhan(api), batch));
 

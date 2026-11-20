@@ -83,6 +83,17 @@ describe("routeIncomingMessage - ghi lịch sử ngay lúc nhận", () => {
     batcher.clearPendingBatches();
   });
 
+  it("cùng một tin tới HAI lần (cùng msgId): một dòng lịch sử, bộ gộp nhận một tin", async () => {
+    // Zalo có thể đẩy một tin qua cả cmd 501 lẫn 551, hoặc vừa trực tiếp vừa
+    // trong trang lấy bù - ghi hai dòng là model đọc hai lần, trả lời hai lần
+    const threadId = "thread-trung-ma";
+    router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw(threadId, "hẹn họp lúc 9h nhé", "m-trung"));
+    router.routeIncomingMessage(ACC, apiGia, SELF, tinRaw(threadId, "hẹn họp lúc 9h nhé", "m-trung"));
+    assert.deepEqual(noiDungHistory(threadId), ["hẹn họp lúc 9h nhé"]);
+    assert.equal(batcher.idTinDangCho(`${ACC}:${threadId}`).length, 1);
+    batcher.clearPendingBatches();
+  });
+
   it("ghi đúng MỘT dòng cho mỗi tin, theo đúng thứ tự người ta gửi", async () => {
     const threadId = "thread-thu-tu";
 

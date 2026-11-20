@@ -31,6 +31,12 @@ export type ParsedMessage = {
    */
   sentAt: string;
   /**
+   * Tin tới từ hàng chờ LẤY BÙ của Zalo (cmd 510/511) chứ không phải tin trực
+   * tiếp - tin người ta gửi lúc bot không nghe. Lượt có tin này mà trễ quá ngưỡng
+   * thì mở đầu bằng một câu xin lỗi vì trả lời muộn. Xem `src/zalo/offline-replay/`.
+   */
+  layBu?: true;
+  /**
    * id dòng trong bảng `messages`, đóng dấu bởi `ghiTinDenVaoHistory` ngay lúc
    * nhận tin. Chưa ghi thì chưa có.
    *
