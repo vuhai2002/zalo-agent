@@ -241,6 +241,17 @@ function runMigrations(): void {
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       PRIMARY KEY (account_id, thread_id, day_key)
     );
+
+    -- Mốc lấy bù tin lỡ (cmd 510 tin 1-1 / 511 tin nhóm): id việc mới nhất của
+    -- hàng chờ Zalo mà bot đã có, để lần kết nối sau xin TỪ đó. Xem
+    -- src/conversation/offline-replay-cursor-store.ts.
+    CREATE TABLE IF NOT EXISTS offline_replay_cursors (
+      account_id TEXT NOT NULL,
+      queue TEXT NOT NULL,
+      last_id TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      PRIMARY KEY (account_id, queue)
+    );
   `);
 
   // Kho tri thức (nguồn -> đoạn -> FTS5 -> gán agent) - lược đồ riêng vì có
