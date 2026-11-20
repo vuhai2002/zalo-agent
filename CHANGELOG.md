@@ -23,6 +23,7 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- **Nâng zca-js 2.3.0: listener không còn bỏ sót tin đến qua lệnh 551.**
 - **Lỗi websocket của listener không còn làm sập cả bot.** Bot chỉ nghe lỗi qua
   callback `onError` (đã deprecated), trong khi zca-js còn phát sự kiện `"error"` mà
   không ai nghe, nên Node ném lỗi và tiến trình thoát, kéo theo mọi account. Ca thật
