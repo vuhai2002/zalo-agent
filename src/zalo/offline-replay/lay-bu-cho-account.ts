@@ -72,6 +72,8 @@ export function batDauLayBuChoAccount(
       hangCho.nha();
     },
     khoangToiThieuMs: () => getTuning("LAY_BU_KHOANG_TOI_THIEU_PHUT") * 60_000,
+    onLuotBatDau: () => hangCho.batDauLuotMoi(),
+    dangBat: () => getTuning("LAY_BU_ENABLED"),
   });
 
   // Bộ nghe khung gắn lại vào ws MỚI ở sự kiện "connected", mà zca-js phát nó NGAY

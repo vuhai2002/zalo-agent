@@ -141,6 +141,14 @@ describe("tiepNhanTinLayBu", () => {
     assert.deepEqual(self, [[`${ACC}:u-lan`, Number(ts)]]);
   });
 
+  it("tin mang uid THẬT của chính tài khoản (không phải '0'): vẫn là self, không ghi", () => {
+    const { ctx, daVao } = dungCtx();
+    const kq = mod.tiepNhanTinLayBu(ctx, "tin_nhom", { ...tin11("8400000000119", gioTruoc(1)), uidFrom: SELF, idTo: "g-1" });
+    assert.equal(kq, "self");
+    assert.equal(soDong(), 0);
+    assert.equal(daVao.length, 0);
+  });
+
   it("tin self quá tuổi hay ts hỏng: không ghi nhận (không làm bỏ lượt oan)", () => {
     const { ctx, self } = dungCtx();
     mod.tiepNhanTinLayBu(ctx, "tin_1_1", { ...tin11("8400000000108", gioTruoc(100)), uidFrom: "0", idTo: "u-lan" });

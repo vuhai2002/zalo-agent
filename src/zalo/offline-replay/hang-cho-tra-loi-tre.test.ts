@@ -208,10 +208,44 @@ describe("tin trực tiếp chen vào", () => {
     hang.nha();
     mock.timers.tick(120_000);
     assert.equal(enq.length, 1);
-    // Lượt sau (nha() đã chạy) thì thread đó lại được xếp như thường
+    // Lượt lấy bù SAU bắt đầu thì thread đó lại được xếp như thường
+    hang.batDauLuotMoi();
     hang.them(key("a"), tin("a", "2026-03-10T09:00:00.000Z"));
     hang.nha();
     assert.equal(enq.length, 2);
+  });
+
+  it("nhaNgay ở lượt trước KHÔNG chặn tin lỡ của lần mất mạng sau", () => {
+    const { hang, enq } = dung();
+    hang.them(key("x"), tin("x", "2026-03-10T07:00:00.000Z"));
+    hang.them(key("p"), tin("p", "2026-03-10T07:10:00.000Z"));
+    hang.nha();
+    hang.nhaNgay(key("p"));
+    mock.timers.tick(120_000);
+    // Vài giờ sau: mất mạng lần 2, lượt mới bắt đầu, P lại có tin lỡ
+    hang.batDauLuotMoi();
+    hang.them(key("p"), tin("p", "2026-03-10T12:00:00.000Z"));
+    hang.nha();
+    assert.deepEqual(
+      enq.map(([, id]) => id),
+      ["x-2026-03-10T07:00:00.000Z", "p-2026-03-10T07:10:00.000Z", "p-2026-03-10T12:00:00.000Z"],
+    );
+  });
+
+  it("nhaNgay: đẩy theo thứ tự giờ gửi; chủ đã trả lời SAU tin chờ thì không đẩy tin cũ", () => {
+    const { hang, enq, boQua } = dung();
+    hang.them(key("a"), tin("a", "2026-03-10T07:30:00.000Z"));
+    hang.them(key("a"), tin("a", "2026-03-10T07:00:00.000Z"));
+    hang.nhaNgay(key("a"));
+    assert.deepEqual(
+      enq.map(([, id]) => id),
+      ["a-2026-03-10T07:00:00.000Z", "a-2026-03-10T07:30:00.000Z"],
+    );
+    hang.them(key("b"), tin("b", "2026-03-10T07:00:00.000Z"));
+    hang.ghiNhanTinSelf(key("b"), Date.parse("2026-03-10T07:05:00.000Z"));
+    assert.equal(hang.nhaNgay(key("b")), false);
+    assert.equal(enq.length, 2);
+    assert.equal(boQua.flat().some((m) => m.threadId === "b"), true);
   });
 
   it("nhaNgay chạy được cả khi hàng chờ chưa bắt đầu nhả", () => {

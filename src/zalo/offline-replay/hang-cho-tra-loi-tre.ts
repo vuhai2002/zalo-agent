@@ -21,7 +21,8 @@ export class HangChoTraLoiTre {
    * Thread đã được `nhaNgay` trong lượt lấy bù hiện tại: tin lấy bù của nó tới
    * SAU (trang sau của cùng lượt) chỉ nằm trong lịch sử, không xếp lại - xếp lại
    * là một lượt trả lời trễ thứ hai, xin lỗi hai lần, trả lời tin cũ sau tin mới.
-   * Xóa ở `nha()` (gọi khi một lượt lấy bù kết thúc).
+   * Xóa ở `batDauLuotMoi()` (một lượt lấy bù MỚI bắt đầu) - xóa ở cuối lượt là
+   * để nó sống qua tới lượt sau và chặn mất tin lỡ của lần mất mạng kế tiếp.
    */
   private readonly daNhaNgay = new Set<string>();
   private dangNha = false;
@@ -69,8 +70,12 @@ export class HangChoTraLoiTre {
   }
 
   /** Bắt đầu / tiếp tục nhả tuần tự. Đang nhả thì không làm gì (gọi nhiều lần được). */
-  nha(): void {
+  /** Một lượt lấy bù mới bắt đầu (không gồm lượt chạy tiếp sau trần - cùng lượt) */
+  batDauLuotMoi(): void {
     this.daNhaNgay.clear();
+  }
+
+  nha(): void {
     if (this.daDung || this.dangNha) return;
     this.dangNha = true;
     this.buoc();
@@ -86,8 +91,15 @@ export class HangChoTraLoiTre {
     if (this.daDung || !ds) return false;
     this.daNhaNgay.add(threadKey);
     this.cho.delete(threadKey);
+    const self = this.selfLuc.get(threadKey);
     this.selfLuc.delete(threadKey);
-    this.dayVao(threadKey, ds);
+    const sapXep = this.sapTheoGio(ds);
+    if (self !== undefined && self > Date.parse(sapXep.at(-1)?.sentAt ?? "")) {
+      // Chủ đã trả lời tay các tin cũ: chỉ tin trực tiếp mới đi, không trả lời lại tin cũ
+      this.an("lưu ảnh tin bỏ lượt", () => this.deps.luuAnhTinBoQua(sapXep));
+      return false;
+    }
+    this.dayVao(threadKey, sapXep);
     return true;
   }
 
@@ -123,7 +135,7 @@ export class HangChoTraLoiTre {
         this.dangNha = false;
         return;
       }
-      const ds = [...(this.cho.get(tk) ?? [])].sort((a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt));
+      const ds = this.sapTheoGio(this.cho.get(tk) ?? []);
       this.cho.delete(tk);
       const self = this.selfLuc.get(tk);
       this.selfLuc.delete(tk);
@@ -165,6 +177,10 @@ export class HangChoTraLoiTre {
       if (!nhan) boQua.push(msg);
     }
     if (boQua.length > 0) this.an("lưu ảnh tin bỏ lượt", () => this.deps.luuAnhTinBoQua(boQua));
+  }
+
+  private sapTheoGio(ds: ParsedMessage[]): ParsedMessage[] {
+    return [...ds].sort((a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt));
   }
 
   private threadSomNhat(): string | undefined {

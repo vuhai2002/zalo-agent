@@ -169,8 +169,17 @@ function xepHangTraLoi(config: AccountConfig, api: API, msg: ParsedMessage): voi
   ).catch((err) => log.debug({ threadId: msg.threadId, err }, "Gửi câu trấn an thất bại"));
 }
 
+/**
+ * Đang hỏi tên nhóm nào: tên chỉ được ghi SAU khi await xong, nên không chặn thì
+ * một loạt tin dồn của cùng nhóm (nhất là trang lấy bù tin lỡ) bắn N lời gọi Zalo.
+ */
+const dangHoiTenNhom = new Set<string>();
+
 /** Lấy tên group 1 lần khi gặp lần đầu, cache vào bảng threads */
 async function resolveGroupName(accountId: string, api: API, threadId: string): Promise<void> {
+  const khoa = `${accountId}:${threadId}`;
+  if (dangHoiTenNhom.has(khoa)) return;
+  dangHoiTenNhom.add(khoa);
   try {
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const info: any = await api.getGroupInfo(threadId);
@@ -178,5 +187,7 @@ async function resolveGroupName(accountId: string, api: API, threadId: string): 
     if (name) setThreadDisplayName(accountId, threadId, String(name));
   } catch (err) {
     log.debug({ accountId, threadId, err }, "Không lấy được tên nhóm - để trống");
+  } finally {
+    dangHoiTenNhom.delete(khoa);
   }
 }

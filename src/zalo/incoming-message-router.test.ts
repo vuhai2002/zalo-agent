@@ -46,6 +46,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 /** API giả: mọi lệnh gửi ra Zalo đều nuốt êm, không chạm mạng; đếm biên nhận "đã nhận" */
 let soBienNhan = 0;
+let soLanHoiTenNhom = 0;
 const apiGia = {
   addReaction: async () => ({}),
   sendSeenEvent: async () => ({}),
@@ -54,7 +55,11 @@ const apiGia = {
     return {};
   },
   sendTypingEvent: async () => ({}),
-  getGroupInfo: async () => ({}),
+  getGroupInfo: async () => {
+    soLanHoiTenNhom++;
+    await sleep(20);
+    return {};
+  },
 } as unknown as API;
 
 function tinRaw(threadId: string, text: string, msgId: string) {
@@ -100,6 +105,21 @@ describe("routeIncomingMessage - ghi lịch sử ngay lúc nhận", () => {
     assert.equal(batcher.idTinDangCho(`${ACC}:${threadId}`).length, 1);
     await sleep(10);
     assert.equal(soBienNhan - truoc, 1, "tin trùng vẫn gửi biên nhận 'đã nhận' lần hai");
+    batcher.clearPendingBatches();
+  });
+
+  it("nhiều tin của một nhóm chưa có tên tới dồn: chỉ hỏi tên nhóm MỘT lần cùng lúc", async () => {
+    const truoc = soLanHoiTenNhom;
+    for (let i = 0; i < 5; i++) {
+      router.routeIncomingMessage(ACC, apiGia, SELF, {
+        threadId: "g-chua-ten",
+        type: ThreadType.Group,
+        isSelf: false,
+        data: { content: `tin ${i}`, uidFrom: "user-1", idTo: "g-chua-ten", dName: "Hải", msgId: `m-nhom-${i}`, cliMsgId: "c" },
+      });
+    }
+    await sleep(60);
+    assert.equal(soLanHoiTenNhom - truoc, 1);
     batcher.clearPendingBatches();
   });
 

@@ -129,6 +129,45 @@ describe("lấy bù theo account", () => {
     assert.equal(moc.docMocLayBu(ACC).tin_1_1, "8400000000600", "tin self đã đẩy mốc");
   });
 
+  it("hai lần mất mạng: người đã được nhả ngay ở lượt 1 vẫn được trả lời tin lỡ của lượt 2", () => {
+    tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", 60);
+    tuning.setTuning("LAY_BU_GIAN_CACH_MAX_GIAY", 60);
+    tuning.setTuning("LAY_BU_KHOANG_TOI_THIEU_PHUT", 0);
+    try {
+      const { api, ws } = apiGia();
+      const daVao: string[] = [];
+      const layBu = mod.batDauLayBuChoAccount(accounts.getAccount(ACC)!, api, SELF, {
+        enqueue: (_tk, m) => {
+          daVao.push(m.msgId);
+          return true;
+        },
+      })!;
+      layBu.khiKetNoi();
+      ws.emit(
+        "message",
+        dungKhungWs(510, 1, {
+          msgs: [tinTho("8400000000901", "u-lan", 3), tinTho("8400000000902", "u-minh", 2)],
+          more: 0,
+          lastActionId: "8400000000902",
+        }),
+      );
+      mock.timers.tick(5_000);
+      ws.emit("message", dungKhungWs(511, 1, { groupMsgs: [], more: 0, lastActionId: "1" }));
+      layBu.nhaNgay(`${ACC}:u-minh`); // Minh nhắn trực tiếp lúc đang chờ
+      layBu.khiDongKetNoi();
+      layBu.khiKetNoi(); // lượt 2
+      ws.emit("message", dungKhungWs(510, 1, { msgs: [tinTho("8400000000903", "u-minh", 1)], more: 0, lastActionId: "8400000000903" }));
+      mock.timers.tick(5_000);
+      ws.emit("message", dungKhungWs(511, 1, { groupMsgs: [], more: 0, lastActionId: "2" }));
+      mock.timers.tick(120_000);
+      assert.ok(daVao.includes("8400000000903"), `tin lỡ lượt 2 của Minh không được trả lời: ${daVao.join(",")}`);
+    } finally {
+      tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", null);
+      tuning.setTuning("LAY_BU_GIAN_CACH_MAX_GIAY", null);
+      tuning.setTuning("LAY_BU_KHOANG_TOI_THIEU_PHUT", null);
+    }
+  });
+
   it("tắt LAY_BU_ENABLED trên dashboard: kết nối không xin gì", () => {
     tuning.setTuning("LAY_BU_ENABLED", false);
     const { api, lenh } = apiGia();

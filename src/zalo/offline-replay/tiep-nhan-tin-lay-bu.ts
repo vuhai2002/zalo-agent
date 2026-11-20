@@ -76,7 +76,8 @@ export function tiepNhanTinLayBu(
     // ts hỏng, ở tương lai quá xa, hay cũ hơn trần: không tin được giờ gửi
     const quaTuoi = !(lech >= -SOM_TOI_DA_MS && lech <= ctx.tranTuoiGio * 3_600_000);
 
-    if (msg.isSelf) {
+    // Chốt thêm theo uid: zca-js chỉ nhận self qua `uidFrom == "0"`
+    if (msg.isSelf || msg.senderId === ctx.selfId) {
       // Tin self quá tuổi / ts hỏng: không ghi nhận - "self lúc bây giờ" là bỏ lượt oan cả thread
       if (!quaTuoi && tsMs !== null) ctx.hangCho.ghiNhanTinSelf(threadKey, tsMs);
       return "self";

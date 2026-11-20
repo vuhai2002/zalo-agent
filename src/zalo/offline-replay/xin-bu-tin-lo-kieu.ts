@@ -54,6 +54,10 @@ export type PhuThuocXinBu = {
    */
   onLuotXong: () => void;
   khoangToiThieuMs: () => number;
+  /** Một lượt MỚI bắt đầu (kể cả lượt hoãn; không gồm chạy tiếp sau trần) */
+  onLuotBatDau?: () => void;
+  /** Công tắc tắt nhanh - đọc lúc bắt đầu lượt và lúc chạy tiếp, không chỉ lúc kết nối */
+  dangBat?: () => boolean;
   now?: () => number;
   random?: () => number;
 };

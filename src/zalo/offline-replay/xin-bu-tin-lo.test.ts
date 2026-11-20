@@ -38,11 +38,12 @@ afterEach(() => {
 
 type Lenh = { cmd: number; first: boolean; lastId: string | null };
 
-function dung(opts: { khoangToiThieuMs?: number; guiLenhNem?: boolean; callbackNem?: boolean } = {}) {
+function dung(opts: { khoangToiThieuMs?: number; guiLenhNem?: boolean; callbackNem?: boolean; dangBat?: () => boolean } = {}) {
   const lenh: Lenh[] = [];
   const tin: [string, Record<string, unknown>][] = [];
   const xong: import("./xin-bu-tin-lo.js").KetQuaHangCho[] = [];
   let luotXong = 0;
+  let batDau = 0;
   const bo = mod.taoBoXinBu({
     accountId: ACC,
     guiLenh: (cmd, data) => {
@@ -60,8 +61,10 @@ function dung(opts: { khoangToiThieuMs?: number; guiLenhNem?: boolean; callbackN
     },
     khoangToiThieuMs: () => opts.khoangToiThieuMs ?? 600_000,
     random: () => 0,
+    onLuotBatDau: () => batDau++,
+    dangBat: opts.dangBat,
   });
-  return { bo, lenh, tin, xong, luotXong: () => luotXong };
+  return { bo, lenh, tin, xong, luotXong: () => luotXong, batDau: () => batDau };
 }
 
 const trang = (lastActionId: string | null, more: boolean, soTin = 1, evict = false): TrangLayBu => ({
@@ -142,6 +145,52 @@ describe("lật trang", () => {
     }
     assert.equal(xong.at(-1)?.trangThai, "du");
     assert.equal(luotXong(), 1);
+  });
+
+  it("lượt CHẠY TIẾP sau trần mà Zalo im: dở nhưng GIỮ mốc (mốc do chính Zalo vừa trả)", () => {
+    const { bo } = dung();
+    bo.khiKetNoi();
+    mock.timers.tick(2_000);
+    bo.khiTrang("tin_nhom", trang("1", false, 0));
+    for (let i = 1; i <= 30; i++) {
+      bo.khiTrang("tin_1_1", trang(String(1000 + i), true));
+      mock.timers.tick(2_000);
+    }
+    mock.timers.tick(60_000); // chạy tiếp: xin từ 1030
+    mock.timers.tick(8_000); // Zalo im
+    assert.equal(moc.docMocLayBu(ACC).tin_1_1, "1030", "lượt chạy tiếp đã bỏ mất mốc tốt");
+  });
+
+  it("onLuotBatDau: gọi khi một lượt mới bắt đầu (kể cả lượt hoãn), KHÔNG gọi khi chạy tiếp sau trần", () => {
+    const { bo, batDau } = dung({ khoangToiThieuMs: 600_000 });
+    bo.khiKetNoi();
+    assert.equal(batDau(), 1);
+    mock.timers.tick(2_000);
+    bo.khiTrang("tin_nhom", trang("1", false, 0));
+    for (let i = 1; i <= 30; i++) {
+      bo.khiTrang("tin_1_1", trang(String(1000 + i), true));
+      mock.timers.tick(2_000);
+    }
+    mock.timers.tick(60_000);
+    assert.equal(batDau(), 1, "chạy tiếp là CÙNG lượt");
+    bo.khiDongKetNoi();
+    bo.khiKetNoi();
+    assert.equal(batDau(), 2);
+  });
+
+  it("công tắc tắt: lượt hoãn và lượt chạy tiếp cũng không xin", () => {
+    let bat = true;
+    const { bo, lenh } = dung({ khoangToiThieuMs: 600_000, dangBat: () => bat });
+    bo.khiKetNoi();
+    bo.khiTrang("tin_1_1", trang("10", false));
+    mock.timers.tick(2_000);
+    bo.khiTrang("tin_nhom", trang("20", false));
+    bo.khiDongKetNoi();
+    bo.khiKetNoi(); // hoãn
+    bat = false;
+    const truoc = lenh.length;
+    mock.timers.tick(600_000);
+    assert.equal(lenh.length, truoc, "tắt rồi mà lượt hoãn vẫn xin");
   });
 
   it("còn trang mà thiếu mã trang, hay trùng mã vừa xin: dừng dở, không xin lặp", () => {

@@ -102,15 +102,24 @@ export function taoBoXinBu(deps: K.PhuThuocXinBu): K.BoXinBu {
     }
   };
 
-  const batDau = (hangCho: HangChoLayBu): void => {
+  const dangBat = (): boolean => {
+    let bat = true;
+    an("đọc công tắc", () => (bat = deps.dangBat?.() ?? true));
+    return bat;
+  };
+
+  /** `choBoMoc = false`: lượt chạy tiếp sau trần - mốc do chính Zalo vừa trả, Zalo im thì GIỮ */
+  const batDau = (hangCho: HangChoLayBu, choBoMoc = true): void => {
     choBatDau.delete(hangCho);
     const moc = docMoc(hangCho);
-    const l: K.Luot = { soTrang: 0, soTin: 0, daXin: null, tuMoc: moc !== null, evict: false, cho: null };
+    const l: K.Luot = { soTrang: 0, soTin: 0, daXin: null, tuMoc: moc !== null && choBoMoc, evict: false, cho: null };
     luot[hangCho] = l;
     xin(hangCho, l, moc, true);
   };
 
   const batDauLuot = (): void => {
+    if (!dangBat()) return;
+    an("báo bắt đầu lượt", () => deps.onLuotBatDau?.());
     lanXinCuoi = now();
     choBatDau.add("tin_nhom");
     batDau("tin_1_1");
@@ -194,7 +203,17 @@ export function taoBoXinBu(deps: K.PhuThuocXinBu): K.BoXinBu {
         // thread đã nhả (xin lỗi hai lần)
         if (tien) choBatDau.add(hangCho);
         ketThuc(hangCho, l, "do", tien ? `Chạm trần ${K.TRAN_TRANG} trang - chạy tiếp sau` : "Chạm trần, mốc không tiến");
-        if (tien) sau(K.CHAY_TIEP_SAU_TRAN_MS, () => !luot[hangCho] && batDau(hangCho));
+        if (tien) {
+          sau(K.CHAY_TIEP_SAU_TRAN_MS, () => {
+            if (luot[hangCho]) return;
+            if (dangBat()) batDau(hangCho, false);
+            else {
+              // Tắt giữa chừng: không chạy tiếp, nhả phần đã lấy
+              choBatDau.delete(hangCho);
+              if (!dangCoLuot() && choBatDau.size === 0) an("báo xong lượt", deps.onLuotXong);
+            }
+          });
+        }
         else log.warn({ hangCho }, "Chạm trần trang mà mốc không lưu được - không chạy tiếp");
       } else {
         sau(K.NHIP_TRANG_MS + Math.floor(random() * K.LECH_TRANG_MS), () => xin(hangCho, l, ke, false));
