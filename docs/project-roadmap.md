@@ -6496,3 +6496,15 @@ Bài học đã ghi vào `docs/release-guide.md` + mục "Phát hành" của `CL
 CHANGELOG `[Chưa phát hành]` bị bỏ trống nhiều đợt nên 3 feature lớn suýt không
 vào release notes. Kỷ luật từ nay: **thêm/sửa/xóa gì thì cập nhật `[Chưa phát
 hành]` NGAY trong đợt đó**, đừng để dồn.
+
+## V3.33 - Lấy bù tin lỡ và trả lời trễ (2026-11-20, plan: plans/261120-1134-lay-bu-tin-lo-va-tra-loi-tre/)
+
+Sau sự cố 2026-11-19 (DNS VPS chết, account cá nhân im 30 giờ, tin tới trong khoảng đó mất):
+- [x] Listener nghe `on("error")` - lỗi websocket không còn làm sập tiến trình
+- [x] Khởi động account gặp lỗi mạng thì tự thử lại (30s -> 5 phút)
+- [x] Nâng zca-js 2.3.0 (nhận tin cmd 551)
+- [x] Mỗi lần kết nối xin bù cmd 510/511 từ mốc, lật trang theo `more`, chạy tiếp sau trần
+- [x] Tin lấy bù qua bộ lọc chung, khử trùng theo `msg_id`, trần tuổi theo `ts` thô, bỏ tin thu hồi
+- [x] Hàng chờ trả lời trễ giãn nhịp, bỏ thread chủ đã trả lời tay, gộp với tin trực tiếp mới
+- [x] Câu xin lỗi vui ở câu trả lời chốt khi trễ >= ngưỡng
+- [ ] Đo thật trên prod: lượt lấy bù đầu của `minh-triet` sau deploy (nâng tạm trần tuổi)

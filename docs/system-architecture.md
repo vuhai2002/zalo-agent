@@ -528,6 +528,49 @@ hoặc khi ai đó reply tin của chính nó. `doiUpdateSangParsedMessage` đ�
 `mentionsMe: true` dựa trên khẳng định đó. Nếu tài liệu sai thì bot trả lời MỌI
 tin trong nhóm - phải đo lại trước khi mở nhóm cho tài khoản thật.
 
+## Lấy bù tin lỡ (`src/zalo/offline-replay/`)
+
+Ca thật 2026-11-19: account cá nhân nằm im khoảng 30 giờ sau một lần DNS VPS chết, mọi tin
+gửi tới trong khoảng đó không bao giờ tới bot. Zalo giữ một HÀNG CHỜ tin cho mỗi tài khoản
+(khoảng 2 tuần) và gửi lại khi client xin bằng cmd 510 (1-1) / 511 (nhóm), như Zalo Web và
+`zalo-archive-mcp` làm mỗi lần kết nối. Chỉ kênh cá nhân (kênh bot không có websocket).
+
+Luồng:
+1. `zalo-listener.ts` gọi hook `khiKetNoi` trong `onConnected` -> `xin-bu-tin-lo.ts` gửi
+   `{version:1, cmd:510|511, subCmd:1, data:{first, lastId, preIds:[]}}` qua `listener.sendWs`
+   (511 sau 510 thêm 2-5 giây). `first:true` xin TỪ mốc (`offline_replay_cursors`, chưa có
+   thì từ đầu hàng chờ); còn `more` thì xin tiếp `{first:false, lastId: lastActionId}` sau 2-4
+   giây. Trần 30 trang, chạm trần thì chạy tiếp từ mốc sau 60 giây trong cùng kết nối (chỉ khi
+   mốc đã tiến). Trang không về 8 giây thì dừng dở; trang ĐẦU xin TỪ mốc mà không về thì bỏ
+   mốc (`xoaMocLayBu` có điều kiện: chỉ xóa nếu DB vẫn giữ đúng mốc đã xin).
+2. Phản hồi đọc từ khung WS thô (`raw-ws-frame-listener.ts` + `giai-ma-khung-ws.ts` +
+   `doc-trang-lay-bu.ts`), không từ `old_messages`: zca-js vứt `more`/`lastActionId`.
+   Trang thiếu mảng tin hoặc có `error_code` khác 0 là KHÔNG hợp lệ (dừng dở, giữ mốc) - không
+   được hiểu là "hết trang".
+3. Từng tin -> `tiep-nhan-tin-lay-bu.ts`: lệnh thu hồi (`content.deleteMsg`) gỡ tin gốc khỏi
+   hàng chờ; tin của chính tài khoản chỉ ghi nhận giờ; tin quá trần tuổi (theo `ts` THÔ) bỏ hẳn;
+   còn lại đánh dấu `layBu` rồi đi `nhanVaGhiTinDen` (chung với router: khử trùng theo
+   `messages.msg_id`, bộ lọc, ghi lịch sử; KHÔNG gửi biên nhận "đã nhận" cho tin lấy bù).
+4. Hết lượt -> `HangChoTraLoiTre` nhả từng hội thoại vào `enqueueMessage` (bộ gộp lo khoá
+   thread, tin chen, trần batch), giãn ngẫu nhiên trong [min, max]. Mỗi người chỉ đẩy
+   `TRAN_TIN_DON` tin mới nhất. Bỏ thread có tin của tài khoản SAU tin chờ cuối.
+5. `loi-nhac-tra-loi-tre.ts`: batch có tin `layBu` trễ >= ngưỡng thì `buildCurrentTurnContent`
+   thêm lời nhắc mở đầu câu trả lời CHỐT bằng một câu xin lỗi vui (dùng chung cho tin chen).
+
+Tin trực tiếp: `daCoTinDen` chặn trùng (cmd 501 + 551, trực tiếp + trang lấy bù); tin không
+trùng không self đẩy mốc khi hàng chờ Zalo đã bắt kịp; người đang chờ trả lời trễ nhắn tin mới
+thì `nhaNgay` đẩy tin chờ của họ vào bộ gộp TRƯỚC tin mới (một lượt thấy cả hai).
+
+Giới hạn đã biết (chấp nhận):
+- Hàng chờ trả lời trễ chỉ trong RAM: restart giữa lúc nhả thì thread còn chờ không được trả
+  lời - `dungVaBaoBoDo` log WARN tên từng thread.
+- Phiên đăng nhập MỚI bằng QR không được Zalo gửi bù (đo ở archive: 0 tin).
+- Tin self có thể là của chính bot; chủ nhắn tay TRONG lúc đang nhả không thấy (`selfListen:false`).
+- Tin lấy bù trong trần tuổi được ghi với `id` mới hơn tin trực tiếp đã có (lịch sử đọc theo `id`).
+- Nhịp giãn tính theo hội thoại; nhóm có N người gửi ra N lượt liền, có thể N câu xin lỗi.
+- Bật lại `LAY_BU_ENABLED` có hiệu lực từ lần kết nối sau. Trang lỗi hình làm handler riêng của
+  zca-js ném -> log ERROR "Listener báo lỗi" (nhiễu, đã tự xử lý).
+
 ## Ràng buộc từ Zalo (qua zca-js)
 
 - 1 listener/account: mở Zalo Web trên trình duyệt sẽ đá listener bot (bot tự reconnect với backoff).

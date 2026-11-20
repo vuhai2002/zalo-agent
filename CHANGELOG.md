@@ -10,6 +10,19 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Thêm
 
+- **Bot lấy lại tin nhắn bị lỡ khi mất kết nối và trả lời trễ** (tài khoản cá nhân).
+  Mỗi lần kết nối lại Zalo (khởi động, rớt mạng, bật lại), bot xin Zalo gửi lại những
+  tin người ta nhắn trong lúc nó không nghe - Zalo giữ khoảng 2 tuần. Tin lấy lại đi
+  qua đúng bộ lọc như tin thường (danh sách cho phép, nhóm phải nhắc tên bot), được ghi
+  vào lịch sử, rồi bot trả lời từng người một, cách nhau 20-60 giây cho khỏi dồn dập.
+  Tin trễ từ 30 phút thì câu trả lời mở đầu bằng một câu vui xin lỗi vì trả lời muộn
+  (lý do mơ hồ kiểu ngủ quên, không bịa bệnh). Bỏ qua: tin cũ hơn 48 giờ, tin người gửi
+  đã thu hồi, hội thoại mà chủ đã tự trả lời trên điện thoại. Không trả lời trùng khi
+  một tin vừa tới trực tiếp vừa nằm trong phần lấy lại. Sáu tham số mới trong nhóm
+  "Gửi tin" của trang Cấu hình (bật/tắt, trần tuổi tối đa 7 ngày, ngưỡng xin lỗi, giãn
+  cách, khoảng tối thiểu giữa hai lần lấy bù). Restart giữa lúc đang trả lời dần thì
+  những hội thoại còn chờ không được trả lời - log ghi tên từng cái để chủ tự nhắn.
+
 - **Ghi chú nguyên văn** (tool `verbatim_note`): người dùng gửi một đoạn (thông báo,
   mẫu tin, lời cảm ơn...) kèm "ghi nhớ tin này" thì bot lưu ĐÚNG từng chữ và gửi lại
   y hệt khi được hỏi. Máy chủ đối chiếu với tin gốc và từ chối nếu bot tóm tắt hay
