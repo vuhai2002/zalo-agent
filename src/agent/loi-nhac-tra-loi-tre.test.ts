@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ParsedMessage } from "../zalo/zalo-message-parser.js";
-import { loiNhacTraLoiTre } from "./loi-nhac-tra-loi-tre.js";
+import { loiNhacSauGianDoan, loiNhacTraLoiTre } from "./loi-nhac-tra-loi-tre.js";
 
 /**
  * Lượt có tin lấy bù trễ quá ngưỡng phải nhắc model mở đầu bằng MỘT câu vui
@@ -74,6 +74,43 @@ describe("loiNhacTraLoiTre", () => {
       "nói thật",
       "đừng nhận là mình quên",
       "chưa làm xong được",
+    ]) {
+      assert.ok(chu.includes(doan), `thiếu "${doan}"`);
+    }
+  });
+
+  it("câu đùa lấy HỆ THỐNG làm chủ ngữ, không để model tự nhận mình ngủ", () => {
+    // Eval model thật 2026-11-20, 3/3 lượt: câu mở đầu "mình vừa ngủ một giấc dài"
+    // + nhãn "hệ thống gián đoạn" ở lượt sau = mâu thuẫn, model kết luận câu đùa là
+    // "lời giải thích bịa" rồi xin lỗi vì thiếu trung thực. Câu đùa phải tự chở sự thật.
+    const chu = loiNhacTraLoiTre([tin("2026-03-10T01:00:00.000Z", true)], NOW, 30, TZ) ?? "";
+    assert.ok(chu.includes("hệ thống bên mình vừa ngủ"), chu);
+    assert.ok(chu.includes("chủ ngữ là HỆ THỐNG"), chu);
+    assert.ok(!chu.includes('"mình vừa tỉnh giấc"'), "ví dụ cũ lấy 'mình' làm chủ ngữ phải bỏ");
+  });
+});
+
+describe("loiNhacSauGianDoan", () => {
+  // Lượt SAU lượt trả lời trễ không còn `loiNhacTraLoiTre`. Eval model thật
+  // 2026-11-20: bị trách "sao bạn sai sót" thì model xin lỗi và tự trách (kể cả
+  // vì câu đùa lúc trước) - người dùng chốt: đó là lỗi HỆ THỐNG, không xin lỗi.
+  const dong = (denTre?: boolean) => ({ role: "user" as const, content: "x", ...(denTre ? { denTre: true } : {}) });
+
+  it("lịch sử không có tin mang nhãn gián đoạn: không nhắc gì", () => {
+    assert.equal(loiNhacSauGianDoan([dong(), { role: "assistant" as const, content: "y" }]), null);
+    assert.equal(loiNhacSauGianDoan([]), null);
+  });
+
+  it("có tin mang nhãn: nói rõ lỗi hệ thống, không xin lỗi, không tự trách", () => {
+    const chu = loiNhacSauGianDoan([dong(), dong(true)]) ?? "";
+    for (const doan of [
+      "[Lời nhắc hệ thống]",
+      "lỗi hệ thống, không phải lỗi của bạn",
+      "KHÔNG xin lỗi",
+      "KHÔNG tự trách",
+      "đừng xin lỗi hay rút lại nó",
+      "bình thản",
+      "người ta không hỏi",
     ]) {
       assert.ok(chu.includes(doan), `thiếu "${doan}"`);
     }

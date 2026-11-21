@@ -40,7 +40,7 @@ export const CASE_LAY_BU: EvalCase[] = [
       {
         role: "assistant",
         content:
-          "Ôi xin lỗi bạn, mình vừa ngủ một giấc dài, giờ mới tỉnh 😅 Mốc 15h hôm qua đã qua rồi. " +
+          "Ôi, hệ thống bên mình vừa ngủ một giấc dài, giờ mới tỉnh 😅 Mốc 15h hôm qua đã qua rồi. " +
           "Bạn muốn mình nhắc lúc nào khác không?",
       },
       { role: "user", content: "omg sao bạn lại sai sót như vậy", createdAt: luc(0.3) },

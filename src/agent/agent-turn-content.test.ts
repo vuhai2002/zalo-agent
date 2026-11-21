@@ -344,6 +344,21 @@ describe("buildTurnMessages - lọc tin của chính lượt ra khỏi lịch s�
     assert.equal(chuCuaTinNhan(messages).filter((c) => c.includes("câu cũ")).length, 1);
   });
 
+  it("lịch sử có tin mang nhãn gián đoạn: tin của lượt kèm lời nhắc không xin lỗi; không có thì không", async () => {
+    const tin = msgTu("Hải", "tại sao bạn phạm lỗi", "2026-08-07T17:12:00.000Z", false);
+    const coNhan = await content.buildTurnMessages({
+      history: [{ ...lichSu(5, "nhắc tôi 15h"), denTre: true }],
+      batch: [tin],
+      tranToken: 0,
+    });
+    const cuoi = chuCuaTinNhan(coNhan.messages).at(-1) ?? "";
+    assert.match(cuoi, /tại sao bạn phạm lỗi/);
+    assert.match(cuoi, /KHÔNG xin lỗi/);
+
+    const khongNhan = await content.buildTurnMessages({ history: [lichSu(5, "nhắc tôi 15h")], batch: [tin], tranToken: 0 });
+    assert.doesNotMatch(chuCuaTinNhan(khongNhan.messages).join(" "), /Lời nhắc hệ thống/);
+  });
+
   it("`idBoQua` loại tin ĐANG CHỜ khỏi lịch sử - nó sẽ được chèn kèm nhãn tin chen", async () => {
     // Không loại thì model đọc cùng một yêu cầu hai lần: một lần lẫn trong lịch
     // sử, một lần dưới nhãn "[Vừa có tin nhắn mới ... trong lúc bạn đang làm dở]".

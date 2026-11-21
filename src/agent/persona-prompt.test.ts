@@ -361,3 +361,17 @@ describe("buildSystemPrompt - tên hiển thị của người gửi", () => {
     assert.match(text, /chat riêng với "Người dùng"/);
   });
 });
+
+describe("buildSystemPrompt - tin tới lúc hệ thống gián đoạn", () => {
+  // Eval model thật 2026-11-20, 12/12 lượt qua 4 bản chữ: lời nhắc ở CUỐI lượt
+  // không ngăn được model xin lỗi vì câu đùa "hệ thống ngủ một giấc" khi bị trách.
+  // Người dùng chốt: lỗi hệ thống, agent không làm sai gì, nên luật nằm ở persona.
+  it("persona dạy cách đọc nhãn gián đoạn: lỗi hệ thống, không xin lỗi, không tự trách", async () => {
+    const { NHAN_DEN_TRE } = await import("./user-message-line.js");
+    const text = prompt.buildSystemPrompt(AGENT, MSG, undefined, account([]));
+    assert.ok(text.includes(NHAN_DEN_TRE), "luật phải trích ĐÚNG nhãn model thấy trên dòng tin");
+    for (const doan of ["lỗi hệ thống, không phải lỗi của bạn", "KHÔNG xin lỗi", "KHÔNG tự trách", "câu đùa"]) {
+      assert.ok(text.includes(doan), `thiếu "${doan}"`);
+    }
+  });
+});

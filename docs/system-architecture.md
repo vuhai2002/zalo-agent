@@ -555,9 +555,12 @@ Luồng:
    thread, tin chen, trần batch), giãn ngẫu nhiên trong [min, max]. Mỗi người chỉ đẩy
    `TRAN_TIN_DON` tin mới nhất. Bỏ thread có tin của tài khoản SAU tin chờ cuối.
 5. `loi-nhac-tra-loi-tre.ts`: batch có tin `layBu` trễ >= ngưỡng thì `buildCurrentTurnContent`
-   thêm lời nhắc mở đầu câu trả lời CHỐT bằng một câu xin lỗi vui (dùng chung cho tin chen).
+   thêm lời nhắc mở đầu câu trả lời CHỐT bằng một câu vui báo trả lời muộn (dùng chung cho tin chen).
    Lời nhắc nói THẬT với model: hệ thống gián đoạn nên không nhận được tin, không phải nó quên;
-   giọng vui kiểu "vừa ngủ một giấc dài mới tỉnh", bị hỏi lý do thì giải thích nhẹ nhàng.
+   giọng vui nhưng câu đùa lấy HỆ THỐNG làm chủ ngữ ("hệ thống bên mình vừa ngủ một giấc dài"),
+   bị hỏi lý do thì giải thích nhẹ nhàng. Đo trên model thật: câu đùa "mình vừa ngủ một giấc" thì
+   lượt sau (thấy nhãn gián đoạn) model gọi chính nó là "lời giải thích bịa" và xin lỗi vì thiếu
+   trung thực, 3/3 lượt.
 6. Tin lấy bù trễ từ ngưỡng xin lỗi được chốt `denTre` MỘT lần lúc nhận (`tiep-nhan-tin-lay-bu.ts`;
    chớp mạng vài phút thì không), ghi cột `messages.den_tre = 1`. Tách khỏi `layBu` vì `layBu` bị gỡ
    khi người đó nhắn lại (không xin lỗi) trong khi dòng lịch sử đã ghi - đọc hai trường là lệch. Dòng lịch
@@ -566,6 +569,11 @@ Luồng:
    lượt trả lời trễ. Ca thật 2026-11-20: thiếu nhãn này, bị hỏi "tại sao bạn phạm lỗi" ở lượt
    sau thì model tự nhận "mình không đặt lịch nhắc". Prompt tóm tắt dùng bản ngôi thứ ba
    (`NHAN_DEN_TRE_TOM_TAT`). Tin nhận trước khi có cột thì không có nhãn.
+7. Lượt SAU (bị hỏi/trách chuyện trả lời trễ): KHÔNG xin lỗi, không tự trách - lỗi hệ thống, bot không
+   làm sai gì (người dùng chốt). Cần HAI chỗ, đã đo trên model thật: luật trong `BASE_PERSONA` (trích
+   đúng `NHAN_DEN_TRE`) + `loiNhacSauGianDoan` ở cuối lượt khi cửa sổ lịch sử còn tin mang nhãn. Chỉ lời
+   nhắc cuối lượt: 12/12 lượt vẫn xin lỗi vì câu đùa. Chỉ persona: hết chữ "xin lỗi" nhưng vẫn tự chê
+   giọng đùa, không hỏi tiếp việc cần làm. Cả hai: 5/5 sạch, bình thản, có gợi ý giúp tiếp.
 
 Tin trực tiếp: `daCoTinDen` chặn trùng (cmd 501 + 551, trực tiếp + trang lấy bù); tin không
 trùng không self đẩy mốc khi hàng chờ Zalo đã bắt kịp. Người có tin lỡ đang chờ nhắn tin mới mà bot
