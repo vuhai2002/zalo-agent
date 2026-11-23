@@ -1162,3 +1162,45 @@ describe("runAgentTurn - stream bị cắt (ai >= 7.0.130, openai-compatible >= 
     assert.equal(ket.text, "Chốt từ kết quả đã tra.");
   });
 });
+
+describe("runAgentTurn - lỗi provider bị router đổi thành chữ [Error]", () => {
+  // Ca thật 2026-11-23: OpenAI chặn lượt vì "cybersecurity risk", 9Router nối
+  // "[Error] <thông báo>" vào cuối câu trả lời, 0 token, finish stop - câu lỗi
+  // tiếng Anh đi thẳng xuống Zalo
+  const LOI = "[Error] This content was flagged for possible cybersecurity risk.";
+
+  it("có câu trả lời trước câu lỗi: gửi phần đó, bỏ đuôi lỗi, không gọi lại", async () => {
+    const { ket, soLanGoi } = await chayLuot([() => traLoi(`Em không nấu được ạ.${LOI}`, KHONG_TOKEN)]);
+    assert.equal(ket.text, "Em không nấu được ạ.");
+    assert.equal(soLanGoi(), 1);
+    assert.equal(ket.duPhong, undefined, "phần trước câu lỗi là câu trả lời thật của model");
+  });
+
+  it("chỉ có câu lỗi: thử lại 1 lần, lần hai có chữ thì dùng", async () => {
+    const { ket, soLanGoi } = await chayLuot([() => traLoi(LOI, KHONG_TOKEN), () => traLoi("Lần hai ổn rồi.")]);
+    assert.equal(soLanGoi(), 2);
+    assert.equal(ket.text, "Lần hai ổn rồi.");
+  });
+
+  it("chỉ có câu lỗi cả hai lần: câu dự phòng có cờ, không lọt chữ [Error]", async () => {
+    const { ket, soLanGoi } = await chayLuot([() => traLoi(LOI, KHONG_TOKEN)]);
+    assert.equal(soLanGoi(), 2, "thử lại đúng 1 lần rồi thôi");
+    assert.equal(ket.duPhong, "router-chan", "caller phải biết đây là câu dự phòng để không ghi lịch sử");
+    assert.ok(ket.text.length > 0);
+    assert.doesNotMatch(ket.text, /\[Error\]|cybersecurity/);
+  });
+
+  it("tool đã chạy ở step trước thì KHÔNG chạy lại cả lượt - trả câu dự phòng", async () => {
+    // Chạy lại là làm lại tác dụng phụ của tool (gửi trùng file/ảnh)
+    const { ket, soLanGoi } = await chayLuot([goiTool, () => traLoi(LOI, KHONG_TOKEN)]);
+    assert.equal(soLanGoi(), 2, "1 step gọi tool + 1 step ra câu lỗi, không có lần gọi thứ ba");
+    assert.equal(ket.duPhong, "router-chan");
+  });
+
+  it("chữ [Error] mà CÓ token là chữ của model - giữ nguyên (đối chứng)", async () => {
+    const { ket, soLanGoi } = await chayLuot([() => traLoi(`Log của bạn: ${LOI}`)]);
+    assert.equal(ket.text, `Log của bạn: ${LOI}`);
+    assert.equal(soLanGoi(), 1);
+    assert.equal(ket.duPhong, undefined);
+  });
+});

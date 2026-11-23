@@ -38,6 +38,12 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Sửa
 
+- **Câu lỗi tiếng Anh của OpenAI không còn lọt xuống Zalo.** Khi OpenAI chặn một
+  lượt (ví dụ bộ lọc an ninh mạng bắt nhầm vì lịch sử có câu nhờ "hack tài khoản"),
+  9Router nối câu `[Error] This content was flagged...` vào cuối câu trả lời như chữ
+  bình thường, và bot gửi nguyên văn. Giờ bot bỏ câu lỗi đó: còn câu trả lời phía
+  trước thì gửi phần đó; chỉ có câu lỗi thì thử lại một lần, vẫn hỏng thì gửi câu báo
+  trục trặc ngắn và không ghi vào lịch sử.
 - **Bot biết tin trả lời trễ là do hệ thống gián đoạn, không tự nhận "mình quên".**
   Trước đây sau một lượt trả lời trễ, người dùng hỏi "sao bạn sai sót" thì bot tự nhận
   lỗi và xin lỗi rối rít, vì không có gì cho nó biết lúc đó hệ thống bị gián đoạn.

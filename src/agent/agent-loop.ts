@@ -30,6 +30,7 @@ import {
 import { catNguCanhTheoNganSach } from "./trim-context-to-budget.js";
 import { giayChoLai, maHttpCua, phanLoaiLoiProvider } from "./provider-error-classifier.js";
 import { chayStream } from "./stream-text-result.js";
+import { tachLoiRouterDoiLotChu } from "./router-error-disguised-as-text.js";
 import { ketQuaTuStepDaXong, laLoiHetGio, laStreamThieuFinish } from "./stream-cut-recovery.js";
 import { dungTinChenTrongNganSach, taoBoChenTin } from "./mid-turn-injection.js";
 import {
@@ -164,9 +165,10 @@ export type AgentTurnResult = {
    * của model: router trả rỗng hai lần, hoặc hết step mà lượt chốt cũng không
    * ra chữ. Caller PHẢI đọc cờ này thay vì so chữ: lịch hẹn không được gửi câu
    * báo lỗi như một lời nhắc (job hỏng thì im), còn chat không được ghi nó vào
-   * history (lượt sau model neo vào tiền lệ hỏng).
+   * history (lượt sau model neo vào tiền lệ hỏng). "router-chan": provider chặn
+   * lượt và router đổi lỗi thành chữ `[Error] ...` (`router-error-disguised-as-text.ts`).
    */
-  duPhong?: "router-rong" | "het-step";
+  duPhong?: "router-rong" | "het-step" | "router-chan";
 };
 
 /**
@@ -697,6 +699,28 @@ export async function runAgentTurn({
     result = await runOnce();
   }
 
+  // Provider chặn lượt (vd bộ lọc an ninh mạng của OpenAI) mà 9Router đổi lỗi
+  // thành chữ "[Error] ..." nối vào câu trả lời, 0 token, finish stop - SDK coi
+  // là thành công. Chỉ còn câu lỗi thì thử lại 1 lần, CHỈ khi chưa có tool nào
+  // chạy (chạy lại là làm lại tác dụng phụ). Bộ lọc không tất định: ca thật
+  // 2026-11-23 có lượt giữa chuỗi lượt bị chặn vẫn qua.
+  const docLoiRouter = () =>
+    tachLoiRouterDoiLotChu({ text: result.text, outputTokens: result.steps.at(-1)?.usage?.outputTokens ?? 0 });
+  let loiRouter = docLoiRouter();
+  if (loiRouter && !loiRouter.phanTruoc && result.steps.length === 1 && result.steps[0]!.toolCalls.length === 0) {
+    log.warn({ loi: forLog(loiRouter.loi, 300) }, "Provider chặn lượt, router trả lỗi dưới dạng chữ - thử lại 1 lần");
+    lanChay++;
+    guard.datLai();
+    result = await runOnce();
+    loiRouter = docLoiRouter();
+  }
+  if (loiRouter) {
+    log.warn(
+      { loi: forLog(loiRouter.loi, 300), conCauTraLoi: Boolean(loiRouter.phanTruoc) },
+      "Provider chặn lượt, router nối câu lỗi vào chữ - bỏ câu lỗi",
+    );
+  }
+
   const doLechUocLuong = soSanhUocLuong(
     uocLuongTokenTinNhan(messages, TOKEN_MOI_ANH_THEO_CO[getTuning("ZALO_IMAGE_QUALITY")]),
     result.steps[0]?.usage?.inputTokens,
@@ -765,6 +789,16 @@ export async function runAgentTurn({
     };
   }
 
+  // Câu lỗi của provider không bao giờ được xuống Zalo, cũng không vào lịch sử
+  // (lượt sau model đọc lại chữ "cybersecurity risk" của chính nó)
+  if (loiRouter && !loiRouter.phanTruoc) {
+    return {
+      text: ROUTER_DOWN_REPLY,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, steps: result.steps.length },
+      duPhong: "router-chan",
+    };
+  }
+
   // Chạm trần step: vòng lặp dừng vì HẾT LƯỢT chứ không phải vì model xong việc,
   // nên `result.text` là text của step đang-gọi-tool. Từ lúc persona dạy model
   // kể tiến trình, text đó là câu tường thuật kiểu "Đủ 2 nguồn - giờ đối chiếu
@@ -818,7 +852,7 @@ export async function runAgentTurn({
   }
 
   return {
-    text: result.text.trim(),
+    text: (loiRouter ? loiRouter.phanTruoc : result.text).trim(),
     usage: {
       inputTokens: result.totalUsage.inputTokens ?? 0,
       outputTokens: result.totalUsage.outputTokens ?? 0,
