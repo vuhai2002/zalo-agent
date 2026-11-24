@@ -1,6 +1,6 @@
 import { getVisionSettings, isSidecarConfigured } from "../config/runtime-vision-settings.js";
 import { createLogger } from "../shared/logger.js";
-import { defaultCaller, type SidecarCaller, type SidecarImage, type SidecarResult } from "./vision-sidecar.js";
+import { defaultCaller, type SidecarCaller, type SidecarImage, type SidecarResult } from "./vision-sidecar-caller.js";
 
 /**
  * Chép chữ MỘT trang tài liệu quét bằng model đọc ảnh (sidecar) - phần OCR của
@@ -34,7 +34,10 @@ export async function chepChuTrang(
     // Hủy hẳn luồng khi quá hạn (không chỉ bỏ chờ): sidecar treo không được giữ
     // cả loạt OCR tới 50 trang
     const kq = await call(settings.sidecar, anh, PROMPT_CHEP_CHU_TRANG, p.maxOutputTokens, AbortSignal.timeout(p.hanMs));
-    log.info({ model: settings.sidecar.model, chars: kq.text.length, truncated: kq.truncated }, "Sidecar đã chép chữ một trang");
+    log.info(
+      { model: settings.sidecar.model, chars: kq.text.length, truncated: kq.truncated, tokenVao: kq.tokenVao, tokenRa: kq.tokenRa },
+      "Sidecar đã chép chữ một trang",
+    );
     return kq;
   } catch (err) {
     log.warn({ err }, "Sidecar chép chữ trang thất bại - bỏ qua trang này");

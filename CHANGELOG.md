@@ -52,6 +52,8 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 
 ### Thay đổi
 
+- **Log ghi số token của model đọc ảnh** (mô tả ảnh, trả lời về ảnh, chép trang PDF quét):
+  trước đây sidecar không xin số token khi stream nên chi phí phần này không thấy ở đâu.
 - **Cần Node >= 24** (unpdf 2.x). Thêm phụ thuộc `@napi-rs/canvas` (render trang PDF,
   binary dựng sẵn) và `word-extractor` (đọc .doc).
 - Kho tri thức: bỏ chữ ẩn của docx (`w:vanish`) và sheet Excel ẩn hẳn (`veryHidden`);

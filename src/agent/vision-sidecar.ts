@@ -1,11 +1,5 @@
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { streamText } from "ai";
-import { chayStream } from "./stream-text-result.js";
-import {
-  getVisionSettings,
-  isSidecarConfigured,
-  type VisionSidecarSettings,
-} from "../config/runtime-vision-settings.js";
+import { defaultCaller, type SidecarCaller, type SidecarImage } from "./vision-sidecar-caller.js";
+import { getVisionSettings, isSidecarConfigured } from "../config/runtime-vision-settings.js";
 import {
   getImageDescription,
   saveImageDescription,
@@ -32,70 +26,6 @@ const DESCRIBE_PROMPT =
   "Sau đó tả bố cục, vật thể, người, màu sắc. Không suy diễn thông tin không có trong ảnh.";
 
 /**
- * Trần token cho một lượt mô tả ảnh. 1024 (số cũ) đủ cho ảnh thường nhưng
- * KHÔNG đủ với ảnh nhiều chữ - menu, bảng giá, danh sách, ảnh chụp màn hình -
- * vì prompt bắt chép nguyên văn mọi chữ và số. Tiếng Việt có dấu ~2.7 ký tự
- * mỗi token nên 2048 tương đương ~5.500 ký tự mô tả, đủ cho ảnh dày chữ.
- */
-const DESCRIBE_MAX_TOKENS = 2048;
-
-export type SidecarImage = {
-  base64: string;
-  mediaType: string;
-  /** Đường dẫn media làm khóa cache; không có (ảnh chưa persist được) thì mô tả không cache */
-  cacheKey?: string;
-};
-
-/**
- * Kết quả một lượt gọi sidecar. `truncated` là thứ bắt buộc phải có: mô tả bị
- * cắt giữa chừng mà đem cache thì bản cụt sống VĨNH VIỄN, mọi lượt sau đều đọc
- * nó và không ai biết vì sao bot trả lời thiếu.
- */
-export type SidecarResult = { text: string; truncated: boolean };
-
-export type SidecarCaller = (
-  settings: VisionSidecarSettings,
-  image: SidecarImage,
-  prompt: string,
-  /** Mặc định trần mô tả ảnh; OCR trang tài liệu truyền trần riêng, lớn hơn */
-  maxOutputTokens?: number,
-  abortSignal?: AbortSignal,
-) => Promise<SidecarResult>;
-
-/** Đường gọi thật - tách ra để test tiêm caller giả, không chạm mạng */
-export const defaultCaller: SidecarCaller = async (settings, image, prompt, maxOutputTokens = DESCRIBE_MAX_TOKENS, abortSignal) => {
-  const provider = createOpenAICompatible({
-    name: "vision-sidecar",
-    baseURL: settings.baseUrl,
-    apiKey: settings.apiKey,
-  });
-  // Streaming như mọi lời gọi LLM khác trong dự án. Sidecar hiện trỏ thẳng
-  // Gemini nên không dính 524 của Cloudflare, NHƯNG base URL là thứ chỉnh được
-  // từ dashboard - trỏ nó về router là dính ngay. Giữ một bất biến "không còn
-  // lời gọi LLM non-stream nào" rẻ hơn việc nhớ chỗ nào đang được miễn và vì sao.
-  const result = await chayStream((onError) =>
-    streamText({
-      model: provider(settings.model),
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "file", data: image.base64, mediaType: image.mediaType },
-            { type: "text", text: prompt },
-          ],
-        },
-      ],
-      maxOutputTokens,
-      abortSignal,
-      maxRetries: 1,
-      onError,
-    }),
-  );
-  // finishReason "length" = model đang viết dở thì chạm trần token
-  return { text: result.text.trim(), truncated: result.finishReason === "length" };
-};
-
-/**
  * Mô tả 1 ảnh, ưu tiên cache. Lỗi (sidecar chết, hết quota, ảnh hỏng) trả null -
  * caller tự quyết nói gì với model chính; KHÔNG throw để một ảnh hỏng không
  * giết cả lượt trả lời.
@@ -113,7 +43,7 @@ export async function describeImage(
   if (!isSidecarConfigured(settings)) return null;
 
   try {
-    const { text: description, truncated } = await call(settings.sidecar, image, DESCRIBE_PROMPT);
+    const { text: description, truncated, tokenVao, tokenRa } = await call(settings.sidecar, image, DESCRIBE_PROMPT);
     if (!description) return null;
     // Mô tả cụt vẫn DÙNG được cho lượt này (có còn hơn không), nhưng TUYỆT ĐỐI
     // không cache: bản cụt sẽ sống mãi và mọi lượt sau đều đọc phải nó
@@ -122,12 +52,12 @@ export async function describeImage(
     }
     if (truncated) {
       log.warn(
-        { cacheKey: image.cacheKey, chars: description.length },
+        { cacheKey: image.cacheKey, chars: description.length, tokenVao, tokenRa },
         "Mô tả ảnh bị cắt vì chạm trần token - dùng tạm, KHÔNG cache. Cân nhắc nâng DESCRIBE_MAX_TOKENS",
       );
     } else {
       log.info(
-        { cacheKey: image.cacheKey, model: settings.sidecar.model, chars: description.length },
+        { cacheKey: image.cacheKey, model: settings.sidecar.model, chars: description.length, tokenVao, tokenRa },
         "Sidecar đã mô tả ảnh",
       );
     }
@@ -172,9 +102,9 @@ export async function askAboutImage(
   const prompt =
     "Trả lời câu hỏi sau về ảnh bằng tiếng Việt, chính xác theo những gì nhìn thấy, " +
     `không suy diễn thông tin không có trong ảnh: ${question}`;
-  const { text: answer, truncated } = await call(settings.sidecar, image, prompt);
+  const { text: answer, truncated, tokenVao, tokenRa } = await call(settings.sidecar, image, prompt);
   log.info(
-    { model: settings.sidecar.model, question: question.slice(0, 100), chars: answer.length, truncated },
+    { model: settings.sidecar.model, question: question.slice(0, 100), chars: answer.length, truncated, tokenVao, tokenRa },
     "Sidecar trả lời câu hỏi về ảnh",
   );
   // Câu trả lời không cache nên cụt chỉ hại lượt này - nói thật để model biết
