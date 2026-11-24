@@ -67,11 +67,19 @@ export const TI_LE_NEN_TOI_DA = 500;
 export const TRAN_MIEN_KIEM_TI_LE = 100 * 1024;
 
 /**
- * Số entry tối đa trong một archive. Corpus OOXML thật đo được trung bình
- * 23,2 entry, cao nhất 99 - headroom 2,6x. Chặn archive vài vạn entry nhỏ
- * (mỗi entry rẻ về byte nhưng tốn CPU duyệt central directory + mở stream).
+ * Số entry tối đa trong một archive - lưới cho tệp trông bất thường, KHÔNG
+ * phải lớp chống bom (cỡ từng entry, tổng giải nén, tỉ lệ nén mới là lớp đó).
+ *
+ * Từng là 256 (corpus cũ cao nhất 99, dư 2,6x) và chặn oan ngay tệp nặng đầu
+ * tiên ngoài đời: một .xlsx kỹ thuật 874 KB có 89 ảnh + 72 đối tượng nhúng =
+ * 263 entry. Đo lại 84 tệp Office thật: trung vị 18, p90 75, cao nhất 263.
+ * 2048 dư ~8x so với ca thật lớn nhất. Giá của việc nới gần như bằng không:
+ * duyệt central directory đo được 0,7 ms ở 2048 entry, 3,9 ms ở 20.000 (và
+ * việc duyệt chạy TRƯỚC phép so trần nên trần cũng không tiết kiệm được nó).
+ * Trần 10 MB cho tệp Office tự kìm thêm: 2048 entry trong 10 MB là trung bình
+ * dưới 5 KB mỗi entry, hiếm ở tệp thật.
  */
-export const TRAN_SO_ENTRY = 256;
+export const TRAN_SO_ENTRY = 2048;
 
 /**
  * Độ sâu lồng thẻ XML tối đa - trần chặn ReDoS/tràn stack của chính bộ đọc

@@ -151,12 +151,17 @@ describe("zip-stream-entry - trần an toàn", () => {
     });
   });
 
-  it("số entry vượt trần 256 bị từ chối, không cần giải nén entry nào, KHÔNG buộc tội 'zip bomb'", () => {
-    // Sửa lại sau rà soát: một .docx nhiều ảnh (mỗi ảnh một entry) đạt 257
-    // entry với khoảng 250 ảnh - hoàn toàn hợp lệ. Corpus đo cao nhất 99 chỉ
-    // chứng minh corpus không có file ảnh nặng, không chứng minh 257 là bất
-    // thường - không được buộc tội "zip bomb" cho ca này.
-    const entries = Array.from({ length: 257 }, (_, i) => ({
+  it("Excel kỹ thuật nhiều hình vẽ (263 phần, ca thật 874 KB) mở được", () => {
+    // Ca thật: một .xlsx 874 KB có 89 ảnh + 72 đối tượng nhúng = 263 phần, trần
+    // cũ 256 báo "quá lớn" oan. Dựng đúng số phần đó để trần không lùi lại.
+    const entries = Array.from({ length: 263 }, (_, i) => ({ name: `xl/media/i${i}.emf`, data: Buffer.from("x") }));
+    assert.doesNotThrow(() => moPhienDocZip(buildZipBuffer(entries)));
+  });
+
+  it("số entry vượt trần 2048 bị từ chối, không cần giải nén entry nào, KHÔNG buộc tội 'zip bomb'", () => {
+    // Nhiều entry không phải hình dạng khả nghi (tệp nhiều ảnh là hợp lệ) -
+    // không được buộc tội "zip bomb" cho ca này.
+    const entries = Array.from({ length: 2049 }, (_, i) => ({
       name: `f${i}.xml`,
       data: Buffer.from("x"),
     }));
@@ -164,8 +169,8 @@ describe("zip-stream-entry - trần an toàn", () => {
     assert.throws(() => moPhienDocZip(zip), (err: unknown) => {
       assert.ok(err instanceof Error);
       assert.match(err.message, /quá nhiều phần bên trong/i);
-      assert.match(err.message, /257/);
-      assert.doesNotMatch(err.message, /zip bomb/i, "không được buộc tội 257 entry là zip bomb");
+      assert.match(err.message, /2049/);
+      assert.doesNotMatch(err.message, /zip bomb/i, "không được buộc tội tệp nhiều entry là zip bomb");
       // Đọc THẲNG số entry trong central directory, chưa giải nén gì ->
       // "khai-bao". Không gắn với MỘT entry cụ thể nào -> entryName undefined.
       assert.ok(err instanceof LoiVuotTran);

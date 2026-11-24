@@ -60,6 +60,8 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 ### Sửa
 
 - **Tin chỉ có tệp đính kèm (không kèm chữ) không còn bị bỏ qua** như tin rỗng.
+- **Tệp Word/Excel nhiều hình không còn bị báo "quá lớn" oan** (cả Kho tri thức): trần
+  số phần trong tệp nâng từ 256 lên 2048 - một Excel kỹ thuật 874 KB có 263 phần.
 - **`pnpm eval` không còn ghi vào DB dev thật.** Runner import tĩnh `kenh-ca-nhan`,
   mà chuỗi import đó mở SQLite ngay khi nạp - trước khi trỏ sang DB tạm - nên mọi lần
   eval đều ghi account, tin nhắn, trace vào `data/zalo-agent.db` và chạy migration
