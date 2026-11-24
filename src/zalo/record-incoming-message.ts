@@ -61,6 +61,8 @@ export function ghiTinDenVaoHistory(
     // nên giá trị luôn rỗng. Đường dẫn được gắn sau qua `ganAnhVaoHistory`.
     // Giờ NGƯỜI TA BẤM GỬI, không phải giờ chạy tới dòng này
     createdAt: msg.sentAt,
+    msgId: msg.msgId,
+    denTre: msg.denTre === true,
   });
   msg.historyRowId = rowId;
 

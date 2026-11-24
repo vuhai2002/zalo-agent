@@ -63,8 +63,8 @@ importers:
         specifier: 1.0.4
         version: 1.0.4
       zca-js:
-        specifier: 2.2.0
-        version: 2.2.0
+        specifier: 2.3.0
+        version: 2.3.0
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -1988,8 +1988,8 @@ packages:
   yauzl@2.10.0:
     resolution: {integrity: sha512-p4a9I6X6nu6IhoGmBqAcbJy1mlC4j27vEPZX9F4L4/vZT3Lyq1VkFHw/V/PUcB9Buo+DG3iHkT0x3Qya58zc3g==}
 
-  zca-js@2.2.0:
-    resolution: {integrity: sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA==}
+  zca-js@2.3.0:
+    resolution: {integrity: sha512-7o5ZK5IDJhdamjOBug7iO39UtkSfIjo98+LMwU7OCC/igFaY31Dkzqn+3QDvluTM6QEGnfwBVa1Q8IluyRMwqA==}
     engines: {node: '>=18.0.0'}
 
   zip-stream@4.1.1:
@@ -3801,7 +3801,7 @@ snapshots:
       buffer-crc32: 0.2.13
       fd-slicer: 1.1.0
 
-  zca-js@2.2.0:
+  zca-js@2.3.0:
     dependencies:
       crypto-js: 4.2.0
       form-data: 4.0.6

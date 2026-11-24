@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { dongTinNguoiDung, tenNguoiGuiAnToan, thutDongNoi } from "./user-message-line.js";
+import { dongTinNguoiDung, tenNguoiGuiAnToan, thutDongNoi, NHAN_DEN_TRE } from "./user-message-line.js";
 
 const TZ = "Asia/Ho_Chi_Minh";
 /** Hình dạng dòng đầu của một tin thật: `[dd/mm hh:mm] ...` sát lề */
@@ -61,5 +61,45 @@ describe("tenNguoiGuiAnToan - tên hiển thị do người gửi tự đặt", 
 
   it("tên chỉ toàn ký tự rác thì coi như không có tên", () => {
     assert.equal(dongTinNguoiDung({ timeZone: TZ, senderName: "\n\u{E0041}", noiDung: "hi" }), "hi");
+  });
+});
+
+describe("dongTinNguoiDung - nhãn tin tới lúc hệ thống gián đoạn", () => {
+  // Tin lấy bù (người ta gửi lúc bot mất kết nối): nhãn do HỆ THỐNG dựng, nằm
+  // trong header, để mọi lượt sau biết bot không hề nhận được tin lúc đó - không
+  // có nó, model thấy câu trả lời trễ cả ngày rồi tự nhận "mình quên" (ca thật 20/11).
+  it("denTre: nhãn nằm sau giờ, trước tên, trên dòng đầu", () => {
+    const dong = dongTinNguoiDung({
+      createdAt: "2026-03-10T03:13:00.000Z",
+      timeZone: "Asia/Ho_Chi_Minh",
+      senderName: "Lan",
+      denTre: true,
+      noiDung: "nhắc tôi 15h chiều nay",
+    });
+    assert.equal(dong, `[10/03 10:13] ${NHAN_DEN_TRE} Lan: nhắc tôi 15h chiều nay`);
+    assert.match(NHAN_DEN_TRE, /gián đoạn/);
+    assert.match(NHAN_DEN_TRE, /không phải bạn quên/);
+  });
+
+  it("không denTre: dòng giữ nguyên hình dạng cũ", () => {
+    const dong = dongTinNguoiDung({
+      createdAt: "2026-03-10T03:13:00.000Z",
+      timeZone: "Asia/Ho_Chi_Minh",
+      senderName: "Lan",
+      noiDung: "chào",
+    });
+    assert.equal(dong, "[10/03 10:13] Lan: chào");
+  });
+
+  it("đi cùng nhãn chưa xác minh: cả hai nhãn đều có, nhãn trễ đứng trước", () => {
+    const dong = dongTinNguoiDung({
+      createdAt: "2026-03-10T03:13:00.000Z",
+      timeZone: "Asia/Ho_Chi_Minh",
+      senderName: "Lan",
+      nhanChuaXacMinh: "[chưa xác minh]",
+      denTre: true,
+      noiDung: "chào",
+    });
+    assert.equal(dong, `[10/03 10:13] ${NHAN_DEN_TRE} [chưa xác minh] Lan: chào`);
   });
 });

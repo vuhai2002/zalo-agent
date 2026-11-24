@@ -21,6 +21,8 @@
     "src/knowledge/kb-slow-docx-test-fixture.ts",
     // Thư mục fixtures: bộ dựng PDF bom, tiến trình con giả - chỉ test dùng
     "src/**/fixtures/**",
+    // Dựng khung WebSocket Zalo giả (kể cả mã hóa) cho test lấy bù
+    "src/zalo/offline-replay/khung-ws-test-helper.ts",
     // Bộ eval chạy TAY bằng tsx, không bao giờ chạy từ `dist`
     "evals/**"
   ]

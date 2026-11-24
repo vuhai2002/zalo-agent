@@ -84,6 +84,21 @@ describe("env tối thiểu - chỉ CREDENTIALS_ENCRYPTION_KEY là bắt buộc"
   });
 });
 
+describe("chốt boot cho cặp giãn cách lấy bù", () => {
+  it("`.env` đặt tối thiểu > tối đa thì chết lúc boot, nêu đúng khóa", () => {
+    // Luật chéo trên dashboard không canh `.env`; consumer dùng hàm ngẫu nhiên
+    // ném khi min > max là chết câm vòng nhả hàng chờ trả lời trễ
+    const ra = chayVoiEnvToiThieu(`await nap("src/config/env.ts");
+console.log("NAP_OK");
+`, {
+      LAY_BU_GIAN_CACH_MIN_GIAY: "100",
+      LAY_BU_GIAN_CACH_MAX_GIAY: "50",
+    });
+    assert.ok(!ra.includes("NAP_OK"), "min > max PHẢI chặn boot");
+    assert.match(ra, /LAY_BU_GIAN_CACH_MAX_GIAY/);
+  });
+});
+
 describe("thiếu cấu hình LLM thì báo ở LƯỢT AGENT, không chết lúc boot", () => {
   const thuLuot = (them: Record<string, string> = {}) =>
     chayVoiEnvToiThieu(

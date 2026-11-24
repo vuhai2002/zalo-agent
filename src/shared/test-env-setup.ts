@@ -37,6 +37,9 @@ export function setupTestEnv(overrides: Record<string, string> = {}): string {
     SEND_DELAY_MIN_MS: "0",
     SEND_DELAY_MAX_MS: "0",
     MESSAGE_BATCH_DEBOUNCE_MS: "20",
+    // Hàng chờ trả lời trễ giãn 20-60s giữa các hội thoại - test không chờ thật
+    LAY_BU_GIAN_CACH_MIN_GIAY: "0",
+    LAY_BU_GIAN_CACH_MAX_GIAY: "0",
 
     // Test chạy như chạy local: không tin X-Forwarded-For, cookie không cần Secure
     DASHBOARD_BEHIND_PROXY: "false",

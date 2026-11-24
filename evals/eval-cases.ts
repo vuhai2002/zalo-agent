@@ -20,5 +20,6 @@ import type { EvalCase } from "./eval-case-type.js";
 import { CASE_TOOL } from "./eval-cases-tool.js";
 import { CASE_CACH_NOI } from "./eval-cases-cach-noi.js";
 import { CASE_MEMORY } from "./eval-cases-memory.js";
+import { CASE_LAY_BU } from "./eval-cases-lay-bu.js";
 
-export const EVAL_CASES: EvalCase[] = [...CASE_TOOL, ...CASE_CACH_NOI, ...CASE_MEMORY];
+export const EVAL_CASES: EvalCase[] = [...CASE_TOOL, ...CASE_CACH_NOI, ...CASE_MEMORY, ...CASE_LAY_BU];

@@ -166,7 +166,13 @@ async function main(): Promise<void> {
       // model bắt chước rất mạnh cách trình bày của chính nó ở lượt trước, nên
       // ca nào muốn đo sức bền của luật trước lịch sử cũ phải dựng lịch sử đó.
       for (const tin of c.lichSuTruoc ?? []) {
-        historyStore.appendMessage(ACC, threadId, { role: tin.role, content: tin.content });
+        historyStore.appendMessage(ACC, threadId, {
+          role: tin.role,
+          content: tin.content,
+          ...(tin.role === "user" ? { senderName: "Người dùng eval", senderId: "eval-user" } : {}),
+          ...(tin.createdAt ? { createdAt: tin.createdAt } : {}),
+          ...(tin.denTre ? { denTre: true } : {}),
+        });
       }
 
       const fake = taoFakeZaloApi();
@@ -185,8 +191,9 @@ async function main(): Promise<void> {
           cliMsgId: `c-${c.ten}`,
           isSelf: false,
           mentionsMe: true,
-          sentAt: new Date().toISOString(),
+          sentAt: new Date(Date.now() - (c.tinNhanLayBu?.gioTruoc ?? 0) * 3_600_000).toISOString(),
           rawData: {},
+          ...(c.tinNhanLayBu ? { layBu: true } : {}),
         },
       ];
 

@@ -3,7 +3,11 @@
 ```bash
 pnpm eval                                  # chạy hết
 EVAL_ONLY=gio-chinh-xac,tra-cuu pnpm eval       # chạy tập con (mỗi lượt là token thật)
+EVAL_IN_TRA_LOI=1 EVAL_ONLY=lay-bu-tra-loi-tre,lay-bu-hoi-vi-sao pnpm eval  # in câu trả lời của mọi ca để đọc tận mắt
 ```
+
+Ca mà phần cần đánh giá là câu chữ (giọng vui, có nói thật không) không khẳng định tự
+động được - chạy với `EVAL_IN_TRA_LOI=1` rồi đọc.
 
 Thoát mã 0 khi mọi case đạt, mã 1 khi có case hỏng.
 

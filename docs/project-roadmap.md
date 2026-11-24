@@ -6497,7 +6497,19 @@ CHANGELOG `[Chưa phát hành]` bị bỏ trống nhiều đợt nên 3 feature 
 vào release notes. Kỷ luật từ nay: **thêm/sửa/xóa gì thì cập nhật `[Chưa phát
 hành]` NGAY trong đợt đó**, đừng để dồn.
 
-## V3.33 - Đọc tệp người dùng gửi + OCR PDF quét (2026-11-18, plan: plans/261117-1525-doc-file-dinh-kem-tu-chat/)
+## V3.33 - Lấy bù tin lỡ và trả lời trễ (2026-11-20, plan: plans/261120-1134-lay-bu-tin-lo-va-tra-loi-tre/)
+
+Sau sự cố 2026-11-19 (DNS VPS chết, account cá nhân im 30 giờ, tin tới trong khoảng đó mất):
+- [x] Listener nghe `on("error")` - lỗi websocket không còn làm sập tiến trình
+- [x] Khởi động account gặp lỗi mạng thì tự thử lại (30s -> 5 phút)
+- [x] Nâng zca-js 2.3.0 (nhận tin cmd 551)
+- [x] Mỗi lần kết nối xin bù cmd 510/511 từ mốc, lật trang theo `more`, chạy tiếp sau trần
+- [x] Tin lấy bù qua bộ lọc chung, khử trùng theo `msg_id`, trần tuổi theo `ts` thô, bỏ tin thu hồi
+- [x] Hàng chờ trả lời trễ giãn nhịp, bỏ thread chủ đã trả lời tay; người đã nhắn lại và được trả lời thì bỏ tin lỡ cũ của họ
+- [x] Câu xin lỗi vui ở câu trả lời chốt khi trễ >= ngưỡng
+- [ ] Đo thật trên prod: lượt lấy bù đầu của `minh-triet` sau deploy (nâng tạm trần tuổi)
+
+## V3.34 - Đọc tệp người dùng gửi + OCR PDF quét (2026-11-18, plan: plans/261117-1525-doc-file-dinh-kem-tu-chat/)
 
 Nguồn nhu cầu: đọc prod - 12 tin gửi pdf/doc/docx mà bot chỉ thấy tên, 19 câu trả
 lời "chỉ thấy tên file". 6 phase, mỗi phase một sub-agent rà rồi sửa trước khi commit:
@@ -6512,8 +6524,13 @@ lời "chỉ thấy tên file". 6 phase, mỗi phase một sub-agent rà rồi s
 Lỗi thật bắt được trong lúc làm: tin chỉ có tệp bị bộ lọc bỏ như tin rỗng; dòng
 lượt hiện tại bỏ mất thẻ tệp.
 
+Đo trên tệp thật (2026-11-24): trích xuất cục bộ 136 tệp trong Downloads - một
+Excel 874 KB có 263 phần bị chặn oan bởi trần 256, đã nâng lên 2048; `.doc` thật
+khớp bản PDF của chính nó. OCR thật (`gemini-3.5-flash-lite`) 8 trang: 2-6 s/trang,
+~1.200 token vào + 400-1.900 token ra mỗi trang; bản vẽ kỹ thuật sai 1/~150 con số.
+Sidecar giờ ghi số token vào log.
+
 ### Còn treo
-- Đo trên tệp mẫu thật (scan đen trắng cơ quan, .doc có bảng, sao kê) + eval hai lượt
-  bằng model thật - cần user cấp mẫu / cho phép tốn token.
+- Chạy end-to-end bằng nick phụ trên máy dev (gửi tệp thật qua Zalo).
 - Build Docker + đo RSS tiến trình con trên VPS (máy dev không có Docker).
 - Log debug ghi nguyên văn câu trả lời của bot (việc riêng, user đã tách).

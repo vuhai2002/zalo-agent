@@ -45,6 +45,7 @@ export function dongTinCuaLuot(batch: ParsedMessage[]): string {
         createdAt: m.sentAt,
         timeZone,
         senderName: m.senderName,
+        denTre: m.denTre === true,
         noiDung: chu || CHI_CO_ANH,
       });
     })

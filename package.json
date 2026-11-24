@@ -76,7 +76,7 @@
     "saxes": "^6.0.0",
     "unpdf": "^2.2.1",
     "word-extractor": "1.0.4",
-    "zca-js": "2.2.0",
+    "zca-js": "2.3.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

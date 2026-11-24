@@ -19,6 +19,7 @@ import { describeImage, ensureDescriptionsFor } from "./vision-sidecar.js";
 
 import { botTimeZone, getTuning } from "../config/runtime-tuning-settings.js";
 import { dongTinCuaLuot } from "./batch-to-user-lines.js";
+import { loiNhacSauGianDoan, loiNhacTraLoiTre } from "./loi-nhac-tra-loi-tre.js";
 
 /**
  * Dựng input cho 1 lượt agent theo 4 chế độ ảnh (mô hình auto|native|text của
@@ -148,7 +149,12 @@ export async function buildTurnMessages(params: {
   // Cả batch của lượt này gộp thành ĐÚNG MỘT tin user - nên vùng bảo vệ khỏi
   // bị cắt là 1 tin cuối. Con số này phải khớp với dòng push ngay dưới; đổi
   // cách gộp batch thì phải đổi theo.
-  messages.push({ role: "user", content: await buildCurrentTurnContent(params.batch, imageMode) });
+  const noiDungLuot = await buildCurrentTurnContent(params.batch, imageMode);
+  // Lượt có tin lấy bù đã mang `loiNhacTraLoiTre` (cùng luật); các lượt sau thì
+  // nhắc riêng nếu lịch sử còn tin tới lúc gián đoạn - không có thì model xin lỗi oan
+  const nhacSau = params.batch.some((m) => m.layBu) ? null : loiNhacSauGianDoan(lichSu);
+  if (nhacSau && typeof noiDungLuot !== "string") noiDungLuot.push({ type: "text", text: nhacSau });
+  messages.push({ role: "user", content: noiDungLuot });
 
   // Ngân sách suy từ trần bằng `nganSachAnToan` - MỘT hàm dùng chung với điều
   // kiện dừng trong lượt (`vuotTranToken`) và với lượt chốt. Trước đây chỗ này
@@ -250,6 +256,12 @@ export async function buildCurrentTurnContent(
   }
 
   parts.push({ type: "text", text: dongTinCuaLuot(batch) });
+
+  // Tin lấy bù trễ (bot không nghe lúc người ta gửi): nhắc mở đầu bằng một câu
+  // xin lỗi vui. Hàm này dùng chung cho tin chen giữa lượt nên tin lấy bù bị kéo
+  // vào như tin chen cũng được nhắc.
+  const loiNhac = loiNhacTraLoiTre(batch, new Date(), getTuning("LAY_BU_NGUONG_XIN_LOI_PHUT"), botTimeZone());
+  if (loiNhac) parts.push({ type: "text", text: loiNhac });
 
   return parts;
 }

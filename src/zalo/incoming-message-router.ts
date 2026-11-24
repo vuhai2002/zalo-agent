@@ -1,7 +1,7 @@
 import type { API } from "zca-js";
 import { kenhCaNhan } from "./kenh-ca-nhan.js";
 import { replyTargetTuKenh } from "./reply-target-tu-kenh.js";
-import { getAccount } from "../config/account-store.js";
+import { getAccount, type AccountConfig } from "../config/account-store.js";
 import { getTuning } from "../config/runtime-tuning-settings.js";
 import { recordContactActivity } from "../conversation/contact-store.js";
 import { persistBatchImages } from "../conversation/media-store.js";
@@ -19,7 +19,9 @@ import { sendDeliveredReceipt } from "./message-receipts.js";
 import { processBatch } from "./message-turn-processor.js";
 import { reportPayloadAnomalies } from "./payload-anomaly-watch.js";
 import { ganAnhVaoHistory, ghiTinDenVaoHistory } from "./record-incoming-message.js";
-import { parseIncomingMessage } from "./zalo-message-parser.js";
+import { parseIncomingMessage, type ParsedMessage } from "./zalo-message-parser.js";
+import { daCoTinDen } from "../conversation/khu-trung-tin-den.js";
+import { layBuCuaAccount } from "./offline-replay/lay-bu-registry.js";
 import { napSan } from "../attachments/phu-thuoc-lay-tep.js";
 import { nenNapSanTep } from "../attachments/nen-nap-san-tep.js";
 import { getAgentForAccount } from "../config/agent-store.js";
@@ -41,14 +43,49 @@ export function routeIncomingMessage(
 
   const msg = parseIncomingMessage(config.id, selfId, raw, getTuning("ZALO_IMAGE_QUALITY"));
 
+  const ketQua = nhanVaGhiTinDen(config, api, msg);
+  const layBu = layBuCuaAccount(config.id);
+  // Tin trực tiếp mới (không trùng, không self) đẩy mốc lấy bù khi hàng chờ Zalo đã bắt kịp
+  if (layBu && ketQua !== "trung" && !msg.isSelf && msg.threadId) layBu.khiTinTrucTiep(msg);
+  if (ketQua !== "tra-loi") return;
+  // Người này nhắn lại và sắp được trả lời: họ biết bot chạy lại rồi, nên tin lấy
+  // bù cũ hơn CỦA HỌ bỏ hẳn - không trả lời riêng, không xin lỗi (vẫn trong lịch sử).
+  // Theo người gửi: trong nhóm, B nhắn không có nghĩa A biết bot chạy lại.
+  layBu?.daTraLoiTrucTiep(`${config.id}:${msg.threadId}`, msg.senderId, Date.parse(msg.sentAt));
+  xepHangTraLoi(config, api, msg);
+}
+
+/**
+ * Bước "nhận + lọc + ghi" của MỌI tin đến, dùng chung cho tin trực tiếp và tin
+ * lấy bù (`offline-replay/`): biên nhận "đã nhận", danh bạ/thread, bộ lọc, ghi
+ * lịch sử. Trả quyết định để caller tự xếp hàng trả lời - tin trực tiếp vào thẳng
+ * bộ gộp, tin lấy bù vào hàng chờ trả lời trễ.
+ *
+ * Khử trùng nằm TRONG hàm (không ở caller): mọi đường vào đều đi qua đây, nên
+ * không caller nào quên được.
+ */
+export function nhanVaGhiTinDen(
+  config: AccountConfig,
+  api: API,
+  msg: ParsedMessage,
+): "trung" | "bo" | "ghi-thu-dong" | "tra-loi" {
+  // Cùng một tin tới hai lần (cmd 501 và 551; trực tiếp và trong trang lấy bù):
+  // bỏ lần sau, kể cả biên nhận - ghi hai dòng là model đọc hai lần, trả lời hai lần
+  if (msg.msgId && msg.threadId && daCoTinDen(config.id, msg.threadId, msg)) {
+    log.debug({ accountId: config.id, threadId: msg.threadId }, "Tin trùng mã đã có trong lịch sử - bỏ");
+    return "trung";
+  }
+
   // Chạy TRƯỚC mọi nhánh return bên dưới: tin thiếu threadId bị bỏ qua lặng lẽ
   // ở ngay dòng dưới, không cảnh báo ở đây thì không còn chỗ nào biết
   reportPayloadAnomalies(config.id, msg);
 
   if (!msg.isSelf && msg.threadId) {
     // "Đã nhận" cho MỌI tin về tới listener, kể cả tin sắp bị lọc - client Zalo
-    // thật cũng báo nhận tự động, không phụ thuộc người dùng có đọc hay không
-    sendDeliveredReceipt(api, msg);
+    // thật cũng báo nhận tự động, không phụ thuộc người dùng có đọc hay không.
+    // Trừ tin LẤY BÙ: một lượt có thể chở hàng trăm tin cũ, bắn từng biên nhận một
+    // trong vài giây là tải dồn dập; lượt trả lời trễ vẫn gửi "đã xem" theo batch.
+    if (!msg.layBu) sendDeliveredReceipt(api, msg);
     recordContactActivity(config.id, msg.senderId, msg.senderName);
     recordThreadActivity({
       accountId: config.id,
@@ -73,7 +110,7 @@ export function routeIncomingMessage(
       { accountId: config.id, threadId: msg.threadId, reason: decision.reason },
       decision.record ? "Ghi passive, không trả lời" : "Bỏ qua tin",
     );
-    return;
+    return decision.record ? "ghi-thu-dong" : "bo";
   }
 
   // Ghi TRƯỚC khi xếp hàng, không đợi lượt agent chạy xong: thứ tự trong lịch
@@ -94,7 +131,11 @@ export function routeIncomingMessage(
   } catch (err) {
     log.error({ accountId: config.id, threadId: msg.threadId, err }, "Không ghi được tin vào history - vẫn trả lời");
   }
+  return "tra-loi";
+}
 
+/** Tin trực tiếp đủ điều kiện trả lời: vào bộ gộp, câu trấn an khi bắt chờ lâu */
+function xepHangTraLoi(config: AccountConfig, api: API, msg: ParsedMessage): void {
   const threadKey = `${config.id}:${msg.threadId}`;
   const daNhan = enqueueMessage(threadKey, msg, (batch) => processBatch(config, kenhCaNhan(api), batch));
 
@@ -140,8 +181,17 @@ export function routeIncomingMessage(
   ).catch((err) => log.debug({ threadId: msg.threadId, err }, "Gửi câu trấn an thất bại"));
 }
 
+/**
+ * Đang hỏi tên nhóm nào: tên chỉ được ghi SAU khi await xong, nên không chặn thì
+ * một loạt tin dồn của cùng nhóm (nhất là trang lấy bù tin lỡ) bắn N lời gọi Zalo.
+ */
+const dangHoiTenNhom = new Set<string>();
+
 /** Lấy tên group 1 lần khi gặp lần đầu, cache vào bảng threads */
 async function resolveGroupName(accountId: string, api: API, threadId: string): Promise<void> {
+  const khoa = `${accountId}:${threadId}`;
+  if (dangHoiTenNhom.has(khoa)) return;
+  dangHoiTenNhom.add(khoa);
   try {
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const info: any = await api.getGroupInfo(threadId);
@@ -149,5 +199,7 @@ async function resolveGroupName(accountId: string, api: API, threadId: string): 
     if (name) setThreadDisplayName(accountId, threadId, String(name));
   } catch (err) {
     log.debug({ accountId, threadId, err }, "Không lấy được tên nhóm - để trống");
+  } finally {
+    dangHoiTenNhom.delete(khoa);
   }
 }

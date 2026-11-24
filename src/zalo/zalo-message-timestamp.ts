@@ -45,7 +45,7 @@ const TRE_TOI_DA_MS = 7 * 24 * 60 * 60 * 1000;
 const SOM_TOI_DA_MS = 5 * 60 * 1000;
 
 /** Đổi `data.ts` thành milli epoch. `null` khi không đọc được. */
-function doiSangMilli(raw: unknown): number | null {
+export function doiSangMilli(raw: unknown): number | null {
   const so = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw.trim()) : Number.NaN;
   if (!Number.isFinite(so) || so <= 0) return null;
   if (so >= NGUONG_MILI) return Math.floor(so);

@@ -48,6 +48,7 @@ Zalo Bot API <--long polling--> src/zalo-bot/                  [kênh BOT]
 | KHÔNG dùng `reasoningTokens` để kiểm chứng thinking trên đường gpt-5.6-sol | Đo bằng request thật: body ra router CÓ `reasoning_effort: "medium"`, và `executors/codex.js:441` đổi nó thành `reasoning: {effort, summary:"auto"}` cho backend Codex - thinking chạy thật. Nhưng `translator/response/openai-responses.js:474` gọi `buildUsage` mà không truyền `reasoningTokens`, còn `buildUsage` chỉ thêm `completion_tokens_details` khi > 0 - nên client LUÔN thấy 0. Kết luận cũ ở V2.5.3 ("reasoningTokens = 0 tức router nuốt tham số") là sai: router nuốt phần BÁO CÁO, không nuốt tham số |
 | Thinking bật qua `LLM_REASONING_EFFORT`, chokepoint duy nhất `reasoning-options.ts` | Không bật thinking, model lướt 50k token nội dung trang một lượt - đối chiếu số vé, đọc bảng đều ẩu (vụ dò vé: dữ liệu đã vào context mà vẫn "chưa lấy được bảng"). Học Hermes: một nơi resolve tham số reasoning cho mọi đường gọi, map theo provider (openai-compatible: `reasoning_effort` chuẩn; anthropic: adaptive thinking + effort). Kiểm chứng bằng reasoningTokens trong log; = 0 khi đã bật tức router nuốt tham số |
 | Retry + fallback khi router trả completion rỗng | 9Router có lúc trả HTTP 200 với message trống (0 token) - SDK coi là thành công nên `maxRetries` không retry, bot im lặng bỏ treo người nhắn. `agent-loop` nhận diện chữ ký rỗng (text trống + 0 tool call + 0 token - phân biệt được với lượt "chỉ thả reaction" hợp lệ vốn có tool call + token), tự retry 1 lần, vẫn rỗng thì trả lời fallback. Gốc bệnh ở router, bot chỉ chống chịu |
+| Lỗi provider bị router đổi thành chữ `[Error] ...` | `open-sse/translator/response/openai-responses.js` của 9Router đổi sự kiện `error`/`response.failed` của Responses API (Codex) thành chunk `content: "[Error] <thông báo>"` + `finish_reason: stop`, không usage - SDK coi là thành công. Ca thật 2026-11-23: bộ lọc an ninh mạng của OpenAI chặn SAU khi model viết xong (lịch sử có câu nhờ hack tài khoản ngân hàng), 5 tin dính câu lỗi tiếng Anh. `router-error-disguised-as-text.ts` nhận bằng HAI dấu hiệu cùng lúc: chữ có `[Error]` (lần cuối) VÀ step cuối 0 token đầu ra - chỉ dựa vào chữ thì người lạ bắt model gõ "[Error]" là cắt được câu trả lời thật. Còn phần trước thì gửi phần đó; chỉ có câu lỗi thì thử lại 1 lần (CHỈ khi chưa tool nào chạy), vẫn hỏng thì câu dự phòng với `duPhong: "router-chan"` (không ghi lịch sử). Lượt chốt (`runWrapUp`) chưa có lưới này |
 | `payload-anomaly-watch.ts` cảnh báo payload lạ | Rủi ro thật không phải zca-js đổi API (TS bắt được) mà là **Zalo đổi tên field** - parser moi payload bằng `any` nên bot chỉ âm thầm ngừng thấy ảnh / ngừng nhận @mention. Tin thiếu `threadId` còn bị bỏ qua không dấu vết. Watcher log warn (throttle 10 phút/loại/account) để lỗi hiện ra thay vì im lặng |
 | Mọi lần tải từ URL đi qua `shared/safe-remote-download.ts` | URL của tool `send_file` do LLM quyết, mà LLM đọc tin của người lạ -> prompt injection có thể bảo bot tải `http://127.0.0.1:3900/api/...` hay metadata cloud (`169.254.169.254`) rồi gửi ra chat. Guard chặn IP nội bộ (kiểm cả literal IP trong URL, cả từng hop redirect) và truyền `lookup` đã kiểm vào `http.request` nên socket dùng đúng địa chỉ đã duyệt - chặn luôn DNS rebinding. Đọc theo stream và cắt khi vượt hạn mức, thay vì `res.arrayBuffer()` nạp cả response vào RAM rồi mới kiểm cỡ |
 | Rate-limit login tính theo IP socket, chỉ tin `X-Forwarded-For` khi `DASHBOARD_BEHIND_PROXY=true` | Header XFF do client gửi được: đổi giá trị mỗi request là mỗi lần có bucket rate-limit mới -> brute-force password không giới hạn. Khi có proxy thì lấy entry **phải nhất** vì Caddy/Nginx *append* IP client vào cuối chuỗi có sẵn; lấy entry trái nhất (cách hay gặp) chính là lỗ hổng |
@@ -592,6 +593,70 @@ năng nhóm "đang trong giai đoạn thử nghiệm nội bộ".
 hoặc khi ai đó reply tin của chính nó. `doiUpdateSangParsedMessage` đặt cứng
 `mentionsMe: true` dựa trên khẳng định đó. Nếu tài liệu sai thì bot trả lời MỌI
 tin trong nhóm - phải đo lại trước khi mở nhóm cho tài khoản thật.
+
+## Lấy bù tin lỡ (`src/zalo/offline-replay/`)
+
+Ca thật 2026-11-19: account cá nhân nằm im khoảng 30 giờ sau một lần DNS VPS chết, mọi tin
+gửi tới trong khoảng đó không bao giờ tới bot. Zalo giữ một HÀNG CHỜ tin cho mỗi tài khoản
+(khoảng 2 tuần) và gửi lại khi client xin bằng cmd 510 (1-1) / 511 (nhóm), như Zalo Web và
+`zalo-archive-mcp` làm mỗi lần kết nối. Chỉ kênh cá nhân (kênh bot không có websocket).
+
+Luồng:
+1. `zalo-listener.ts` gọi hook `khiKetNoi` trong `onConnected` -> `xin-bu-tin-lo.ts` gửi
+   `{version:1, cmd:510|511, subCmd:1, data:{first, lastId, preIds:[]}}` qua `listener.sendWs`
+   (511 sau 510 thêm 2-5 giây). `first:true` xin TỪ mốc (`offline_replay_cursors`, chưa có
+   thì từ đầu hàng chờ); còn `more` thì xin tiếp `{first:false, lastId: lastActionId}` sau 2-4
+   giây. Trần 30 trang, chạm trần thì chạy tiếp từ mốc sau 60 giây trong cùng kết nối (chỉ khi
+   mốc đã tiến). Trang không về 8 giây thì dừng dở; trang ĐẦU xin TỪ mốc mà không về thì bỏ
+   mốc (`xoaMocLayBu` có điều kiện: chỉ xóa nếu DB vẫn giữ đúng mốc đã xin).
+2. Phản hồi đọc từ khung WS thô (`raw-ws-frame-listener.ts` + `giai-ma-khung-ws.ts` +
+   `doc-trang-lay-bu.ts`), không từ `old_messages`: zca-js vứt `more`/`lastActionId`.
+   Trang thiếu mảng tin hoặc có `error_code` khác 0 là KHÔNG hợp lệ (dừng dở, giữ mốc) - không
+   được hiểu là "hết trang".
+3. Từng tin -> `tiep-nhan-tin-lay-bu.ts`: lệnh thu hồi (`content.deleteMsg`) gỡ tin gốc khỏi
+   hàng chờ; tin của chính tài khoản chỉ ghi nhận giờ; tin quá trần tuổi (theo `ts` THÔ) bỏ hẳn;
+   còn lại đánh dấu `layBu` rồi đi `nhanVaGhiTinDen` (chung với router: khử trùng theo
+   `messages.msg_id`, bộ lọc, ghi lịch sử; KHÔNG gửi biên nhận "đã nhận" cho tin lấy bù).
+4. Hết lượt -> `HangChoTraLoiTre` nhả từng hội thoại vào `enqueueMessage` (bộ gộp lo khoá
+   thread, tin chen, trần batch), giãn ngẫu nhiên trong [min, max]. Mỗi người chỉ đẩy
+   `TRAN_TIN_DON` tin mới nhất. Bỏ thread có tin của tài khoản SAU tin chờ cuối.
+5. `loi-nhac-tra-loi-tre.ts`: batch có tin `layBu` trễ >= ngưỡng thì `buildCurrentTurnContent`
+   thêm lời nhắc mở đầu câu trả lời CHỐT bằng một câu vui báo trả lời muộn (dùng chung cho tin chen).
+   Lời nhắc nói THẬT với model: hệ thống gián đoạn nên không nhận được tin, không phải nó quên;
+   giọng vui nhưng câu đùa lấy HỆ THỐNG làm chủ ngữ ("hệ thống bên mình vừa ngủ một giấc dài"),
+   bị hỏi lý do thì giải thích nhẹ nhàng. Đo trên model thật: câu đùa "mình vừa ngủ một giấc" thì
+   lượt sau (thấy nhãn gián đoạn) model gọi chính nó là "lời giải thích bịa" và xin lỗi vì thiếu
+   trung thực, 3/3 lượt.
+6. Tin lấy bù trễ từ ngưỡng xin lỗi được chốt `denTre` MỘT lần lúc nhận (`tiep-nhan-tin-lay-bu.ts`;
+   chớp mạng vài phút thì không), ghi cột `messages.den_tre = 1`. Tách khỏi `layBu` vì `layBu` bị gỡ
+   khi người đó nhắn lại (không xin lỗi) trong khi dòng lịch sử đã ghi - đọc hai trường là lệch. Dòng lịch
+   sử, dòng của lượt hiện tại và dòng tóm tắt hội thoại mang nhãn `NHAN_DEN_TRE` do HỆ THỐNG dựng
+   trong header (`user-message-line.ts`), nên các lượt SAU cũng biết - lời nhắc ở bước 5 chỉ có ở
+   lượt trả lời trễ. Ca thật 2026-11-20: thiếu nhãn này, bị hỏi "tại sao bạn phạm lỗi" ở lượt
+   sau thì model tự nhận "mình không đặt lịch nhắc". Prompt tóm tắt dùng bản ngôi thứ ba
+   (`NHAN_DEN_TRE_TOM_TAT`). Tin nhận trước khi có cột thì không có nhãn.
+7. Lượt SAU (bị hỏi/trách chuyện trả lời trễ): KHÔNG xin lỗi, không tự trách - lỗi hệ thống, bot không
+   làm sai gì (người dùng chốt). Cần HAI chỗ, đã đo trên model thật: luật trong `BASE_PERSONA` (trích
+   đúng `NHAN_DEN_TRE`) + `loiNhacSauGianDoan` ở cuối lượt khi cửa sổ lịch sử còn tin mang nhãn. Chỉ lời
+   nhắc cuối lượt: 12/12 lượt vẫn xin lỗi vì câu đùa. Chỉ persona: hết chữ "xin lỗi" nhưng vẫn tự chê
+   giọng đùa, không hỏi tiếp việc cần làm. Cả hai: 5/5 sạch, bình thản, có gợi ý giúp tiếp.
+
+Tin trực tiếp: `daCoTinDen` chặn trùng (cmd 501 + 551, trực tiếp + trang lấy bù); tin không
+trùng không self đẩy mốc khi hàng chờ Zalo đã bắt kịp. Người có tin lỡ đang chờ nhắn tin mới mà bot
+sắp trả lời (`daTraLoiTrucTiep`, theo (thread, người gửi)): họ biết bot chạy lại rồi, nên tin lỡ CŨ
+hơn tin đó CỦA HỌ bị bỏ hẳn (kể cả trang về muộn) - không trả lời riêng, không xin lỗi; tin cũ vẫn
+trong lịch sử làm ngữ cảnh. Tin lỡ MỚI hơn (lần mất mạng sau) xử lý như thường. Tin trực tiếp bị lọc
+không tính. Tin cũ đã nhả vào bộ gộp mà lượt chưa chạy thì chỉ gỡ cờ trễ (trả lời chung, không xin lỗi).
+
+Giới hạn đã biết (chấp nhận):
+- Hàng chờ trả lời trễ chỉ trong RAM: restart giữa lúc nhả thì thread còn chờ không được trả
+  lời - `dungVaBaoBoDo` log WARN tên từng thread.
+- Phiên đăng nhập MỚI bằng QR không được Zalo gửi bù (đo ở archive: 0 tin).
+- Tin self có thể là của chính bot; chủ nhắn tay TRONG lúc đang nhả không thấy (`selfListen:false`).
+- Tin lấy bù trong trần tuổi được ghi với `id` mới hơn tin trực tiếp đã có (lịch sử đọc theo `id`).
+- Nhịp giãn tính theo hội thoại; nhóm có N người gửi ra N lượt liền, có thể N câu xin lỗi.
+- Bật lại `LAY_BU_ENABLED` có hiệu lực từ lần kết nối sau. Trang lỗi hình làm handler riêng của
+  zca-js ném -> log ERROR "Listener báo lỗi" (nhiễu, đã tự xử lý).
 
 ## Ràng buộc từ Zalo (qua zca-js)
 

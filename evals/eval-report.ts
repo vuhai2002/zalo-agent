@@ -36,6 +36,16 @@ export function inBang(kq: KetQuaCase[]): void {
   const hong = kq.filter((r) => !r.dat);
   console.log(`${kq.length - hong.length}/${kq.length} đạt`);
 
+  // Ca mà phần cần đánh giá là câu chữ (không được khẳng định tự động - xem README):
+  // EVAL_IN_TRA_LOI=1 in câu trả lời của MỌI ca để người chạy đọc tận mắt
+  if (process.env.EVAL_IN_TRA_LOI === "1") {
+    for (const r of kq.filter((x) => x.dat)) {
+      console.log("");
+      console.log(`ĐẠT: ${r.ten}`);
+      console.log(`  Bot trả lời: ${JSON.stringify(r.traLoi)}`);
+    }
+  }
+
   for (const r of hong) {
     console.log("");
     console.log(`HỎNG: ${r.ten}`);

@@ -116,6 +116,30 @@ describe("validateTuning - ràng buộc chéo", () => {
     assert.ok(loi.some((l) => /tối thiểu/.test(l)));
   });
 
+  it("giãn cách lấy bù tối thiểu không được lớn hơn tối đa", () => {
+    const loi = tuning.validateTuning({ LAY_BU_GIAN_CACH_MIN_GIAY: 70, LAY_BU_GIAN_CACH_MAX_GIAY: 60 });
+    assert.ok(loi.some((l) => /lấy bù/.test(l)), `phải chặn, nhận: ${JSON.stringify(loi)}`);
+  });
+
+  it("giãn cách lấy bù: chỉ sửa ô tối đa xuống dưới tối thiểu đã lưu cũng bị chặn", () => {
+    // Dashboard tự lưu TỪNG ô: ca thật là gửi một khóa, khóa kia lấy giá trị hiện tại
+    tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", 50);
+    const loi = tuning.validateTuning({ LAY_BU_GIAN_CACH_MAX_GIAY: 30 });
+    tuning.setTuning("LAY_BU_GIAN_CACH_MIN_GIAY", null);
+    assert.ok(loi.some((l) => /lấy bù/.test(l)), `phải chặn, nhận: ${JSON.stringify(loi)}`);
+  });
+
+  it("trần tuổi lấy bù tối đa 168 giờ (parser kẹp giờ gửi của tin cũ hơn 7 ngày)", async () => {
+    const { TUNING_DEFS } = await import("./tuning-definitions.js");
+    const def = TUNING_DEFS.LAY_BU_TRAN_TUOI_GIO as { max?: number };
+    assert.equal(def.max, 168);
+  });
+
+  it("giãn cách lấy bù: tối thiểu bằng tối đa là hợp lệ", () => {
+    const loi = tuning.validateTuning({ LAY_BU_GIAN_CACH_MIN_GIAY: 60, LAY_BU_GIAN_CACH_MAX_GIAY: 60 });
+    assert.ok(!loi.some((l) => /lấy bù/.test(l)), JSON.stringify(loi));
+  });
+
   it("trần ký tự tài liệu quá lớn so với trần token thì chặn", () => {
     const loi = tuning.validateTuning({ DOCUMENT_MAX_CHARS: 400_000, LLM_MAX_OUTPUT_TOKENS: 16_384 });
     assert.ok(loi.some((l) => /tài liệu/.test(l)));

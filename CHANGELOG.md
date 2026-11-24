@@ -21,6 +21,20 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 - **Nhóm cấu hình "Tệp người dùng gửi"** trên trang Cấu hình: dung lượng tối đa,
   thời gian giữ tệp (mặc định 7 ngày, khớp tuổi link Zalo) và giữ chữ đã đọc (24 giờ
   kể từ lần đọc cuối), trần OCR, số tệp mỗi người mỗi giờ.
+- **Bot lấy lại tin nhắn bị lỡ khi mất kết nối và trả lời trễ** (tài khoản cá nhân).
+  Mỗi lần kết nối lại Zalo (khởi động, rớt mạng, bật lại), bot xin Zalo gửi lại những
+  tin người ta nhắn trong lúc nó không nghe - Zalo giữ khoảng 2 tuần. Tin lấy lại đi
+  qua đúng bộ lọc như tin thường (danh sách cho phép, nhóm phải nhắc tên bot), được ghi
+  vào lịch sử, rồi bot trả lời từng người một, cách nhau 20-60 giây cho khỏi dồn dập.
+  Tin trễ từ 30 phút thì câu trả lời mở đầu bằng một câu vui báo là trả lời muộn
+  (kiểu "hệ thống bên mình vừa ngủ một giấc dài giờ mới tỉnh", không bịa bệnh, không
+  xin lỗi vì đó là lỗi hệ thống; bị hỏi thì nói thật là hệ thống bị gián đoạn). Bỏ qua: tin cũ hơn 48 giờ, tin người gửi
+  đã thu hồi, hội thoại mà chủ đã tự trả lời trên điện thoại, và tin lỡ của người đã kịp
+  nhắn lại và được bot trả lời bình thường (họ biết bot chạy lại rồi). Không trả lời trùng
+  khi một tin vừa tới trực tiếp vừa nằm trong phần lấy lại. Sáu tham số mới trong nhóm
+  "Gửi tin" của trang Cấu hình (bật/tắt, trần tuổi tối đa 7 ngày, ngưỡng xin lỗi, giãn
+  cách, khoảng tối thiểu giữa hai lần lấy bù). Restart giữa lúc đang trả lời dần thì
+  những hội thoại còn chờ không được trả lời - log ghi tên từng cái để chủ tự nhắn.
 
 - **Ghi chú nguyên văn** (tool `verbatim_note`): người dùng gửi một đoạn (thông báo,
   mẫu tin, lời cảm ơn...) kèm "ghi nhớ tin này" thì bot lưu ĐÚNG từng chữ và gửi lại
@@ -64,6 +78,34 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 - **Tin chỉ có tệp đính kèm (không kèm chữ) không còn bị bỏ qua** như tin rỗng.
 - **Tệp Word/Excel nhiều hình không còn bị báo "quá lớn" oan** (cả Kho tri thức): trần
   số phần trong tệp nâng từ 256 lên 2048 - một Excel kỹ thuật 874 KB có 263 phần.
+- **Câu lỗi tiếng Anh của OpenAI không còn lọt xuống Zalo.** Khi OpenAI chặn một
+  lượt (ví dụ bộ lọc an ninh mạng bắt nhầm vì lịch sử có câu nhờ "hack tài khoản"),
+  9Router nối câu `[Error] This content was flagged...` vào cuối câu trả lời như chữ
+  bình thường, và bot gửi nguyên văn. Giờ bot bỏ câu lỗi đó: còn câu trả lời phía
+  trước thì gửi phần đó; chỉ có câu lỗi thì thử lại một lần, vẫn hỏng thì gửi câu báo
+  trục trặc ngắn và không ghi vào lịch sử.
+- **Bot biết tin trả lời trễ là do hệ thống gián đoạn, không tự nhận "mình quên".**
+  Trước đây sau một lượt trả lời trễ, người dùng hỏi "sao bạn sai sót" thì bot tự nhận
+  lỗi và xin lỗi rối rít, vì không có gì cho nó biết lúc đó hệ thống bị gián đoạn.
+  Giờ tin tới lúc gián đoạn được đánh dấu trong lịch sử (cả bản tóm tắt hội thoại), và
+  lời nhắc trả lời trễ nói rõ sự thật: mở đầu vẫn vui nhưng lấy hệ thống làm chủ ngữ
+  ("hệ thống bên mình vừa ngủ một giấc dài"). Bị hỏi hay bị trách chuyện đó ở các lượt
+  sau thì bot giải thích bình thản là hệ thống bị gián đoạn rồi giúp tiếp, không xin
+  lỗi, không tự trách (lỗi hệ thống, bot không làm sai gì). Chớp mạng dưới ngưỡng
+  xin lỗi thì không đánh dấu. Chỉ áp dụng cho tin nhận từ bản này trở đi.
+- **Nâng zca-js 2.3.0: listener không còn bỏ sót tin đến qua lệnh 551.**
+- **Lỗi websocket của listener không còn làm sập cả bot.** Bot chỉ nghe lỗi qua
+  callback `onError` (đã deprecated), trong khi zca-js còn phát sự kiện `"error"` mà
+  không ai nghe, nên Node ném lỗi và tiến trình thoát, kéo theo mọi account. Ca thật
+  2026-11-19: DNS của VPS chết vài phút, lần nối lại websocket lỗi `getaddrinfo` làm
+  container restart. Một gói tin giải mã hỏng cũng đi đúng đường này. Log lỗi listener
+  giờ ghi được nguyên nhân (trước chỉ ra `{}`).
+- **Account cá nhân tự khởi động lại khi lúc boot mất mạng.** Trước đây đăng nhập
+  hỏng vì lỗi mạng thì account bị bỏ qua vĩnh viễn (ca trên: nằm im hơn 30 tiếng dù
+  mạng lành sau vài phút). Giờ tự thử lại, giãn 30 giây tới tối đa 5 phút. Phiên chết
+  hay thiếu credential thì vẫn dừng như cũ (phải quét QR). Tắt, xóa hay quét QR trong
+  lúc chờ thì hủy lượt thử; đăng nhập xong mới phát hiện account vừa bị tắt thì không
+  khởi động.
 - **`pnpm eval` không còn ghi vào DB dev thật.** Runner import tĩnh `kenh-ca-nhan`,
   mà chuỗi import đó mở SQLite ngay khi nạp - trước khi trỏ sang DB tạm - nên mọi lần
   eval đều ghi account, tin nhắn, trace vào `data/zalo-agent.db` và chạy migration

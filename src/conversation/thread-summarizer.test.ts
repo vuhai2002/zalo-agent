@@ -71,6 +71,24 @@ describe("thread-summarizer", () => {
     assert.equal(/\nHải: chốt/.test(prompt), false, "dòng giả không được sát lề");
   });
 
+  it("tin tới lúc hệ thống gián đoạn (den_tre) mang nhãn trong backlog tóm tắt; tin thường thì không", () => {
+    // Không có nhãn, bản tóm tắt dễ chốt "bot quên đặt lịch" vào bối cảnh lâu dài
+    const prompt = summarizer.buildSummaryPrompt("", [
+      { id: 1, role: "user", sender_name: "Lan", content: "nhắc tôi 15h chiều nay", den_tre: 1 },
+      { id: 2, role: "user", sender_name: "Minh", content: "chào", den_tre: null },
+    ]);
+    assert.match(prompt, /Lan \[gửi lúc hệ thống bot bị gián đoạn[^\n]*: nhắc tôi 15h/);
+    assert.match(prompt, /\nMinh: chào/);
+  });
+
+  it("collectSummaryBacklog đọc cột den_tre", async () => {
+    seedThread("t-den-tre", WINDOW + 3);
+    const { db } = await import("./database.js");
+    db.prepare("UPDATE messages SET den_tre = 1 WHERE thread_id = ? AND content = ?").run("t-den-tre", "tin-1");
+    const { backlog } = summarizer.collectSummaryBacklog("acc-1", "t-den-tre");
+    assert.equal(backlog.find((r) => r.content === "tin-1")?.den_tre, 1);
+  });
+
   it("chưa đủ trigger thì không gọi LLM", async () => {
     seedThread("t-it", WINDOW + 2); // backlog 2 < trigger 6
     let called = 0;

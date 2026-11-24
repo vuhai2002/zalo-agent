@@ -45,6 +45,20 @@ export type ParsedMessage = {
    */
   sentAt: string;
   /**
+   * Tin tới từ hàng chờ LẤY BÙ của Zalo (cmd 510/511) chứ không phải tin trực
+   * tiếp - tin người ta gửi lúc bot không nghe. Lượt có tin này mà trễ quá ngưỡng
+   * thì mở đầu bằng một câu xin lỗi vì trả lời muộn. Xem `src/zalo/offline-replay/`.
+   */
+  layBu?: true;
+  /**
+   * Tin lấy bù trễ từ ngưỡng xin lỗi (`LAY_BU_NGUONG_XIN_LOI_PHUT`): dòng của nó
+   * (lịch sử + lượt hiện tại) mang nhãn "hệ thống gián đoạn". Chốt MỘT lần lúc
+   * nhận, tách khỏi `layBu`: chớp mạng vài phút thì không kể chuyện gián đoạn, và
+   * `layBu` còn bị gỡ khi người đó nhắn lại (không xin lỗi) trong khi dòng lịch sử
+   * đã ghi cờ - hai nơi đọc hai trường khác nhau là lệch nhau.
+   */
+  denTre?: true;
+  /**
    * id dòng trong bảng `messages`, đóng dấu bởi `ghiTinDenVaoHistory` ngay lúc
    * nhận tin. Chưa ghi thì chưa có.
    *

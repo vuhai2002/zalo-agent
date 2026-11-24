@@ -27,11 +27,18 @@ export type StoredMessage = {
    * và tin cũ về muộn sau khi listener nối lại thì lệch hẳn hàng giờ.
    */
   createdAt?: string;
+  /** Mã tin Zalo - chỉ tin ĐẾN có, để khử trùng (xem `daCoTinDen`). Rỗng coi như không có. */
+  msgId?: string;
+  /**
+   * Tin tới lúc hệ thống bot gián đoạn (Zalo gửi lại qua lấy bù tin lỡ). Dòng lịch
+   * sử được dán nhãn để các lượt sau biết bot không hề nhận được tin lúc đó.
+   */
+  denTre?: boolean;
 };
 
 const insertStmt = db.prepare(
-  `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content, images)
-   VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content, images, msg_id, den_tre)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 /**
@@ -41,12 +48,12 @@ const insertStmt = db.prepare(
  * định dạng khác nhau mà không gì đỏ.
  */
 const insertWithCreatedAtStmt = db.prepare(
-  `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content, images, created_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  `INSERT INTO messages (account_id, thread_id, role, sender_name, sender_id, content, images, msg_id, den_tre, created_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const recentStmt = db.prepare(
-  `SELECT id, role, sender_name, sender_id, content, images, created_at FROM messages
+  `SELECT id, role, sender_name, sender_id, content, images, created_at, den_tre FROM messages
    WHERE account_id = ? AND thread_id = ?
    ORDER BY id DESC LIMIT ?`,
 );
@@ -103,6 +110,8 @@ export function appendMessage(
     message.senderId ?? null,
     message.content,
     message.images && message.images.length > 0 ? JSON.stringify(message.images) : null,
+    message.msgId || null,
+    message.denTre ? 1 : null,
   ] as const;
   const result = message.createdAt
     ? insertWithCreatedAtStmt.run(...cot, message.createdAt)
@@ -134,6 +143,7 @@ export function getRecentMessages(
     content: string;
     images: string | null;
     created_at: string;
+    den_tre: number | null;
   };
   const rows = recentStmt.all(accountId, threadId, limit) as unknown as Row[];
   // DESC để lấy N tin mới nhất, đảo lại thành thứ tự thời gian cho LLM
@@ -145,6 +155,7 @@ export function getRecentMessages(
     senderId: r.sender_id ?? undefined,
     images: parseImages(r.images),
     createdAt: r.created_at,
+    ...(r.den_tre === 1 ? { denTre: true } : {}),
   }));
 }
 

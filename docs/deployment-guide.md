@@ -175,7 +175,7 @@ DEPLOY_SKIP_PULL=1 bash deploy.sh
 
 Dữ liệu không bị đụng - nó nằm ngoài image.
 
-### Đọc tệp người dùng gửi (từ V3.33)
+### Đọc tệp người dùng gửi (từ V3.34)
 
 - Image cần **Node >= 24** (Dockerfile đã dùng `node:24-alpine`).
 - `@napi-rs/canvas` cài binary dựng sẵn `linux-x64-musl` theo nền tảng lúc

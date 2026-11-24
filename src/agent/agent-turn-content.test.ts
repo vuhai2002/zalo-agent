@@ -100,6 +100,26 @@ describe("buildCurrentTurnContent - tệp đính kèm", () => {
   });
 });
 
+describe("buildCurrentTurnContent - lời nhắc trả lời trễ", () => {
+  it("batch có tin lấy bù trễ 3 giờ: part text CUỐI là lời nhắc, ngay sau dòng tin", async () => {
+    const tre = new Date(Date.now() - 3 * 3_600_000).toISOString();
+    const parts = partsOf(
+      await content.buildCurrentTurnContent([{ ...msgTu("Lan", "hẹn họp lúc 9h nhé", tre, false), layBu: true, denTre: true }], "blind"),
+    );
+    const text = parts.filter((p) => p.type === "text");
+    assert.equal(text.length, 2);
+    assert.match(text[0]!.text!, /hẹn họp lúc 9h nhé/);
+    assert.match(text[0]!.text!, /gián đoạn/, "dòng tin lấy bù của lượt hiện tại phải mang nhãn gián đoạn như trong lịch sử");
+    assert.match(text[1]!.text!, /KHÔNG bịa bệnh/);
+  });
+
+  it("batch thường (không lấy bù): không có lời nhắc", async () => {
+    const parts = partsOf(await content.buildCurrentTurnContent([msgWithImages("chào", [])], "blind"));
+    assert.ok(!parts.some((p) => p.text?.includes("Lời nhắc hệ thống")));
+    assert.ok(!parts.some((p) => p.text?.includes("gián đoạn")));
+  });
+});
+
 describe("buildCurrentTurnContent", () => {
   it("blind: không tải ảnh, chèn 1 ghi chú tổng dặn bot nói thật", async () => {
     const parts = partsOf(
@@ -343,6 +363,21 @@ describe("buildTurnMessages - lọc tin của chính lượt ra khỏi lịch s�
     });
 
     assert.equal(chuCuaTinNhan(messages).filter((c) => c.includes("câu cũ")).length, 1);
+  });
+
+  it("lịch sử có tin mang nhãn gián đoạn: tin của lượt kèm lời nhắc không xin lỗi; không có thì không", async () => {
+    const tin = msgTu("Hải", "tại sao bạn phạm lỗi", "2026-08-07T17:12:00.000Z", false);
+    const coNhan = await content.buildTurnMessages({
+      history: [{ ...lichSu(5, "nhắc tôi 15h"), denTre: true }],
+      batch: [tin],
+      tranToken: 0,
+    });
+    const cuoi = chuCuaTinNhan(coNhan.messages).at(-1) ?? "";
+    assert.match(cuoi, /tại sao bạn phạm lỗi/);
+    assert.match(cuoi, /KHÔNG xin lỗi/);
+
+    const khongNhan = await content.buildTurnMessages({ history: [lichSu(5, "nhắc tôi 15h")], batch: [tin], tranToken: 0 });
+    assert.doesNotMatch(chuCuaTinNhan(khongNhan.messages).join(" "), /Lời nhắc hệ thống/);
   });
 
   it("`idBoQua` loại tin ĐANG CHỜ khỏi lịch sử - nó sẽ được chèn kèm nhãn tin chen", async () => {

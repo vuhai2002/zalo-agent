@@ -183,6 +183,9 @@ export function deleteAccount(id: string): boolean {
     // Tệp đính kèm (link tải + chữ đã trích của sao kê, giấy tờ...) - account
     // mất thì không ai còn đọc được, giữ lại chỉ để hồi sinh nhầm khi tạo lại CÙNG ID.
     db.prepare("DELETE FROM tep_dinh_kem WHERE account_id = ?").run(id);
+    // Mốc lấy bù tin lỡ: tạo lại account CÙNG ID (có thể là nick khác) mà còn mốc
+    // cũ là xin Zalo từ mốc của tài khoản trước - bỏ sót tin của nick mới cũ hơn mốc.
+    db.prepare("DELETE FROM offline_replay_cursors WHERE account_id = ?").run(id);
     return db.prepare("DELETE FROM accounts WHERE id = ?").run(id).changes > 0;
   });
 }

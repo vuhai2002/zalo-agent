@@ -242,6 +242,17 @@ function runMigrations(): void {
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       PRIMARY KEY (account_id, thread_id, day_key)
     );
+
+    -- Mốc lấy bù tin lỡ (cmd 510 tin 1-1 / 511 tin nhóm): id việc mới nhất của
+    -- hàng chờ Zalo mà bot đã có, để lần kết nối sau xin TỪ đó. Xem
+    -- src/conversation/offline-replay-cursor-store.ts.
+    CREATE TABLE IF NOT EXISTS offline_replay_cursors (
+      account_id TEXT NOT NULL,
+      queue TEXT NOT NULL,
+      last_id TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      PRIMARY KEY (account_id, queue)
+    );
   `);
 
   // Kho tri thức (nguồn -> đoạn -> FTS5 -> gán agent) - lược đồ riêng vì có
@@ -282,6 +293,14 @@ function runMigrations(): void {
   // Ảnh kèm tin nhắn: JSON array đường dẫn file trong data/media (tương đối DATA_DIR)
   // để lượt sau nạp lại cho model xem; NULL = tin không có ảnh
   addColumnIfMissing("messages", "images", "TEXT");
+  // Mã tin Zalo của tin ĐẾN, để khử trùng: tin lỡ được Zalo gửi lại qua hàng
+  // chờ lấy bù (cmd 510/511) có thể trùng tin đã tới trực tiếp. NULL ở mọi dòng
+  // ghi trước khi có cột này và ở dòng của bot.
+  addColumnIfMissing("messages", "msg_id", "TEXT");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_messages_msg_id ON messages (account_id, thread_id, msg_id)");
+  // Tin tới lúc hệ thống bot gián đoạn (lấy bù tin lỡ): 1, còn lại NULL. Dòng lịch
+  // sử được dán nhãn để các lượt sau không tưởng bot đã quên (xem NHAN_DEN_TRE).
+  addColumnIfMissing("messages", "den_tre", "INTEGER");
   // Memory lớp 2: rolling summary per thread
   addColumnIfMissing("threads", "summary", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing("threads", "summary_covers_to_message_id", "INTEGER NOT NULL DEFAULT 0");
