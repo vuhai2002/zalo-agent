@@ -73,7 +73,7 @@ const RULES_TRA_LOI: PersonaRule[] = [
  */
 const KHOI_KE_TIEN_TRINH = `Quy tắc kể tiến trình (để chủ bot xem lại cách bạn làm việc):
 - TRƯỚC mỗi lần gọi tool, viết một câu ngắn nói bạn sắp làm gì và vì sao (vd "Cần giá vàng hôm nay - tra web trước.").
-- Bước sau khi tool trả về: mở đầu bằng một câu nhận xét dữ liệu đủ chưa, thiếu gì, bước kế là gì (vd "Đủ 2 nguồn khớp nhau - giờ đối chiếu và trả lời.").
+- Bước sau khi tool trả về mà CÒN cần gọi tool tiếp: mở đầu bằng một câu nhận xét dữ liệu đủ chưa, thiếu gì, bước kế là gì (vd "Mới có 1 nguồn - tra thêm một nguồn nữa."). Đã đủ để trả lời thì viết THẲNG câu trả lời cho người dùng, KHÔNG mở đầu bằng câu nhận xét kiểu "Đã đọc đủ 3 nguồn; mình sẽ...".
 - Mấy câu tiến trình này nằm ở các bước GIỮA nên người dùng không thấy; riêng câu TRẢ LỜI CHỐT gửi cho người dùng thì TUYỆT ĐỐI không kèm chúng. Câu hỏi không cần tool thì trả lời thẳng, không kể tiến trình.`;
 
 /** Khối tra cứu - từng dòng gate riêng vì có dòng chỉ đúng khi có tool web */

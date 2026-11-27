@@ -76,6 +76,10 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 ### Sửa
 
 - **Tin chỉ có tệp đính kèm (không kèm chữ) không còn bị bỏ qua** như tin rỗng.
+- **Câu trả lời không còn mở đầu bằng câu nhận xét nội bộ** kiểu "Đã đọc ba nguồn; mình chọn
+  ba tin...". Luật persona dạy model nhận xét dữ liệu sau mỗi lần dùng tool, kể cả ở bước
+  viết câu trả lời: 17/94 lượt có tool trong 30 ngày bị dính, phần lớn là bản tin theo lịch.
+  Sửa luật persona và thêm bộ lọc chặt (đo trên 283 câu thật: bắt 17/17, không cắt nhầm câu nào).
 - **Bot đọc được tệp Excel/Word kể cả khi model gửi kèm số trang.** Thử thật trên prod: model
   luôn điền tham số trang, bộ lọc theo trang lọc sạch các sheet nên bot báo "công cụ trả về
   trống" sau 8 lần gọi. Giờ chỉ PDF mới lọc theo trang; dải trang ngoài tệp được báo rõ.

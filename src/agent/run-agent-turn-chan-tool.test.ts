@@ -114,6 +114,14 @@ describe("lượt agent: đọc tệp xong thì tạm tắt tool ghi bền", () 
     assert.equal(memory.listMemories({ accountId: account.id }).length, truoc, "save_memory không được chạy");
   });
 
+  it("câu trả lời chốt mở đầu bằng câu nhận xét dữ liệu: bị bỏ trước khi gửi (dây nối thật của agent-loop)", async () => {
+    let lan = 0;
+    const ketQua: (() => unknown)[] = [() => goi("get_datetime", {}, "c1"), () => traLoi("Đã đọc đủ ba nguồn; mình sẽ chọn hai tin.\nHải ơi, hôm nay có hai tin chính.")];
+    const model = new MockLanguageModelV4({ doStream: async () => thanhKetQuaStream(ketQua[Math.min(lan++, 1)]!() as KetQuaGenerate) });
+    const kq = await loop.runAgentTurn({ api: {} as API, account, batch: [tin("t-tu-thuat")], trace: [], resolveModel: () => model });
+    assert.equal(kq.text, "Hải ơi, hôm nay có hai tin chính.");
+  });
+
   it("lượt KHÔNG đọc tệp: save_memory vẫn chạy bình thường", async () => {
     const truoc = memory.listMemories({ accountId: account.id }).length;
     await chay("t-thuong", [() => goi("save_memory", { ...MEM, content: "Người dùng thích uống trà sen" }, "c1"), () => traLoi("xong")]);

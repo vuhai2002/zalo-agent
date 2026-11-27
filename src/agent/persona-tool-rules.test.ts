@@ -62,6 +62,15 @@ describe("toolPersonaSections", () => {
     assert.deepEqual(rules.toolPersonaSections([]), []);
   });
 
+  it("câu nhận xét dữ liệu CHỈ cho bước còn gọi tool tiếp - bước trả lời viết thẳng", () => {
+    // Bản cũ dạy "bước sau khi tool trả về: mở đầu bằng câu nhận xét" - mà bước đó
+    // thường chính là câu trả lời, nên 17/94 lượt có tool trên prod mở đầu bằng
+    // "Đã đọc ba nguồn; mình chọn..." gửi thẳng cho người dùng
+    const luat = gop(["web_search"]);
+    assert.match(luat, /CÒN cần gọi tool tiếp/);
+    assert.match(luat, /viết THẲNG câu trả lời/);
+  });
+
   it("có tool nhưng không phải tool web: vẫn giữ luật chung, bỏ luật web", () => {
     const chiVeAnh = gop(["create_image"]);
     assert.ok(chiVeAnh.includes("kể tiến trình"), "luật chung về dùng tool phải còn");

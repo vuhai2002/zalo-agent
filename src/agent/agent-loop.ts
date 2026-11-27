@@ -32,6 +32,7 @@ import { catNguCanhTheoNganSach } from "./trim-context-to-budget.js";
 import { giayChoLai, maHttpCua, phanLoaiLoiProvider } from "./provider-error-classifier.js";
 import { chayStream } from "./stream-text-result.js";
 import { tachLoiRouterDoiLotChu } from "./router-error-disguised-as-text.js";
+import { boCauTuThuatDau } from "./cau-tu-thuat-dau-tra-loi.js";
 import { ketQuaTuStepDaXong, laLoiHetGio, laStreamThieuFinish } from "./stream-cut-recovery.js";
 import { dungTinChenTrongNganSach, taoBoChenTin } from "./mid-turn-injection.js";
 import {
@@ -823,6 +824,14 @@ export async function runAgentTurn({
   // còn gọi tool) chứ không phải `hitStepLimit` (đòi thêm đủ step). Dùng nhầm
   // hàm cũ thì lượt dừng vì token gửi thẳng câu tường thuật xuống Zalo.
   const lastStepToolCalls = result.steps.at(-1)?.toolCalls.length ?? 0;
+  // Câu "nhận xét dữ liệu" model lỡ viết ở đầu câu trả lời chốt - bỏ trước khi
+  // gửi VÀ trước khi ghi lịch sử (`cau-tu-thuat-dau-tra-loi.ts`). Chỉ log độ dài.
+  const coGoiTool = result.steps.some((step) => step.toolCalls.length > 0);
+  const lamSachCauChot = (text: string) => {
+    const kq = boCauTuThuatDau(text, { coGoiTool });
+    if (kq.daBo) log.info({ kyTuDaBo: text.length - kq.text.length }, "Bỏ câu nhận xét dữ liệu ở đầu câu trả lời");
+    return kq.text;
+  };
   if (canLuotChot({ lastStepToolCalls })) {
     // Nhãn phải kể ĐÚNG một trong BA điều kiện dừng. Bản đầu chỉ có hai nên viết
     // nhị phân "hết step" : "chạm trần token"; guard thêm vào sau, và mọi lần
@@ -848,7 +857,7 @@ export async function runAgentTurn({
       log.error({ err }, "Lượt chốt cũng lỗi");
       return null;
     });
-    const cauChot = chot?.trim();
+    const cauChot = chot ? lamSachCauChot(chot.trim()) : undefined;
     return {
       text: cauChot || STEP_LIMIT_REPLY,
       ...(cauChot ? {} : { duPhong: "het-step" as const }),
@@ -862,7 +871,7 @@ export async function runAgentTurn({
   }
 
   return {
-    text: (loiRouter ? loiRouter.phanTruoc : result.text).trim(),
+    text: lamSachCauChot((loiRouter ? loiRouter.phanTruoc : result.text).trim()),
     usage: {
       inputTokens: result.totalUsage.inputTokens ?? 0,
       outputTokens: result.totalUsage.outputTokens ?? 0,
