@@ -76,6 +76,9 @@ Bản `0.x` nghĩa là API và cấu hình còn có thể đổi giữa các b�
 ### Sửa
 
 - **Tin chỉ có tệp đính kèm (không kèm chữ) không còn bị bỏ qua** như tin rỗng.
+- **Bot đọc được tệp Excel/Word kể cả khi model gửi kèm số trang.** Thử thật trên prod: model
+  luôn điền tham số trang, bộ lọc theo trang lọc sạch các sheet nên bot báo "công cụ trả về
+  trống" sau 8 lần gọi. Giờ chỉ PDF mới lọc theo trang; dải trang ngoài tệp được báo rõ.
 - **Tệp Word/Excel nhiều hình không còn bị báo "quá lớn" oan** (cả Kho tri thức): trần
   số phần trong tệp nâng từ 256 lên 2048 - một Excel kỹ thuật 874 KB có 263 phần.
 - **Câu lỗi tiếng Anh của OpenAI không còn lọt xuống Zalo.** Khi OpenAI chặn một

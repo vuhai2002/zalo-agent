@@ -84,6 +84,22 @@ describe("dungKetQuaDocTep", () => {
     assert.match(s.slice(0, viTriMoKhoi(s)), /trang 80/i);
   });
 
+  it("Excel/Word gọi kèm trang (model buộc điền mọi trường): BỎ QUA dải trang, vẫn hiện nội dung sheet", () => {
+    // Ca thật trên prod: model gửi trang="1" ở cả 8 lần gọi một tệp xlsx; bộ lọc
+    // theo nhãn "Trang N" lọc sạch các sheet và bot báo "công cụ trả về trống"
+    const s = dungKetQuaDocTep(
+      goc({ dinhDang: "xlsx", soTrang: null, daiTrang: [1, 1], noiDung: [{ nhan: 'Sheet "Tổng quan"', chu: "Phòng Kỹ thuật\t6", nguon: "chu" }] }),
+    );
+    assert.match(s, /Phòng Kỹ thuật\t6/);
+    assert.match(s.slice(0, viTriMoKhoi(s)), /không chia trang/);
+    assert.doesNotMatch(s.slice(0, viTriMoKhoi(s)), /Đang hiện riêng trang/);
+  });
+
+  it("PDF xin dải trang nằm ngoài tệp: nói rõ không có trang nào trong dải, không im lặng trả rỗng", () => {
+    const s = dungKetQuaDocTep(goc({ soTrang: 3, daiTrang: [80, 90] }));
+    assert.match(s.slice(0, viTriMoKhoi(s)), /Không có trang nào trong dải 80-90.*3 trang/);
+  });
+
   it("cắt trang không xẻ đôi emoji (cặp surrogate)", () => {
     const s = dungKetQuaDocTep(goc({ dinhDang: "docx", noiDung: [{ nhan: "Toàn văn", chu: "😀".repeat(20_000), nguon: "chu" }] }));
     assert.doesNotMatch(s, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);

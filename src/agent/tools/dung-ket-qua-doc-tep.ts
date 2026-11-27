@@ -118,24 +118,35 @@ function catAnToan(s: string, tu: number, tran: number): string {
 }
 
 export function dungKetQuaDocTep(d: DuLieuDocTep): string {
+  // Chỉ PDF có nhãn "Trang N". Excel/Word mà lọc theo trang là lọc sạch nội
+  // dung - ca thật: model gửi trang="1" ở mọi lời gọi xlsx (đường gọi ép điền
+  // mọi trường) và bot báo "công cụ trả về trống" sau 8 lần gọi.
+  const daiTrang = d.dinhDang === "pdf" ? d.daiTrang : undefined;
   // Có dải trang: CHỈ các trang trong dải - không thì trang xin (vd trang quét
   // 80 của PDF 100 trang) nằm sau 30.000 ký tự đầu và model không bao giờ thấy,
   // trong khi phần đầu lại báo "đã OCR trang 80" -> dễ bịa nội dung.
-  const phan = d.daiTrang
+  const phan = daiTrang
     ? d.noiDung.filter((p) => {
         const so = soTrangCuaNhan(p.nhan);
-        return so !== null && so >= d.daiTrang![0] && so <= d.daiTrang![1];
+        return so !== null && so >= daiTrang[0] && so <= daiTrang[1];
       })
     : d.noiDung;
   const toanVan = phan.map(vanBanMotPhan).join("\n\n");
   const doan = catAnToan(toanVan, d.tuKyTu, d.tranKyTu);
   const ketThuc = d.tuKyTu + doan.length;
   const dau = phanDau(d);
-  if (d.daiTrang) dau.push(`Đang hiện riêng trang ${d.daiTrang[0]}-${d.daiTrang[1]}.`);
+  if (d.daiTrang && !daiTrang) {
+    dau.push("Tệp này không chia trang - đã bỏ qua tham số trang, đang hiện nội dung theo thứ tự (đọc tiếp bằng tuKyTu).");
+  }
+  if (daiTrang && phan.length === 0) {
+    dau.push(`Không có trang nào trong dải ${daiTrang[0]}-${daiTrang[1]} - tệp có ${d.soTrang ?? "?"} trang.`);
+  } else if (daiTrang) {
+    dau.push(`Đang hiện riêng trang ${daiTrang[0]}-${daiTrang[1]}.`);
+  }
   if (d.tuKyTu > 0 && d.tuKyTu >= toanVan.length) {
     dau.push(`Đã hết nội dung (phần này có ${toanVan.length} ký tự) - không còn gì để đọc tiếp.`);
   } else if (ketThuc < toanVan.length) {
-    dau.push(`Đang hiện ký tự ${d.tuKyTu}-${ketThuc}/${toanVan.length}. Đọc tiếp: gọi lại doc_file với tuKyTu=${ketThuc}${d.daiTrang ? ` và cùng trang` : ""}.`);
+    dau.push(`Đang hiện ký tự ${d.tuKyTu}-${ketThuc}/${toanVan.length}. Đọc tiếp: gọi lại doc_file với tuKyTu=${ketThuc}${daiTrang ? ` và cùng trang` : ""}.`);
   }
   const khoi = `Tên tệp: ${JSON.stringify(d.ten)}\n\n${doan || "(không có chữ trong phần này)"}`;
   return `${dau.join("\n")}\n\n${wrapUntrustedContent(khoi, "tệp đính kèm")}`;
